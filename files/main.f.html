@@ -1,0 +1,1301 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>main.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ main.f</span></header><main>
+<h1>main.f</h1>
+<p class='muted'>1133 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/main.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>main.f</code> is YREC's main program (it has no <code>PROGRAM</code> statement; the site lists it as <code>(file level)</code>). It reads the run's settings, sets up the physics tables, and then, for each "kind card" (one run of a job: a starting model and what to do with it), loads the starting model and evolves it model by model. Each evolutionary step does, in order: mass loss, mixing and nuclear burning, rezoning, the iterative solution of the structure equations, rotation, light-element burning, the next time step, and output. Around this loop sit optional drivers: automatic calibration of a solar model or of a star of given $L$ and $T_\mathrm{eff}$, and Monte Carlo runs over nuclear and solar parameters. This is the reader's starting point.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> everything comes through <a href="../files/parmin.f.html#def-PARMIN"><code>PARMIN</code></a> (the run's parameters, per kind card; it also opens files and returns the names of the table files) and <a href="../files/setups.f.html#def-SETUPS"><code>SETUPS</code></a> (constants, and the opacity, EOS and atmosphere tables). The starting model is read by <a href="../files/starin.f.html#def-STARIN"><code>STARIN</code></a> from the unit <code>IFIRST</code>. With <code>LMONTE</code>, the Monte Carlo parameters are read from unit <code>IDYN</code>.</li>
+<li><strong>Who calls it:</strong> nobody; it is the program.</li>
+<li><strong>Outputs:</strong> written by the routines it calls: headers by <a href="../files/wrthead.f.html#def-WRTHEAD"><code>WRTHEAD</code></a>, each model by <a href="../files/wrtout.f.html#def-WRTOUT"><code>WRTOUT</code></a> (the output driver: short output <code>ISHORT</code>, track <code>ITRACK</code>, model printouts and so on), the last model of a run by <a href="../files/putstore.f.html#def-PUTSTORE"><code>PUTSTORE</code></a> (unit <code>ISTOR</code>, for continuing a sequence), the model before a step by <a href="../files/wrtlst.f.html#def-WRTLST"><code>WRTLST</code></a> (unit <code>ILAST</code>, for He-flash runs), pulsation output by <a href="../files/pdist.f.html#def-PDIST"><code>PDIST</code></a>, and calibration and Monte Carlo summaries to <code>ISNU</code> (with <a href="../files/wrtmonte.f.html#def-WRTMONTE"><code>WRTMONTE</code></a>).</li>
+<li><strong>COMMON blocks:</strong> main.f declares 60 of them, many of the code's global blocks, mostly so that it can set flags or keep state across the loop. The ones it actually uses: <code>CKIND</code> (<code>NUMRUN</code>, <code>NMODLS</code>, <code>IRESCA</code>, <code>RESCAL</code>, per kind card), <code>NEWXYM</code> (per-run $X$, $Z$, mixing length, envelope settings), <code>SETT</code> (stop conditions: <code>ENDAGE</code>, <code>LENDAG</code>, <code>END_DCEN</code>, <code>END_XCEN</code>, <code>END_YCEN</code>), <code>ENTROP</code> (the rates of change of $\log T$, $\log P$, $\ln L$, $\log r$ from the previous model; shared only with <code>HPOINT</code>, which moves them to the new grid), <code>OLDMOD</code> (the model at the start of the step), <code>PREVCZ</code>, <code>LIOV</code> (light-element burning with overshoot), <code>ORIGSTART</code> (start-of-step $j$ and composition when iterating between structure and rotation), <code>DIFUS</code> (<code>ITDIF1</code>), <code>CTOL</code> (<code>FCORR</code>, <code>NITER1</code>–<code>NITER3</code>), <code>NEWENG</code> (<code>NITER4</code>, <code>LNEWS</code>, <code>LSNU</code>), <code>CALSUN</code>, <code>CALS2</code>, <code>CALSTAR</code> (calibrations), <code>MONTE</code>, <code>MONTE2</code>, <code>CROSS</code> (Monte Carlo), <code>ACDPTH</code> (outputs at chosen ages), <code>ROTPRT</code>, <code>DISK</code> (<code>SAGE</code>), <code>CT3</code> (<code>LPTIME</code>), <code>ATMOS</code> (<code>KTTAU</code>), and <code>FLAG</code> (<code>LEXCOM</code>), <code>ROT</code> (<code>LROT</code>, <code>LINSTB</code>), <code>HEFLSH</code> (<code>LKUTHE</code>), <code>DPMIX</code> (<code>LOVSTE</code>, <code>ALPHAE</code>).</li>
+</ul>
+<p><strong>The order of the run.</strong></p>
+<ol>
+<li><strong>Settings and tables.</strong> <code>IOWR</code> = 9; <a href="../files/parmin.f.html#def-PARMIN"><code>PARMIN</code></a>, then <a href="../files/setups.f.html#def-SETUPS"><code>SETUPS</code></a> (MHP 8/25: the table file names are now passed as arguments instead of through COMMON).</li>
+<li><strong>Monte Carlo loop</strong> (<code>DO 500 NN</code>): with <code>LMONTE</code>, read up to 1000 parameter sets (factors for the pp, ³He+³He, ³He+⁴He and ⁷Be+p cross sections, $Z/X$, the settling efficiency, $L_\odot$, the solar age) and, for each, set <code>SSTANDARD</code>, <code>FGRZ</code>, <code>CLSUN</code> and <code>FACAGE</code>; otherwise the loop runs once.</li>
+<li><strong>Calibration set-up:</strong> <a href="../files/setcal.f.html#def-SETCAL"><code>SETCAL</code></a> for a solar calibration (<code>LCALS</code>; it changes the kind cards, and <code>LPTIME</code>, <code>KTTAU</code> are saved to be restored at each cycle), <a href="../files/setscal.f.html#def-SETSCAL"><code>SETSCAL</code></a> for a star of given $L$, $T_\mathrm{eff}$ (<code>LCALST</code>).</li>
+<li><strong>Kind-card loop</strong> (<code>DO 200 NK = 1, NUMRUN</code>): set the run's $X$, $Z$, mixing length and envelope options; <a href="../files/starin.f.html#def-STARIN"><code>STARIN</code></a> reads (or keeps) the starting model and rescales it if asked; stop if <code>LROT</code> is set but $\Omega = 0$; disable stop conditions already met by the starting model; <a href="../files/wrthead.f.html#def-WRTHEAD"><code>WRTHEAD</code></a>; for He-flash runs (<code>LKUTHE</code>) store the model with <code>WRTLST</code>; <a href="../files/findsh.f.html#def-FINDSH"><code>FINDSH</code></a> (the H-burning shell and convection-zone edges); <a href="../files/htimer.f.html#def-HTIMER"><code>HTIMER</code></a> (the first step); zero the entropy terms and the light-element rates of the surface zone.</li>
+<li><strong>Model loop</strong> (<code>DO 100 MODELN = 1, NMODLS(NK)</code>), the evolution step, below.</li>
+<li>
+<p><strong>End of a kind card</strong> (label 110): <code>PUTSTORE</code> the last model if asked; for a solar calibration, every third kind card <a href="../files/chkcal.f.html#def-CHKCAL"><code>CHKCAL</code></a> compares $L$, $R$ (and the surface $Z/X$) with the targets and either ends (<code>LSOL</code>) or starts another cycle; the counter <code>ICONV</code> starts at 1 and the calibration gives up when it reaches 15. The radius comes from $L = 4\pi R^2\sigma T_\mathrm{eff}^4$ (<code>RLL</code>, with <code>BL</code> = $\log(L/L_\odot)$):
+$$\log\frac{R}{R_\odot} = \tfrac12\Bigl[\log\frac{L}{L_\odot} + \log L_\odot - \log 4\pi - \log\sigma - 4\log T_\mathrm{eff}\Bigr] - \log R_\odot;$$ for <code>LCALST</code>, end when the star is matched (<code>LSTAR</code>, on an even kind card).</p>
+</li>
+<li>
+<p><strong>After the runs</strong> (label 250): Monte Carlo and calibration summaries to <code>ISNU</code>, then <code>STOP</code>.</p>
+</li>
+</ol>
+<p><strong>The evolution step</strong> (one pass of the model loop).</p>
+<ol>
+<li>Output switches: rewind <code>ISHORT</code> if <code>LRWSH</code>; turn on pulsation output on the last model, at chosen ages (<code>AGEOUT</code>, JVS 02/11) or at the final age; <a href="../files/pdist.f.html#def-PDIST"><code>PDIST</code></a> if <code>LPOUT</code>.</li>
+<li><strong>After a failed model</strong> (label 15). If the previous attempt diverged or did not converge (<code>LARGE</code>), call <code>STARIN</code> again. Despite the comment "STARIN called here for timestep cutting", STARIN does not cut the step: with <code>LARGE</code> set it prints "RUN STOPPED" and stops (<code>starin.f</code>, lines 137–144). So a failed model ends the run.</li>
+<li><strong>Ageing?</strong> <code>LAGE</code> is true when <code>MODEL</code> ≥ 0, unless the kind card only relaxes a rescaled model (<code>IRESCA</code> = 2, except for pre-main-sequence models with $\log T_c$ &lt; 6.6).</li>
+<li><strong>Mass loss and mixing</strong> (if <code>LAGE</code>): <a href="../files/massloss.f.html#def-MASSLOSS"><code>MASSLOSS</code></a>; save the composition in <code>HCOMPP</code>; <a href="../files/mix.f.html#def-MIX"><code>MIX</code></a> (convective mixing, nuclear burning through <a href="../files/kemcom.f.html#def-KEMCOM"><code>KEMCOM</code></a>, settling through <a href="../files/grsett.f.html#def-GRSETT"><code>GRSETT</code></a>); advance the age: <code>DDAGE</code> = $\Delta t$/<code>CSECYR</code>, <code>DAGE</code> += $10^{-9}$<code>DDAGE</code> (Gyr).</li>
+<li><strong>Rezoning:</strong> <a href="../files/hpoint.f.html#def-HPOINT"><code>HPOINT</code></a> (not in He-flash runs, which only save the old model for <code>PTIME</code>).</li>
+<li><strong>Light elements at the start</strong> (if <code>LEXCOM</code>): the convection zone's base <code>JENV0</code>, the overshoot distance $\alpha_e H_P$ with $H_P = P r^2/(\rho G m)$ (<code>PSCAL0</code>), and <a href="../files/lirate88.f.html#def-LIRATE88"><code>LIRATE88</code></a> (rates, <code>J</code> = 1).</li>
+<li>
+<p><strong>First guess of the structure.</strong> If <code>LNEWS</code> and the step is positive, extrapolate each point from the previous model's rates of change:
+$$\log T \mathrel{+}= \dot{(\log T)}_0\,\Delta t,\quad \log P \mathrel{+}= \dot{(\log P)}_0\,\Delta t,\quad L \mathrel{+}= L\,\dot{(\ln L)}_0\,\Delta t,\quad \log r \mathrel{+}= \dot{(\log r)}_0\,\Delta t;$$
+otherwise zero these terms. A non-ageing step is made negative (a relaxation).</p>
+</li>
+<li>
+<p><strong>Structure: four levels of <a href="../files/crrect.f.html#def-CRRECT"><code>CRRECT</code></a></strong> (the Henyey iteration), each with its own iteration limit: level 1 (<code>NITER1</code>) with the previous envelope triangle; level 2 (<code>NITER2</code>) checking the surface boundary condition (<code>LSBC</code>); level 3 (<code>NITER3</code>); then, after storing the new rates of change
+$$\dot{(\log T)}_0 = \frac{\Delta\log T}{\Delta t},\quad \dot{(\ln L)}_0 = \frac{2(L - L_\mathrm{old})}{(L + L_\mathrm{old})\,\Delta t},\ \dots$$
+for the next step's guess, level 4 (<code>NITER4</code>), which repeats the iteration between mixing and structure (its comment: not for models where semiconvection matters; for high-precision work such as solar models). Any divergence (<code>LARGE</code>), or no convergence after level 4, goes back to step 2, which stops the run. With rotation, the block from level 4 through step 9 (level 4, the convergence test, <code>MIXCZ</code>, <code>GETW</code>, <code>FPFT</code>) can be iterated <code>ITDIF1</code> times, restoring the start-of-step composition <code>HCOMPP</code> and $j$ each time.</p>
+</li>
+<li>
+<p><strong>After convergence:</strong> <a href="../files/mixcz.f.html#def-MIXCZ"><code>MIXCZ</code></a> (fully mix the convection zones; G. Somers 6/14 also computes the turnover time there); <code>SAGE</code> = age; for rotating models <a href="../files/getw.f.html#def-GETW"><code>GETW</code></a> (the new $\Omega$: angular-momentum transport and wind loss) and <a href="../files/fpft.f.html#def-FPFT"><code>FPFT</code></a> (the distortion terms).</p>
+</li>
+<li><a href="../files/findsh.f.html#def-FINDSH"><code>FINDSH</code></a> again.</li>
+<li><strong>Light-element burning</strong> (if <code>LEXCOM</code>, <code>MODEL</code> ≥ 0 and the step is positive, and not rotating with rotational mixing; in that case <a href="../files/getw.f.html#def-GETW"><code>GETW</code></a> calls <code>LIRATE88</code>, <code>LIBURN</code> and <code>LIBURN2</code> itself): <a href="../files/convec.f.html#def-CONVEC"><code>CONVEC</code></a> for the zone's base at the end, <code>PSCAL1</code>, <code>LIRATE88</code> (<code>J</code> = 2), <a href="../files/liburn.f.html#def-LIBURN"><code>LIBURN</code></a>.</li>
+<li><strong>After accretion</strong> (<code>LNEWFIT</code>): <a href="../files/getnewenv.f.html#def-GETNEWENV"><code>GETNEWENV</code></a> restores the envelope fitting point, then <code>FPFT</code>.</li>
+<li><strong>Next step:</strong> <a href="../files/htimer.f.html#def-HTIMER"><code>HTIMER</code></a>. When the final age is reached, the step written with the model is the step just taken, <code>DELTS = MAX(DELTS0, 1.0D-3*DAGE*CSECYR)</code>, instead of a zero one, so that the sequence can be continued (see question 7 on the floor).</li>
+<li><code>MODEL</code> += 1 (unless relaxing); <a href="../files/wrtout.f.html#def-WRTOUT"><code>WRTOUT</code></a>.</li>
+<li><strong>Stop conditions</strong> (MHP 10/24): end the kind card when the final age is reached, or the central D, $X$ or $Y$ falls below its threshold; for <code>LCALST</code>, <a href="../files/chkscal.f.html#def-CHKSCAL"><code>CHKSCAL</code></a> on even kind cards from the second model on (on success, <code>LPASSR</code>, it jumps to label 200, which skips <code>PUTSTORE</code>).</li>
+</ol>
+<p><strong>Which routines do what, in brief.</strong> Settings: <code>PARMIN</code>, <code>SETUPS</code>. Starting model: <code>STARIN</code> (with <code>RSCALE</code>). Time step: <code>HTIMER</code>. Mass change: <code>MASSLOSS</code>, <code>MDOT</code>. Mixing, burning, settling: <code>MIX</code>, <code>KEMCOM</code>, <code>GRSETT</code>, <code>MIXCZ</code>, <code>CONVEC</code>. Rezoning: <code>HPOINT</code>. Structure: <code>CRRECT</code> (with <code>COEFFT</code>, <code>ENVINT</code>, <code>HSOLVE</code> and the physics: EOS, opacities, energy generation <code>ENGEB</code>). Rotation: <code>GETW</code>, <code>FPFT</code>, <code>MOMI</code>. Light elements: <code>LIRATE88</code>, <code>LIBURN</code>. Output: <code>WRTHEAD</code>, <code>WRTOUT</code>, <code>PUTSTORE</code>, <code>WRTLST</code>, <code>PDIST</code>. Calibration: <code>SETCAL</code>, <code>CHKCAL</code>, <code>SETSCAL</code>, <code>CHKSCAL</code>.</p>
+<p><strong>Design.</strong> The program is one long routine with <code>GOTO</code>s across loop levels (back to label 15 after a failed model, which stops the run, forward to 110, 200 and 250). The state of the evolution lives in local arrays passed to every routine, and in many COMMON blocks. A neutrino-flux table block (<code>LNUTAB</code>) is switched off by a hard-coded <code>.FALSE.</code>. The comment at the top still says to change the array size by a global change of "JSON=2000" (now 5000, set in 123 of the 254 files).</p>
+<p><strong>KC's changes.</strong></p>
+<ul>
+<li>2025-05-30: COMMON <code>ACDPTH</code> reordered (logicals after reals, as in the other units).</li>
+<li>2025-05-31: unused arguments removed from the calls to <code>STARIN</code> (<code>DELTS0</code>, <code>JCORE</code>), <code>HTIMER</code> (<code>LC</code>, <code>QDT</code>, <code>QDP</code>), <code>MIX</code> (<code>QDT</code>, <code>QDP</code>), <code>HPOINT</code> (<code>BL</code>, <code>DELTS</code>, <code>SMASS</code>), <code>CRRECT</code> (<code>MODEL</code>, <code>MRZONE</code>, <code>NRZONE</code>, <code>NZONE</code>), <code>MIXCZ</code> (also noted 2025-05-30 as addressing compiler warnings), <code>GETW</code>, <code>GETNEWENV</code>, <code>ENGEB</code>, <code>LIBURN</code>, <code>WRTOUT</code> (<code>NK</code>), <code>WRTMONTE</code>; the unused <code>SUNAGE</code> removed.</li>
+</ul></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Disabling the stop conditions.</strong> When the starting central $X$ is already below <code>END_XCEN</code>, the code sets <code>END_DCEN(NK) = -END_XCEN(NK)</code> (not <code>END_XCEN</code>), so the $X$ stop stays active and the deuterium stop is altered. The messages for $X$ and $Y$ also print the central deuterium <code>HCOMP(12,1)</code> and <code>END_DCEN</code>. Copy-paste slips?</li>
+<li><strong>The call to <code>MASSLOSS</code> and on to <code>MDOT</code>.</strong> <code>MASSLOSS</code> passes one argument more than <code>MDOT</code> takes (see <a href="../files/mdot.f.html"><code>mdot.f</code></a>), so mass loss cannot work as written.</li>
+<li><strong>The Monte Carlo failure summary.</strong> <code>ZTOX</code> is written to <code>ISNU</code> in the failure branch, but it is assigned only in the success branch, so the first failure writes an undefined value and later ones the value of an earlier parameter set. The same branch writes <code>TCENTER</code>, <code>PCENTER</code>, <code>DCENTER</code> as they are (logs), while the success branch converts them to $T_6$, $\rho$ and $P/10^{17}$. (Other variables passed without a value in main.f are set by the callees: <code>GL</code> by <code>WRTOUT</code>, <code>LMIX</code>, <code>LOCOND</code>, <code>LATMO</code>, <code>LDERIV</code> by <code>COEFFT</code> through <code>CRRECT</code>, <code>QDT</code>, <code>QDP</code> by <code>STARIN</code>.)</li>
+<li><strong>The neutrino table block.</strong> It is off (<code>LNUTAB = .FALSE.</code>); it writes to unit 76, which nothing opens, and after KC's 2025-05-31 change it passes <code>IU</code>, which is undefined in main.f, to <code>ENGEB</code> (it used to pass the loop index <code>I</code>). Remove the block, or repair it?</li>
+<li><strong>Calibration limits.</strong> The loop ends after 15 calibration cycles (<code>ICONV.GE.15</code>), but the failure branch tests <code>ICONV.GE.11</code> and its message says "did not converge within 10 attempts".</li>
+<li><strong>Unused Monte Carlo values.</strong> <code>FGRSET = FHE(NN)</code> is set and never used (the helium settling factor <code>FGRY</code> is not changed), and <code>FZDIF</code> is a copy of <code>FHE</code>, so the one settling factor read is applied to the metals only (<code>FGRZ</code>). Was <code>FGRY</code> meant? <code>ZX(NN)</code> (the $Z/X$ of each set) is read but only written out, and <code>TEFFI</code> is set and never used.</li>
+<li><strong>The floor on the final step.</strong> At the final age, <code>DELTS = MAX(DELTS0, 1.0D-3*DAGE*CSECYR)</code>: with <code>DAGE</code> in Gyr this is $10^{-3}$ times the age in Gyr, in years, i.e. $10^{-12}$ of the age, so the floor never acts. Was <code>1.0D-3*DAGE*1.0D9*CSECYR</code> ($10^{-3}$ of the age) meant?</li>
+<li><strong>The He-flash copy to <code>ILAST</code>.</strong> The comment says time-step cutting "requires a model stored in logical unit ILAST or it will crash", but the copy runs only if <code>LPUNCH</code>, which is false on the first kind card (and again after <code>PUTSTORE</code>); it also passes <code>JCORE</code> before <code>FINDSH</code> has set it for this kind card. Should the copy be unconditional, after <code>FINDSH</code>?</li>
+<li><strong>Hard-coded values.</strong> <code>IOWR</code> = 9; the solar luminosity <code>SUNL</code> = 3.844 × 10³³ erg/s and, in the Monte Carlo set-up, <code>ENDAGE(2)</code> = 10⁸ and <code>ENDAGE(3)</code> = 4.57 × 10⁹ yr; $\log T_c$ &lt; 6.6 for pre-main-sequence relaxation; the "BP96" cross-section factors <code>SBP</code> (comment: "actual values set in PARMIN").</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+MAIN
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+*******
+initialize all variables, set up common blocks
+*******
+the array size, i.e. max # of shells is specified in the
+parameter statement.  it defines JSON.  to change the array
+size do a global change on &quot;JSON=2000&quot; or whatever.
+DBGLAOL - to save space make tables single precision
+MHP 8/25 Removed unused variables and added pass-through variables
+COMMON/LUFNM/ FLAST, FFIRST, FRUN, FSTAND, FFERMI,
+1    FDEBUG, FTRACK, FSHORT, FMILNE, FMODPT,
+2    FSTOR, FPMOD, FPENV, FPATM, FDYN,
+3    FLLDAT, FSNU, FSCOMP, FKUR,
+4    FMHD1, FMHD2, FMHD3, FMHD4, FMHD5, FMHD6, FMHD7, FMHD8
+DBGLAOL
+MHP 8/25 Removed character file names from common block
+11/91 COMMON BLOCKS ADDED FOR PRESSURE SCALE HEIGHT CALC. FOR LIBURN
+MHP 05/02 ADDED OPTION TO ITERATE BETWEEN ROTATION AND
+STRUCTURE CALCULATIONS - SET ITDIF1 GREATER THAN 1
+MHP 8/17 ADDED EXCEN, C_2 TO COMMON BLOCK FOR MATT ET AL. 2012 CENT. TERM
+COMMON/CWIND/WMAX,EXMD,EXW,EXTAU,EXR,EXM,CONSTFACTOR,STRUCTFACTOR,LJDOT0
+MHP 10/24 ADDED STOP CRITERIA FOR CENTRAL H,D,AND HE4
+COMMON/SETT/ENDAGE(50),SETDT(50),LENDAG(50),LSETDT(50)
+7/91 ENTROPY TERM COMMON BLOCK ADDED.
+7/91 FLAG TO TOGGLE BETWEEN NEW/OLD RATES ADDED.
+MHP 9/94
+MHP 9/94 ADDED DISK LOCKING OPTION - FLAG, TIME OVER WHICH LOCKING
+IS ENFORCED, AND PERIOD AT WHICH LOCKING IS SET ARE OPTIONS.
+MHP 8/25 Removed character file names from common block
+DBG 1/92 let XENV0, ZENV0, and CMIXL be arrays so can change during
+a set of runs.
+MHP 8/25 Removed character file names from common block
+DBG 4/26/94 Tired of not have access to current age of model so...
+MHP 10/24 FLAG FOR END OF RUN
+JVS 02/12
+DBG PULSE OUT 7/92</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-_file_level_'>(file level)</a> <span class='muted'>main program</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-_file_level_'><h3><span class='kind'>main program</span>(file level)</h3>
+<p class='muted'>lines 1–1133 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/main.f#L1-L1133'>GitHub</a></p>
+<pre>(no PROGRAM statement: the file&#x27;s statements are the main program)</pre>
+<div class='notes'><p>The main program: settings and tables, then for each kind card the starting model and the evolution loop (mass loss, mixing and burning, rezoning, four levels of <code>CRRECT</code>, rotation, light elements, time step, output), with calibration and Monte Carlo drivers around it (above).</p></div>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-ACDPTH'>/ACDPTH/</a>, <a href='../commons.html#c-ATMOS'>/ATMOS/</a>, <a href='../commons.html#c-BE7'>/BE7/</a>, <a href='../commons.html#c-CALS2'>/CALS2/</a>, <a href='../commons.html#c-CALSTAR'>/CALSTAR/</a>, <a href='../commons.html#c-CALSUN'>/CALSUN/</a>, <a href='../commons.html#c-CCOUT'>/CCOUT/</a>, <a href='../commons.html#c-CCOUT2'>/CCOUT2/</a>, <a href='../commons.html#c-CENT'>/CENT/</a>, <a href='../commons.html#c-CENV'>/CENV/</a>, <a href='../commons.html#c-CHRONE'>/CHRONE/</a>, <a href='../commons.html#c-CKIND'>/CKIND/</a>, <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-CONST3'>/CONST3/</a>, <a href='../commons.html#c-CROSS'>/CROSS/</a>, <a href='../commons.html#c-CT3'>/CT3/</a>, <a href='../commons.html#c-CTOL'>/CTOL/</a>, <a href='../commons.html#c-CWIND'>/CWIND/</a>, <a href='../commons.html#c-DEUTER'>/DEUTER/</a>, <a href='../commons.html#c-DIFUS'>/DIFUS/</a>, <a href='../commons.html#c-DISK'>/DISK/</a>, <a href='../commons.html#c-DPMIX'>/DPMIX/</a>, <a href='../commons.html#c-ENTROP'>/ENTROP/</a>, <a href='../commons.html#c-ENVCZ'>/ENVCZ/</a>, <a href='../commons.html#c-FLAG'>/FLAG/</a>, <a href='../commons.html#c-FLUXES'>/FLUXES/</a>, <a href='../commons.html#c-GOVS'>/GOVS/</a>, <a href='../commons.html#c-GRAB'>/GRAB/</a>, <a href='../commons.html#c-GRAVS3'>/GRAVS3/</a>, <a href='../commons.html#c-HEFLSH'>/HEFLSH/</a>, <a href='../commons.html#c-LABEL'>/LABEL/</a>, <a href='../commons.html#c-LIOV'>/LIOV/</a>, <a href='../commons.html#c-LLOT95'>/LLOT95/</a>, <a href='../commons.html#c-LLOT95A'>/LLOT95A/</a>, <a href='../commons.html#c-LLOT95E'>/LLOT95E/</a>, <a href='../commons.html#c-LUNUM'>/LUNUM/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-MONTE'>/MONTE/</a>, <a href='../commons.html#c-MONTE2'>/MONTE2/</a>, <a href='../commons.html#c-NEWENG'>/NEWENG/</a>, <a href='../commons.html#c-NEWXYM'>/NEWXYM/</a>, <a href='../commons.html#c-NWLAOL'>/NWLAOL/</a>, <a href='../commons.html#c-OLDMOD'>/OLDMOD/</a>, <a href='../commons.html#c-OP95FACT'>/OP95FACT/</a>, <a href='../commons.html#c-OP95INDX'>/OP95INDX/</a>, <a href='../commons.html#c-ORIGSTART'>/ORIGSTART/</a>, <a href='../commons.html#c-OVRTRN'>/OVRTRN/</a>, <a href='../commons.html#c-PO'>/PO/</a>, <a href='../commons.html#c-PREVCZ'>/PREVCZ/</a>, <a href='../commons.html#c-PULSE'>/PULSE/</a>, <a href='../commons.html#c-ROT'>/ROT/</a>, <a href='../commons.html#c-ROTPRT'>/ROTPRT/</a>, <a href='../commons.html#c-SETT'>/SETT/</a>, <a href='../commons.html#c-SOUND'>/SOUND/</a>, <a href='../commons.html#c-STCH'>/STCH/</a>, <a href='../commons.html#c-THEAGE'>/THEAGE/</a>, <a href='../commons.html#c-TRACK'>/TRACK/</a>, <a href='../commons.html#c-ZRAMP'>/ZRAMP/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/chkcal.f.html#def-CHKCAL'>CHKCAL</a> <span class='muted'>(chkcal.f)</span></li>
+<li><a href='../files/chkscal.f.html#def-CHKSCAL'>CHKSCAL</a> <span class='muted'>(chkscal.f)</span></li>
+<li><a href='../files/convec.f.html#def-CONVEC'>CONVEC</a> <span class='muted'>(convec.f)</span></li>
+<li><a href='../files/crrect.f.html#def-CRRECT'>CRRECT</a> <span class='muted'>(crrect.f)</span> ×4</li>
+<li><a href='../files/engeb.f.html#def-ENGEB'>ENGEB</a> <span class='muted'>(engeb.f)</span></li>
+<li><a href='../files/findsh.f.html#def-FINDSH'>FINDSH</a> <span class='muted'>(findsh.f)</span> ×2</li>
+<li><a href='../files/fpft.f.html#def-FPFT'>FPFT</a> <span class='muted'>(fpft.f)</span> ×2</li>
+<li><a href='../files/getnewenv.f.html#def-GETNEWENV'>GETNEWENV</a> <span class='muted'>(getnewenv.f)</span></li>
+<li><a href='../files/getw.f.html#def-GETW'>GETW</a> <span class='muted'>(getw.f)</span></li>
+<li><a href='../files/hpoint.f.html#def-HPOINT'>HPOINT</a> <span class='muted'>(hpoint.f)</span></li>
+<li><a href='../files/htimer.f.html#def-HTIMER'>HTIMER</a> <span class='muted'>(htimer.f)</span> ×2</li>
+<li><a href='../files/liburn.f.html#def-LIBURN'>LIBURN</a> <span class='muted'>(liburn.f)</span></li>
+<li><a href='../files/lirate88.f.html#def-LIRATE88'>LIRATE88</a> <span class='muted'>(lirate88.f)</span> ×2</li>
+<li><a href='../files/massloss.f.html#def-MASSLOSS'>MASSLOSS</a> <span class='muted'>(massloss.f)</span></li>
+<li><a href='../files/mix.f.html#def-MIX'>MIX</a> <span class='muted'>(mix.f)</span></li>
+<li><a href='../files/mixcz.f.html#def-MIXCZ'>MIXCZ</a> <span class='muted'>(mixcz.f)</span></li>
+<li><a href='../files/parmin.f.html#def-PARMIN'>PARMIN</a> <span class='muted'>(parmin.f)</span></li>
+<li><a href='../files/pdist.f.html#def-PDIST'>PDIST</a> <span class='muted'>(pdist.f)</span></li>
+<li><a href='../files/putstore.f.html#def-PUTSTORE'>PUTSTORE</a> <span class='muted'>(putstore.f)</span></li>
+<li><a href='../files/setcal.f.html#def-SETCAL'>SETCAL</a> <span class='muted'>(setcal.f)</span></li>
+<li><a href='../files/setscal.f.html#def-SETSCAL'>SETSCAL</a> <span class='muted'>(setscal.f)</span></li>
+<li><a href='../files/setups.f.html#def-SETUPS'>SETUPS</a> <span class='muted'>(setups.f)</span></li>
+<li><a href='../files/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span> ×2</li>
+<li><a href='../files/wrthead.f.html#def-WRTHEAD'>WRTHEAD</a> <span class='muted'>(wrthead.f)</span></li>
+<li><a href='../files/wrtlst.f.html#def-WRTLST'>WRTLST</a> <span class='muted'>(wrtlst.f)</span></li>
+<li><a href='../files/wrtmonte.f.html#def-WRTMONTE'>WRTMONTE</a> <span class='muted'>(wrtmonte.f)</span> ×2</li>
+<li><a href='../files/wrtout.f.html#def-WRTOUT'>WRTOUT</a> <span class='muted'>(wrtout.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">1</span>C
+<span class="ln">2</span>C
+<span class="ln">3</span>C$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+<span class="ln">4</span>C MAIN
+<span class="ln">5</span>C$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+<span class="ln">6</span>
+<span class="ln">7</span>C*******
+<span class="ln">8</span>C initialize all variables, set up common blocks
+<span class="ln">9</span>C*******
+<span class="ln">10</span>
+<span class="ln">11</span>C the array size, i.e. max # of shells is specified in the
+<span class="ln">12</span>C parameter statement.  it defines JSON.  to change the array
+<span class="ln">13</span>C size do a global change on &quot;JSON=2000&quot; or whatever.
+<span class="ln">14</span>      PARAMETER (JSON=5000)
+<span class="ln">15</span>      PARAMETER (NUMTT=70)
+<span class="ln">16</span>      PARAMETER (NUMD=19)
+<span class="ln">17</span>      PARAMETER (NUMX=10)
+<span class="ln">18</span>      PARAMETER (NUMZ=13)
+<span class="ln">19</span>      PARAMETER (NUMXZ=126)
+<span class="ln">20</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">21</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">22</span>C DBGLAOL - to save space make tables single precision
+<span class="ln">23</span>      REAL*8 OLAOL,OXA,OT,ORHO,TOLLAOL
+<span class="ln">24</span>C MHP 8/25 Removed unused variables and added pass-through variables 
+<span class="ln">25</span>      CHARACTER*256 FALEX06,FALLARD,FATM,FFERMI,FKUR,FKUR2,FLAOL,
+<span class="ln">26</span>     * FLAOL2,FLIV95,FLLDAT,FMHD1,FMHD2,FMHD3,FMHD4,FMHD5,
+<span class="ln">27</span>     * FMHD6,FMHD7,FMHD8,FOPAL2,FPATM,FPENV,FPMOD,FPUREZ,FSCVH,FSCVHE,FSCVZ
+<span class="ln">28</span>      CHARACTER*256 OPECALEX(7)
+<span class="ln">29</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">30</span>      COMMON/LUNUM/IFIRST, IRUN, ISTAND, IFERMI,
+<span class="ln">31</span>     1    IOPMOD, IOPENV, IOPATM, IDYN,
+<span class="ln">32</span>     2    ILLDAT, ISNU, ISCOMP, IKUR
+<span class="ln">33</span>C      COMMON/LUFNM/ FLAST, FFIRST, FRUN, FSTAND, FFERMI,
+<span class="ln">34</span>C     1    FDEBUG, FTRACK, FSHORT, FMILNE, FMODPT,
+<span class="ln">35</span>C     2    FSTOR, FPMOD, FPENV, FPATM, FDYN,
+<span class="ln">36</span>C     3    FLLDAT, FSNU, FSCOMP, FKUR,
+<span class="ln">37</span>C     4    FMHD1, FMHD2, FMHD3, FMHD4, FMHD5, FMHD6, FMHD7, FMHD8
+<span class="ln">38</span>C DBGLAOL
+<span class="ln">39</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">40</span>      COMMON/NWLAOL/OLAOL(12,104,52),OXA(12),OT(52),ORHO(104),TOLLAOL,
+<span class="ln">41</span>     *  IOLAOL, NUMOFXYZ, NUMRHO, NUMT, LLAOL, LPUREZ, IOPUREZ
+<span class="ln">42</span>      COMMON/TRACK/ITRVER
+<span class="ln">43</span>      COMMON/LABEL/XENV0,ZENV0
+<span class="ln">44</span>      COMMON/CCOUT/LSTORE,LSTATM,LSTENV,LSTMOD,LSTPHYS,LSTROT,LSCRIB,LSTCH,LPHHD
+<span class="ln">45</span>      COMMON/CCOUT2/LDEBUG,LCORR,LMILNE,LTRACK,LSTPCH
+<span class="ln">46</span>      COMMON/CENV/TRIDT,TRIDL,SENV0,LSENV0,LNEW0
+<span class="ln">47</span>      COMMON/CKIND/RESCAL(4,50),NMODLS(50),IRESCA(50),LFIRST(50),
+<span class="ln">48</span>     1       NUMRUN
+<span class="ln">49</span>C 11/91 COMMON BLOCKS ADDED FOR PRESSURE SCALE HEIGHT CALC. FOR LIBURN
+<span class="ln">50</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">51</span>C MHP 05/02 ADDED OPTION TO ITERATE BETWEEN ROTATION AND
+<span class="ln">52</span>C STRUCTURE CALCULATIONS - SET ITDIF1 GREATER THAN 1
+<span class="ln">53</span>      COMMON/DIFUS/DTDIF,DJOK,ITDIF1,ITDIF2
+<span class="ln">54</span>      COMMON/DPMIX/DPENV,ALPHAC,ALPHAE,ALPHAM,BETAC,IOV1,IOV2,
+<span class="ln">55</span>     *      IOVIM, LOVSTC, LOVSTE, LOVSTM, LSEMIC, LADOV, LOVMAX
+<span class="ln">56</span>      COMMON/LIOV/PSCAL0,PSCAL1
+<span class="ln">57</span>      COMMON/PREVCZ/RBASE0,BLI6OLD,BLI7OLD,BBE9OLD,JENVOS
+<span class="ln">58</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">59</span>      COMMON/CONST3/CDELRL,CMIXL,CMIXL2,CMIXL3,CLNDP,CSECYR
+<span class="ln">60</span>      COMMON/CTOL/HTOLER(5,2),FCORR0,FCORRI,FCORR,HPTTOL(12),NITER1,
+<span class="ln">61</span>     1 NITER2,NITER3
+<span class="ln">62</span>C MHP 8/17 ADDED EXCEN, C_2 TO COMMON BLOCK FOR MATT ET AL. 2012 CENT. TERM
+<span class="ln">63</span>      COMMON/CWIND/WMAX,EXMD,EXW,EXTAU,EXR,EXM,EXL,EXPR,CONSTFACTOR,
+<span class="ln">64</span>     *             STRUCTFACTOR,EXCEN,C_2,LJDOT0
+<span class="ln">65</span>C      COMMON/CWIND/WMAX,EXMD,EXW,EXTAU,EXR,EXM,CONSTFACTOR,STRUCTFACTOR,LJDOT0
+<span class="ln">66</span>      COMMON/FLAG/LEXCOM
+<span class="ln">67</span>      COMMON/HEFLSH/LKUTHE
+<span class="ln">68</span>      COMMON/ROT/WNEW,WALPCZ,ACFPFT,ITFP1,ITFP2,LROT,LINSTB,LWNEW
+<span class="ln">69</span>C MHP 10/24 ADDED STOP CRITERIA FOR CENTRAL H,D,AND HE4
+<span class="ln">70</span>      COMMON/SETT/ENDAGE(50),SETDT(50),LENDAG(50),LSETDT(50),
+<span class="ln">71</span>     * END_DCEN(50),END_XCEN(50),END_YCEN(50)
+<span class="ln">72</span>C      COMMON/SETT/ENDAGE(50),SETDT(50),LENDAG(50),LSETDT(50)
+<span class="ln">73</span>      COMMON/NEWENG/NITER4,LNEWS,LSNU
+<span class="ln">74</span>C 7/91 ENTROPY TERM COMMON BLOCK ADDED.
+<span class="ln">75</span>      COMMON/ENTROP/HTT0(JSON),HPP0(JSON),HLL0(JSON),HRR0(JSON)
+<span class="ln">76</span>C 7/91 FLAG TO TOGGLE BETWEEN NEW/OLD RATES ADDED.
+<span class="ln">77</span>      COMMON/OLDMOD/HPO(JSON),HTO(JSON),HRO(JSON),HLO(JSON),HDO(JSON),
+<span class="ln">78</span>     *              HCOMPP(15,JSON),HSS(JSON),LCO(JSON),LCZO(JSON),TEFFLO,MO
+<span class="ln">79</span>C MHP 9/94
+<span class="ln">80</span>      COMMON/ROTPRT/LPRT0
+<span class="ln">81</span>C MHP 9/94 ADDED DISK LOCKING OPTION - FLAG, TIME OVER WHICH LOCKING
+<span class="ln">82</span>C IS ENFORCED, AND PERIOD AT WHICH LOCKING IS SET ARE OPTIONS.
+<span class="ln">83</span>      COMMON/DISK/SAGE,TDISK,PDISK,LDISK
+<span class="ln">84</span>      COMMON/PULSE/XMSOL,LPULSE,IPVER
+<span class="ln">85</span>      COMMON/ATMOS/HRAS,KTTAU,KTTAU0,LTTAU
+<span class="ln">86</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">87</span>      COMMON/CHRONE/LRWSH, LISO, IISO
+<span class="ln">88</span>C DBG 1/92 let XENV0, ZENV0, and CMIXL be arrays so can change during
+<span class="ln">89</span>C a set of runs.
+<span class="ln">90</span>      COMMON /NEWXYM/XENV0A(50),ZENV0A(50),CMIXLA(50),LSENV0A(50),
+<span class="ln">91</span>     * SENV0A(50)
+<span class="ln">92</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">93</span>      COMMON/ZRAMP/RSCLZC(50), RSCLZM1(50), RSCLZM2(50),
+<span class="ln">94</span>     *     IOLAOL2, IOOPAL2, NK, LZRAMP
+<span class="ln">95</span>C DBG 4/26/94 Tired of not have access to current age of model so...
+<span class="ln">96</span>      COMMON/THEAGE/DAGE
+<span class="ln">97</span>      DIMENSION TLUMX(8),TRIL(3),TRIT(3),PS(3),TS(3),RS(3),CFENV(9),
+<span class="ln">98</span>     *HS(JSON),HL(JSON),HR(JSON),HP(JSON),HT(JSON),HD(JSON),LC(JSON),
+<span class="ln">99</span>     *HCOMP(15,JSON),HS1(JSON),HS2(JSON),HHC(JSON),
+<span class="ln">100</span>     *HHA(4,2,JSON),HHB(4,JSON),HPP(JSON),HTT(JSON),ESTORE(4),
+<span class="ln">101</span>     *HMAX(4),NHMAX(4),HSRF(6),FP(JSON),FT(JSON),
+<span class="ln">102</span>     *OMEGA(JSON),HI(JSON),HJM(JSON),HKEROT(JSON),R0(JSON),ETA2(JSON),
+<span class="ln">103</span>     *QIW(JSON),HG(JSON),V(12),HKEROTO(JSON)
+<span class="ln">104</span>C     MHP 10/24 FLAG FOR END OF RUN
+<span class="ln">105</span>      LOGICAL*4 LEND_KIND
+<span class="ln">106</span>C JVS 02/12
+<span class="ln">107</span>      COMMON/STCH/HCOMPF(15,JSON),HRF(JSON),HPF(JSON),HDF(JSON),
+<span class="ln">108</span>     * HSF(JSON),HTF(JSON)
+<span class="ln">109</span>
+<span class="ln">110</span>C DBG PULSE OUT 7/92
+<span class="ln">111</span>C variables used to contral output of pulsation models.  model
+<span class="ln">112</span>C output after has traveled pomax in HR diagram
+<span class="ln">113</span>C LPOUT and POMAX added to control common block, rest in physics
+<span class="ln">114</span>      COMMON /PO/POA,POB,POC,POMAX,LPOUT
+<span class="ln">115</span>C MHP 1/93 add common blocks for automatic calibration of solar models.
+<span class="ln">116</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">117</span>      COMMON/CALSUN/DLDX,DRDX,DLDA,DRDA,BLP,RLP,DX,DA,LSOL
+<span class="ln">118</span>C MHP 6/13 ADD OPTION TO CALIBRATE SOLAR Z/X, SOLAR Z/X, SOLAR AGE
+<span class="ln">119</span>      COMMON/CALS2/TOLL,TOLR,TOLZ,LCALS,LCALSOLZX,CALSOLZX,CALSOLAGE
+<span class="ln">120</span>C      COMMON/CALS2/TOLL,TOLR,LCALS
+<span class="ln">121</span>      COMMON/GRAVS3/FGRY,FGRZ,LTHOUL,LDIFZ
+<span class="ln">122</span>C DBG 12/94 added calibrate stellar model
+<span class="ln">123</span>      COMMON/CALSTAR/XLS, XLSTOL,  STEFF, SR,
+<span class="ln">124</span>     1      BLI, ALRI, AGER, BLR, BLRP, AGEI,
+<span class="ln">125</span>     2      LSTAR, LTEFF, LPASSR,LCALST
+<span class="ln">126</span>C MHP 7/96 common block added for sound speed
+<span class="ln">127</span>      COMMON/SOUND/GAM1(JSON),LSOUND
+<span class="ln">128</span>C MHP 8/96 monte carlo option for snus added.
+<span class="ln">129</span>      COMMON/MONTE/LMONTE,IMBEG,IMEND
+<span class="ln">130</span>      COMMON/FLUXES/FLUX(10),FLUXTOT(10),CLSNU,GASNU
+<span class="ln">131</span>C MHP 6/14 DERIVATIVES ADDED TO COMMON BLOCK.  NOT USED FOR DERIVATIVES
+<span class="ln">132</span>C IN THE MONTE CARLO.
+<span class="ln">133</span>      COMMON/CROSS/SSTANDARD(17),QS0E(8),QQS0EE(8),FO16,FC12,LNEWNUC
+<span class="ln">134</span>C      COMMON/CROSS/SSTANDARD(17)
+<span class="ln">135</span>C MHP 8/96
+<span class="ln">136</span>C added monte carlo parameters for metal diffusion, solar L, solar age.
+<span class="ln">137</span>      COMMON/MONTE2/S11(1000),S33(1000),S34(1000),S17(1000),
+<span class="ln">138</span>     *              ZX(1000),FHE(1000),FZDIF(1000),FLUM(1000),
+<span class="ln">139</span>     *              FAGE(1000)
+<span class="ln">140</span>C MHP 3/96 central T,P,RHO added
+<span class="ln">141</span>      COMMON/CENT/TCENTER,PCENTER,DCENTER,ENVLM,ENVR
+<span class="ln">142</span>      COMMON /LLOT95A/TGR(NUMTT),XXG(NUMX),R0GR(NUMD),ZZG(NUMZ),
+<span class="ln">143</span>     *                CAPPA2(NUMXZ,NUMTT,NUMD),NUMXM(NUMZ),NZ(NUMZ)
+<span class="ln">144</span>C as above for the model Z.
+<span class="ln">145</span>      COMMON /LLOT95/CAPPA(NUMX,NUMTT,NUMD),ZTAB
+<span class="ln">146</span>C as above for desired surface value of X.
+<span class="ln">147</span>      COMMON /LLOT95E/CAPPAE(NUMTT,NUMD),XTAB
+<span class="ln">148</span>C indices for interpolation in Z,X,T, and R
+<span class="ln">149</span>      COMMON/OP95INDX/JZ,JX(4,4),JT,JD(4)
+<span class="ln">150</span>C interpolation factors for Z,X,T, and R, as well as derivative
+<span class="ln">151</span>C factors for T and RHO.
+<span class="ln">152</span>      COMMON/OP95FACT/BZ(4),BX(4,4),BT(4),BTT(4),BD(4,4),BDD(4,4)
+<span class="ln">153</span>C MHP 05/02 ADDED FOR ITERATION BETWEEN ROTATION AND STRUCTURE CALCULATION
+<span class="ln">154</span>      COMMON/ORIGSTART/HJM0(JSON),HCOMPP0(15,JSON)
+<span class="ln">155</span>C MHP 05/02 DEUTERIUM BURNING RATE ADDED
+<span class="ln">156</span>      COMMON/DEUTER/DRATE(JSON),DRATE0(JSON),FMASSACC,JCZ
+<span class="ln">157</span>C***MHP 1/04 inserted for test
+<span class="ln">158</span>C      COMMON/OPTAB/OPTOL,ZSI,IDT,IDD(4)
+<span class="ln">159</span>C*** end test
+<span class="ln">160</span>C LLP 8/07 Make LPTIME available for calibration
+<span class="ln">161</span>      COMMON/CT3/LPTIME
+<span class="ln">162</span>C MHP 2/04 ADDED FOR NEUTRINO FLUX TABLE
+<span class="ln">163</span>      COMMON/BE7/BE7MASSFRACTION
+<span class="ln">164</span>C JVS 02/11
+<span class="ln">165</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">166</span>C       COMMON/ACDPTH/TAUCZN,DELADJ(JSON),TAUHE, TNORM, TCZ, WHE, ICLCD,
+<span class="ln">167</span>      COMMON/ACDPTH/TAUCZN,DELADJ(JSON),TAUHE, TNORM, TCZ, WHE,
+<span class="ln">168</span>     *ACATMR(JSON), ACATMD(JSON), ACATMP(JSON), ACATMT(JSON),TATMOS,
+<span class="ln">169</span>C      *LCLCD, AGEOUT(5), IACAT, IJLAST, LJLAST, LJWRT, LADON,LAOLY, IJVS,
+<span class="ln">170</span>     *AGEOUT(5), LCLCD, ICLCD, IACAT, IJLAST, LJLAST, LJWRT, LADON, LAOLY, IJVS,
+<span class="ln">171</span>     *IJENT, IJDEL, LACOUT
+<span class="ln">172</span>      INTEGER NAO
+<span class="ln">173</span>      DATA NAO/1/
+<span class="ln">174</span>C 10/11 He3+He3 luminosity info
+<span class="ln">175</span>      COMMON/GRAB/ENGHE3,HE3ALL,UMHE33(JSON),UMHEAL(JSON)
+<span class="ln">176</span>C JVS 08/13 IF THE CZ IS BEYOND THE FITTING POINT, STORE ITS LOCATION
+<span class="ln">177</span>      COMMON/ENVCZ/ENVRCZ,RINT
+<span class="ln">178</span>C JVS 04/14 Common block for additional timestep governors
+<span class="ln">179</span>      COMMON/GOVS/LTRIST
+<span class="ln">180</span>C G Somers 3/17, ADDING NEW TAUCZ COMMON BLOCK
+<span class="ln">181</span>      COMMON/OVRTRN/LNEWTCZ,LCALCENV,TAUCZ,TAUCZ0,PPHOT,PPHOT0,FRACSTEP
+<span class="ln">182</span>C     MHP 10/24 NEW VARIABLES FOR STOP CONDITIONS ON CENTRAL ABUNDANCE
+<span class="ln">183</span>C       REAL*8 XCEN(2,15),DTPREV
+<span class="ln">184</span>C       LOGICAL*4 L_LASTSTEP
+<span class="ln">185</span>C
+<span class="ln">186</span>      DIMENSION BE7M(JSON),FLUXI0(10,JSON)
+<span class="ln">187</span>      DIMENSION HR1(JSON),HR2(JSON),HR3(JSON),HR4(JSON),HR5(JSON),
+<span class="ln">188</span>     1 HR6(JSON),HR7(JSON),HR8(JSON),HR9(JSON),HR10(JSON),HR11(JSON),
+<span class="ln">189</span>     2 HR12(JSON),HR13(JSON),HF1(JSON),HF2(JSON)
+<span class="ln">190</span>      DIMENSION MXZONE(12,2),MXZON0(12,2),MRZONE(13,2)
+<span class="ln">191</span>      DIMENSION LCZ(JSON)
+<span class="ln">192</span>C latest values (Bahcall and Pinsonneault 1996)-actual values set in
+<span class="ln">193</span>C subroutine PARMIN
+<span class="ln">194</span>      DIMENSION SBP(17)
+<span class="ln">195</span>      DATA SBP/0.9558,0.9690,0.9712,1.0,1.0,0.992,1.0,1.0,1.0,1.0,1.0,
+<span class="ln">196</span>     $  1.0,1.0,1.0,1.0,0.92088,0.1625/
+<span class="ln">197</span>C MHP 3/96 added data for base solar age, L
+<span class="ln">198</span>C       DATA SUNAGE,SUNL/4.57D09,3.844D33/  ! KC 2025-05-31
+<span class="ln">199</span>      DATA SUNL/3.844D33/
+<span class="ln">200</span>      SAVE
+<span class="ln">201</span>
+<span class="ln">202</span>C*******
+<span class="ln">203</span>C START
+<span class="ln">204</span>C*******
+<span class="ln">205</span>
+<span class="ln">206</span>      IOWR = 9
+<span class="ln">207</span>C LPUNCH is TRUE once first model is calculated
+<span class="ln">208</span>      LPUNCH=.FALSE.
+<span class="ln">209</span>C read in user parameters
+<span class="ln">210</span>      CALL <a href="../files/parmin.f.html#def-PARMIN" title="PARMIN in parmin.f">PARMIN</a>(FALEX06,FALLARD,FATM,FFERMI,FKUR,FKUR2,FLAOL,
+<span class="ln">211</span>     * FLAOL2,FLIV95,FLLDAT,FMHD1,FMHD2,FMHD3,FMHD4,FMHD5,FMHD6,FMHD7,
+<span class="ln">212</span>     * FMHD8,FOPAL2,FPATM,FPENV,FPMOD,FPUREZ,FSCVH,FSCVHE,FSCVZ,OPECALEX)
+<span class="ln">213</span>C set up constants and read in tabular data
+<span class="ln">214</span>C MHP 8/25 directly pass file names instead of using common blocks
+<span class="ln">215</span>      CALL <a href="../files/setups.f.html#def-SETUPS" title="SETUPS in setups.f">SETUPS</a>(V,FALEX06,FALLARD,FATM,FFERMI,FKUR,FKUR2,FLAOL,
+<span class="ln">216</span>     * FLAOL2,FLIV95,FLLDAT,FMHD1,FMHD2,FMHD3,FMHD4,FMHD5,FMHD6,FMHD7,
+<span class="ln">217</span>     * FMHD8,FOPAL2,FPUREZ,FSCVH,FSCVHE,FSCVZ,OPECALEX)
+<span class="ln">218</span>C MHP 3/96 changed I/O to read in only up to max run needed.
+<span class="ln">219</span>      IF(LMONTE)THEN
+<span class="ln">220</span>c MHP 8/25 moved file open to parmin
+<span class="ln">221</span>C     OPEN(UNIT=IDYN,FILE=FDYN,FORM=&#x27;FORMATTED&#x27;,STATUS=&#x27;OLD&#x27;)
+<span class="ln">222</span>         I0 = IMBEG
+<span class="ln">223</span>         IMEND = MIN(IMEND,1000)
+<span class="ln">224</span>         I1 = IMEND
+<span class="ln">225</span>C read in monte carlo data
+<span class="ln">226</span>         DO I = 1,IMEND
+<span class="ln">227</span>            READ(IDYN,1511)S11(I),S33(I),S34(I),S17(I),ZX(I),FHE(I),
+<span class="ln">228</span>     *                     FLUM(I),FAGE(I)
+<span class="ln">229</span> 1511       FORMAT(7X,1P7E10.3/E9.3)
+<span class="ln">230</span>            WRITE(IOWR,*)I,S11(I),S33(I),S34(I),S17(I),ZX(I),FHE(I),
+<span class="ln">231</span>     *                 FLUM(I),FAGE(I)
+<span class="ln">232</span>            FZDIF(I) = FHE(I)
+<span class="ln">233</span>         END DO
+<span class="ln">234</span>      ELSE
+<span class="ln">235</span>         I0 = 1
+<span class="ln">236</span>         I1 = 1
+<span class="ln">237</span>      ENDIF
+<span class="ln">238</span>      DO 500 NN = I0,I1
+<span class="ln">239</span>C for monte carlo run, input values of parameters being changed.
+<span class="ln">240</span>      IF(LMONTE)THEN
+<span class="ln">241</span>         SSTANDARD(1) = S11(NN)*SBP(1)
+<span class="ln">242</span>         SSTANDARD(2) = S33(NN)*SBP(2)
+<span class="ln">243</span>         SSTANDARD(3) = S34(NN)*SBP(3)
+<span class="ln">244</span>         SSTANDARD(16) = S17(NN)*SBP(16)
+<span class="ln">245</span>         FGRSET = FHE(NN)
+<span class="ln">246</span>         FGRZ = FZDIF(NN)
+<span class="ln">247</span>         CLSUN = SUNL*FLUM(NN)
+<span class="ln">248</span>         CLSUNL = DLOG10(CLSUN)
+<span class="ln">249</span>         CLNSUN = CLN/CLSUN
+<span class="ln">250</span>         FACAGE = FAGE(NN)
+<span class="ln">251</span>C timestep and final age are altered in SR SETCAL; input #s should be
+<span class="ln">252</span>C scaled for a solar age of 4.57 Gyr
+<span class="ln">253</span>         ENDAGE(2)=1.0D8
+<span class="ln">254</span>         ENDAGE(3)=4.57D9
+<span class="ln">255</span>      ELSE
+<span class="ln">256</span>         FACAGE = 1.0D0
+<span class="ln">257</span>      ENDIF
+<span class="ln">258</span>C DBG PULSE: save LPULSE flag, set LPULSE to F except on last model of
+<span class="ln">259</span>C last run, then set LPULSE to saved value of LPULSE.
+<span class="ln">260</span>      LSAVPU = LPULSE
+<span class="ln">261</span>C 02/11 JVS uncommented LPULSE=.FALSE.
+<span class="ln">262</span>C      LPULSE = .FALSE.
+<span class="ln">263</span>C MHP 1/93 add option to automatically calibrate solar model.
+<span class="ln">264</span>C MHP 3/96 added counter for # of iterations per converged model and
+<span class="ln">265</span>C starting estimate of ALPHA and X
+<span class="ln">266</span>      IF(LCALS)THEN
+<span class="ln">267</span>         CALL <a href="../files/setcal.f.html#def-SETCAL" title="SETCAL in setcal.f">SETCAL</a>(FACAGE)
+<span class="ln">268</span>         ICONV = 1
+<span class="ln">269</span>         XGUESS = RESCAL(2,1)
+<span class="ln">270</span>         AGUESS = CMIXLA(1)
+<span class="ln">271</span>         lptimesv = lptime   ! save LPTIME for reuse during calibration
+<span class="ln">272</span>         kttausv  = kttau    ! save KTTAU for reuse during calibration
+<span class="ln">273</span>      ELSE
+<span class="ln">274</span>         ICONV = 0
+<span class="ln">275</span>      ENDIF
+<span class="ln">276</span>C DBG 12/94 add option to automatically calculate a stellar model
+<span class="ln">277</span>C of specified Teff and L
+<span class="ln">278</span>      IF (LCALST) THEN
+<span class="ln">279</span>         CALL <a href="../files/setscal.f.html#def-SETSCAL" title="SETSCAL in setscal.f">SETSCAL</a>
+<span class="ln">280</span>      ENDIF
+<span class="ln">281</span>
+<span class="ln">282</span>C**********
+<span class="ln">283</span>C     RUN THROUGH THE KIND CARDS IN ORDER
+<span class="ln">284</span>C**********
+<span class="ln">285</span>      DO 200 NK = 1, NUMRUN
+<span class="ln">286</span>         LSOUND = .FALSE.
+<span class="ln">287</span>C         LPULSE=.FALSE.
+<span class="ln">288</span>         XENV0 = XENV0A(NK)
+<span class="ln">289</span>         ZENV0 = ZENV0A(NK)
+<span class="ln">290</span>         CMIXL = CMIXLA(NK)
+<span class="ln">291</span>       LSENV0 = LSENV0A(NK)
+<span class="ln">292</span>       SENV0 = SENV0A(NK)
+<span class="ln">293</span>       LRESET = .FALSE.
+<span class="ln">294</span>       LARGE = .FALSE.
+<span class="ln">295</span>C MHP 10/02 ZERO OUT INITIAL ANGULAR MOMENTUM
+<span class="ln">296</span>         SJTOT = 0.0D0
+<span class="ln">297</span>         SKEROT = 0.0D0
+<span class="ln">298</span>C read in the initial model here
+<span class="ln">299</span>C STARIN also calls RSCALE to perform rescaling if requested
+<span class="ln">300</span>C        CALL STARIN(BL,CFENV,DAGE,DDAGE,DELTS,DELTSH,DELTS0,ETA2,  ! KC 2025-05-31
+<span class="ln">301</span>       CALL <a href="../files/starin.f.html#def-STARIN" title="STARIN in starin.f">STARIN</a>(BL,CFENV,DAGE,DDAGE,DELTS,DELTSH,ETA2,
+<span class="ln">302</span>     *    FP,FT,FTRI,HCOMP,HD,HI,HJM,HKEROT,HL,HP,HR,HS,HS1,HS2,
+<span class="ln">303</span>C      *    HSTOT,HT,IKUT,ISTORE,JCORE,JENV,LARGE,LC,LNEW,M,MODEL,  ! KC 2025-05-31
+<span class="ln">304</span>     *    HSTOT,HT,IKUT,ISTORE,JENV,LARGE,LC,LNEW,M,MODEL,
+<span class="ln">305</span>     *    NK,OMEGA,PS,QDP,QDT,QIW,R0,RS,SJTOT,SKEROT,SMASS,TEFFL,
+<span class="ln">306</span>     *    TLUMX,TRIL,TRIT,TS,VEL,HG,V)
+<span class="ln">307</span>      IF((OMEGA(1) .EQ. 0) .AND. (LROT)) THEN
+<span class="ln">308</span>1611      FORMAT(&#x27;LROT set to TRUE, but OMEGA(1) = 0. Stopping.&#x27;,
+<span class="ln">309</span>     *           &#x27; Initialize rotation rates or set LROT to&#x27;,
+<span class="ln">310</span>     *           &#x27; FALSE.&#x27;)
+<span class="ln">311</span>          PRINT 1611
+<span class="ln">312</span>          STOP
+<span class="ln">313</span>      ENDIF
+<span class="ln">314</span>c     MHP 10/24 CHECK STOP CONDITIONS AND DISABLE THEM IF THE STARTING VALUES ARE BELOW THE TARGET THRESHOLD
+<span class="ln">315</span>         IF(LENDAG(NK))THEN
+<span class="ln">316</span>            IF(END_DCEN(NK).GT.0.0D0 .AND.
+<span class="ln">317</span>     *           HCOMP(12,1).LT.END_DCEN(NK))THEN
+<span class="ln">318</span>               END_DCEN(NK)=-END_DCEN(NK)
+<span class="ln">319</span>               WRITE(*,101)HCOMP(12,1),END_DCEN(NK)
+<span class="ln">320</span>               WRITE(ISHORT,101)HCOMP(12,1),END_DCEN(NK)
+<span class="ln">321</span> 101           FORMAT(&#x27;STARTING D &#x27;,E12.4,&#x27; BELOW STOP VALUE &#x27;,
+<span class="ln">322</span>     *                E12.4,&#x27; STOP DISABLED.&#x27;)
+<span class="ln">323</span>            ENDIF
+<span class="ln">324</span>            IF(END_XCEN(NK).GT.0.0D0 .AND.
+<span class="ln">325</span>     *           HCOMP(1,1).LT.END_XCEN(NK))THEN
+<span class="ln">326</span>               END_DCEN(NK)=-END_XCEN(NK)
+<span class="ln">327</span>               WRITE(*,102)HCOMP(12,1),END_DCEN(NK)
+<span class="ln">328</span>               WRITE(ISHORT,102)HCOMP(12,1),END_DCEN(NK)
+<span class="ln">329</span> 102           FORMAT(&#x27;STARTING X &#x27;,E12.4,&#x27; BELOW STOP VALUE &#x27;,
+<span class="ln">330</span>     *                E12.4,&#x27; STOP DISABLED.&#x27;)
+<span class="ln">331</span>            ENDIF
+<span class="ln">332</span>            IF(END_YCEN(NK).GT.0.0D0 .AND.
+<span class="ln">333</span>     *           HCOMP(2,1).LT.END_YCEN(NK))THEN
+<span class="ln">334</span>               END_YCEN(NK)=-END_YCEN(NK)
+<span class="ln">335</span>               WRITE(*,103)HCOMP(12,1),END_DCEN(NK)
+<span class="ln">336</span>               WRITE(ISHORT,103)HCOMP(12,1),END_DCEN(NK)
+<span class="ln">337</span> 103           FORMAT(&#x27;STARTING Y &#x27;,E12.4,&#x27; BELOW STOP VALUE &#x27;,
+<span class="ln">338</span>     *                E12.4,&#x27; STOP DISABLED.&#x27;)
+<span class="ln">339</span>            ENDIF
+<span class="ln">340</span>         ENDIF
+<span class="ln">341</span>C     MHP 2/04 NEUTRINO TABLE
+<span class="ln">342</span>C      LNUTAB = .TRUE.
+<span class="ln">343</span>      LNUTAB = .FALSE.
+<span class="ln">344</span>      IF(LNUTAB)THEN
+<span class="ln">345</span>C SET UP WEIGHTS AND MASSES.
+<span class="ln">346</span>C HS1 = LOCATION IN GM (UNLOGGED) OF SHELL CENTERS.
+<span class="ln">347</span>C HS2 = MASS IN GM OF EACH SHELL.
+<span class="ln">348</span>      DS3 = EXP(CLN*HS(1))
+<span class="ln">349</span>      DS2 = - DS3
+<span class="ln">350</span>      DO I = 2,M
+<span class="ln">351</span>         DS1 = DS2
+<span class="ln">352</span>         DS2 = DS3
+<span class="ln">353</span>         DS3 = EXP(CLN*HS(I))
+<span class="ln">354</span>         HS1(I-1) = DS2
+<span class="ln">355</span>         HS2(I-1) = 0.5D0*(DS3-DS1)
+<span class="ln">356</span>      END DO
+<span class="ln">357</span>      HS1(M) = DS3
+<span class="ln">358</span>      HS2(M) = EXP(CLN*HSTOT) - 0.5D0*(DS2+DS3)
+<span class="ln">359</span>      PDT = -1.0D0
+<span class="ln">360</span>      PDP = 1.0D0
+<span class="ln">361</span>      DO J = 1,10
+<span class="ln">362</span>         FLUXTOT(J) = 0.0D0
+<span class="ln">363</span>         DO K = 1,M
+<span class="ln">364</span>            FLUXI0(J,K) = 0.0D0
+<span class="ln">365</span>         END DO
+<span class="ln">366</span>      END DO
+<span class="ln">367</span>C ASSIGN LOCAL VARIABLES FOR SR CALL FROM GLOBAL VECTORS.
+<span class="ln">368</span>      DO I = 1,M
+<span class="ln">369</span>         DL = HD(I)
+<span class="ln">370</span>         TL = HT(I)
+<span class="ln">371</span>C SKIP CALCULATIONS FOR LOW TEMPERATURES.
+<span class="ln">372</span>         IF(TL.LT.6.0D0)GOTO 666
+<span class="ln">373</span>         X = HCOMP(1,I)
+<span class="ln">374</span>         Y = HCOMP(2,I)
+<span class="ln">375</span>         Z = HCOMP(3,I)
+<span class="ln">376</span>         XHE3 = HCOMP(4,I)
+<span class="ln">377</span>         XC12 = HCOMP(5,I)
+<span class="ln">378</span>         XC13 = HCOMP(6,I)
+<span class="ln">379</span>         XN14 = HCOMP(7,I)
+<span class="ln">380</span>         XN15 = HCOMP(8,I)
+<span class="ln">381</span>         XO16 = HCOMP(9,I)
+<span class="ln">382</span>         XO17 = HCOMP(10,I)
+<span class="ln">383</span>         XO18 = HCOMP(11,I)
+<span class="ln">384</span>         CALL <a href="../files/engeb.f.html#def-ENGEB" title="ENGEB in engeb.f">ENGEB</a>(EPP1,EPP2,EPP3,ECN,E3AL,PEP,PET,SUM1,DL,
+<span class="ln">385</span>C      *TL,PDT,PDP,X,Y,Z,XHE3,XC12,XC13,XN14,XN15,XO16,XO17,
+<span class="ln">386</span>C      *XO18,XH2,XLI6,XLI7,XBE9,I,HR1,HR2,HR3,HR4,HR5,HR6,HR7,  ! KC 2025-05-31
+<span class="ln">387</span>     *TL,X,Y,XHE3,XC12,XC13,XN14,XO16,
+<span class="ln">388</span>     *XO18,XH2,IU,HR1,HR2,HR3,HR4,HR5,HR6,HR7,
+<span class="ln">389</span>     *HR8,HR9,HR10,HR11,HR12,HR13,HF1,HF2)
+<span class="ln">390</span>C BE7 MASS FRACTION.
+<span class="ln">391</span>         BE7M(I) = BE7MASSFRACTION
+<span class="ln">392</span>C CONVERT FROM ERG/GM/S TO ERG/S FOR EACH SHELL BY MULTIPLYING
+<span class="ln">393</span>C BY THE MASS OF EACH SHELL IN GM (HS2).
+<span class="ln">394</span>         DO J = 1,10
+<span class="ln">395</span>            FLUXI0(J,I) = FLUX(J)*HS2(I)
+<span class="ln">396</span>            FLUXTOT(J) = FLUXTOT(J) + FLUXI0(J,I)
+<span class="ln">397</span>         END DO
+<span class="ln">398</span>         WRITE(*,911)I,HS2(I),(FLUXI0(J,I),J=1,10)
+<span class="ln">399</span> 911     FORMAT(I5,1P11E10.3)
+<span class="ln">400</span>      END DO
+<span class="ln">401</span>  666 CONTINUE
+<span class="ln">402</span>C WRITE OUT TOTAL NEUTRINO FLUXES.
+<span class="ln">403</span>C ***NOTE THAT THESE ARE IN UNITS OF 10**10. ***
+<span class="ln">404</span>      WRITE(76,222)(FLUXTOT(I),I=1,10)
+<span class="ln">405</span>C NORMALIZE FLUXES.
+<span class="ln">406</span>      DO J = 1,10
+<span class="ln">407</span>         DO I = 1,M
+<span class="ln">408</span>            FLUXI0(J,I) = FLUXI0(J,I)/FLUXTOT(J)
+<span class="ln">409</span>         END DO
+<span class="ln">410</span>      END DO
+<span class="ln">411</span>      DO I = 1,M
+<span class="ln">412</span>C TEMPERATURE IN UNITS OF 10**6 K.
+<span class="ln">413</span>         T6 = EXP(CLN*(HT(I)-6.0D0))
+<span class="ln">414</span>         IF(T6.LT.5.0D0)GOTO 141
+<span class="ln">415</span>C ELECTRON DENSITY.
+<span class="ln">416</span>         RHOE = HD(I)+LOG10((1.0D0+HCOMP(1,I))/2.0D0)
+<span class="ln">417</span>C MASS FRACTION.
+<span class="ln">418</span>         FM = HS2(I)/1.9891D33
+<span class="ln">419</span>C RADIUS FRACTION.
+<span class="ln">420</span>         FR = EXP(CLN*HR(I))/CRSUN
+<span class="ln">421</span>C FLUXES ARE PRINTED IN THE SAME ORDER AS BAHCALL AND PINSONNEAULT.
+<span class="ln">422</span>         WRITE(76,145)FR,T6,RHOE,FM,BE7M(I),FLUXI0(1,I),FLUXI0(5,I),
+<span class="ln">423</span>     *   FLUXI0(6,I),
+<span class="ln">424</span>     *   FLUXI0(7,I),FLUXI0(8,I),FLUXI0(4,I),FLUXI0(2,I),FLUXI0(3,I)
+<span class="ln">425</span>  145    FORMAT(F9.5,F7.3,F6.3,1P10E10.3)
+<span class="ln">426</span>      END DO
+<span class="ln">427</span>  141 CONTINUE
+<span class="ln">428</span>  222    FORMAT(1P10E10.3)
+<span class="ln">429</span>C         IF(M.GT.1)STOP999
+<span class="ln">430</span>      ENDIF
+<span class="ln">431</span>C save mass in solar units
+<span class="ln">432</span>         XMSOL=SMASS
+<span class="ln">433</span>C MHP 08/02 STORE STARTING CZ PROPERTIES
+<span class="ln">434</span>         JCZ = JENV
+<span class="ln">435</span>         TAUCZ = 0.0D0
+<span class="ln">436</span>C write out headers of the appropriate output files
+<span class="ln">437</span>      CALL <a href="../files/wrthead.f.html#def-WRTHEAD" title="WRTHEAD in wrthead.f">WRTHEAD</a>(SMASS)
+<span class="ln">438</span>C DBG PULSE OUT 7/92
+<span class="ln">439</span>C initialize variables for calculating when to dump pulse output
+<span class="ln">440</span>         POL1 = BL
+<span class="ln">441</span>         POT1 = TEFFL
+<span class="ln">442</span>         POA1 = DAGE
+<span class="ln">443</span>         POLEN = 0.0D0
+<span class="ln">444</span>
+<span class="ln">445</span>       IF(LKUTHE) THEN
+<span class="ln">446</span>C timestep cutting requires a model stored in logical unit ILAST
+<span class="ln">447</span>C or it will crash - so copy initial model to unit ILAST
+<span class="ln">448</span>          IF(LPUNCH) THEN
+<span class="ln">449</span>             IWRITE = ILAST
+<span class="ln">450</span>             CALL <a href="../files/wrtlst.f.html#def-WRTLST" title="WRTLST in wrtlst.f">WRTLST</a>(IWRITE,HCOMP,HD,HL,HP,HR,HS,HT,LC,TRIT,TRIL,
+<span class="ln">451</span>     *         PS,TS,RS,CFENV,FTRI,TLUMX,JCORE,JENV,MODEL,M,
+<span class="ln">452</span>     *         SMASS,TEFFL,BL,HSTOT,DAGE,DDAGE,OMEGA)
+<span class="ln">453</span>          ENDIF
+<span class="ln">454</span>       ENDIF
+<span class="ln">455</span>
+<span class="ln">456</span>C locate the hydrogen-burning shell and the boundaries of the central
+<span class="ln">457</span>C and surface convection zones (if applicable).
+<span class="ln">458</span>         CALL <a href="../files/findsh.f.html#def-FINDSH" title="FINDSH in findsh.f">FINDSH</a>(HCOMP,HL,LC,M,JCORE,JENV,JXBEG,JXEND,JXMID,
+<span class="ln">459</span>     *               LSHELL)
+<span class="ln">460</span>C determine timestep for model
+<span class="ln">461</span>C JVS 04/14 Added Teffl to passed variables
+<span class="ln">462</span>C        CALL HTIMER(DELTS,DELTSH,M,HD,HL,HS1,HS2,HT,LC,HCOMP,JCORE,
+<span class="ln">463</span>C      *               JXMID,TLUMX,DAGE,DDAGE,QDT,QDP,NK,HP,HR,OMEGA,  ! KC 2025-05-31
+<span class="ln">464</span>       CALL <a href="../files/htimer.f.html#def-HTIMER" title="HTIMER in htimer.f">HTIMER</a>(DELTS,DELTSH,M,HD,HL,HS1,HS2,HT,HCOMP,JCORE,
+<span class="ln">465</span>     *               JXMID,TLUMX,DAGE,DDAGE,NK,HP,HR,OMEGA,
+<span class="ln">466</span>     *               DWMAX,JXBEG,TEFFL)
+<span class="ln">467</span>
+<span class="ln">468</span>       DELTS0 = DELTS
+<span class="ln">469</span>C zero out entropy terms.
+<span class="ln">470</span>         DO 99 I = 1,M
+<span class="ln">471</span>            HTT0(I) = 0.0D0
+<span class="ln">472</span>            HPP0(I) = 0.0D0
+<span class="ln">473</span>            HLL0(I) = 0.0D0
+<span class="ln">474</span>            HRR0(I) = 0.0D0
+<span class="ln">475</span>   99    CONTINUE
+<span class="ln">476</span>
+<span class="ln">477</span>C zero out light element burning rates in the surface CZ.
+<span class="ln">478</span>         IF(LEXCOM)THEN
+<span class="ln">479</span>            BLI6OLD = 0.0D0
+<span class="ln">480</span>            BLI7OLD = 0.0D0
+<span class="ln">481</span>            BBE9OLD = 0.0D0
+<span class="ln">482</span>         ENDIF
+<span class="ln">483</span>
+<span class="ln">484</span>C for a given kind card, evolve NMODLS(NK) times
+<span class="ln">485</span>C if rescaling is being performed, NMODLS(NK) is the number of times
+<span class="ln">486</span>C the new model is being relaxed
+<span class="ln">487</span>       DO 100 MODELN = 1,NMODLS(NK)
+<span class="ln">488</span>C rewind ISHORT if LRWSH is true (keeps ISHORT small)
+<span class="ln">489</span>          IF (LRWSH) THEN
+<span class="ln">490</span>             REWIND(ISHORT)
+<span class="ln">491</span>          ENDIF
+<span class="ln">492</span>C DBG PULSE:  if last model of last run then set LPULSE to LSAVPU
+<span class="ln">493</span>            IF (MODELN.EQ.NMODLS(NK) .AND. NK .EQ. NUMRUN) THEN
+<span class="ln">494</span>                 LPULSE = LSAVPU
+<span class="ln">495</span>            END IF
+<span class="ln">496</span>
+<span class="ln">497</span>C JVS 02/11: Also allow pulse output at particular ages along the way
+<span class="ln">498</span>C
+<span class="ln">499</span>C  If the step is bracketing an age of interest, turn on output. This will
+<span class="ln">500</span>C for the step before and step after the age in AGEOUT. Once the info has
+<span class="ln">501</span>C been printed out, AGEOUT is set to the next age.
+<span class="ln">502</span>C
+<span class="ln">503</span>C Turn on calcad:
+<span class="ln">504</span>      IF (LACOUT) THEN
+<span class="ln">505</span>            LADON=.TRUE.
+<span class="ln">506</span>      ELSE
+<span class="ln">507</span>            LADON = .FALSE.
+<span class="ln">508</span>      ENDIF
+<span class="ln">509</span>C If output has been turned on for a previous step, keep it on for the next
+<span class="ln">510</span>C step, but then turn it off.
+<span class="ln">511</span>      IF (LACOUT) THEN
+<span class="ln">512</span>            IF (LJWRT) THEN
+<span class="ln">513</span>                  PRINT*, &#x27;LJWRT on&#x27;
+<span class="ln">514</span>                  LPULSE = LSAVPU
+<span class="ln">515</span>                  NAO=NAO+1
+<span class="ln">516</span>                  LCLCD =.TRUE.
+<span class="ln">517</span>                  LJLAST =.FALSE.
+<span class="ln">518</span>                  LJWRT=.FALSE.
+<span class="ln">519</span>            ELSE IF (.NOT.LJWRT) THEN
+<span class="ln">520</span>                  LCLCD=.FALSE.
+<span class="ln">521</span>            ENDIF
+<span class="ln">522</span>C If this is the step before one of the ages of interest, print everything out.
+<span class="ln">523</span>C Also, save model structure.
+<span class="ln">524</span>            IF(NAO.LT.6) THEN
+<span class="ln">525</span>                  IF(DAGE+DDAGE/1.0D9-AGEOUT(NAO) .LE. 0.0D0 .AND.
+<span class="ln">526</span>     *            DAGE+2.0D0*DDAGE/1.0D9-AGEOUT(NAO) .GE. 0.0D0 .AND. .NOT. LJWRT) THEN
+<span class="ln">527</span>                        PRINT*, &#x27;AGEOUT reached&#x27;
+<span class="ln">528</span>                        LPULSE = LSAVPU
+<span class="ln">529</span>                        LCLCD = .TRUE.
+<span class="ln">530</span>                        LJLAST = .TRUE.
+<span class="ln">531</span>                        LJWRT=.TRUE.
+<span class="ln">532</span>                  ENDIF
+<span class="ln">533</span>            ENDIF
+<span class="ln">534</span>       ENDIF
+<span class="ln">535</span>
+<span class="ln">536</span>
+<span class="ln">537</span>C JVS end
+<span class="ln">538</span>C
+<span class="ln">539</span>C DBG PULSE:  if endage reached then set LPULSE to LSAVPU
+<span class="ln">540</span>C MHP 10/24 GENERALIZE CHECK
+<span class="ln">541</span>         IF(LENDAG(NK).AND.ENDAGE(NK).GT.0.0D0. AND.
+<span class="ln">542</span>     *   (ABS(ENDAGE(NK)-DAGE*1.0D9-DDAGE) .LE. 1.0D0)) THEN
+<span class="ln">543</span>                 LPULSE = LSAVPU
+<span class="ln">544</span>C MHP 7/96 compute sound speed for solar model
+<span class="ln">545</span>                 LSOUND = .TRUE.
+<span class="ln">546</span>            END IF
+<span class="ln">547</span>
+<span class="ln">548</span>
+<span class="ln">549</span>CFD echo LSOUND
+<span class="ln">550</span>C        print*,&#x27;MAIN LSOUND = &#x27;,LSOUND
+<span class="ln">551</span>CFD end
+<span class="ln">552</span>            IF (LPOUT) THEN
+<span class="ln">553</span>C MHP 8/25 changed to add file names as declared variables 
+<span class="ln">554</span>             CALL <a href="../files/pdist.f.html#def-PDIST" title="PDIST in pdist.f">PDIST</a>(POL1,POT1,POA1,POLEN,BL,TEFFL,MODELN,FPATM,
+<span class="ln">555</span>     *       FPENV,FPMOD)
+<span class="ln">556</span>          ENDIF
+<span class="ln">557</span>
+<span class="ln">558</span>C STARIN called here for timestep cutting
+<span class="ln">559</span>   15       IF(LARGE) THEN
+<span class="ln">560</span>C              CALL STARIN(BL,CFENV,DAGE,DDAGE,DELTS,DELTSH,DELTS0,ETA2,  ! KC 2025-05-31
+<span class="ln">561</span>             CALL <a href="../files/starin.f.html#def-STARIN" title="STARIN in starin.f">STARIN</a>(BL,CFENV,DAGE,DDAGE,DELTS,DELTSH,ETA2,
+<span class="ln">562</span>     *          FP,FT,FTRI,HCOMP,HD,HI,HJM,HKEROT,HL,HP,HR,HS,HS1,HS2,
+<span class="ln">563</span>C      *          HSTOT,HT,IKUT,ISTORE,JCORE,JENV,LARGE,LC,LNEW,M,MODEL,  ! KC 2025-05-31
+<span class="ln">564</span>     *          HSTOT,HT,IKUT,ISTORE,JENV,LARGE,LC,LNEW,M,MODEL,
+<span class="ln">565</span>     *          NK,OMEGA,PS,QDP,QDT,QIW,R0,RS,SJTOT,SKEROT,SMASS,TEFFL,
+<span class="ln">566</span>     *          TLUMX,TRIL,TRIT,TS,VEL,HG,V)
+<span class="ln">567</span>             IF((OMEGA(1) .EQ. 0) .AND. (LROT)) THEN
+<span class="ln">568</span>18               FORMAT(&#x27;LROT set to TRUE, but OMEGA(1) = 0. Stopping.&#x27;,
+<span class="ln">569</span>     *                  &#x27; Initialize rotation rates or set LROT to&#x27;,
+<span class="ln">570</span>     *                  &#x27; FALSE.&#x27;)
+<span class="ln">571</span>                 PRINT 18
+<span class="ln">572</span>                 STOP
+<span class="ln">573</span>             ENDIF
+<span class="ln">574</span>          ENDIF
+<span class="ln">575</span>          LPUNCH = .TRUE.
+<span class="ln">576</span>
+<span class="ln">577</span>C skip this section if model not to be aged
+<span class="ln">578</span>C MHP 7/98
+<span class="ln">579</span>C need to add logic to permit resacling + time evolution for
+<span class="ln">580</span>C pre-main sequence models
+<span class="ln">581</span>            IF(IRESCA(NK).NE.2 .AND. MODEL.GE.0) THEN
+<span class="ln">582</span>               LAGE = .TRUE.
+<span class="ln">583</span>            ELSE IF(MODEL.GE.0 .AND. HT(1).LT.6.6D0)THEN
+<span class="ln">584</span>               LAGE = .TRUE.
+<span class="ln">585</span>            ELSE
+<span class="ln">586</span>               LAGE = .FALSE.
+<span class="ln">587</span>            ENDIF
+<span class="ln">588</span>            LNEWFIT = .FALSE.
+<span class="ln">589</span>            IF(LAGE) THEN
+<span class="ln">590</span>C ADD MASS LOSS CALCULATION
+<span class="ln">591</span>               CALL <a href="../files/massloss.f.html#def-MASSLOSS" title="MASSLOSS in massloss.f">MASSLOSS</a>(BL,DAGE,DELTS,HCOMP,HD,HJM,HP,HR,
+<span class="ln">592</span>     *                       HS,HS1,HS2,HSTOT,HT,JENV,LNEW,
+<span class="ln">593</span>     *                       M,OMEGA,SMASS,TEFFL,SENVOLD,LNEWFIT)
+<span class="ln">594</span>C STORE COMPOSITION MATRIX AT THE BEGINNING OF THE TIMESTEP.
+<span class="ln">595</span>               NSPEC = 11
+<span class="ln">596</span>               IF(LEXCOM)NSPEC=15
+<span class="ln">597</span>               DO 33 I = 1,M
+<span class="ln">598</span>                  DO 32 J = 1,NSPEC
+<span class="ln">599</span>                     HCOMPP(J,I) = HCOMP(J,I)
+<span class="ln">600</span>   32             CONTINUE
+<span class="ln">601</span>   33          CONTINUE
+<span class="ln">602</span>               ITLVL=1
+<span class="ln">603</span>               CALL <a href="../files/mix.f.html#def-MIX" title="MIX in mix.f">MIX</a>(DELTS,HCOMP,HD,HL,HP,HR,HS,HS1,HS2,HSTOT,
+<span class="ln">604</span>C      *                     HT,ITLVL,LC,M,QDT,QDP,DDAGE,JCORE,JENV,  ! KC 2025-05-31
+<span class="ln">605</span>     *                     HT,ITLVL,LC,M,DDAGE,JCORE,JENV,
+<span class="ln">606</span>     *                     MXZONE,MXZON0,TEFFL)
+<span class="ln">607</span>             DDAGE = DELTS/CSECYR
+<span class="ln">608</span>             DAGE = DAGE + 1.0D-9*DDAGE
+<span class="ln">609</span>            ENDIF
+<span class="ln">610</span>C***MHP 1/04 OPACITY TEST
+<span class="ln">611</span>C      IDT = 15
+<span class="ln">612</span>C      DO JJJ = 1,4
+<span class="ln">613</span>C         IDD(JJJ) = 5
+<span class="ln">614</span>C      END DO
+<span class="ln">615</span>C      XXX = 0.7D0
+<span class="ln">616</span>C      ZZZ = 0.02D0
+<span class="ln">617</span>C      Do JJJ = 1,2000
+<span class="ln">618</span>c         READ(75,*)TL,DL,XX,ZZ,OO
+<span class="ln">619</span>C         IF(TT.GT.1.0D9)STOP911
+<span class="ln">620</span>C         TL = LOG10(TT)
+<span class="ln">621</span>C         DL = LOG10(DD)
+<span class="ln">622</span>C DBG 12/95 GET OPACITY
+<span class="ln">623</span>C         CALL GETOPAC(DL, TL,XXX,ZZZ, O, OL, QOD, QOT)
+<span class="ln">624</span>c         DIFF = (O-OO)/O
+<span class="ln">625</span>C         RL = DL - 3*TL +18.0D0
+<span class="ln">626</span>C         WRITE(76,1554)TL,RL,XXX,ZZZ,O,OO,DIFF
+<span class="ln">627</span>C 1554    format(4f11.6,3e20.10)
+<span class="ln">628</span>C      END DO
+<span class="ln">629</span>C*** END TEST
+<span class="ln">630</span>C rezone new model, except rezoning not performed for He flash calculations
+<span class="ln">631</span>          IF(.NOT.LKUTHE) THEN
+<span class="ln">632</span>             CALL <a href="../files/hpoint.f.html#def-HPOINT" title="HPOINT in hpoint.f">HPOINT</a>(M,HSTOT,HS,HS1,HS2,HT,HP,HR,LC,HL,HD,
+<span class="ln">633</span>     *              HCOMP,PS,RS,ESTORE,ISTORE,LRESET,JXBEG,
+<span class="ln">634</span>     *              MODEL,LSHELL,JCORE,JENV,OMEGA,ETA2,R0,HI,
+<span class="ln">635</span>C      *              HJM,HKEROT,SJTOT,SKEROT,BL,DELTS,FP,FT,
+<span class="ln">636</span>C      *              HG,QIW,SMASS,TEFFL)  ! KC 2025-05-31
+<span class="ln">637</span>     *              HJM,HKEROT,SJTOT,SKEROT,FP,FT,HG,QIW,TEFFL)
+<span class="ln">638</span>C STORE NEW CZ BASE
+<span class="ln">639</span>               JCZ = JENV
+<span class="ln">640</span>            ELSE
+<span class="ln">641</span>C save old model for PTIME
+<span class="ln">642</span>               DO I=1, M
+<span class="ln">643</span>                  HPO(I) = HP(I)
+<span class="ln">644</span>                  HTO(I) = HT(I)
+<span class="ln">645</span>                  HRO(I) = HR(I)
+<span class="ln">646</span>                  HLO(I) = HL(I)
+<span class="ln">647</span>                  HDO(I) = HD(I)
+<span class="ln">648</span>               END DO
+<span class="ln">649</span>C JVS 04/14 Save Teff as well
+<span class="ln">650</span>               TEFFLO = TEFFL
+<span class="ln">651</span>C  JVS 05/25 Added model number to list of saved values
+<span class="ln">652</span>           MO = M
+<span class="ln">653</span>
+<span class="ln">654</span>          ENDIF
+<span class="ln">655</span>C store starting distribution of rotational kinetic energy.
+<span class="ln">656</span>            IF(LROT)THEN
+<span class="ln">657</span>               DO I = 1,M
+<span class="ln">658</span>                  HKEROTO(I) = HKEROT(I)
+<span class="ln">659</span>               END DO
+<span class="ln">660</span>            ENDIF
+<span class="ln">661</span>C changed for lithium burning with overshoot.
+<span class="ln">662</span>C store starting depth of C.Z. for light element burning.
+<span class="ln">663</span>            IF(LEXCOM)THEN
+<span class="ln">664</span>               RBASE0 = 0.0D0
+<span class="ln">665</span>               JENV0 = JENV
+<span class="ln">666</span>               IF(LOVSTE)THEN
+<span class="ln">667</span>                  PSCAL0 = ALPHAE*EXP(CLNDP*(HP(JENV)+2.0D0*HR(JENV)
+<span class="ln">668</span>     *                     -HD(JENV)-CGL-HS(JENV)))
+<span class="ln">669</span>               ELSE
+<span class="ln">670</span>                  PSCAL0 = 0.0D0
+<span class="ln">671</span>               ENDIF
+<span class="ln">672</span>C find burning rates at the beginning of the time step.
+<span class="ln">673</span>               CALL <a href="../files/lirate88.f.html#def-LIRATE88" title="LIRATE88 in lirate88.f">LIRATE88</a>(HCOMP,HD,HT,M,1)
+<span class="ln">674</span>            ENDIF
+<span class="ln">675</span>C begin correction routines
+<span class="ln">676</span>C set flags for CRRECT
+<span class="ln">677</span>C CRRECT checks surface boundary conditions in every iteration
+<span class="ln">678</span>C if LNEW0 = T, new envelope triangle calculated the 1st iteration
+<span class="ln">679</span>C (i.e. old triangle ignored)
+<span class="ln">680</span>C LFINI = T if model has converged
+<span class="ln">681</span>C LARGE = T if model has diverged
+<span class="ln">682</span>          IF(LNEW0) LNEW = .TRUE.
+<span class="ln">683</span>            IF(.NOT.LAGE) DELTS = -DABS(DELTS)
+<span class="ln">684</span>            FCORR = DABS(FCORR0) - FCORRI
+<span class="ln">685</span>            ITDONE = 0
+<span class="ln">686</span>            LARGE = .FALSE.
+<span class="ln">687</span>            LFINI = .FALSE.
+<span class="ln">688</span>            IF(.NOT.LNEWS .OR. DELTS.LE.0.0D0)THEN
+<span class="ln">689</span>               DO 20 I = 1,M
+<span class="ln">690</span>C zero entropy terms
+<span class="ln">691</span>                  HTT(I) = 0.0D0
+<span class="ln">692</span>                  HPP(I) = 0.0D0
+<span class="ln">693</span>                  HTT0(I) = 0.0D0
+<span class="ln">694</span>                  HPP0(I) = 0.0D0
+<span class="ln">695</span>                  HLL0(I) = 0.0D0
+<span class="ln">696</span>                  HRR0(I) = 0.0D0
+<span class="ln">697</span>C zero gravitational energy terms.
+<span class="ln">698</span>                  HHC(I) = 0.0D0
+<span class="ln">699</span> 20            CONTINUE
+<span class="ln">700</span>            ELSE
+<span class="ln">701</span>C use the rate of change in the previous model to estimate the new
+<span class="ln">702</span>C run of structure variables.
+<span class="ln">703</span>               DO 30 I = 1,M
+<span class="ln">704</span>                  DT = HTT0(I)*DELTS
+<span class="ln">705</span>                  DP = HPP0(I)*DELTS
+<span class="ln">706</span>                  DL = HL(I)*HLL0(I)*DELTS
+<span class="ln">707</span>                  DR = HRR0(I)*DELTS
+<span class="ln">708</span>                  HTT(I) = DT
+<span class="ln">709</span>                  HPP(I) = DP
+<span class="ln">710</span>                  HT(I) = HT(I) + DT
+<span class="ln">711</span>                  HP(I) = HP(I) + DP
+<span class="ln">712</span>                  HL(I) = HL(I) + DL
+<span class="ln">713</span>                  HR(I) = HR(I) + DR
+<span class="ln">714</span>C zero gravitational energy terms.
+<span class="ln">715</span>                  HHC(I) = 0.0D0
+<span class="ln">716</span> 30            CONTINUE
+<span class="ln">717</span>            ENDIF
+<span class="ln">718</span>
+<span class="ln">719</span>C FIRST LEVEL OF ITERATIONS
+<span class="ln">720</span>C USE ENVELOPE TRIANGLE OF THE PREVIOUS MODEL;
+<span class="ln">721</span>C FOR THE FIRST MODEL OF A RUN,THE TRIANGLE IS GENERATED HERE.
+<span class="ln">722</span>            NITER = NITER1
+<span class="ln">723</span>            LSBC = .FALSE.
+<span class="ln">724</span>C CALL TO CRRECT - ADDED ITERATION LEVEL
+<span class="ln">725</span>            ITLVL = 1
+<span class="ln">726</span>            CALL <a href="../files/crrect.f.html#def-CRRECT" title="CRRECT in crrect.f">CRRECT</a>(DELTS,M,NITER,LFINI,LARGE,LNEW,LRESET,LSBC,
+<span class="ln">727</span>     *           TRIT,TRIL,CFENV,PS,TS,RS,FTRI,ISTORE,ESTORE,HSTOT,
+<span class="ln">728</span>     *           BL,TEFFL,HD,HHA,HHB,HHC,HL,HMAX,HP,HPP,HR,HS,HS1,
+<span class="ln">729</span>     *           HS2,HSRF,HT,HTT,HCOMP,LC,NHMAX,TLUMX,LATMO,LDERIV,
+<span class="ln">730</span>C      *           LMIX,LOCOND,QDT,QDP,MODEL,FP,FT,ETA2,OMEGA,R0,ITDONE,
+<span class="ln">731</span>C      *           HG,HI,HJM, ITLVL,LCZ,MRZONE,MXZONE,NRZONE,NZONE,  ! KC 2025-05-31
+<span class="ln">732</span>     *           LMIX,LOCOND,QDT,QDP,FP,FT,ETA2,OMEGA,R0,ITDONE,
+<span class="ln">733</span>     *           HG,HI,HJM, ITLVL,LCZ,MXZONE,QIW,HKEROT,HKEROTO)
+<span class="ln">734</span>C SECOND LEVEL OF ITERATIONS
+<span class="ln">735</span>C CHECK ENVELOPE TRIANGLE BEFORE ITERATING FOR SOLUTION
+<span class="ln">736</span>            IF(LARGE) GOTO 15
+<span class="ln">737</span>            LSBC = .TRUE.
+<span class="ln">738</span>            NITER = NITER2
+<span class="ln">739</span>            ITLVL = 2
+<span class="ln">740</span>            CALL <a href="../files/crrect.f.html#def-CRRECT" title="CRRECT in crrect.f">CRRECT</a>(DELTS,M,NITER,LFINI,LARGE,LNEW,LRESET,LSBC,
+<span class="ln">741</span>     *           TRIT,TRIL,CFENV,PS,TS,RS,FTRI,ISTORE,ESTORE,HSTOT,
+<span class="ln">742</span>     *           BL,TEFFL,HD,HHA,HHB,HHC,HL,HMAX,HP,HPP,HR,HS,HS1,
+<span class="ln">743</span>     *           HS2,HSRF,HT,HTT,HCOMP,LC,NHMAX,TLUMX,LATMO,LDERIV,
+<span class="ln">744</span>C      *           LMIX,LOCOND,QDT,QDP,MODEL,FP,FT,ETA2,OMEGA,R0,ITDONE,
+<span class="ln">745</span>C      *           HG,HI,HJM, ITLVL,LCZ,MRZONE,MXZONE,NRZONE,NZONE,  ! KC 2025-05-31
+<span class="ln">746</span>     *           LMIX,LOCOND,QDT,QDP,FP,FT,ETA2,OMEGA,R0,ITDONE,
+<span class="ln">747</span>     *           HG,HI,HJM, ITLVL,LCZ,MXZONE,QIW,HKEROT,HKEROTO)
+<span class="ln">748</span>            IF(LARGE)GOTO 15
+<span class="ln">749</span>C 7/91 STORE CHANGES IN THE STRUCTURE. THESE CHANGES ARE USED TO GET AN
+<span class="ln">750</span>C IMPROVED FIRST GUESS AT THE STRUCTURE FOR THE NEXT MODEL IF LNEWS=T.
+<span class="ln">751</span>            IF(DELTS.GT.0.0D0)THEN
+<span class="ln">752</span>               DO 27 II = 1,M
+<span class="ln">753</span>                  HTT0(II)=HTT(II)/DELTS
+<span class="ln">754</span>                  HPP0(II)=HPP(II)/DELTS
+<span class="ln">755</span>                  HLL0(II)=2.0D0*(HL(II)-HLO(II))/(HL(II)+HLO(II))/DELTS
+<span class="ln">756</span>                  HRR0(II)=(HR(II)-HRO(II))/DELTS
+<span class="ln">757</span> 27            CONTINUE
+<span class="ln">758</span>            ENDIF
+<span class="ln">759</span>C THIRD LEVEL OF ITERATIONS
+<span class="ln">760</span>            LSBC = .FALSE.
+<span class="ln">761</span>            NITER = NITER3
+<span class="ln">762</span>            ITLVL = 3
+<span class="ln">763</span>            CALL <a href="../files/crrect.f.html#def-CRRECT" title="CRRECT in crrect.f">CRRECT</a>(DELTS,M,NITER,LFINI,LARGE,LNEW,LRESET,LSBC,
+<span class="ln">764</span>     *           TRIT,TRIL,CFENV,PS,TS,RS,FTRI,ISTORE,ESTORE,HSTOT,
+<span class="ln">765</span>     *           BL,TEFFL,HD,HHA,HHB,HHC,HL,HMAX,HP,HPP,HR,HS,HS1,
+<span class="ln">766</span>     *           HS2,HSRF,HT,HTT,HCOMP,LC,NHMAX,TLUMX,LATMO,LDERIV,
+<span class="ln">767</span>C      *           LMIX,LOCOND,QDT,QDP,MODEL,FP,FT,ETA2,OMEGA,R0,ITDONE,
+<span class="ln">768</span>C      *           HG,HI,HJM, ITLVL,LCZ,MRZONE,MXZONE,NRZONE,NZONE,  ! KC 2025-05-31
+<span class="ln">769</span>     *           LMIX,LOCOND,QDT,QDP,FP,FT,ETA2,OMEGA,R0,ITDONE,
+<span class="ln">770</span>     *           HG,HI,HJM, ITLVL,LCZ,MXZONE,QIW,HKEROT,HKEROTO)
+<span class="ln">771</span>            IF(LARGE)GOTO 15
+<span class="ln">772</span>            IF(.NOT.LROT)THEN
+<span class="ln">773</span>               ITDIF1 = 1
+<span class="ln">774</span>            ENDIF
+<span class="ln">775</span>C MHP 05/02
+<span class="ln">776</span>C IF THE CODE IS ITERATING BETWEEN THE STRUCTURE AND ROTATION
+<span class="ln">777</span>C SOLUTIONS, ENSURE THAT THE START-OF-TIMESTEP QUANTITIES
+<span class="ln">778</span>C HCOMPP (COMPOSITION) AND HJMSAV (ANGULAR MOMENTUM) ARE ONLY
+<span class="ln">779</span>C OVERWRITTEN ON THE LAST RUN THROUGH.
+<span class="ln">780</span>            IF(ITDIF1.GT.1)THEN
+<span class="ln">781</span>               DO I = 1,M
+<span class="ln">782</span>                  HJM0(I) = HJM(I)
+<span class="ln">783</span>                  DO J = 1,15
+<span class="ln">784</span>                     HCOMPP0(J,I) = HCOMPP(J,I)
+<span class="ln">785</span>                  END DO
+<span class="ln">786</span>               END DO
+<span class="ln">787</span>            ENDIF
+<span class="ln">788</span>            DO ITROT = 1, ITDIF1
+<span class="ln">789</span>C MHP 05/02 RESTORE ORIGINAL &quot;START OF TIMESTEP&quot;
+<span class="ln">790</span>C VALUES FOR THE COMPOSITION MATRIX
+<span class="ln">791</span>               IF(ITROT.GT.1)THEN
+<span class="ln">792</span>                  DO I = 1,M
+<span class="ln">793</span>                     DO J = 1,15
+<span class="ln">794</span>                        HCOMPP(J,I) = HCOMPP0(J,I)
+<span class="ln">795</span>                     END DO
+<span class="ln">796</span>                  END DO
+<span class="ln">797</span>               ENDIF
+<span class="ln">798</span>C 7/91 THE FOURTH LEVEL OF ITERATION REPEATS THE ITERATION BETWEEN THE
+<span class="ln">799</span>C MIXING AND THE STRUCTURE VARIABLES.  IT SHOULD NOT BE USED FOR MODELS
+<span class="ln">800</span>C WHERE SEMI-CONVECTION IS IMPORTANT (ITERATING BETWEEN THE BURNING AND
+<span class="ln">801</span>C STRUCTURE GENERATES OSCILLATIONS). IT SHOULD BE USED FOR HIGH-PRECISION
+<span class="ln">802</span>C WORK (E.G. SOLAR MODELS).
+<span class="ln">803</span>C Surface boundary conditions checked again since we&#x27;ve changed the
+<span class="ln">804</span>C composition (and hence the structure) of the model in ITLVL=3
+<span class="ln">805</span>C (to be implemented when I know the rest of it works!)
+<span class="ln">806</span>            NITER = NITER4
+<span class="ln">807</span>            LSBC=.FALSE.
+<span class="ln">808</span>            ITLVL = 4
+<span class="ln">809</span>            CALL <a href="../files/crrect.f.html#def-CRRECT" title="CRRECT in crrect.f">CRRECT</a>(DELTS,M,NITER,LFINI,LARGE,LNEW,LRESET,LSBC,
+<span class="ln">810</span>     *           TRIT,TRIL,CFENV,PS,TS,RS,FTRI,ISTORE,ESTORE,HSTOT,
+<span class="ln">811</span>     *           BL,TEFFL,HD,HHA,HHB,HHC,HL,HMAX,HP,HPP,HR,HS,HS1,
+<span class="ln">812</span>     *           HS2,HSRF,HT,HTT,HCOMP,LC,NHMAX,TLUMX,LATMO,LDERIV,
+<span class="ln">813</span>C      *           LMIX,LOCOND,QDT,QDP,MODEL,FP,FT,ETA2,OMEGA,R0,ITDONE,
+<span class="ln">814</span>C      *           HG,HI,HJM,ITLVL,LCZ,MRZONE,MXZONE,NRZONE,NZONE,  ! KC 2025-05-31
+<span class="ln">815</span>     *           LMIX,LOCOND,QDT,QDP,FP,FT,ETA2,OMEGA,R0,ITDONE,
+<span class="ln">816</span>     *           HG,HI,HJM,ITLVL,LCZ,MXZONE,QIW,HKEROT,HKEROTO)
+<span class="ln">817</span>C  25         CONTINUE
+<span class="ln">818</span>            IF(.NOT.LFINI) THEN
+<span class="ln">819</span>C MODEL FAILED TO CONVERGE WITHIN(NITER1+NITER2+NITER3+NITER4)ITERATIONS
+<span class="ln">820</span>               LARGE = .TRUE.
+<span class="ln">821</span>               GOTO 15
+<span class="ln">822</span>            ENDIF
+<span class="ln">823</span>
+<span class="ln">824</span>C MODEL HAS CONVERGED
+<span class="ln">825</span>C ENSURE CONVECTION ZONES ARE FULLY MIXED.
+<span class="ln">826</span>C MHP 02/12 INFER CONVECTIVE OVERTURN TIMESCALE (USED IN MDOT)
+<span class="ln">827</span>C JVS 02/12 CALL MIXCZ(HCOMP,HS2,LC,M)
+<span class="ln">828</span>C KC 2025-05-30 addressed warning messages from Makefile.legacy
+<span class="ln">829</span>C C G Somers 6/14, SET IMIX = .TRUE. SO THE CORRECT GRADS ARE USED.
+<span class="ln">830</span>C       IMIX = .TRUE.
+<span class="ln">831</span>C       CALL MIXCZ(HCOMP,HS2,HS1,LC,HR,HP,HD,HG,M,IMIX)
+<span class="ln">832</span>C G Somers 6/14, SET LIMIX = .TRUE. SO THE CORRECT GRADS ARE USED.
+<span class="ln">833</span>      LIMIX = .TRUE.
+<span class="ln">834</span>C       CALL MIXCZ(HCOMP,HS2,HS1,LC,HR,HP,HD,HG,M,LIMIX)  ! KC 2025-05-31
+<span class="ln">835</span>      CALL <a href="../files/mixcz.f.html#def-MIXCZ" title="MIXCZ in mixcz.f">MIXCZ</a>(HCOMP,HS2,LC,M)
+<span class="ln">836</span>C G Somers END
+<span class="ln">837</span>
+<span class="ln">838</span>C MHP 9/94 STORE TOTAL AGE IN SAGE
+<span class="ln">839</span>            SAGE = DAGE
+<span class="ln">840</span>            IF(LROT) THEN
+<span class="ln">841</span>C RESTORE ORIGINAL START OF TIMESTEP VALUES
+<span class="ln">842</span>C TO THE ANGULAR MOMENTUM DISTRIBUTION
+<span class="ln">843</span>               IF(ITROT.GT.1)THEN
+<span class="ln">844</span>                  DO I = 1,M
+<span class="ln">845</span>                     HJM(I) = HJM0(I)
+<span class="ln">846</span>                  END DO
+<span class="ln">847</span>               ENDIF
+<span class="ln">848</span>C MHP 9/94 ADDED FLAG TO TURN ON ROTATION OUTPUT WHEN END OF KIND
+<span class="ln">849</span>C CARD REACHED.
+<span class="ln">850</span>C MHP 10/24 GENERALIZE CHECK
+<span class="ln">851</span>         IF(LENDAG(NK).AND.ENDAGE(NK).GT.0.0D0. AND.
+<span class="ln">852</span>     *   (ABS(ENDAGE(NK)-DAGE*1.0D9-DDAGE) .LE. 1.0D0)) THEN
+<span class="ln">853</span>C               IF(LENDAG(NK).AND.ENDAGE(NK)-DAGE*1.0D9.LE.1.0D0)THEN
+<span class="ln">854</span>                  LPRT0 = .TRUE.
+<span class="ln">855</span>               ELSE
+<span class="ln">856</span>                  LPRT0 = .FALSE.
+<span class="ln">857</span>               ENDIF
+<span class="ln">858</span>C FIND THE NEW RUN OF OMEGA
+<span class="ln">859</span>C JENV0 ADDED TO SR CALL.
+<span class="ln">860</span>               LJDOT = LJDOT0
+<span class="ln">861</span>               CALL <a href="../files/getw.f.html#def-GETW" title="GETW in getw.f">GETW</a>(BL,DELTS,DWMAX,FP,FT,HCOMP,HD,HJM,HL,HP,HR,
+<span class="ln">862</span>C      *              HS,HS1,HS2,HSTOT,HT,LC,LJDOT,M,MODEL,SJTOT,SMASS,  ! KC 2025-05-31
+<span class="ln">863</span>     *              HS,HS1,HS2,HSTOT,HT,LC,LJDOT,M,SMASS,
+<span class="ln">864</span>     *              TEFFL,ETA2,HG,HI,OMEGA,QIW,R0,JENV0)
+<span class="ln">865</span>C CALCULATE FP AND FT GIVEN OMEGA FOR THE NEW POINT DISTRIBUTION
+<span class="ln">866</span>               CALL <a href="../files/fpft.f.html#def-FPFT" title="FPFT in fpft.f">FPFT</a>(HD,HR,HS,M,OMEGA,ETA2,FP,FT,HG,R0)
+<span class="ln">867</span>            ENDIF
+<span class="ln">868</span>            END DO
+<span class="ln">869</span>C LOCATE THE HYDROGEN-BURNING SHELL AND THE BOUNDARIES OF THE CENTRAL
+<span class="ln">870</span>C AND SURFACE CONVECTION ZONES (IF APPLICABLE).
+<span class="ln">871</span>       CALL <a href="../files/findsh.f.html#def-FINDSH" title="FINDSH in findsh.f">FINDSH</a>(HCOMP,HL,LC,M,JCORE,JENV,JXBEG,JXEND,JXMID,
+<span class="ln">872</span>     *               LSHELL)
+<span class="ln">873</span>C PERFORM LIGHT ELEMENT BURNING
+<span class="ln">874</span>         IF(LEXCOM .AND. MODEL.GE.0 .AND. DELTS.GT.0.0D0)THEN
+<span class="ln">875</span>C ONLY FOR MODELS WITHOUT ROTATION, OR WITHOUT ROTATIONAL MIXING.
+<span class="ln">876</span>            IF(.NOT.LROT .OR. .NOT.LINSTB)THEN
+<span class="ln">877</span>C FIND CONVECTION ZONE DEPTH AT THE END OF THE TIME STEP.
+<span class="ln">878</span>               CALL <a href="../files/convec.f.html#def-CONVEC" title="CONVEC in convec.f">CONVEC</a>(HCOMP,HD,HP,HR,HS,HT,LC,M,MRZONE,MXZONE,
+<span class="ln">879</span>     *                      MXZON0,JCORE,JENV,NRZONE,NZONE,NZONE0)
+<span class="ln">880</span>C CHANGED FOR LITHIUM BURNING WITH OVERSHOOT.
+<span class="ln">881</span>               JENV1 = JENV
+<span class="ln">882</span>               IF(LOVSTE)THEN
+<span class="ln">883</span>                  PSCAL1 = ALPHAE*EXP(CLNDP*(HP(JENV)+2.0D0*HR(JENV)
+<span class="ln">884</span>     *                     -HD(JENV)-CGL-HS(JENV)))
+<span class="ln">885</span>               ELSE
+<span class="ln">886</span>                  PSCAL1 = 0.0D0
+<span class="ln">887</span>               ENDIF
+<span class="ln">888</span>C FIND BURNING RATES AT THE END OF THE TIME STEP.
+<span class="ln">889</span>               CALL <a href="../files/lirate88.f.html#def-LIRATE88" title="LIRATE88 in lirate88.f">LIRATE88</a>(HCOMP,HD,HT,M,2)
+<span class="ln">890</span>C                CALL LIBURN(DELTS,HCOMP,HD,HR,HS1,HS2,HT,JENV1,JENV0,M)  ! KC 2025-05-31
+<span class="ln">891</span>               CALL <a href="../files/liburn.f.html#def-LIBURN" title="LIBURN in liburn.f">LIBURN</a>(DELTS,HCOMP,HR,HS1,HS2,HT,JENV1,JENV0,M)
+<span class="ln">892</span>            ENDIF
+<span class="ln">893</span>         ENDIF
+<span class="ln">894</span>C MHP 07/02 RESTORE PRIOR FITTING POINT IF MASS ACCRETION IS BEING
+<span class="ln">895</span>C INCLUDED
+<span class="ln">896</span>         IF(LNEWFIT)THEN
+<span class="ln">897</span>            CALL <a href="../files/getnewenv.f.html#def-GETNEWENV" title="GETNEWENV in getnewenv.f">GETNEWENV</a>(SENVOLD,HCOMP,HD,HL,HP,HR,HS,HS1,HS2,
+<span class="ln">898</span>C     *                     HSTOT,HT,LC,ETA2,HG,HI,HJM,QIW,R0,  ! KC 2025-05-31
+<span class="ln">899</span>     *                     HSTOT,HT,LC,ETA2,HI,HJM,QIW,R0,
+<span class="ln">900</span>     *                     HKEROT,BL,SJTOT,SKEROT,TEFFL,M,LNEW)
+<span class="ln">901</span>C CALCULATE FP AND FT GIVEN OMEGA FOR THE NEW POINT DISTRIBUTION
+<span class="ln">902</span>            CALL <a href="../files/fpft.f.html#def-FPFT" title="FPFT in fpft.f">FPFT</a>(HD,HR,HS,M,OMEGA,ETA2,FP,FT,HG,R0)
+<span class="ln">903</span>            LNEWFIT = .FALSE.
+<span class="ln">904</span>         ENDIF
+<span class="ln">905</span>C DETERMINE TIMESTEP FOR NEXT MODEL
+<span class="ln">906</span>C HTIMER ALSO LOCATES THE H-BURNING SHELL
+<span class="ln">907</span>C JVS 04/14 added teffl to passed htimer variables
+<span class="ln">908</span>       DELTS = DABS(DELTS)
+<span class="ln">909</span>       DELTS0 = DELTS
+<span class="ln">910</span>C        CALL HTIMER(DELTS,DELTSH,M,HD,HL,HS1,HS2,HT,LC,HCOMP,JCORE,
+<span class="ln">911</span>C      *        JXMID,TLUMX,DAGE,DDAGE,QDT,QDP,NK,HP,HR,OMEGA,  ! KC 2025-05-31
+<span class="ln">912</span>       CALL <a href="../files/htimer.f.html#def-HTIMER" title="HTIMER in htimer.f">HTIMER</a>(DELTS,DELTSH,M,HD,HL,HS1,HS2,HT,HCOMP,JCORE,
+<span class="ln">913</span>     *        JXMID,TLUMX,DAGE,DDAGE,NK,HP,HR,OMEGA,
+<span class="ln">914</span>     *        DWMAX,JXBEG,TEFFL)
+<span class="ln">915</span>C  IF EVOLVING TO A GIVEN AGE AND KIND CARD IS DONE, AVOID ZEROING OUT
+<span class="ln">916</span>C  TIMESTEP WRITTEN TO MODEL (AS THIS MAKES CONTINUING A SEQUENCE AWKWARD.)
+<span class="ln">917</span>C     INSTEAD WRITE THE PREVIOUS MODEL TIMESTEP TO MODEL.
+<span class="ln">918</span>C ONLY IF A FIXED END AGE IS USED, NOT FOR OTHER STOPS
+<span class="ln">919</span>       IF(LENDAG(NK) .AND. ENDAGE(NK).GT.0.0D0)THEN
+<span class="ln">920</span>          IF(ENDAGE(NK)-DAGE*1.0D9.LE.1.0D0)THEN
+<span class="ln">921</span>             DELTS = MAX(DELTS0,1.0D-3*DAGE*CSECYR)
+<span class="ln">922</span>             DDAGE = DELTS/CSECYR
+<span class="ln">923</span>          ELSE
+<span class="ln">924</span>             DELTS0 = DELTS
+<span class="ln">925</span>          ENDIF
+<span class="ln">926</span>       ELSE
+<span class="ln">927</span>          DELTS0 = DELTS
+<span class="ln">928</span>       ENDIF
+<span class="ln">929</span>       IF(IRESCA(NK).NE.2) MODEL = MODEL+1
+<span class="ln">930</span>C WRTOUT IS THE OUTPUT DRIVER ROUTINE
+<span class="ln">931</span>       CALL <a href="../files/wrtout.f.html#def-WRTOUT" title="WRTOUT in wrtout.f">WRTOUT</a>(HCOMP,HD,HL,HP,HR,HS,HS1,HT,LC,M,MODEL,DAGE,
+<span class="ln">932</span>     *        DDAGE,SMASS,TEFFL,BL,GL,LSHELL,JXBEG,JXMID,JXEND,JCORE,
+<span class="ln">933</span>     *        JENV,TLUMX,TRIT,TRIL,PS,TS,RS,CFENV,FTRI,HSTOT,OMEGA,
+<span class="ln">934</span>C      *        LPUNCH,FP,FT,ETA2,R0,HJM,HI,SJTOT,SKEROT,HS2,NK)  ! KC 2025-05-31
+<span class="ln">935</span>     *        LPUNCH,FP,FT,ETA2,R0,HJM,HI,SJTOT,SKEROT,HS2)
+<span class="ln">936</span>
+<span class="ln">937</span>C MHP 10/24 GENERALIZED STOP CONDITIONS
+<span class="ln">938</span>C     IF EVOLVING TO A GIVEN AGE AND AGE IS REACHED, KIND CARD IS DONE
+<span class="ln">939</span>C       IF(LENDAG(NK).AND.ENDAGE(NK)-DAGE*1.0D9.LE.1.0D0)GOTO 110
+<span class="ln">940</span>       IF(LENDAG(NK).AND.ENDAGE(NK).GT.0.0D0 .AND.
+<span class="ln">941</span>     *   (ENDAGE(NK)-DAGE*1.0D9).LE.1.0D0)GOTO 110
+<span class="ln">942</span>C MHP 10/24 CHECK ALL STOP CONDITIONS, EXIT IF ANY SATISFIED
+<span class="ln">943</span>         LEND_KIND = .FALSE.
+<span class="ln">944</span>         IF(LENDAG(NK).AND.END_DCEN(NK).GT.0.0D0 .AND.
+<span class="ln">945</span>     *        HCOMP(12,1).LT.END_DCEN(NK))THEN
+<span class="ln">946</span>            WRITE(*,104)HCOMP(12,1),END_DCEN(NK)
+<span class="ln">947</span> 104        FORMAT(&#x27;CENTRAL D &#x27;,E12.4,&#x27; BELOW STOP VALUE &#x27;,E12.4)
+<span class="ln">948</span>            LEND_KIND =.TRUE.
+<span class="ln">949</span>         ENDIF
+<span class="ln">950</span>         IF(LENDAG(NK).AND.END_XCEN(NK).GT.0.0D0 .AND.
+<span class="ln">951</span>     *        HCOMP(1,1).LT.END_XCEN(NK))THEN
+<span class="ln">952</span>            WRITE(*,105)HCOMP(1,1),END_XCEN(NK)
+<span class="ln">953</span> 105        FORMAT(&#x27;CENTRAL X &#x27;,E12.4,&#x27; BELOW STOP VALUE &#x27;,E12.4)
+<span class="ln">954</span>            LEND_KIND =.TRUE.
+<span class="ln">955</span>         ENDIF
+<span class="ln">956</span>         IF(LENDAG(NK).AND.END_YCEN(NK).GT.0.0D0 .AND.
+<span class="ln">957</span>     *        HCOMP(2,1).LT.END_YCEN(NK))THEN
+<span class="ln">958</span>            WRITE(*,106)HCOMP(2,1),END_YCEN(NK)
+<span class="ln">959</span> 106        FORMAT(&#x27;CENTRAL Y &#x27;,E12.4,&#x27; BELOW STOP VALUE &#x27;,E12.4)
+<span class="ln">960</span>            LEND_KIND =.TRUE.
+<span class="ln">961</span>         ENDIF
+<span class="ln">962</span>C IF EXITING, SET I/O FLAGS PROPERLY AND EXIT LOOP
+<span class="ln">963</span>         IF(LEND_KIND)THEN
+<span class="ln">964</span>            LPULSE = LSAVPU
+<span class="ln">965</span>            LSOUND = .TRUE.
+<span class="ln">966</span>            LPRT0 = .TRUE.
+<span class="ln">967</span>            GOTO 110
+<span class="ln">968</span>         ENDIF
+<span class="ln">969</span>C TEST IF MODEL IS NEAR DESIRED Teff AND L. IF NOT RESCALE AND TRY AGAIN.
+<span class="ln">970</span>         IF (LCALST .AND. .NOT. LSTAR) THEN
+<span class="ln">971</span>            IF(MOD(NK,2).EQ.0)THEN
+<span class="ln">972</span>             IF(MODELN.EQ.1) THEN
+<span class="ln">973</span>                TEFFI = 10.0D0**TEFFL
+<span class="ln">974</span>             ELSE
+<span class="ln">975</span>                CALL <a href="../files/chkscal.f.html#def-CHKSCAL" title="CHKSCAL in chkscal.f">CHKSCAL</a>(BL, TEFFL, DAGE, NK)
+<span class="ln">976</span>                IF(LPASSR) GOTO 200
+<span class="ln">977</span>             END IF
+<span class="ln">978</span>          ENDIF
+<span class="ln">979</span>       ENDIF
+<span class="ln">980</span>
+<span class="ln">981</span>C END OF RUN
+<span class="ln">982</span>  100    CONTINUE
+<span class="ln">983</span>
+<span class="ln">984</span>C G Somers 11/14, CHANGE CALL TO PUTSTORE INSTEAD OF WRTLST.
+<span class="ln">985</span>C STORE LAST MODEL IN ISTOR IF LSTORE, LSTPCH, AND LPUNCH ARE .TRUE.
+<span class="ln">986</span>  110    IF(LSTORE.AND.LSTPCH.AND.LPUNCH) THEN
+<span class="ln">987</span>          CALL <a href="../files/putstore.f.html#def-PUTSTORE" title="PUTSTORE in putstore.f">PUTSTORE</a>(HCOMP,HD,HL,HP,HR,HS,HT,LC,TRIT,TRIL,PS,TS,RS,
+<span class="ln">988</span>     *           CFENV,FTRI,TLUMX,JCORE,JENV,MODEL,M,SMASS,TEFFL,BL,HSTOT,
+<span class="ln">989</span>     *           DAGE,DDAGE,OMEGA,HS1,ETA2,R0,FP,FT,HJM,HI)
+<span class="ln">990</span>            LPUNCH = .FALSE.
+<span class="ln">991</span>       ENDIF
+<span class="ln">992</span>C 110  CONTINUE
+<span class="ln">993</span>C G Somers END
+<span class="ln">994</span>
+<span class="ln">995</span>C MHP 1/93 CHECK AUTOMATIC CALIBRATATION OF SOLAR MODEL.
+<span class="ln">996</span>c MHP 5/96 changed solar calibration to perform solar models in 3 kind cards
+<span class="ln">997</span>         IF(LCALS)THEN
+<span class="ln">998</span>C JVS Turn off calcad - speeds things up
+<span class="ln">999</span>            LADON=.FALSE.
+<span class="ln">1000</span>            IF(MOD(NK,3).EQ.0)THEN
+<span class="ln">1001</span>               RLL = 0.5D0*(BL+CLSUNL-C4PIL-CSIGL-4.0D0*TEFFL)-CRSUNL
+<span class="ln">1002</span>C MHP 06/13 Add solar Z/X to observables
+<span class="ln">1003</span>               SOLZX = HCOMP(3,M)/HCOMP(1,M)
+<span class="ln">1004</span>               CALL <a href="../files/chkcal.f.html#def-CHKCAL" title="CHKCAL in chkcal.f">CHKCAL</a>(BL,RLL,NK,SOLZX)
+<span class="ln">1005</span>C               CALL CHKCAL(BL,RLL,NK)
+<span class="ln">1006</span>               lptime = lptimesv  ! Restore LPTIME to original value for next cycle
+<span class="ln">1007</span>               kttau  = kttausv    ! Restore KTTAU to original value for next cycle
+<span class="ln">1008</span>               IF(LSOL) THEN
+<span class="ln">1009</span>                  GO TO 250
+<span class="ln">1010</span>               ELSE
+<span class="ln">1011</span>c MHP 8/96 added counter for # of runs needed for calibration
+<span class="ln">1012</span>                  ICONV = ICONV + 1
+<span class="ln">1013</span>C MHP 6/97 STOP AFTER 10 ATTEMPTS AT CALIBRATION
+<span class="ln">1014</span>c                  IF(ICONV.GE.11) GOTO 250
+<span class="ln">1015</span>                  IF(ICONV.GE.15) GOTO 250
+<span class="ln">1016</span>                  IF (LPULSE) THEN
+<span class="ln">1017</span>C DBG 6/93 Need to delete pulse output because have not got ultimate
+<span class="ln">1018</span>C model yet.
+<span class="ln">1019</span>C MHP 8/25 Replaced delete file with rewind file. This is functionally the same and avoids the need to pass the character string for the file name from parmin.
+<span class="ln">1020</span>                     REWIND(IOPMOD)
+<span class="ln">1021</span>                     REWIND(IOPENV)
+<span class="ln">1022</span>                     REWIND(IOPATM)
+<span class="ln">1023</span>C                     CLOSE(IOPMOD, STATUS=&#x27;DELETE&#x27;)
+<span class="ln">1024</span>C                     CLOSE(IOPENV, STATUS=&#x27;DELETE&#x27;)
+<span class="ln">1025</span>C                     CLOSE(IOPATM, STATUS=&#x27;DELETE&#x27;)
+<span class="ln">1026</span>C                     OPEN(IOPMOD, FILE=FPMOD,STATUS=&#x27;UNKNOWN&#x27;,
+<span class="ln">1027</span>C     *                    FORM=&#x27;FORMATTED&#x27;)
+<span class="ln">1028</span>C                     OPEN(IOPENV, FILE=FPENV,STATUS=&#x27;UNKNOWN&#x27;,
+<span class="ln">1029</span>C     *                    FORM=&#x27;FORMATTED&#x27;)
+<span class="ln">1030</span>C                     OPEN(IOPATM, FILE=FPATM,STATUS=&#x27;UNKNOWN&#x27;,
+<span class="ln">1031</span>C     *                    FORM=&#x27;FORMATTED&#x27;)
+<span class="ln">1032</span>                  END IF
+<span class="ln">1033</span>               END IF
+<span class="ln">1034</span>            ENDIF
+<span class="ln">1035</span>         ENDIF
+<span class="ln">1036</span>
+<span class="ln">1037</span>C DBG 12/94 NO MORE RUNS NEEDED. HAVE CALIBRATED STELLAR MODEL
+<span class="ln">1038</span>         IF(LCALST .AND. LSTAR.AND.(MOD(NK,2).EQ.0)) GOTO 250
+<span class="ln">1039</span>
+<span class="ln">1040</span>C END RUN LOOP
+<span class="ln">1041</span> 200  CONTINUE
+<span class="ln">1042</span>C EXIT RUN LOOP
+<span class="ln">1043</span> 250  CONTINUE
+<span class="ln">1044</span>
+<span class="ln">1045</span>C FOR MONTE CARLO, REWIND OUTPUT FILES AND WRITE OUT SNU FLUXES AND
+<span class="ln">1046</span>C MODEL PARAMTERS TO AN OUTPUT FILE.
+<span class="ln">1047</span>C RUN FAILED TO CONVERGE.  WRITE FINAL INFO WITH WARNING NOTE.
+<span class="ln">1048</span>      IF(LMONTE .AND. ICONV.GE.11 .AND. .NOT.LSOL)THEN
+<span class="ln">1049</span>         REWIND(ILAST)
+<span class="ln">1050</span>         REWIND(IFIRST)
+<span class="ln">1051</span>         REWIND(IDEBUG)
+<span class="ln">1052</span>         REWIND(ITRACK)
+<span class="ln">1053</span>         REWIND(ISHORT)
+<span class="ln">1054</span>         REWIND(IMODPT)
+<span class="ln">1055</span>         REWIND(ISTOR)
+<span class="ln">1056</span>         WRITE(ISNU,1525)BL,RLL
+<span class="ln">1057</span> 1525    FORMAT(5X,&#x27;DID NOT CONVERGE WITHIN 10 ATTEMPTS L,R&#x27;,2F10.6)
+<span class="ln">1058</span>C MONTE CARLO #, CONVERGED MIXING LENGTH AND INITIAL H, SURFACE X,
+<span class="ln">1059</span>C SURFACE Z, Z/X, CENTRAL X, CENTRAL Z
+<span class="ln">1060</span>         WRITE(ISNU,1519) NN,CMIXLA(NK),RESCAL(2,NK-2),HCOMP(1,M),
+<span class="ln">1061</span>     *        HCOMP(3,M),ZTOX,HCOMP(1,1),HCOMP(3,1)
+<span class="ln">1062</span> 1519    FORMAT(1X,I5,3F10.6,4E10.3)
+<span class="ln">1063</span>C NUMERICAL DATA : #OF RUNS NEEDED FOR A CONVERGED MODEL, INITIAL X
+<span class="ln">1064</span>C AND ALPHA, FINAL DL/DX,DR/DX,DL/D ALPHA, DR/D ALPHA
+<span class="ln">1065</span>         WRITE(ISNU,1518)ICONV,XGUESS,AGUESS,DLDX,DRDX,DLDA,DRDA
+<span class="ln">1066</span>C SUMMARY OF STRUCTURE : TC, RHOC, PC
+<span class="ln">1067</span>         WRITE(ISNU, 1517)TCENTER,PCENTER,DCENTER,
+<span class="ln">1068</span>     *        HCOMP(1,1),HCOMP(3,1)
+<span class="ln">1069</span>C NEUTRINO FLUXES (SEE ENGEB FOR DETAILS)
+<span class="ln">1070</span>         WRITE(ISNU, 1516) CLSNU,GASNU,(FLUXTOT(I),I=1,8)
+<span class="ln">1071</span>C          CALL WRTMONTE(HCOMP,HD,HL,HP,HR,HS,HT,LC,M,MODEL,DAGE,
+<span class="ln">1072</span>C      *        DDAGE,SMASS,TEFFL,BL,GL,LSHELL,JXBEG,JXMID,
+<span class="ln">1073</span>C      *        JXEND,JCORE,JENV,TLUMX,TRIT,TRIL,PS,TS,RS,
+<span class="ln">1074</span>C      *        CFENV,FTRI,HSTOT,OMEGA,RLL,ICONV,NK,NN)  ! KC 2025-05-31
+<span class="ln">1075</span>         CALL <a href="../files/wrtmonte.f.html#def-WRTMONTE" title="WRTMONTE in wrtmonte.f">WRTMONTE</a>(HCOMP,HD,HL,HP,HR,HS,HT,LC,M,DAGE,
+<span class="ln">1076</span>     *        DDAGE,SMASS,TEFFL,BL,
+<span class="ln">1077</span>     *        JCORE,JENV,TLUMX,TRIT,TRIL,PS,TS,RS,
+<span class="ln">1078</span>     *        CFENV,FTRI,HSTOT,OMEGA,RLL,ICONV,NK,NN)
+<span class="ln">1079</span>      ELSE IF(LCALS .AND. LSNU .AND. LSOL)THEN
+<span class="ln">1080</span>         REWIND(ILAST)
+<span class="ln">1081</span>         REWIND(IFIRST)
+<span class="ln">1082</span>         REWIND(IDEBUG)
+<span class="ln">1083</span>         REWIND(ITRACK)
+<span class="ln">1084</span>         REWIND(ISHORT)
+<span class="ln">1085</span>         REWIND(IMODPT)
+<span class="ln">1086</span>         REWIND(ISTOR)
+<span class="ln">1087</span>
+<span class="ln">1088</span>         ZTOX = HCOMP(3,M)/HCOMP(1,M)
+<span class="ln">1089</span>C HEADER FILE:  MONTE CARLO PARAMETERS
+<span class="ln">1090</span>         IF(LMONTE)THEN
+<span class="ln">1091</span>            WRITE(ISNU,1520)NN,S11(NN),S33(NN),S34(NN),S17(NN),
+<span class="ln">1092</span>     *           ZX(NN),FHE(NN),FZDIF(NN),FLUM(NN),FAGE(NN)
+<span class="ln">1093</span>         ENDIF
+<span class="ln">1094</span> 1520    FORMAT(I7,1P9E10.3)
+<span class="ln">1095</span>C NUMERICAL DATA : #OF RUNS NEEDED FOR A CONVERGED MODEL, INITIAL X
+<span class="ln">1096</span>C AND ALPHA, FINAL DL/DX,DR/DX,DL/D ALPHA, DR/D ALPHA
+<span class="ln">1097</span>         WRITE(ISNU,1518)ICONV,XGUESS,AGUESS,DLDX,DRDX,DLDA,DRDA
+<span class="ln">1098</span> 1518    FORMAT(1X,I2,2F10.6,1P4E11.4)
+<span class="ln">1099</span>C NEUTRINO FLUXES (SEE ENGEB FOR DETAILS)
+<span class="ln">1100</span>         WRITE(ISNU, 1516) CLSNU,GASNU,(FLUXTOT(I),I=1,10)
+<span class="ln">1101</span> 1516    FORMAT(1X,2F8.3,1P10E10.3)
+<span class="ln">1102</span>C SUMMARY OF STRUCTURE : TC, RHOC, PC, XC, ZC (ADD MU C)
+<span class="ln">1103</span>         TCEN = 10.0D0**(TCENTER-6.0D0)
+<span class="ln">1104</span>         PCEN = 10.0D0**(PCENTER-17.0D0)
+<span class="ln">1105</span>         DCEN = 10.0D0**DCENTER
+<span class="ln">1106</span>         WRITE(ISNU, 1517)TCEN,DCEN,PCEN,HCOMP(1,1),HCOMP(3,1)
+<span class="ln">1107</span> 1517    FORMAT(1X,F7.3,F7.2,F6.3,2F8.5)
+<span class="ln">1108</span>C INITIAL ALPHA,Y,Z,ALPHA; FINAL R, L
+<span class="ln">1109</span>         YINI = 1.0D0 - RESCAL(2,NK-2) - RESCAL(3,NK-2)
+<span class="ln">1110</span>         ZINI = RESCAL(3,NK-2)
+<span class="ln">1111</span>         WRITE(ISNU,1521)CMIXLA(NK),YINI,ZINI,BL,RLL
+<span class="ln">1112</span> 1521    FORMAT(F7.4,2F8.5,1P2E10.3)
+<span class="ln">1113</span>C CZ DEPTH (R,M), SURFACE Y, Z, Z/X (ADD T CZ BASE, RHO CZ BASE)
+<span class="ln">1114</span>         WRITE(ISNU,1522)ENVR,ENVLM,HCOMP(2,M),HCOMP(3,M),ZTOX
+<span class="ln">1115</span> 1522    FORMAT(F8.5,F9.6,2F8.5,F9.6)
+<span class="ln">1116</span>C ENERGY GENERATION FRACTIONS PP I,II,III,CNO,EGRAV
+<span class="ln">1117</span>         WRITE(ISNU,1523)(TLUMX(J),J=1,4),TLUMX(7)
+<span class="ln">1118</span> 1523    FORMAT(1P5E10.3)
+<span class="ln">1119</span>         IF(LMONTE)THEN
+<span class="ln">1120</span>C             CALL WRTMONTE(HCOMP,HD,HL,HP,HR,HS,HT,LC,M,MODEL,DAGE,
+<span class="ln">1121</span>C      *           DDAGE,SMASS,TEFFL,BL,GL,LSHELL,JXBEG,JXMID,
+<span class="ln">1122</span>C      *           JXEND,JCORE,JENV,TLUMX,TRIT,TRIL,PS,TS,RS,
+<span class="ln">1123</span>C      *           CFENV,FTRI,HSTOT,OMEGA,RLL,ICONV,NK,NN)  ! KC 2025-05-31
+<span class="ln">1124</span>            CALL <a href="../files/wrtmonte.f.html#def-WRTMONTE" title="WRTMONTE in wrtmonte.f">WRTMONTE</a>(HCOMP,HD,HL,HP,HR,HS,HT,LC,M,DAGE,
+<span class="ln">1125</span>     *           DDAGE,SMASS,TEFFL,BL,
+<span class="ln">1126</span>     *           JCORE,JENV,TLUMX,TRIT,TRIL,PS,TS,RS,
+<span class="ln">1127</span>     *           CFENV,FTRI,HSTOT,OMEGA,RLL,ICONV,NK,NN)
+<span class="ln">1128</span>         ENDIF
+<span class="ln">1129</span>      ENDIF
+<span class="ln">1130</span> 500  ENDDO
+<span class="ln">1131</span>
+<span class="ln">1132</span>      STOP
+<span class="ln">1133</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "main.f declares about 80 of them": it declares 60. Fix.</li>
+<li><strong>Wrong.</strong> "<code>ENTROP</code> (… with <code>HPOINT</code>, <code>CRRECT</code>)": <code>ENTROP</code> is shared with <code>HPOINT</code> only. Fix.</li>
+<li><strong>Wrong.</strong> Question 3: <code>GL</code> is set by <code>WRTOUT</code> (<code>GL = CGL + STOTAL - RL - RL</code>), and <code>LMIX</code>, <code>LOCOND</code>, <code>LATMO</code>, <code>LDERIV</code> are set by <code>COEFFT</code> (through <code>CRRECT</code>) before use; <code>QDT</code>, <code>QDP</code> are set by <code>STARIN</code>. Only <code>ZTOX</code> remains: in the Monte Carlo failure branch it is written before any assignment on the first pass (later passes see the previous value, through <code>SAVE</code>). Fix: reduce the question to <code>ZTOX</code> (and add that the failure branch prints <code>TCENTER</code>, <code>PCENTER</code>, <code>DCENTER</code> as logs, unlike the success branch).</li>
+<li><strong>Wrong (small).</strong> Step 13: "at least $10^{-3}$ of the age". <code>DELTS = MAX(DELTS0, 1.0D-3*DAGE*CSECYR)</code> with <code>DAGE</code> in Gyr gives $10^{-3}\times$ (age in Gyr) years, i.e. $10^{-12}$ of the age. Fix: describe what the code computes and add a question (units slip?).</li>
+<li><strong>Missing question.</strong> For He-flash runs the copy of the starting model to <code>ILAST</code> (<code>WRTLST</code>, comment: "timestep cutting requires a model stored in ILAST or it will crash") runs only if <code>LPUNCH</code>, which is false on the first kind card (and after <code>PUTSTORE</code>), and it passes <code>JCORE</code> before <code>FINDSH</code> has set it. Fix: add.</li>
+<li><strong>Missing.</strong> Step 3: <code>LAGE</code> also needs <code>MODEL ≥ 0</code>. Step 11 says rotational mixing "which <code>GETW</code> handles": this is a fact (GETW calls <code>LIRATE88</code>, <code>LIBURN</code>, <code>LIBURN2</code>), so cite it. The <code>ITROT</code> loop includes <code>MIXCZ</code> and the convergence test, not only level 4 and rotation. <code>CHKSCAL</code>'s success (<code>LPASSR</code>) jumps to label 200, skipping <code>PUTSTORE</code>. <code>TEFFI</code> is set and never used. Fix: add these.</li>
+<li><strong>Missing.</strong> The radius for the solar calibration: $\log(R/R_\odot) = \tfrac12[\log(L/L_\odot) + \log L_\odot - \log 4\pi - \log\sigma - 4\log T_\mathrm{eff}] - \log R_\odot$ (<code>RLL</code>). Fix: add the equation.</li>
+<li><strong>Unclear.</strong> "up to 15" calibration cycles: the counter starts at 1 and the loop ends when it reaches 15. Fix: say so. Question 6: <code>FZDIF</code> is a copy of <code>FHE</code>, so the one settling factor read is applied to metals only; <code>ZX(NN)</code> is read but only written out. Fix: add to the question.
+Also checked: "now 5000, in every file" holds (the only "JSON=2000" is the comment itself).</li>
+</ol>
+<p>Revised: all eight findings applied (60 blocks; <code>ENTROP</code> with <code>HPOINT</code> only; question 3 reduced to <code>ZTOX</code>; step 13 and question 7 on the floor; question 8 on <code>ILAST</code>; step 3, step 11, the <code>ITROT</code> loop, <code>CHKSCAL</code>, <code>TEFFI</code>; the <code>RLL</code> equation; <code>ICONV</code> and question 6).</p></div></details>
+</main></body></html>

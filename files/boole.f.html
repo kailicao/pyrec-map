@@ -1,0 +1,143 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>boole.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ boole.f</span></header><main>
+<h1>boole.f</h1>
+<p class='muted'>75 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/boole.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file integrates tabulated data with Boole's rule (5-point Newton–Cotes), after interpolating the data onto an even grid with a cubic spline. Its only use is the acoustic depth in <a href="../files/calcad.f.html#def-CALCAD">CALCAD</a>, $\int dr / c_s$.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>X(N)</code> and <code>Y(N)</code>, and <code>NN</code>, the number of points of the even grid (it should be $1 + 4p$).</li>
+<li><strong>Who calls it:</strong> <a href="../files/calcad.f.html#def-CALCAD">CALCAD</a>, twice: over the whole star and from the base of the convection zone to the surface.</li>
+<li><strong>What it calls:</strong> <a href="../files/splinj.f.html#def-SPLINJ">SPLINJ</a> (the spline's second derivatives) and <a href="../files/splint.f.html#def-SPLINT">SPLINT</a> (spline evaluation).</li>
+<li><strong>Output:</strong> the integral in <code>S</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Rescale: $x&#x27; = 10^{-11} x$, $y&#x27; = 10^{7} y$ (<code>SCALEX</code>, <code>SCALEY</code>; the comment says this brings the radius and the sound-speed vector to values near 1).</li>
+<li>Fit a natural cubic spline to $(x&#x27;, y&#x27;)$ and evaluate it at <code>NN</code> evenly spaced points $x&#x27;_k = x&#x27;_1 + (k-1)h$, $h = (x&#x27;_N - x&#x27;_1)/(NN-1)$.</li>
+<li>
+<p>Apply Boole's rule to each group of 5 points:
+$$\int_{x_0}^{x_4} f\,dx \approx \frac{2h}{45}\left(7f_0 + 32f_1 + 12f_2 + 32f_3 + 7f_4\right),$$
+over $p = \lfloor (NN-1)/4 \rfloor$ groups.</p>
+</li>
+<li>
+<p>Undo the scaling: $S = S&#x27;/(10^{-11}\cdot 10^{7})$.</p>
+</li>
+</ol></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Leftover points.</strong> If $NN - 1$ is not a multiple of 4, the last points are silently left out. CALCAD always passes a valid <code>NN</code>, but nothing checks it here.</li>
+<li><strong>Fixed scales.</strong> The factors $10^{-11}$ and $10^{7}$ suit radii in cm and $1/c_s$ in s cm$^{-1}$ of a star like the Sun. Since the result is scaled back, they only affect rounding; are they needed?</li>
+<li><strong>Fortran 77.</strong> The local arrays <code>XI</code>, <code>YI</code>, <code>XD</code>, <code>YD</code>, <code>D2X</code> have sizes set by arguments (automatic arrays), and <code>H</code> and <code>S</code> are arrays of length 1 used as scalars. These need a Fortran 90 compiler; worth tidying in the overhaul.</li>
+<li><strong>The header.</strong> It names "numerical recipes SPLINE (renamed splinnr)", but the code calls <code>SPLINJ</code>.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>*************************************************************
+BOOLE: Performs 5-point Newton-Cotes integration of tabulated data
+X: vector of independent variable values (x)
+Y: vector dependent variable values ( f(x) )
+N: number of elements in X
+NN: number of elements desired in interpolated grid (should be 1+4*A)
+S: returned, integrated value of the function
+XI: returned grid in X
+YI: returned interpolated values of Y
+
+Data need to be evenly gridded for the integration formula to work.
+Data that are not already so are interpolated onto an even grid
+using spline interpolation (numerical recipes SPLINE (renamed splinnr)
+and SPLINT)
+*************************************************************
+PARAMETER(NN = 17)
+PARAMETER(N = 16)
+DATA Y/6.40,5.041,3.844,2.809,1.936,1.225,0.676,0.289,0.064,0.361,
+*0.784,1.369,2.116,3.025,4.096,5.329/
+DATA X/-8.0,-7.1,-6.2,-5.3,-4.4,-3.5,-2.6,-1.7,0.8,1.9,2.8,3.7,
+*4.6,5.5,6.4,7.3/</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-BOOLE'>BOOLE</a> <span class='muted'>subroutine · *************************************************************</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-BOOLE'><h3><span class='kind'>subroutine</span>BOOLE</h3>
+<p class='muted'>lines 24–72 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/boole.f#L24-L72'>GitHub</a></p>
+<pre>SUBROUTINE BOOLE(X,Y,N,NN,S)</pre>
+<div class='notes'><p>Spline-resamples $(X, Y)$ onto <code>NN</code> even points and integrates with Boole's rule; returns $\int Y\,dX$ in <code>S</code>.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>*************************************************************
+BOOLE: Performs 5-point Newton-Cotes integration of tabulated data
+X: vector of independent variable values (x)
+Y: vector dependent variable values ( f(x) )
+N: number of elements in X
+NN: number of elements desired in interpolated grid (should be 1+4*A)
+S: returned, integrated value of the function
+XI: returned grid in X
+YI: returned interpolated values of Y
+
+Data need to be evenly gridded for the integration formula to work.
+Data that are not already so are interpolated onto an even grid
+using spline interpolation (numerical recipes SPLINE (renamed splinnr)
+and SPLINT)
+*************************************************************
+PARAMETER(NN = 17)
+PARAMETER(N = 16)
+DATA Y/6.40,5.041,3.844,2.809,1.936,1.225,0.676,0.289,0.064,0.361,
+*0.784,1.369,2.116,3.025,4.096,5.329/
+DATA X/-8.0,-7.1,-6.2,-5.3,-4.4,-3.5,-2.6,-1.7,0.8,1.9,2.8,3.7,
+*4.6,5.5,6.4,7.3/</pre></details>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/splinj.f.html#def-SPLINJ'>SPLINJ</a> <span class='muted'>(splinj.f)</span></li>
+<li><a href='../files/splint.f.html#def-SPLINT'>SPLINT</a> <span class='muted'>(splint.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/calcad.f.html#def-CALCAD'>CALCAD</a> <span class='muted'>(calcad.f)</span> ×2</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">24</span>      SUBROUTINE BOOLE(X,Y,N,NN,S)
+<span class="ln">25</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">26</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">27</span>      PARAMETER(SCALEX=1e-11)
+<span class="ln">28</span>      PARAMETER(SCALEY=1e7)
+<span class="ln">29</span>      REAL*8 H(1),D2X(N)
+<span class="ln">30</span>      DIMENSION X(N), Y(N),XI(NN), YI(NN), S(1), XD(N), YD(N)
+<span class="ln">31</span>      INTEGER I, N, NN, P, KLO, KHI
+<span class="ln">32</span>
+<span class="ln">33</span>
+<span class="ln">34</span>C Rescale radius and cs vectors to have values ~1
+<span class="ln">35</span>      DO 22 I=1,N
+<span class="ln">36</span>            XD(I)=X(I)*SCALEX
+<span class="ln">37</span>            YD(I)=Y(I)*SCALEY
+<span class="ln">38</span>22      CONTINUE
+<span class="ln">39</span>C Deal with unevenly gridded datasets:
+<span class="ln">40</span>C      IF (.NOT.LEVEN) THEN            ! do for all
+<span class="ln">41</span>            CALL <a href="../files/splinj.f.html#def-SPLINJ" title="SPLINJ in splinj.f">SPLINJ</a>(XD,YD,D2X,N) ! get derivs of interp. fn.
+<span class="ln">42</span>            DO 20, I=1,NN
+<span class="ln">43</span>                  XI(I)=XD(1)+(I-1)*(XD(N)-XD(1))/(NN-1)
+<span class="ln">44</span>                  CALL <a href="../files/splint.f.html#def-SPLINT" title="SPLINT in splint.f">SPLINT</a>(XD,YD,N,D2X,XI(I),YI(I),KLO,KHI)
+<span class="ln">45</span>20            CONTINUE
+<span class="ln">46</span>
+<span class="ln">47</span>
+<span class="ln">48</span>C How many sets of four points do we have?
+<span class="ln">49</span>      P=(NN-1)/4
+<span class="ln">50</span>      H=(XD(N)-XD(1))/(NN-1)
+<span class="ln">51</span>C For each set of 4 points before the last, apply formula and add up
+<span class="ln">52</span>      S=0.0D0
+<span class="ln">53</span>      DO 21, I=0,P-1
+<span class="ln">54</span>            S=S+2.0*H*(7*YI(1+4*I)+ 32*YI(2+4*I) + 12*YI(3+4*I) +
+<span class="ln">55</span>     *            32*YI(4+4*I) + 7*YI(5+4*I))/45.0
+<span class="ln">56</span>21      CONTINUE
+<span class="ln">57</span>C Rescale result back to actual units:
+<span class="ln">58</span>      S=S/(SCALEX*SCALEY)
+<span class="ln">59</span>C      PRINT*, &#x27;Last point in vector:&#x27;, NN
+<span class="ln">60</span>C      PRINT*, &#x27;Last point integrated:&#x27;,5+4*(P-1)
+<span class="ln">61</span>
+<span class="ln">62</span>C--------------------------------------------------------------
+<span class="ln">63</span>C                  OPEN(UNIT=100,FILE=&#x27;diagnostic3.out&#x27;,STATUS=&#x27;OLD&#x27;)
+<span class="ln">64</span>C                  DO 1505 I=1,N
+<span class="ln">65</span>C                              WRITE(100,1504), X(I), Y(I), XD(I), YD(I),
+<span class="ln">66</span>C     *                         XI(I), YI(I), S(1), H(1)
+<span class="ln">67</span>C1505                  CONTINUE
+<span class="ln">68</span>C1504                  FORMAT(1X,8E16.8)
+<span class="ln">69</span>C                  CLOSE(100)
+<span class="ln">70</span>C----------------------------------------------------------------
+<span class="ln">71</span>
+<span class="ln">72</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No change: correct.</p></div></details>
+</main></body></html>

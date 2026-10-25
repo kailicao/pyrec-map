@@ -1,0 +1,534 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>seculr.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ seculr.f</span></header><main>
+<h1>seculr.f</h1>
+<p class='muted'>456 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/seculr.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> The secular transport of angular momentum, and of the composition it carries, by rotational instabilities, over one time step. Its comment: "SECULR CALCULATES THE TRANSFER OF ANGULAR MOMENTUM (AND THE ASSOCIATED TRANSPORT OF COMPOSITION) DUE TO SECULAR ROTATIONAL INSTABILITIES." The mechanisms considered are "secular and dynamical shear, Eddington circulation, and the GSF instability". It is the central routine of rotational mixing: it sets up, iterates and checks the diffusion of $\Omega$ and of the abundances.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/getw.f.html#def-GETW"><code>GETW</code></a>, once per time step, for a rotating model.</li>
+<li><strong>Inputs (arguments):</strong> the step <code>DT</code>; the model (<code>HD</code>, <code>HG</code>, <code>HI</code>, <code>HL</code>, <code>HP</code>, <code>HR</code>, <code>HS</code>, <code>HS1</code>, <code>HS2</code>, <code>HT</code>, <code>HCOMP</code>, <code>M</code>); the rotation (<code>OMEGA</code>, specific angular momentum <code>HJM</code> and its saved copy <code>HJMSAV</code>, <code>ETA2</code>, <code>QIW</code>, <code>R0</code>); the convection flags <code>LCZ</code> and the range of radiative interfaces <code>IMIN</code>–<code>IMAX</code>; and for the wind, <code>BL</code>, <code>HSTOT</code>, <code>SMASS</code>, <code>TEFFL</code>, <code>HSBOT</code>, <code>HSTOP</code>, <code>LCZSUR</code> (the star has a surface convection zone).</li>
+<li><strong>Outputs:</strong> <code>OMEGA</code>, <code>HJM</code>, <code>HCOMP</code> updated; <code>HV</code> (the circulation velocities), <code>COD2</code> (composition diffusion coefficients), <code>HICZ</code>, <code>OMEGAS</code>; the flags <code>LOK</code> (converged) and <code>LREDO</code>, <code>IREDO</code> (the step must be cut, set by the checks).</li>
+<li><strong>What it calls, in order:</strong> <a href="../files/setupv.f.html#def-SETUPV"><code>SETUPV</code></a> (factors for the velocities), <a href="../files/getqua.f.html#def-GETQUA"><code>GETQUA</code></a>, <a href="../files/vcirc.f.html#def-VCIRC"><code>VCIRC</code></a> (stability tests and velocities; sets <code>LDO</code>), <a href="../files/getfc.f.html#def-GETFC"><code>GETFC</code></a> (with <code>LVFC</code>), <a href="../files/mixcz.f.html#def-MIXCZ"><code>MIXCZ</code></a>, the wind routines <a href="../files/mwind.f.html#def-MWIND"><code>MWIND</code></a> and <a href="../files/mcowind.f.html#def-MCOWIND"><code>MCOWIND</code></a>, <a href="../files/solid.f.html#def-SOLID"><code>SOLID</code></a> (solid-body rotation), <a href="../files/codiff.f.html#def-CODIFF"><code>CODIFF</code></a> (diffusion coefficients), <a href="../files/rotgrid.f.html#def-ROTGRID"><code>ROTGRID</code></a> (the equally spaced grid), <a href="../files/dcoeft.f.html#def-DCOEFT"><code>DCOEFT</code></a> and <a href="../files/tridia.f.html#def-TRIDIA"><code>TRIDIA</code></a> (the diffusion equation for $\Omega$ and its tridiagonal solution) or <a href="../files/dadcoeft.f.html#def-DADCOEFT"><code>DADCOEFT</code></a> (diffusion plus advection, <code>LDIFAD</code>), <a href="../files/eq2mod.f.html#def-EQ2MOD"><code>EQ2MOD</code></a> (back to the model's grid), <a href="../files/ndifcom.f.html#def-NDIFCOM"><code>NDIFCOM</code></a> (composition diffusion), <a href="../files/checkj.f.html#def-CHECKJ"><code>CHECKJ</code></a> and <a href="../files/checkc.f.html#def-CHECKC"><code>CHECKC</code></a> (convergence and step-cutting checks).</li>
+<li><strong>COMMON, main ones:</strong> <code>/DIFUS/</code> (<code>ITDIF2</code>, the maximum number of iterations), <code>/DISK/</code> (disk locking: <code>LDISK</code>, <code>TDISK</code>, <code>SAGE</code>), <code>/SBROT/</code> (<code>LSOLID</code>, <code>IMPJMOD</code>), <code>/VARFC/</code> (<code>VFC</code>, <code>LVFC</code>, <code>LDIFAD</code>), <code>/CWIND/</code> (<code>LJDOT0</code>, the wind), <code>/INTVAR/</code> (<code>RM</code>, the mid-shell radii), <code>/OLDAB/</code> (<code>HCOMPS</code>, the composition at the start), <code>/OLDROT2/</code> (<code>WMST</code>), <code>/EGRID/</code> (<code>NTOT</code>), <code>/NOTRAN/</code> (<code>LNOJ</code>), <code>/FLAG/</code> (<code>LEXCOM</code>), <code>/LUOUT/</code> (<code>IMODPT</code>).</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Disk locking:</strong> if <code>LDISK</code> and the age is below <code>TDISK</code>, the surface rate is held fixed (<code>LOCK</code>).</li>
+<li><strong>Shear.</strong> At each interface the logarithmic gradient of $\Omega$ is centered on the mid-shell radius $r_m$:
+   $$\frac{d\Omega}{d\ln r}\bigg|_i \approx \frac{\Omega_i - \Omega_{i-1}}{4}\left[\frac{1}{\ln r_i - \ln r_m} + \frac{1}{\ln r_m - \ln r_{i-1}}\right],$$
+   which is $(\Omega_i - \Omega_{i-1})/(\ln r_i - \ln r_{i-1})$ when $r_m$ is the geometric mean.</li>
+<li><strong>Iteration</strong> <code>IT</code> = 1 … <code>ITDIF2</code>. From the second iteration on, $\Omega$ is replaced by the average of the start and the latest solution, $\Omega \leftarrow \tfrac12(\Omega + \Omega_\mathrm{start})$, the velocities are recomputed, $j$ and the first four abundances are reset to their starting values, and convection zones are remixed (<code>MIXCZ</code>).</li>
+<li><strong>Wind.</strong> For an isolated surface convection zone (no diffusion across its base, <code>HV(IMAX)</code> = 0) the wind torque is applied to that zone (<code>MWIND</code>); for solid-body models (<code>LSOLID</code> or <code>IMPJMOD</code> = 1) to the whole star, followed by <code>SOLID</code>. Otherwise the wind enters the diffusion equation as a boundary term (<code>MCOWIND</code>, giving <code>WIND1</code>, <code>WIND2</code>), or not at all when locked.</li>
+<li><strong>Unstable regions.</strong> If <code>VCIRC</code> found no instability (<code>LDO</code> false), the routine ends. Otherwise <code>CODIFF</code> gives the coefficients, and each run of interfaces with $v &gt; 0$ (<code>HV</code>) is solved on its own: <code>ROTGRID</code> maps it to an equally spaced grid, the diffusion equation for $\Omega$ is solved implicitly (<code>DCOEFT</code> + <code>TRIDIA</code>, or <code>DADCOEFT</code>), <code>EQ2MOD</code> maps the change in $j$ back, and <code>NDIFCOM</code> diffuses species 1–4 ($X$, $Y$, $Z$, He3: those that change the mean molecular weight). A region that <code>ROTGRID</code> flags (<code>LDUM2</code>: a single radiative interface between two convection zones) is skipped. For solid-body models (<code>LSOLID</code> or <code>IMPJMOD</code> = 1) the solution for $\Omega$ is skipped ("MHP 3/09"), but <code>NDIFCOM</code> still diffuses the composition. The center and the surface shells are treated as convective during this.</li>
+<li><strong>Checks.</strong> <code>CHECKJ</code> checks the solution and updates $\Omega$; <code>CHECKC</code> checks the composition. On convergence (<code>LOK</code>), or after <code>ITDIF2</code> iterations, species 5–11 (or 5–15 with <code>LEXCOM</code>) are diffused with <code>NDIFCOM</code>.</li>
+</ol>
+<p><strong>Design.</strong> Printing is switched off (<code>LPRT = .FALSE.</code>, "G Somers 11/14"), so the block that writes the composition changes to <code>IMODPT</code> never runs. Large commented-out blocks remain (the old <code>EQUAL</code>, <code>EQUAL2</code>, <code>DIFCOM</code>, <code>BSCOMP</code> routines, and a coupling-factor diagnostic).</p>
+<p><strong>KC's changes.</strong> Unused arguments were removed from this routine's signature (<code>DELTS</code>, <code>LC</code>, <code>MODEL</code>, <code>LFIRST</code>, <code>SJTOT</code>, <code>MRZONE</code>, <code>MXZONE</code>, <code>NRZONE</code>, <code>NZONE</code>) and from its calls to <code>SETUPV</code>, <code>VCIRC</code>, <code>MWIND</code>, <code>CODIFF</code>, <code>TRIDIA</code>, <code>DADCOEFT</code>, <code>NDIFCOM</code> and <code>CHECKJ</code> (KC 2025-05-31); the call to <code>MIXCZ</code> was reduced to its four used arguments (KC 2025-05-30/31).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>LCODM</code> and <code>CODM</code> are never set here (apparent bug).</strong> The test <code>IF(LCODM.AND.CODM.GT.0.0D0)</code> ("MHP 8/13 treat entire domain as unstable if a constant diffusion coefficient is being added") uses <code>LCODM</code> and <code>CODM</code>, which live in <code>/MAG/</code> in <a href="../files/parmin.f.html#def-PARMIN"><code>PARMIN</code></a> and <a href="../files/codiff.f.html#def-CODIFF"><code>CODIFF</code></a>, but <code>SECULR</code> does not declare <code>/MAG/</code>. Here they are uninitialized local variables, so the option probably never takes effect in this routine (or depends on the compiler). Add <code>COMMON/MAG/CODM,LCODM</code>?</li>
+<li><strong>The heavy species use the last region only.</strong> The final <code>NDIFCOM</code> for species 5–15 is called once, after the loop over regions, with <code>IBEG</code>, <code>IEND</code>, <code>ECOD2</code> and <code>EM</code> of the last region processed. When there are several unstable regions, the others get no diffusion of these species. And if no region had $v &gt; 0$ in this call, the values are those saved from an earlier call. Intended?</li>
+<li><strong>Non-convergence counts as success.</strong> If the loop ends after <code>ITDIF2</code> iterations without <code>LOK</code>, the code sets <code>LOK = .TRUE.</code> and goes on. Should it warn, or cut the step?</li>
+<li><strong><code>LIMIX</code> unused.</strong> <code>LIMIX = .FALSE.</code> is set "so the correct grads are used", but after KC's change <code>MIXCZ</code> no longer takes it. Remove the line, or was the behavior it controlled lost?</li>
+<li><strong>Comment versus species.</strong> The comment says only "H, HE3, HE4" are diffused before the final iteration; the call covers species 1–4, which include $Z$ (species 3). Harmless, but the comment could say so.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+SUBROUTINE SECULR(DELTS,DT,HD,HG,HI,HL,HP,HR,HS,HS1,HS2,HT,
+*                  HJMSAV,LCZ,LC,M,MODEL,OMEGA,
+*                  HJM,ETA2,QIW,R0,HCOMP,LFIRST,IMIN,IMAX,
+*                  BL,HSTOT,SJTOT,SMASS,TEFFL,LREDO,IREDO,  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-SECULR'>SECULR</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-SECULR'><h3><span class='kind'>subroutine</span>SECULR</h3>
+<p class='muted'>lines 6–456 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/seculr.f#L6-L456'>GitHub</a></p>
+<pre>SUBROUTINE SECULR(DT,HD,HG,HI,HL,HP,HR,HS,HS1,HS2,HT,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+SUBROUTINE SECULR(DELTS,DT,HD,HG,HI,HL,HP,HR,HS,HS1,HS2,HT,
+*                  HJMSAV,LCZ,LC,M,MODEL,OMEGA,
+*                  HJM,ETA2,QIW,R0,HCOMP,LFIRST,IMIN,IMAX,
+*                  BL,HSTOT,SJTOT,SMASS,TEFFL,LREDO,IREDO,  ! KC 2025-05-31</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CCOUT'>/CCOUT/</a>, <a href='../commons.html#c-CCOUT1'>/CCOUT1/</a>, <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CWIND'>/CWIND/</a>, <a href='../commons.html#c-DIFUS'>/DIFUS/</a>, <a href='../commons.html#c-DISK'>/DISK/</a>, <a href='../commons.html#c-EGRID'>/EGRID/</a>, <a href='../commons.html#c-FLAG'>/FLAG/</a>, <a href='../commons.html#c-INTVAR'>/INTVAR/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-NOTRAN'>/NOTRAN/</a>, <a href='../commons.html#c-OLDAB'>/OLDAB/</a>, <a href='../commons.html#c-OLDMOD'>/OLDMOD/</a>, <a href='../commons.html#c-OLDROT2'>/OLDROT2/</a>, <a href='../commons.html#c-ROTPRT'>/ROTPRT/</a>, <a href='../commons.html#c-SBROT'>/SBROT/</a>, <a href='../commons.html#c-TEMP2'>/TEMP2/</a>, <a href='../commons.html#c-VARFC'>/VARFC/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/checkc.f.html#def-CHECKC'>CHECKC</a> <span class='muted'>(checkc.f)</span></li>
+<li><a href='../files/checkj.f.html#def-CHECKJ'>CHECKJ</a> <span class='muted'>(checkj.f)</span></li>
+<li><a href='../files/codiff.f.html#def-CODIFF'>CODIFF</a> <span class='muted'>(codiff.f)</span></li>
+<li><a href='../files/dadcoeft.f.html#def-DADCOEFT'>DADCOEFT</a> <span class='muted'>(dadcoeft.f)</span></li>
+<li><a href='../files/dcoeft.f.html#def-DCOEFT'>DCOEFT</a> <span class='muted'>(dcoeft.f)</span></li>
+<li><a href='../files/eq2mod.f.html#def-EQ2MOD'>EQ2MOD</a> <span class='muted'>(eq2mod.f)</span></li>
+<li><a href='../files/getfc.f.html#def-GETFC'>GETFC</a> <span class='muted'>(getfc.f)</span> ×2</li>
+<li><a href='../files/getqua.f.html#def-GETQUA'>GETQUA</a> <span class='muted'>(getqua.f)</span></li>
+<li><a href='../files/mcowind.f.html#def-MCOWIND'>MCOWIND</a> <span class='muted'>(mcowind.f)</span></li>
+<li><a href='../files/mixcz.f.html#def-MIXCZ'>MIXCZ</a> <span class='muted'>(mixcz.f)</span></li>
+<li><a href='../files/mwind.f.html#def-MWIND'>MWIND</a> <span class='muted'>(mwind.f)</span> ×2</li>
+<li><a href='../files/ndifcom.f.html#def-NDIFCOM'>NDIFCOM</a> <span class='muted'>(ndifcom.f)</span> ×2</li>
+<li><a href='../files/rotgrid.f.html#def-ROTGRID'>ROTGRID</a> <span class='muted'>(rotgrid.f)</span></li>
+<li><a href='../files/setupv.f.html#def-SETUPV'>SETUPV</a> <span class='muted'>(setupv.f)</span></li>
+<li><a href='../files/solid.f.html#def-SOLID'>SOLID</a> <span class='muted'>(solid.f)</span></li>
+<li><a href='../files/tridia.f.html#def-TRIDIA'>TRIDIA</a> <span class='muted'>(tridia.f)</span></li>
+<li><a href='../files/vcirc.f.html#def-VCIRC'>VCIRC</a> <span class='muted'>(vcirc.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/getw.f.html#def-GETW'>GETW</a> <span class='muted'>(getw.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE SECULR(DT,HD,HG,HI,HL,HP,HR,HS,HS1,HS2,HT,
+<span class="ln">7</span>     *                  HJMSAV,LCZ,M,OMEGA,
+<span class="ln">8</span>     *                  HJM,ETA2,QIW,R0,HCOMP,IMIN,IMAX,
+<span class="ln">9</span>     *                  BL,HSTOT,SMASS,TEFFL,LREDO,IREDO,
+<span class="ln">10</span>     *                  HICZ,HSBOT,HSTOP,OMEGAS,LCZSUR,
+<span class="ln">11</span>C      *                  MRZONE,MXZONE,NRZONE,NZONE,  ! KC 2025-05-31
+<span class="ln">12</span>     *                  COD2,HV,LOK)
+<span class="ln">13</span>C MHP 6/00 ADDED MRZONE,MXZONE,NRZONE,NZONE FOR BS MIX PLUS BURN
+<span class="ln">14</span>      PARAMETER(JSON=5000)
+<span class="ln">15</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">16</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">17</span>
+<span class="ln">18</span>      COMMON/CCOUT/LSTORE,LSTATM,LSTENV,LSTMOD,LSTPHYS,LSTROT,LSCRIB,LSTCH,LPHHD
+<span class="ln">19</span>      COMMON/CCOUT1/NPENV,NPRTMOD,NPRTPT,NPOINT
+<span class="ln">20</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">21</span>      COMMON/CONST1/CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">22</span>C MHP 8/17 ADDED EXCEN, C_2 TO COMMON BLOCK FOR MATT ET AL. 2012 CENT. TERM
+<span class="ln">23</span>      COMMON/CWIND/WMAX,EXMD,EXW,EXTAU,EXR,EXM,EXL,EXPR,CONSTFACTOR,
+<span class="ln">24</span>     *             STRUCTFACTOR,EXCEN,C_2,LJDOT0
+<span class="ln">25</span>C      COMMON/CWIND/WMAX,EXMD,EXW,EXTAU,EXR,EXM,CONSTFACTOR,STRUCTFACTOR,LJDOT0
+<span class="ln">26</span>      COMMON/DIFUS/DTDIF,DJOK,ITDIF1,ITDIF2
+<span class="ln">27</span>C MHP 6/00 ADDED FLAG FOR CALL TO NDIFCOM
+<span class="ln">28</span>      COMMON/FLAG/LEXCOM
+<span class="ln">29</span>C 3/92 COMMON BLOCK ADDED FOR CENTERED DW/DLNR.
+<span class="ln">30</span>      COMMON/INTVAR/ALM(JSON),DELAMI(JSON),DELMI(JSON),DM(JSON),
+<span class="ln">31</span>     *     EPSILM(JSON),HGM(JSON),HS3(JSON),PM(JSON),
+<span class="ln">32</span>     *     QDTMI(JSON),RM(JSON),TM(JSON)
+<span class="ln">33</span>      COMMON/OLDMOD/HPO(JSON),HTO(JSON),HRO(JSON),HLO(JSON),HDO(JSON),
+<span class="ln">34</span>     *     HCOMPP(15,JSON),HSS(JSON),LCO(JSON),LCZO(JSON),TEFFLO,MO
+<span class="ln">35</span>      COMMON/TEMP2/VES(JSON),VES0(JSON),VSS(JSON),VSS0(JSON),
+<span class="ln">36</span>     *     HLE(JSON),VGSF(JSON),VGSF0(JSON),VMU(JSON)
+<span class="ln">37</span>      COMMON/OLDAB/HCOMPS(15,JSON)
+<span class="ln">38</span>C ADD OPTION FOR VARIABLE FC.
+<span class="ln">39</span>      COMMON/VARFC/VFC(JSON),LVFC,LDIFAD
+<span class="ln">40</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">41</span>      COMMON/ROTPRT/LPRT0
+<span class="ln">42</span>      COMMON/NOTRAN/LNOJ
+<span class="ln">43</span>C MHP 9/94 ADDED DISK LOCKING OPTION - FLAG, TIME OVER WHICH LOCKING
+<span class="ln">44</span>C IS ENFORCED, AND PERIOD AT WHICH LOCKING IS SET ARE OPTIONS.
+<span class="ln">45</span>      COMMON/DISK/SAGE,TDISK,PDISK,LDISK
+<span class="ln">46</span>      COMMON/EGRID/CHI(JSON),ECHI(JSON),EQS1(JSON),DCHI,NTOT
+<span class="ln">47</span>C Time change of theta
+<span class="ln">48</span>      COMMON/OLDROT2/THO(JSON),THN(JSON),THM(JSON),
+<span class="ln">49</span>     *               DDELM(JSON),FESTIME(JSON),THP(JSON),
+<span class="ln">50</span>     *               QWRST(JSON),WMST(JSON),QWRMST(JSON)
+<span class="ln">51</span>C MHP 3/99 ADDED FLAG TO TREAT THE ENTIRE STAR AS &#x27;CONVECTIVE&#x27;
+<span class="ln">52</span>C FOR ANGULAR MOMENTUM PURPOSES.
+<span class="ln">53</span>C JNT 09/25 FOR 05/15 ADD IMPJMOD
+<span class="ln">54</span>      COMMON/SBROT/LSOLID,IMPJMOD
+<span class="ln">55</span>      DIMENSION HD(JSON),HI(JSON),HG(JSON),HP(JSON),HS(JSON),
+<span class="ln">56</span>C      * HR(JSON),LC(JSON),OMEGA(JSON),HL(JSON),ETA2(JSON),QIW(JSON),  ! KC 2025-05-31
+<span class="ln">57</span>     * HR(JSON),OMEGA(JSON),HL(JSON),ETA2(JSON),QIW(JSON),
+<span class="ln">58</span>     * HS1(JSON),HS2(JSON),HT(JSON),QWRMAX(JSON),R0(JSON),EM(JSON),
+<span class="ln">59</span>     * HJMSAV(JSON),LCZ(JSON),COD(JSON),ECOD2(JSON),
+<span class="ln">60</span>     * EI(JSON),EJ(JSON),ECOD(JSON),HRU(JSON),RMID(JSON),
+<span class="ln">61</span>     * HV(JSON),QWLNR(JSON),HCOMP(15,JSON),
+<span class="ln">62</span>     * HJM(JSON),DJ(JSON),HJMP(JSON),COD2(JSON),WSAV(JSON),EW(JSON),
+<span class="ln">63</span>     * ID(JSON)
+<span class="ln">64</span>C      *     MRZONE(13,2),MXZONE(12,2)
+<span class="ln">65</span>      SAVE
+<span class="ln">66</span>C MHP 6/00 ADDED MRZONE,MXZONE FOR BS MIXING PLUS BURNING
+<span class="ln">67</span>C   SECULR CALCULATES THE TRANSFER OF ANGULAR MOMENTUM(AND THE ASSOCIATED
+<span class="ln">68</span>C   TRANSPORT OF COMPOSITION) DUE TO SECULAR ROTATIONAL INSTABILITIES.
+<span class="ln">69</span>
+<span class="ln">70</span>C  PRINT OUT DETAILS OF THE DIFFUSION EVERY TIME SHORT OR LONG
+<span class="ln">71</span>C  OUTPUT OF THE MODEL IS GENERATED.
+<span class="ln">72</span>C
+<span class="ln">73</span>C G Somers 11/14, EXCLUDE THE IO TO THE FULL FILE. THE CODE
+<span class="ln">74</span>C WILL NO LONGER REPORT THE CHANGES TO J AT EACH POINT, BECAUSE
+<span class="ln">75</span>C THIS CAN BE EASILY INFERRED FROM THE EXTENDED SHORT FILE. IF
+<span class="ln">76</span>C DESIRED, THIS OUTPUT CAN BE RETURNED.
+<span class="ln">77</span>C      IF(.NOT.LPRT0)THEN
+<span class="ln">78</span>C         LPRT = MOD(MODEL+1,NPRTMOD).EQ.0
+<span class="ln">79</span>C      ELSE
+<span class="ln">80</span>C         LPRT = .TRUE.
+<span class="ln">81</span>C      ENDIF
+<span class="ln">82</span>C      IF(.NOT.LSCRIB.OR..NOT.LPRTIN) LPRT = .FALSE.
+<span class="ln">83</span>      LPRT = .FALSE.
+<span class="ln">84</span>C MHP 9/94
+<span class="ln">85</span>C DISK LOCKING CHECKED
+<span class="ln">86</span>      LOCK = .FALSE.
+<span class="ln">87</span>      IF(LDISK .AND. SAGE.LE.TDISK)LOCK = .TRUE.
+<span class="ln">88</span>C  FIRST AND LAST SHELL BOUNDARY CONDITIONS REQUIRE THAT THESE SHELLS BE
+<span class="ln">89</span>C  TREATED AS &#x27;CONVECTIVE&#x27; FOR DIFFUSION PURPOSES. FIX THIS.
+<span class="ln">90</span>      LCZ1 = LCZ(1)
+<span class="ln">91</span>      LCZM = LCZ(M)
+<span class="ln">92</span>C  SET UP FACTORS USED TO COMPUTE DIFFUSION VELOCITIES.
+<span class="ln">93</span>C       CALL SETUPV(HD,HG,HL,HP,HR,HS1,HT,IMIN,IMAX,LCZ,M,HRU,QWRMAX)  ! KC 2025-05-31
+<span class="ln">94</span>      CALL <a href="../files/setupv.f.html#def-SETUPV" title="SETUPV in setupv.f">SETUPV</a>(HD,HG,HL,HP,HR,HS1,HT,IMIN,IMAX,M,HRU,QWRMAX)
+<span class="ln">95</span>      CLTOT = CLSUN*HL(M)
+<span class="ln">96</span>C  COMPUTE ANGULAR VELOCITY GRADIENTS
+<span class="ln">97</span>      DO 10 I = IMIN,IMAX
+<span class="ln">98</span>C CENTER LOGARITHMIC DERIVATIVE.
+<span class="ln">99</span>         RLNC = LOG10(RM(I))
+<span class="ln">100</span>         DR1 = 1.0D0/CLN/(HR(I)-RLNC)+1.0D0/CLN/(RLNC-HR(I-1))
+<span class="ln">101</span>         QWLNR(I) = 0.25D0*(OMEGA(I)-OMEGA(I-1))*DR1
+<span class="ln">102</span>C        QWLNR(I) = (OMEGA(I)-OMEGA(I-1))/CLN/(HR(I)-HR(I-1))
+<span class="ln">103</span>   10 CONTINUE
+<span class="ln">104</span>      CALL <a href="../files/getqua.f.html#def-GETQUA" title="GETQUA in getqua.f">GETQUA</a>(HD,HG,HRU,OMEGA,M)
+<span class="ln">105</span>      DO I = 1,M
+<span class="ln">106</span>         VFC(I) = 0.0D0
+<span class="ln">107</span>      END DO
+<span class="ln">108</span>C  CHECK STABILITY OF THE MODEL AND COMPUTE CIRCULATION VELOCITIES.
+<span class="ln">109</span>C  MECHANISMS CONSIDERED:SECULAR AND DYNAMICAL SHEAR,EDDINGTON CIRCULATION,
+<span class="ln">110</span>C  AND THE GSF INSTABILITY.
+<span class="ln">111</span>      IT = 1
+<span class="ln">112</span>C MHP 06/02 added timestep to call
+<span class="ln">113</span>C       CALL VCIRC(HJM,HR,HRU,IMIN,IMAX,IT,LCZ,M,OMEGA,LDO,QWLNR,  ! KC 2025-05-31
+<span class="ln">114</span>      CALL <a href="../files/vcirc.f.html#def-VCIRC" title="VCIRC in vcirc.f">VCIRC</a>(HR,HRU,IMIN,IMAX,IT,LCZ,M,OMEGA,LDO,QWLNR,
+<span class="ln">115</span>     *           QWRMAX,HV,CLTOT,DT,HP)
+<span class="ln">116</span>      IF(LVFC) CALL <a href="../files/getfc.f.html#def-GETFC" title="GETFC in getfc.f">GETFC</a>(HD,HRU,HV,IMIN,IMAX,OMEGA)
+<span class="ln">117</span>C  STORE INITIAL ANGULAR MOMENTUM DISTRIBUTION.
+<span class="ln">118</span>      DO 20 I =1,M
+<span class="ln">119</span>         HJMP(I) = HJMSAV(I)
+<span class="ln">120</span>         WSAV(I) = OMEGA(I)
+<span class="ln">121</span>   20 CONTINUE
+<span class="ln">122</span>C  STORE INITIAL SURFACE ANGULAR VELOCITY FOR USE IN ANGULAR MOMENTUM
+<span class="ln">123</span>C  LOSS CALCULATIONS.
+<span class="ln">124</span>C      WBEG = OMEGA(M)
+<span class="ln">125</span>      WBEG = WMST(M)
+<span class="ln">126</span>      LOK = .FALSE.
+<span class="ln">127</span>C  ON THE FIRST LEVEL OF ITERATION, THE UNPERTURBED MODEL IS USED TO
+<span class="ln">128</span>C  CALCULATE THE DIFFUSION VELOCITIES. ON THE SECOND AND SUBSEQUENT
+<span class="ln">129</span>C  ITERATIONS, THE ANGULAR MOMENTUM DISTRIBUTION FROM THE PREVIOUS
+<span class="ln">130</span>C  ITERATION IS USED TO GET THE VELOCITIES.  THIS &#x27;NEW&#x27; VELOCITY IS THEN
+<span class="ln">131</span>C  AVERAGED WITH THE VELOCITY FOUND IN THE PREVIOUS ITERATION TO GET A
+<span class="ln">132</span>C  CORRECTED V AND THUS A MORE ACCURATE RUN OF DIFFUSION COEFFICIENTS.
+<span class="ln">133</span>      DO 100 IT = 1,ITDIF2
+<span class="ln">134</span>         OMEGAS = OMEGA(M)
+<span class="ln">135</span>         IF(IT.GT.1)THEN
+<span class="ln">136</span>C  COMPUTE NEW RUN OF ANGULAR VELOCITIES (AVERAGE OF INITIAL AND
+<span class="ln">137</span>C  LATEST VALUES).
+<span class="ln">138</span>            DO I = 1,M
+<span class="ln">139</span>               OMEGA(I) = 0.5D0*(OMEGA(I)+WSAV(I))
+<span class="ln">140</span>            END DO
+<span class="ln">141</span>C  COMPUTE NEW RUN OF ANGULAR VELOCITY GRADIENTS.
+<span class="ln">142</span>            DO 30 I = IMIN,IMAX
+<span class="ln">143</span>C CENTER LOGARITHMIC DERIVATIVE.
+<span class="ln">144</span>               RLNC = LOG10(RM(I))
+<span class="ln">145</span>               DR1 = 1.0D0/CLN/(HR(I)-RLNC)+1.0D0/CLN/(RLNC-HR(I-1))
+<span class="ln">146</span>               QWLNR(I) = 0.25D0*(OMEGA(I)-OMEGA(I-1))*DR1
+<span class="ln">147</span>C              QWLNR(I) = (OMEGA(I)-OMEGA(I-1))/CLN/(HR(I)-HR(I-1))
+<span class="ln">148</span>   30       CONTINUE
+<span class="ln">149</span>C  ON 2ND AND SUBSEQUENT ITERATIONS,COMPUTE CHARACTERISTIC VELOCITIES
+<span class="ln">150</span>C  FOR THE NEW RUN OF OMEGA AND COMPOSITION FOUND IN THE PREVIOUS
+<span class="ln">151</span>C  ITERATION.
+<span class="ln">152</span>C MHP 06/02 added pressure and timestep to call
+<span class="ln">153</span>C             CALL VCIRC(HJM,HR,HRU,IMIN,IMAX,IT,LCZ,M,OMEGA,LDO,QWLNR,  ! KC 2025-05-31
+<span class="ln">154</span>            CALL <a href="../files/vcirc.f.html#def-VCIRC" title="VCIRC in vcirc.f">VCIRC</a>(HR,HRU,IMIN,IMAX,IT,LCZ,M,OMEGA,LDO,QWLNR,
+<span class="ln">155</span>     *                 QWRMAX,HV,CLTOT,DT,HP)
+<span class="ln">156</span>            IF(LVFC) CALL <a href="../files/getfc.f.html#def-GETFC" title="GETFC in getfc.f">GETFC</a>(HD,HRU,HV,IMIN,IMAX,OMEGA)
+<span class="ln">157</span>C  NOW THAT THE NEW DIFFUSION VELOCITIES HAVE BEEN COMPUTED, RESET THE
+<span class="ln">158</span>C  ANGULAR MOMENTUM AND COMPOSITION ARRAYS TO THEIR ORIGINAL VALUES.
+<span class="ln">159</span>            DO 50 I = 1,M
+<span class="ln">160</span>               HJM(I) = HJMSAV(I)
+<span class="ln">161</span>               DO 40 J = 1,4
+<span class="ln">162</span>                  HCOMP(J,I) = HCOMPS(J,I)
+<span class="ln">163</span>   40          CONTINUE
+<span class="ln">164</span>   50       CONTINUE
+<span class="ln">165</span>C MHP 10/91 CHANGED TO REMIX CZ&#x27;S TO THEIR PROPER DEPTH!
+<span class="ln">166</span>C OTHERWISE, DRASTIC ERRORS OCCUR IN THE PRESENCE OF A DEEPENING CZ
+<span class="ln">167</span>C (THE LOCAL ABUNDANCE AT THE CZ BASE PRIOR TO THE DEEPENING OF THE
+<span class="ln">168</span>C  CZ IS ASSIGNED TO THE WHOLE CZ - X AND HE3 ONLY, AND ONLY FOR A
+<span class="ln">169</span>C  CZ WHICH IS BECOMING DEEPER.)
+<span class="ln">170</span>C  ENSURE THAT CONVECTIVE REGIONS ARE FULLY MIXED.
+<span class="ln">171</span>C  JVS 0212 CALL MIXCZ(HCOMP,HS2,LCZ,M)
+<span class="ln">172</span>C KC 2025-05-30 addressed warning messages from Makefile.legacy
+<span class="ln">173</span>C C G Somers 6/14, SET IMIX = .FALSE. SO THE CORRECT GRADS ARE USED.
+<span class="ln">174</span>C          IMIX = .FALSE.
+<span class="ln">175</span>C          CALL MIXCZ(HCOMP,HS2,HS1,LCZ,HR,HP,HD,HG,M,IMIX)
+<span class="ln">176</span>C G Somers 6/14, SET LIMIX = .FALSE. SO THE CORRECT GRADS ARE USED.
+<span class="ln">177</span>         LIMIX = .FALSE.
+<span class="ln">178</span>C          CALL MIXCZ(HCOMP,HS2,HS1,LCZ,HR,HP,HD,HG,M,LIMIX)  ! KC 2025-05-31
+<span class="ln">179</span>         CALL <a href="../files/mixcz.f.html#def-MIXCZ" title="MIXCZ in mixcz.f">MIXCZ</a>(HCOMP,HS2,LCZ,M)
+<span class="ln">180</span>C G Somers END
+<span class="ln">181</span>         ENDIF
+<span class="ln">182</span>C  CALCULATE LOSS OF ANGULAR MOMENTUM DUE TO WIND FOR AN
+<span class="ln">183</span>C  ISOLATED SURFACE C.Z.(NO COUPLING WITH INTERIOR VIA DIFFUSION).
+<span class="ln">184</span>         IF(LCZSUR.AND.HV(IMAX).EQ.0.0D0 .AND. .NOT.LOCK)THEN
+<span class="ln">185</span>C  FIND MOMENT OF INERTIA OF THE SURFACE C.Z.
+<span class="ln">186</span>            HICZ = 0.0D0
+<span class="ln">187</span>            DO 55 I = IMAX,M
+<span class="ln">188</span>               HICZ = HICZ + HI(I)
+<span class="ln">189</span>   55       CONTINUE
+<span class="ln">190</span>            LJDOT = LJDOT0
+<span class="ln">191</span>C MHP 10/02 UNUSED LFIRST REMOVED FROM CALL
+<span class="ln">192</span>            CALL <a href="../files/mwind.f.html#def-MWIND" title="MWIND in mwind.f">MWIND</a>(BL,DT,HSBOT,HSTOP,IMAX,M,LJDOT,OMEGAS,
+<span class="ln">193</span>C      *                SJTOT,SMASS,TEFFL,HICZ,HJM,LFIRST)  ! KC 2025-05-31
+<span class="ln">194</span>     *                 SMASS,TEFFL,HICZ,HJM)
+<span class="ln">195</span>C REMOVE TORQUE FROM ENTIRE STAR
+<span class="ln">196</span>C JNT 09/25 FOR 05/15 IMPJMOD=1 SAME AS LSOLID
+<span class="ln">197</span>         ELSE IF(LCZSUR .AND. (LSOLID .OR. (IMPJMOD.EQ.1)))THEN
+<span class="ln">198</span>            LJDOT = LJDOT0
+<span class="ln">199</span>            HSBOTJ = 0.0D0
+<span class="ln">200</span>            HSTOPJ = EXP(CLN*HSTOT)
+<span class="ln">201</span>            IMAXJ = 1
+<span class="ln">202</span>            CALL <a href="../files/mwind.f.html#def-MWIND" title="MWIND in mwind.f">MWIND</a>(BL,DT,HSBOTJ,HSTOPJ,IMAXJ,M,LJDOT,OMEGAS,
+<span class="ln">203</span>C      *                SJTOT,SMASS,TEFFL,HICZ,HJM)  ! KC 2025-05-31
+<span class="ln">204</span>     *                 SMASS,TEFFL,HICZ,HJM)
+<span class="ln">205</span>C            WRITE(*,*)HJM(1),HJM(M)
+<span class="ln">206</span>            JSTART = 1
+<span class="ln">207</span>            JEND = M
+<span class="ln">208</span>            CALL <a href="../files/solid.f.html#def-SOLID" title="SOLID in solid.f">SOLID</a>(HD,HJM,HR,HS,HS2,JSTART,JEND,ETA2,HI,OMEGA,
+<span class="ln">209</span>     *                 QIW,R0,M)
+<span class="ln">210</span>C            WRITE(*,*)OMEGA(1),OMEGA(M)
+<span class="ln">211</span>         ENDIF
+<span class="ln">212</span>C  IF LDO=F,NO INSTABILITIES OCCUR (STABLE AGAINST ALL MECHANISMS).
+<span class="ln">213</span>         IF(.NOT.LDO) GOTO 9999
+<span class="ln">214</span>C  TREAT CENTRAL AND SURFACE ZONES AS ALWAYS CONVECTIVE
+<span class="ln">215</span>C  (SHOULD BE FIXED TO GIVE BETTER CENTRAL/SURFACE B.C.)
+<span class="ln">216</span>         LCZ(1) = .TRUE.
+<span class="ln">217</span>         LCZ(M) = .TRUE.
+<span class="ln">218</span>C  UNSTABLE REGION EXISTS.
+<span class="ln">219</span>C  FIND DIFFUSION COEFFICIENTS(COD) FOR ALL UNSTABLE REGIONS.
+<span class="ln">220</span>C          CALL CODIFF(DELTS,HRU,HV,IMIN,IMAX,LC,LCZ,M,RMID,COD,COD2)  ! KC 2025-05-31
+<span class="ln">221</span>         CALL <a href="../files/codiff.f.html#def-CODIFF" title="CODIFF in codiff.f">CODIFF</a>(HRU,M,RMID,COD,COD2)
+<span class="ln">222</span>C  EACH UNSTABLE REGION IS SOLVED SEPARATELY STARTING HERE.
+<span class="ln">223</span>C  LTEST IS SET T IF A NON-ZERO VELOCITY IS ENCOUNTERED.
+<span class="ln">224</span>C  IBEG IS THE ZONE BELOW THE FIRST NON-ZERO V;IEND IS THE ZONE ABOVE
+<span class="ln">225</span>C  THE LAST NON-ZERO V.
+<span class="ln">226</span>         LDUM = .FALSE.
+<span class="ln">227</span>         ISTART = IMIN
+<span class="ln">228</span>   60    CONTINUE
+<span class="ln">229</span>         LTEST = .FALSE.
+<span class="ln">230</span>C MHP 8/13 TREAT ENTIRE DOMAIN AS UNSTABLE IF A CONSTANT DIFFUSION
+<span class="ln">231</span>C COEFFICIENT IS BEING ADDED
+<span class="ln">232</span>         IF(LCODM.AND.CODM.GT.0.0D0)THEN
+<span class="ln">233</span>            LTEST = .TRUE.
+<span class="ln">234</span>            IBEG = IMIN - 1
+<span class="ln">235</span>            IEND = IMAX
+<span class="ln">236</span>            ISTART = IMAX + 1
+<span class="ln">237</span>            GOTO 80
+<span class="ln">238</span>         ENDIF
+<span class="ln">239</span>         DO 70 J = ISTART,IMAX
+<span class="ln">240</span>            IF(HV(J).GT.0.0D0) THEN
+<span class="ln">241</span>               LTEST = .TRUE.
+<span class="ln">242</span>               IF(.NOT.LDUM) THEN
+<span class="ln">243</span>C  START OF UNSTABLE REGION
+<span class="ln">244</span>                  LDUM = .TRUE.
+<span class="ln">245</span>                  IBEG = J - 1
+<span class="ln">246</span>               ENDIF
+<span class="ln">247</span>            ELSE IF(LDUM) THEN
+<span class="ln">248</span>C  END OF UNSTABLE REGION
+<span class="ln">249</span>               IEND = J - 1
+<span class="ln">250</span>               LDUM = .FALSE.
+<span class="ln">251</span>               ISTART = J + 1
+<span class="ln">252</span>               GOTO 80
+<span class="ln">253</span>            ENDIF
+<span class="ln">254</span>   70    CONTINUE
+<span class="ln">255</span>C  IF THE LAST INTERFACE IS UNSTABLE (NON-ZERO V) ENSURE THAT IEND IS SET
+<span class="ln">256</span>C  PROPERLY.
+<span class="ln">257</span>         IF(LDUM) IEND = IMAX
+<span class="ln">258</span>         ISTART = IMAX + 1
+<span class="ln">259</span>   80    CONTINUE
+<span class="ln">260</span>C  IF NO NON-ZERO V&#x27;S ENCOUNTERED, EXIT.
+<span class="ln">261</span>         IF(.NOT.LTEST) GOTO 90
+<span class="ln">262</span>C MHP 08/03 REMOVED OBSOLETE EQUAL ROUTINE
+<span class="ln">263</span>C         IF(M.GT.1)THEN
+<span class="ln">264</span>C  TRANSFORM TO EQUAL GRID SPACING IN CHI FOR THE REGION.
+<span class="ln">265</span>C CHI IS A NORMALIZED SUM OF THE VARIABLES USED TO PLACE POINTS
+<span class="ln">266</span>C IN THE HENYEY SCHEME, CHOSEN SUCH THAT THE GRID USED IN THE
+<span class="ln">267</span>C ANGULAR MOMENTUM EVOLUTION IS CLOSE TO THE GRID STORED FOR
+<span class="ln">268</span>C THE STRUCTURAL EVOLUTION.
+<span class="ln">269</span>         CALL <a href="../files/rotgrid.f.html#def-ROTGRID" title="ROTGRID in rotgrid.f">ROTGRID</a>(COD,COD2,HD,HI,HJMSAV,HL,HP,HR,HRU,HS,HS1,HS2,
+<span class="ln">270</span>     *                HSTOT,IBEG,IEND,LCZ,M,WSAV,DR,ECOD,
+<span class="ln">271</span>     *                ECOD2,EI,EJ,EM,EW,LDUM2)
+<span class="ln">272</span>C         ELSE
+<span class="ln">273</span>C         CALL EQUAL(BL,COD,COD2,HD,HI,HJMSAV,HRU,HS,HS1,HS2,HSTOT,
+<span class="ln">274</span>C     *              IBEG,IEND,LCZ,M,TEFFL,DR,ECOD,ECOD2,EI,EJ,
+<span class="ln">275</span>C     *              EM,ES1,EW,WSAV,LDUM2,NTOT)
+<span class="ln">276</span>C         ENDIF
+<span class="ln">277</span>C  LDUM2=T IF TWO C.Z.&#x27;S ARE SEPARATED BY ONE RADIATIVE ZONE;
+<span class="ln">278</span>C  SKIP IF THIS OCCURS.
+<span class="ln">279</span>         IF(LDUM2) THEN
+<span class="ln">280</span>            IF(ISTART.LE.IMAX) THEN
+<span class="ln">281</span>               GOTO 60
+<span class="ln">282</span>            ELSE
+<span class="ln">283</span>               GOTO 90
+<span class="ln">284</span>            ENDIF
+<span class="ln">285</span>         ENDIF
+<span class="ln">286</span>C MHP 3/09 SKIP ANGULAR MOMENTUM EVOLUTION FOR SOLID BODY MODELS
+<span class="ln">287</span>C JNT 09/25 FOR 05/15 IMPJMOD=1 IS THE SAME AS LSOLID 
+<span class="ln">288</span>         IF(.NOT.LSOLID .AND. (IMPJMOD.NE.1))THEN
+<span class="ln">289</span>C  CHECK IF SURFACE C.Z. IS PART OF THE UNSTABLE REGION.
+<span class="ln">290</span>C  IF SO,CALCULATE TERMS FOR DIFFUSION.
+<span class="ln">291</span>         IF(LCZSUR.AND.IEND.EQ.IMAX)THEN
+<span class="ln">292</span>            IF(LOCK)THEN
+<span class="ln">293</span>               WIND1 = 0.0D0
+<span class="ln">294</span>               WIND2 = 0.0D0
+<span class="ln">295</span>               LFIX = .TRUE.
+<span class="ln">296</span>            ELSE
+<span class="ln">297</span>               LFIX = .FALSE.
+<span class="ln">298</span>               IF(LJDOT0)THEN
+<span class="ln">299</span>                  HICZ = EI(NTOT)
+<span class="ln">300</span>                  OMEGAS = OMEGA(M)
+<span class="ln">301</span>                  CALL <a href="../files/mcowind.f.html#def-MCOWIND" title="MCOWIND in mcowind.f">MCOWIND</a>(BL,DT,HICZ,IT,OMEGAS,SMASS,
+<span class="ln">302</span>     *                        TEFFL,WBEG,WIND1,WIND2)
+<span class="ln">303</span>               ELSE
+<span class="ln">304</span>                  WIND1 = 0.0D0
+<span class="ln">305</span>                  WIND2 = 0.0D0
+<span class="ln">306</span>               ENDIF
+<span class="ln">307</span>            ENDIF
+<span class="ln">308</span>         ELSE
+<span class="ln">309</span>            LFIX = .FALSE.
+<span class="ln">310</span>            WIND1 = 0.0D0
+<span class="ln">311</span>            WIND2 = 0.0D0
+<span class="ln">312</span>         ENDIF
+<span class="ln">313</span>         LOKAD = .FALSE.
+<span class="ln">314</span>         IF(.NOT.LDIFAD)THEN
+<span class="ln">315</span>C  SET UP DIFFUSION EQUATION ARRAYS TO SOLVE FOR OMEGA AT END OF TSTEP
+<span class="ln">316</span>            CALL <a href="../files/dcoeft.f.html#def-DCOEFT" title="DCOEFT in dcoeft.f">DCOEFT</a>(ECOD,DR,DT,EI,EJ,EW,NTOT,WIND1,WIND2,LFIX)
+<span class="ln">317</span>C  SOLVE MATRIX FOR THE RUN OF OMEGA AT THE END OF THE TIMESTEP AT THE
+<span class="ln">318</span>C  EQUALLY SPACED GRID POINTS.
+<span class="ln">319</span>C             CALL TRIDIA(NTOT,EI,EJ,DJ,SUMDJ)  ! KC 2025-05-31
+<span class="ln">320</span>            CALL <a href="../files/tridia.f.html#def-TRIDIA" title="TRIDIA in tridia.f">TRIDIA</a>(NTOT,EI,DJ,SUMDJ)
+<span class="ln">321</span>C  TRANSFORM THE NEW ANGULAR MOMENTUM DISTRIBUTION BACK TO THE ORIGINAL GRID
+<span class="ln">322</span>C  POINTS IN THE UNSTABLE REGION.
+<span class="ln">323</span>         ELSE
+<span class="ln">324</span>C SOLVE FOR OMEGA AND ITS DERIVATIVES IN A BAND MATRIX
+<span class="ln">325</span>C             CALL DADCOEFT(DR,DT,EI,EJ,EW,NTOT,WIND1,WIND2,DJ,  ! KC 2025-05-31
+<span class="ln">326</span>            CALL <a href="../files/dadcoeft.f.html#def-DADCOEFT" title="DADCOEFT in dadcoeft.f">DADCOEFT</a>(DR,DT,EI,EW,NTOT,WIND1,WIND2,DJ,
+<span class="ln">327</span>     *                    ECOD2,SUMDJ,LFIX,LOKAD)
+<span class="ln">328</span>         ENDIF
+<span class="ln">329</span>C MHP 08/03 REMOVED OBSOLETE EQUAL2 ROUTINE
+<span class="ln">330</span>C         IF(M.GT.1)THEN
+<span class="ln">331</span>C TRANSFORM BACK TO THE ORIGINAL GRID
+<span class="ln">332</span>            CALL <a href="../files/eq2mod.f.html#def-EQ2MOD" title="EQ2MOD in eq2mod.f">EQ2MOD</a>(DJ,EJ,HS2,IBEG,IEND,LCZ,M,SUMDJ,HJM)
+<span class="ln">333</span>C         ELSE
+<span class="ln">334</span>C         CALL EQUAL2(DJ,EJ,EM,ES1,HS1,IBEG,IEND,LCZ,M,NTOT,HJM)
+<span class="ln">335</span>C         ENDIF
+<span class="ln">336</span>C  PERFORM COMPOSITION DIFFUSION.
+<span class="ln">337</span>C  UNTIL THE FINAL ITERATION, ONLY COMPOSITION DIFFUSION OF SPECIES WHICH
+<span class="ln">338</span>C  AFFECT GRADIENTS IN MEAN MOLECULAR WEIGHT IS COMPUTED (H,HE3,HE4).
+<span class="ln">339</span>C  ON THE FINAL ITERATION, DIFFUSION OF ALL SPECIES IS PERFORMED.
+<span class="ln">340</span>C MHP 08/03 REMOVED OBSOLETE DIFCOM ROUTINE
+<span class="ln">341</span>C         IF(M.GT.1)THEN
+<span class="ln">342</span>         ENDIF
+<span class="ln">343</span>         JBEG = 1
+<span class="ln">344</span>         JEND = 4
+<span class="ln">345</span>         CALL <a href="../files/ndifcom.f.html#def-NDIFCOM" title="NDIFCOM in ndifcom.f">NDIFCOM</a>(DT,COD2,ECOD2,EM,HD,HL,HP,HR,HS,HS1,HS2,
+<span class="ln">346</span>C      *                HSTOT,HV,IBEG,IEND,IMAX,IMIN,LCZ,LOK,M,NTOT,  ! KC 2025-05-31
+<span class="ln">347</span>     *                HSTOT,HV,IBEG,IEND,IMAX,IMIN,LCZ,LOK,M,
+<span class="ln">348</span>     *                HCOMP,JBEG,JEND)
+<span class="ln">349</span>C         ELSE
+<span class="ln">350</span>C         CALL DIFCOM(DR,DT,COD2,ECOD2,EM,ES1,HRU,HS,HS1,HS2,HV,
+<span class="ln">351</span>C     *               IBEG,IEND,IMIN,LCZ,LOK,M,NTOT,HCOMP)
+<span class="ln">352</span>C         ENDIF
+<span class="ln">353</span>C  RETURN FOR NEXT REGION IF APPLICABLE
+<span class="ln">354</span>         IF(ISTART.LE.IMAX) GOTO 60
+<span class="ln">355</span>   90    CONTINUE
+<span class="ln">356</span>C CHECK SOLUTION,UPDATE OMEGA,AND SEE IF ANOTHER ITERATION IS NEEDED.
+<span class="ln">357</span>         LCZ(1) = LCZ1
+<span class="ln">358</span>         LCZ(M) = LCZM
+<span class="ln">359</span>C mhp 10/02 unused ecod, ecod2 no longer passed
+<span class="ln">360</span>C         WRITE(*,*)LSOLID,OMEGA(1),OMEGA(M)
+<span class="ln">361</span>         CALL <a href="../files/checkj.f.html#def-CHECKJ" title="CHECKJ in checkj.f">CHECKJ</a>(HD,HJMP,HJMSAV,HR,HS,HS2,HV,IMIN,IMAX,IT,LCZ,
+<span class="ln">362</span>C      *         LPRT,M,DT,ETA2,HI,HJM,IREDO,LOK,LREDO,OMEGA,QIW,R0,  ! KC 2025-05-31
+<span class="ln">363</span>     *         M,DT,ETA2,HI,HJM,IREDO,LOK,LREDO,OMEGA,QIW,R0,
+<span class="ln">364</span>     *         WSAV,ID,IDM,LOKAD)
+<span class="ln">365</span>C     *         WSAV,ID,IDM,ECOD,ECOD2,LOKAD)
+<span class="ln">366</span>C         WRITE(*,*)OMEGA(1),OMEGA(M)
+<span class="ln">367</span>C CHECK COMPOSITION DIFFUSION AND RECOMPUTE MEAN MOLECULAR WEIGHT.
+<span class="ln">368</span>         IF(.NOT.LREDO)CALL <a href="../files/checkc.f.html#def-CHECKC" title="CHECKC in checkc.f">CHECKC</a>(HCOMP,IT,LPRT,M,DT,IREDO,LOK,LREDO)
+<span class="ln">369</span>C MHP 9/93
+<span class="ln">370</span>         IF(LNOJ)LOK = .TRUE.
+<span class="ln">371</span>C IF LOK=T,CONVERGED.
+<span class="ln">372</span>         IF(LOK)GOTO 200
+<span class="ln">373</span>C IF LREDO=T, A PROBLEM REQUIRES TIMESTEP CUTTING.
+<span class="ln">374</span>         IF(LREDO)GOTO 9999
+<span class="ln">375</span>  100 CONTINUE
+<span class="ln">376</span>      LOK = .TRUE.
+<span class="ln">377</span>  200 CONTINUE
+<span class="ln">378</span>C PERFORM COMPOSITION DIFFUSION OF REMAINING SPECIES.
+<span class="ln">379</span>      LCZ(1) = .TRUE.
+<span class="ln">380</span>      LCZ(M) = .TRUE.
+<span class="ln">381</span>C MHP 6/00 ADDED OPTION OF BS EXTRAPOLATION FOR HE3, CNO
+<span class="ln">382</span>C      LBSMIX=.TRUE.
+<span class="ln">383</span>C      IF(LBSMIX)THEN
+<span class="ln">384</span>C         CALL BSCOMP(DR,DT,COD2,ECOD2,EM,ES1,HRU,HS,HS1,HS2,
+<span class="ln">385</span>C     *               IBEG,IEND,IMIN,LCZ,LOK,M,NTOT,HCOMP,HV,
+<span class="ln">386</span>C     *           HD,HP,HR,HT,MRZONE,MXZONE,NRZONE,NZONE,HSTOT)
+<span class="ln">387</span>C      ELSE
+<span class="ln">388</span>C MHP 08/03 REMOVED OBSOLETE DIFCOM ROUTINE
+<span class="ln">389</span>C      IF(M.GT.1)THEN
+<span class="ln">390</span>      JBEG = 5
+<span class="ln">391</span>      IF(LEXCOM)THEN
+<span class="ln">392</span>         JEND = 15
+<span class="ln">393</span>      ELSE
+<span class="ln">394</span>         JEND = 11
+<span class="ln">395</span>      ENDIF
+<span class="ln">396</span>      CALL <a href="../files/ndifcom.f.html#def-NDIFCOM" title="NDIFCOM in ndifcom.f">NDIFCOM</a>(DT,COD2,ECOD2,EM,HD,HL,HP,HR,HS,HS1,HS2,
+<span class="ln">397</span>C      *             HSTOT,HV,IBEG,IEND,IMAX,IMIN,LCZ,LOK,M,NTOT,  ! KC 2025-05-31
+<span class="ln">398</span>     *             HSTOT,HV,IBEG,IEND,IMAX,IMIN,LCZ,LOK,M,
+<span class="ln">399</span>     *             HCOMP,JBEG,JEND)
+<span class="ln">400</span>C      ELSE
+<span class="ln">401</span>C      CALL DIFCOM(DR,DT,COD2,ECOD2,EM,ES1,HRU,HS,HS1,HS2,HV,
+<span class="ln">402</span>C     *            IBEG,IEND,IMIN,LCZ,LOK,M,NTOT,HCOMP)
+<span class="ln">403</span>C      ENDIF
+<span class="ln">404</span>C MHP 6/00
+<span class="ln">405</span>      LCZ(1) = LCZ1
+<span class="ln">406</span>      LCZ(M) = LCZM
+<span class="ln">407</span>C ADD I/O FOR MIXING.
+<span class="ln">408</span>      IF(LPRT)THEN
+<span class="ln">409</span>C MHP 8/03 ADDED HEADER LINE.
+<span class="ln">410</span>      WRITE(IMODPT,198)
+<span class="ln">411</span> 198  FORMAT(&#x27;COMPOSITION CHANGE FROM ROTATIONAL MIXING&#x27;/
+<span class="ln">412</span>     *       5X,&#x27;H&#x27;,8X,&#x27;HE3&#x27;,7X,&#x27;C12&#x27;,7X,&#x27;C13&#x27;,7X,&#x27;N14&#x27;,
+<span class="ln">413</span>     *       7X,&#x27;LI7&#x27;,7X,&#x27;BE9&#x27;)
+<span class="ln">414</span>      DO I = 1,IDM
+<span class="ln">415</span>         DX = HCOMP(1,ID(I))-HCOMPS(1,ID(I))
+<span class="ln">416</span>         DHE3 = HCOMP(4,ID(I))-HCOMPS(4,ID(I))
+<span class="ln">417</span>         DC12 = HCOMP(5,ID(I))-HCOMPS(5,ID(I))
+<span class="ln">418</span>         DC13 = HCOMP(6,ID(I))-HCOMPS(6,ID(I))
+<span class="ln">419</span>         DN14 = HCOMP(7,ID(I))-HCOMPS(7,ID(I))
+<span class="ln">420</span>         DLI7 = HCOMP(14,ID(I))-HCOMPS(14,ID(I))
+<span class="ln">421</span>         DBE9 = HCOMP(15,ID(I))-HCOMPS(15,ID(I))
+<span class="ln">422</span>         WRITE(IMODPT,199)ID(I),DX,DHE3,DC12,DC13,DN14,DLI7,DBE9
+<span class="ln">423</span> 199     FORMAT(I5,1P7E10.3)
+<span class="ln">424</span>      END DO
+<span class="ln">425</span>      ENDIF
+<span class="ln">426</span> 9999 CONTINUE
+<span class="ln">427</span>C MHP 8/03 - OMITTED I/O, COULD REINTRODUCE IN ANOTHER FILE
+<span class="ln">428</span>C  DETERMINE COUPLING FACTOR (I.E. THE FRACTION OF THE TOTAL ANGULAR
+<span class="ln">429</span>C  MOMENTUM LOST FROM THE CORE RELATIVE TO ITS FRACTION OF THE TOTAL
+<span class="ln">430</span>C  MOMENT OF INERTIA).
+<span class="ln">431</span>C      DJCORE = 0.0D0
+<span class="ln">432</span>C      HICORE = 0.0D0
+<span class="ln">433</span>C      HJTOT = 0.0D0
+<span class="ln">434</span>C      DO I = 1,IMAX-1
+<span class="ln">435</span>C         DJCORE = DJCORE + (HJM(I)-HJMSAV(I))*HS2(I)
+<span class="ln">436</span>C         HICORE = HICORE + HI(I)
+<span class="ln">437</span>C         HJTOT = HJTOT + HJM(I)*HS2(I)
+<span class="ln">438</span>C      END DO
+<span class="ln">439</span>C      HIENV = 0.0D0
+<span class="ln">440</span>C      DJENV = 0.0D0
+<span class="ln">441</span>C      DO I = IMAX,M
+<span class="ln">442</span>C         DJENV = DJENV + (HJM(I)-HJMSAV(I))*HS2(I)
+<span class="ln">443</span>C         HIENV = HIENV + HI(I)
+<span class="ln">444</span>C         HJTOT = HJTOT + HJM(I)*HS2(I)
+<span class="ln">445</span>C      END DO
+<span class="ln">446</span>C      FI = HICORE/(HICORE+HIENV)
+<span class="ln">447</span>C      IF(ABS(DJCORE+DJENV).GT.1.0D-32)THEN
+<span class="ln">448</span>C         FJ = DJCORE/(DJCORE+DJENV)
+<span class="ln">449</span>C      ELSE
+<span class="ln">450</span>C         FJ = 1.0D0
+<span class="ln">451</span>C      ENDIF
+<span class="ln">452</span>C      WRITE(88,709)SAGE,HJTOT,OMEGA(M),FJ,FJ/FI,
+<span class="ln">453</span>C     *               HCOMP(14,M),HCOMP(15,M)
+<span class="ln">454</span>C  709 FORMAT(1P7E11.3)
+<span class="ln">455</span>      RETURN
+<span class="ln">456</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ul>
+<li><strong>Missing.</strong> Step 5 does not say that a region flagged by <code>ROTGRID</code> (<code>LDUM2</code>) is skipped, nor that for solid-body models (<code>LSOLID</code>, <code>IMPJMOD</code> = 1) the $\Omega$ solution is skipped while <code>NDIFCOM</code> still diffuses species 1–4. Fix: add both.</li>
+<li>Checked and confirmed: the centered shear formula (it reduces to $\Delta\Omega/\Delta\ln r$ at the geometric mean), the iteration, the wind branches, questions 1–5 (<code>LCODM</code>, <code>CODM</code> are local, undeclared; the final <code>NDIFCOM</code> uses the last region's <code>IBEG</code>, <code>IEND</code>, <code>ECOD2</code>, <code>EM</code>).</li>
+</ul>
+<p>Revised: applied.</p></div></details>
+</main></body></html>

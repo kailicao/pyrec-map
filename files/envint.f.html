@@ -1,0 +1,973 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>envint.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ envint.f</span></header><main>
+<h1>envint.f</h1>
+<p class='muted'>884 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/envint.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file integrates the outer layers of the star, which the interior model does not contain: first the atmosphere, from small optical depth to the photosphere, then the envelope, from the photosphere down to the interior's outermost mass point. The result is the pressure, temperature and radius at that fitting point, which <a href="../files/surfbc.f.html#def-SURFBC">SURFBC</a> turns into the surface boundary condition of the interior; the run of the envelope is stored for output, the acoustic depth and the convective overturn time.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>B</code> ($L$), <code>TEFFL</code>, <code>GL</code> ($\log g$), <code>RL</code> ($\log R$), <code>HSTOT</code> ($\log M$), <code>X</code>, <code>Z</code>, <code>FPL</code>, <code>FTL</code> (rotational corrections), <code>PLIM</code> (the expected end pressure), <code>IE</code> (which point of the envelope triangle), <code>LSBC</code>, <code>LPRT</code>, <code>LPULPT</code>. From COMMON: the atmosphere choice <code>KTTAU</code> (<code>/ATMOS/</code>: 0 Eddington gray, 1 Krishna Swamy, 2 the <code>HRA</code> $T$–$\tau$ relation, 3 Kurucz, 4 Allard, 5 Castelli–Kurucz 2004); the integration controls <code>/INTATM/</code>, <code>/INTENV/</code>, <code>/INTPAR/</code>; <code>SENV</code> ($\log$ of the fitting point's mass fraction) and <code>STOTAL</code> (<code>/COMP/</code>); <code>TENV</code> (<code>/CTLIM/</code>); <code>LCALCENV</code>, <code>LNEWTCZ</code> (<code>/OVRTRN/</code>); output switches in <code>/CCOUT/</code>, <code>/PULSE/</code>, <code>/ACDPTH/</code>.</li>
+<li><strong>Who calls it:</strong> <a href="../files/surfbc.f.html#def-SURFBC">SURFBC</a> (the boundary condition), <a href="../files/calcad.f.html#def-CALCAD">CALCAD</a>, <a href="../files/getnewenv.f.html#def-GETNEWENV">GETNEWENV</a>, <a href="../files/gettau.f.html#def-GETTAU">GETTAU</a>, <a href="../files/starin.f.html#def-STARIN">STARIN</a>, <a href="../files/stitch.f.html#def-STITCH">STITCH</a> and <a href="../files/wrtmod.f.html#def-WRTMOD">WRTMOD</a>.</li>
+<li><strong>What it calls:</strong> for tabulated atmospheres <a href="../files/surfp.f.html#def-SURFP">SURFP</a>, <a href="../files/kcsurfp.f.html#def-KCSURFP">KCSURFP</a> or <a href="../files/alsurfp.f.html#def-ALSURFP">ALSURFP</a>; for gray ones <a href="../files/hra.f.html#def-HRA">HRA</a>, <a href="../files/meqos.f.html#def-MEQOS">MEQOS</a> or <a href="../files/eqstat.f.html#def-EQSTAT">EQSTAT</a>, <a href="../files/getopac.f.html#def-GETOPAC">GETOPAC</a>; for both integrations <a href="../files/bsstep.f.html#def-BSSTEP">BSSTEP</a> with the derivative routines <a href="../files/qatm.f.html#def-QATM">QATM</a> and <a href="../files/qenv.f.html#def-QENV">QENV</a>; at the end <a href="../files/taucal.f.html#def-TAUCAL">TAUCAL</a>.</li>
+<li><strong>Outputs:</strong></li>
+<li>arguments: <code>PS(IE)</code>, <code>TS(IE)</code>, <code>RS(IE)</code> (the fitting point's $\log P$, $\log T$, $\log r$), <code>ESTORE</code>, <code>ISTORE</code> (the state where $T$ first reaches <code>TENV</code>), all set only when <code>LSBC</code>; counters <code>KATM</code>, <code>KENV</code>, <code>KSAHA</code>;</li>
+<li><code>/ENVSTRUCT/</code>: the envelope profile ($\log P$, $\log T$, $\log m$, $\log\rho$, $\log r$, $X$, $Z$, convective flag, gradients, velocities, $\beta$, $\Gamma_1$, $c_P$, ionization, opacity, $L$, $\rho_T$), reordered from the centre outward; read by CALCAD, GETNEWENV, GETTAU, STARIN, STITCH, TAUINT;</li>
+<li><code>/ATMSTRUCT/</code> (the atmosphere profile, for STITCH); <code>PPHOT</code> (<code>/OVRTRN/</code>, the photospheric pressure, for <a href="../files/amcalc.f.html#def-AMCALC">AMCALC</a>); <code>ENVRCZ</code> (<code>/ENVCZ/</code>, the radius of the convection zone's base when it lies in the envelope, for <a href="../files/wrtout.f.html#def-WRTOUT">WRTOUT</a>);</li>
+<li>text: the atmosphere and envelope tables to <code>ISTOR</code>, summaries to <code>ISHORT</code>, pulsation files <code>IOPATM</code>, <code>IOPENV</code>.</li>
+</ul>
+<p><strong>The atmosphere.</strong></p>
+<ul>
+<li><strong>Tables</strong> (<code>KTTAU</code> = 3, 4, 5): the routine reads $\log P$ (and $\log T$) at the photosphere from the table; if the Allard table fails, it switches the run to the gray atmosphere (it sets <code>KTTAU = 0</code> for good).</li>
+<li><strong>Gray</strong> (<code>KTTAU</code> = 0, 1, 2): start at a small optical depth, with the temperature from the $T$–$\tau$ relation at $\tau \to 0$ (Eddington: $\log T = \log T_\mathrm{eff} - \tfrac14\log\tfrac43 + \tfrac14\log\tfrac23$, that is $T^4 = T_\mathrm{eff}^4/2$; Krishna Swamy: $T^4 = \tfrac34 T_\mathrm{eff}^4 \times 0.550$; <code>HRA</code>: its own value at $\tau = 2/3$ shifted by <code>HRAS</code>) and the pressure $P = \rho\mathcal{R}T + aT^4/3$ at a chosen density <code>ATMD0</code>. Then, with $\log\tau$ as the variable,
+$$\frac{d\log P}{d\log\tau} = \frac{g\,\tau}{\kappa P},$$
+up to $\tau = 2/3$ (Eddington; $\tau = 0.312$ for Krishna Swamy). If the starting $\tau$ lies beyond the end, the density is divided by 10 and the start retried.</li>
+</ul>
+<p><strong>The envelope.</strong> With $\log P$ as the variable and $y = (\log(m/M), \log T, \log r)$, QENV gives
+$$\frac{d\log m}{d\log P} = -\frac{4\pi r^4 P}{G m^2 f_P}, \qquad \frac{d\log T}{d\log P} = \nabla, \qquad \frac{d\log r}{d\log P} = -\frac{P r f_P}{G m \rho},$$
+integrated with BSSTEP from the photosphere until $\log(m/M)$ reaches <code>SENV</code>; the step is shortened or reversed to land on it, and, when <code>LSBC</code> is false, the first step past <code>PLIM</code> is cut to end on it. The end point is interpolated linearly to <code>SENV</code>. If the envelope mass is negligible (<code>SENV &gt; -1e-12</code>), the photosphere is the fitting point.</p>
+<p><strong>After the integration.</strong> The profile is reversed; for TAUCAL the masses are passed in grams (<code>ENVS1</code>) and as differences in units of the total mass (<code>ENVS2</code>, used only as weights in an average, so the unit cancels); the base of the convection zone is found by linear interpolation of $\nabla_\mathrm{rad} - \nabla$, and TAUCAL computes the overturn time (unless <code>LNEWTCZ</code>). With <code>LCALCENV</code> false, the routine stops after the atmosphere, having set <code>PPHOT</code>.</p>
+<p><strong>Design.</strong> The routine mixes physics with output for several purposes (the <code>.store</code> tables, pulsation files, acoustic-depth arrays), and each output path keeps its own copies of $\Gamma_1$ and related values. Failure to finish in 2000 steps stops the run. <code>LDERIV</code> is set by the pulsation test and then forced to <code>.TRUE.</code> on the next line.</p>
+<p><strong>KC's changes.</strong> 2025-05-30: the elements of <code>/ENVSTRUCT/</code> and <code>/ACDPTH/</code> reordered. 2025-05-31: the call to MEQOS no longer passes <code>LDERIV</code>, <code>LATMO</code>, <code>KSAHA</code>; <code>ENVX</code> removed from the call to TAUCAL.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A broken swap.</strong> In the loop that reverses the envelope profile, <code>ENVL</code> is swapped without the line <code>ENVL(I2) = DUM1</code> (added with "08/25 JVS"). The first half then gets the second half's values and the second half keeps its own, Since every entry of <code>ENVL</code> is <code>B</code> (the luminosity is constant in the envelope), nothing goes wrong now; the swap would fail only if <code>ENVL</code> ever varied.</li>
+<li><strong><code>ENVG</code> never set.</strong> The local array <code>ENVG</code> is passed to <a href="../files/taucal.f.html#def-TAUCAL">TAUCAL</a> as <code>HG</code> (gravity) but never filled here. TAUCAL computes <code>HG</code> itself at the two points it needs when <code>LROT</code> is false; with rotation it uses <code>HG</code> as passed, so the overturn time of a rotating model would use an unset $g$. Should ENVINT fill <code>ENVG</code>?</li>
+<li><strong>A computed overturn time not kept.</strong> <code>TAUCZENV</code> ($\sum \Delta r/v$ in the convection zone) is computed in the loop but never stored or returned. Dead code, or meant to feed <code>TAUCZ</code>?</li>
+<li><strong>Wrong $c_P$ in a print.</strong> At the first atmosphere point, the printed $\Gamma_1$ uses <code>QCPP</code> ($\partial c_P/\partial\ln P$) in place of <code>QCP</code>. It affects only the <code>.store</code> output.</li>
+<li><strong>Pulsation variables on other paths.</strong> The block run when <code>LCLCD</code> or <code>LSTCH</code> (not only for pulsation output) uses <code>TAUP</code>, <code>OP</code>, <code>DP</code>, which are set at the start only when <code>LPULPT.AND.LPRT</code>; otherwise they keep values from an earlier call.</li>
+<li><strong>Two ways of storing the atmosphere.</strong> <code>ATMOP</code>, <code>ATMOT</code>, … are stored when <code>LPRT.AND.LSTATM</code>, but <code>ATMOR</code>, <code>ADELS</code> and <code>NUMATM</code> when <code>LCLCD</code>, <code>LSTCH</code> or pulsation output is on. Can the two be out of step for STITCH?</li>
+<li><strong>No limit on retries.</strong> The retry with <code>ATMDX/10</code> has no limit.</li>
+<li><strong>A global switch.</strong> On an Allard failure, <code>KTTAU</code> is set to 0 in <code>/ATMOS/</code>, so the rest of the run uses gray atmospheres, even if a later model would fit the table.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+ENVINT
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-ENVINT'>ENVINT</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-ENVINT'><h3><span class='kind'>subroutine</span>ENVINT</h3>
+<p class='muted'>lines 6–884 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/envint.f#L6-L884'>GitHub</a></p>
+<pre>SUBROUTINE ENVINT(B,FPL,FTL,GL,HSTOT,IE,LPRT,LSBC,PLIM,RL,TEFFL,</pre>
+<div class='notes'><p>Integrates the atmosphere (gray $T$–$\tau$ or tabulated) and the envelope (in $\log P$, with <a href="../files/bsstep.f.html#def-BSSTEP">BSSTEP</a> and <a href="../files/qenv.f.html#def-QENV">QENV</a>) down to the fitting mass, returns the fitting point's $P$, $T$, $r$, stores the envelope profile in <code>/ENVSTRUCT/</code>, and finds the convection zone's base and overturn time.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+ENVINT
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-ACDPTH'>/ACDPTH/</a>, <a href='../commons.html#c-ALATM03'>/ALATM03/</a>, <a href='../commons.html#c-ALATM04'>/ALATM04/</a>, <a href='../commons.html#c-ATMOS'>/ATMOS/</a>, <a href='../commons.html#c-ATMOS2'>/ATMOS2/</a>, <a href='../commons.html#c-ATMOS2C'>/ATMOS2C/</a>, <a href='../commons.html#c-ATMPRT'>/ATMPRT/</a>, <a href='../commons.html#c-ATMSTRUCT'>/ATMSTRUCT/</a>, <a href='../commons.html#c-CCOUT'>/CCOUT/</a>, <a href='../commons.html#c-COMP'>/COMP/</a>, <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-CONST3'>/CONST3/</a>, <a href='../commons.html#c-CTLIM'>/CTLIM/</a>, <a href='../commons.html#c-DEUTER'>/DEUTER/</a>, <a href='../commons.html#c-ENVCZ'>/ENVCZ/</a>, <a href='../commons.html#c-ENVPRT'>/ENVPRT/</a>, <a href='../commons.html#c-ENVSTRUCT'>/ENVSTRUCT/</a>, <a href='../commons.html#c-FLAG'>/FLAG/</a>, <a href='../commons.html#c-INTATM'>/INTATM/</a>, <a href='../commons.html#c-INTENV'>/INTENV/</a>, <a href='../commons.html#c-INTPAR'>/INTPAR/</a>, <a href='../commons.html#c-LUNUM'>/LUNUM/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-MHD'>/MHD/</a>, <a href='../commons.html#c-NWLAOL'>/NWLAOL/</a>, <a href='../commons.html#c-OPTAB'>/OPTAB/</a>, <a href='../commons.html#c-OVRTRN'>/OVRTRN/</a>, <a href='../commons.html#c-PUALPHA'>/PUALPHA/</a>, <a href='../commons.html#c-PULSE'>/PULSE/</a>, <a href='../commons.html#c-PULSE1'>/PULSE1/</a>, <a href='../commons.html#c-PULSE2'>/PULSE2/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/alsurfp.f.html#def-ALSURFP'>ALSURFP</a> <span class='muted'>(alsurfp.f)</span></li>
+<li><a href='../files/bsstep.f.html#def-BSSTEP'>BSSTEP</a> <span class='muted'>(bsstep.f)</span> ×2</li>
+<li><a href='../files/eqstat.f.html#def-EQSTAT'>EQSTAT</a> <span class='muted'>(eqstat.f)</span></li>
+<li><a href='../files/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span></li>
+<li><a href='../files/hra.f.html#def-HRA'>HRA</a> <span class='muted'>(hra.f)</span></li>
+<li><a href='../files/kcsurfp.f.html#def-KCSURFP'>KCSURFP</a> <span class='muted'>(kcsurfp.f)</span></li>
+<li><a href='../files/meqos.f.html#def-MEQOS'>MEQOS</a> <span class='muted'>(meqos.f)</span></li>
+<li><a href='../files/qatm.f.html#def-QATM'>QATM</a> <span class='muted'>(qatm.f)</span></li>
+<li><a href='../files/qenv.f.html#def-QENV'>QENV</a> <span class='muted'>(qenv.f)</span> ×2</li>
+<li><a href='../files/surfp.f.html#def-SURFP'>SURFP</a> <span class='muted'>(surfp.f)</span></li>
+<li><a href='../files/taucal.f.html#def-TAUCAL'>TAUCAL</a> <span class='muted'>(taucal.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/calcad.f.html#def-CALCAD'>CALCAD</a> <span class='muted'>(calcad.f)</span></li>
+<li><a href='../files/getnewenv.f.html#def-GETNEWENV'>GETNEWENV</a> <span class='muted'>(getnewenv.f)</span></li>
+<li><a href='../files/gettau.f.html#def-GETTAU'>GETTAU</a> <span class='muted'>(gettau.f)</span></li>
+<li><a href='../files/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span></li>
+<li><a href='../files/stitch.f.html#def-STITCH'>STITCH</a> <span class='muted'>(stitch.f)</span></li>
+<li><a href='../files/surfbc.f.html#def-SURFBC'>SURFBC</a> <span class='muted'>(surfbc.f)</span></li>
+<li><a href='../files/wrtmod.f.html#def-WRTMOD'>WRTMOD</a> <span class='muted'>(wrtmod.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE ENVINT(B,FPL,FTL,GL,HSTOT,IE,LPRT,LSBC,PLIM,RL,TEFFL,
+<span class="ln">7</span>     *                  X,Z,ESTORE,ISTORE,KATM,KENV,KSAHA,PS,RS,TS,
+<span class="ln">8</span>     *                  LPULPT)
+<span class="ln">9</span>
+<span class="ln">10</span>      PARAMETER(JSON=5000)
+<span class="ln">11</span>C PARAMETERS NT AND NG FOR TABULATED SURFACE PRESSURES OF KURUCZ.
+<span class="ln">12</span>      PARAMETER(NT=57,NG=11)
+<span class="ln">13</span>C JNT 06/14 ADDED NTC/NGC FOR KTTAU=5
+<span class="ln">14</span>      PARAMETER(NTC=76,NGC=11)
+<span class="ln">15</span>C MHP 8/97 ADDED NTA AND NGA FOR ALLARD ATMOSPHERE TABLES
+<span class="ln">16</span>      PARAMETER(NTA=54,NGA=5)
+<span class="ln">17</span>
+<span class="ln">18</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">19</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">20</span>      IMPLICIT INTEGER*4(I,J,K,M,N)
+<span class="ln">21</span>      REAL*8 OLAOL(12,104,52),OXA(12),OT(52),ORHO(104),TOLLAOL
+<span class="ln">22</span>      REAL*8 ENVS1(JSON),ENVS2(JSON),ENVG(JSON),EDEL1(JSON),
+<span class="ln">23</span>     * EDEL2(JSON)
+<span class="ln">24</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">25</span>      COMMON/LUNUM/IFIRST, IRUN, ISTAND, IFERMI,
+<span class="ln">26</span>     1    IOPMOD, IOPENV, IOPATM, IDYN,
+<span class="ln">27</span>     2    ILLDAT, ISNU, ISCOMP, IKUR
+<span class="ln">28</span>C DBG CHANGED MAXSTEP FROM 200 TO 2000 TO GIVE ATMOSPHERE INTEGRATER A CHANCE.
+<span class="ln">29</span>      PARAMETER (MAXSTP = 2000,TINY=1.0D-30)
+<span class="ln">30</span>      EXTERNAL QATM,QENV
+<span class="ln">31</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">32</span>      COMMON/NWLAOL/OLAOL, OXA, OT, ORHO, TOLLAOL,
+<span class="ln">33</span>     *  IOLAOL, NUMOFXYZ, NUMRHO, NUMT, LLAOL, LPUREZ, IOPUREZ
+<span class="ln">34</span>      COMMON/ATMPRT/TAU,AP,AT,AD,AO,AFXION(3)
+<span class="ln">35</span>      COMMON/COMP/XENV,ZENV,ZENVM,AMUENV,FXENV(12),XNEW,ZNEW,STOTAL,
+<span class="ln">36</span>     *     SENV
+<span class="ln">37</span>C DBG PULSE: CONSTANTS NEEDED FOR DEL AND DELA CALCULATION
+<span class="ln">38</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">39</span>      COMMON/CONST3/CDELRL,CMIXL,CMIXL2,CMIXL3,CLNDP,CSECYR
+<span class="ln">40</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">41</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">42</span>      COMMON/CTLIM/ATIME(14),TCUT(5),TSCUT,TENV0,TENV1,TENV,TGCUT
+<span class="ln">43</span>      COMMON/ENVPRT/EP,ET,ER,ES,ED,EO,EBETA,EDEL(3),EFXION(3),EVEL
+<span class="ln">44</span>      COMMON/FLAG/LEXCOM
+<span class="ln">45</span>      COMMON/INTATM/ATMERR,ATMD0,ATMBEG,ATMMIN,ATMMAX
+<span class="ln">46</span>      COMMON/INTENV/ENVERR,ENVBEG,ENVMIN,ENVMAX
+<span class="ln">47</span>      COMMON/INTPAR/STOLR0,IMAX,NUSE
+<span class="ln">48</span>      COMMON/OPTAB/OPTOL,ZSI,IDT,IDD(4)
+<span class="ln">49</span>C DBG PULSE
+<span class="ln">50</span>      COMMON/PULSE/XMSOL,LPULSE,IPVER
+<span class="ln">51</span>      COMMON/PULSE1/PQDP(JSON),PQED(JSON),PQET(JSON),
+<span class="ln">52</span>     *   PQOD(JSON), PQOT(JSON), PQCP(JSON), PRMU(JSON),
+<span class="ln">53</span>     *   PQDT(JSON),PEMU(JSON),LPUMOD
+<span class="ln">54</span>      COMMON/PULSE2/QQDP,QQED,QQET,QQOD,QQOT,QDEL,
+<span class="ln">55</span>     *      QDELA, QQCP, QRMU, QTL, QPL, QDL, QO, QOL,
+<span class="ln">56</span>     *      QT, QP, QQDT, QEMU, QD, QFS
+<span class="ln">57</span>      COMMON/ATMOS/HRAS,KTTAU,KTTAU0,LTTAU
+<span class="ln">58</span>      COMMON/MHD/LMHD,IOMHD1,IOMHD2,IOMHD3,IOMHD4,IOMHD5,IOMHD6,
+<span class="ln">59</span>     1           IOMHD7, IOMHD8
+<span class="ln">60</span>C MHP 8/25 Removed file names from common block
+<span class="ln">61</span>C      COMMON/ATMOS2/ATMPL(NT,NG),ATMTL(NT),
+<span class="ln">62</span>C     *              ATMGL(NG),ATMZ,IOATM,FATM
+<span class="ln">63</span>      COMMON/ATMOS2/ATMPL(NT,NG),ATMTL(NT),
+<span class="ln">64</span>     *              ATMGL(NG),ATMZ,IOATM
+<span class="ln">65</span>C JNT 6/14 ADD FOR KURUCZ/CASTELLI 2004 ATMOSPHERES
+<span class="ln">66</span>      COMMON/ATMOS2C/ATMPLC(NTC,NGC),ATMTLC(NTC),
+<span class="ln">67</span>     *              ATMGLC(NGC)
+<span class="ln">68</span>C MHP 6/97 ADDED ALLARD MODEL ATMOSPHERES
+<span class="ln">69</span>C      COMMON/ATMOS3/ATMZA,ATMPLA(NTA,NGA),
+<span class="ln">70</span>C     *ATMTLA(NTA),ATMGLA(NGA),FALLARD,IOATMA
+<span class="ln">71</span>      COMMON /ALATM03/ ALATM_FeH,ALATM_Alpha,LALTPTau100,  ! Shared: ALFILEIN,
+<span class="ln">72</span>     x       IOATMA                                         ! ALSURFP and PARMIN
+<span class="ln">73</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">74</span>      COMMON /ALATM04/ DUMMY1,DUMMY2,DUMMY3,DUMMY4
+<span class="ln">75</span>C DBG 7/95 To store variables for pulse output
+<span class="ln">76</span>      COMMON/PUALPHA/ALFMLT,PHMLT,CMXMLT,
+<span class="ln">77</span>     *             VALFMLT(JSON),VPHMLT(JSON),VCMXMLT(JSON)
+<span class="ln">78</span>C MHP 07/02 STORE CONTENTS OF ENVELOPE INTEGRATION INTO A
+<span class="ln">79</span>C SET OF VECTORS, WHICH ARE FLIPPED AND CONVERTED INTO AN ASCENDING
+<span class="ln">80</span>C SERIES AFTER THE INTEGRATION IS DONE.
+<span class="ln">81</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">82</span>C JvS 08/25 Updated with new elements
+<span class="ln">83</span>      COMMON/ENVSTRUCT/ENVP(JSON),ENVT(JSON),ENVS(JSON),ENVD(JSON),
+<span class="ln">84</span>     *     ENVR(JSON),ENVX(JSON),ENVZ(JSON),LCENV(JSON),
+<span class="ln">85</span>     *     EDELS(3,JSON),EVELS(JSON),EBETAS(JSON),
+<span class="ln">86</span>     *     EGAM1(JSON),EQCP(JSON),EFXIONS(3,JSON),
+<span class="ln">87</span>     *     ENVO(JSON), ENVL(JSON),EQDT(JSON),NUMENV  
+<span class="ln">88</span>C JvS SAVE ATMOSPHERE STRUCTURE TO MAKE PROFILE OUTPUT EASIER
+<span class="ln">89</span>      COMMON/ATMSTRUCT/ATMOP(JSON),ATMOT(JSON),ATMOD(JSON),
+<span class="ln">90</span>     *     ATMOR(JSON),ADELS(3,JSON),ABETAS(JSON),
+<span class="ln">91</span>     *     AGAM1(JSON),AQDT(JSON),AFXIONS(3,JSON),
+<span class="ln">92</span>     *     ATMOO(JSON),ATMOCP(JSON),NUMATM
+<span class="ln">93</span>C JVS 08/13 IF THE CZ IS BEYOND THE FITTING POINT, STORE ITS LOCATION
+<span class="ln">94</span>      COMMON/ENVCZ/ENVRCZ,RINT
+<span class="ln">95</span>
+<span class="ln">96</span>C MHP 08/02 ADDED VECTOR FOR STORING THE OVERTURN TIMESCALE OF THE
+<span class="ln">97</span>C SURFACE CONVECTION ZONE
+<span class="ln">98</span>      COMMON/DEUTER/DRATE(JSON),DRATE0(JSON),FMASSACC,JCZ
+<span class="ln">99</span>      DIMENSION FXION(3),PS(3),RS(3),TS(3),ESTORE(4)
+<span class="ln">100</span>      DIMENSION Y(3),DYDX(3),YSCAL(3),YSTART(3),ERRSUM(3),ERR(3)
+<span class="ln">101</span>
+<span class="ln">102</span>C JVS Acoustic depth common block
+<span class="ln">103</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">104</span>C       COMMON/ACDPTH/TAUCZN,DELADJ(JSON),TAUHE, TNORM, TCZ, WHE, ICLCD,
+<span class="ln">105</span>      COMMON/ACDPTH/TAUCZN,DELADJ(JSON),TAUHE, TNORM, TCZ, WHE,
+<span class="ln">106</span>     *ACATMR(JSON), ACATMD(JSON), ACATMP(JSON), ACATMT(JSON),TATMOS,
+<span class="ln">107</span>C      *LCLCD, AGEOUT(5), IACAT, IJLAST, LJLAST, LJWRT, LADON,LAOLY, IJVS,
+<span class="ln">108</span>     *AGEOUT(5), LCLCD, ICLCD, IACAT, IJLAST, LJLAST, LJWRT, LADON, LAOLY, IJVS,
+<span class="ln">109</span>     *IJENT, IJDEL, LACOUT
+<span class="ln">110</span>
+<span class="ln">111</span>C G Somers 11/14, ADD I/O COMMON BLOCK
+<span class="ln">112</span>      COMMON/CCOUT/LSTORE,LSTATM,LSTENV,LSTMOD,LSTPHYS,LSTROT,LSCRIB,LSTCH,LPHHD
+<span class="ln">113</span>C G Somers END
+<span class="ln">114</span>
+<span class="ln">115</span>C G Somers 3/17, ADDING NEW TAUCZ COMMON BLOCK
+<span class="ln">116</span>      COMMON/OVRTRN/LNEWTCZ,LCALCENV,TAUCZ,TAUCZ0,PPHOT,PPHOT0,FRACSTEP
+<span class="ln">117</span>
+<span class="ln">118</span>C MHP 1/01 CHANGED END OF FILE INDICATOR IN ATMOSPHERE/ENVELOPE FILES TO
+<span class="ln">119</span>C VECTOR FROM SCALAR
+<span class="ln">120</span>      DIMENSION XYZ(22)
+<span class="ln">121</span>      DATA XYZ/22*99.99D0/
+<span class="ln">122</span>      SAVE
+<span class="ln">123</span>
+<span class="ln">124</span>C DBG PULSE TURN ON DERIVATIVE CALCULATOR
+<span class="ln">125</span>      IF (LPULPT.AND.LPRT) THEN
+<span class="ln">126</span>          LPUMOD = .TRUE.
+<span class="ln">127</span>          LDERIV = .TRUE.
+<span class="ln">128</span>          LATMO = .FALSE.
+<span class="ln">129</span>      ELSE
+<span class="ln">130</span>          LPUMOD = .FALSE.
+<span class="ln">131</span>          LDERIV = .FALSE.
+<span class="ln">132</span>          LATMO = .TRUE.
+<span class="ln">133</span>      END IF
+<span class="ln">134</span>      LOCOND = .FALSE.
+<span class="ln">135</span>
+<span class="ln">136</span>C JVS 10/07/13 Always calculate derivatives
+<span class="ln">137</span>      LDERIV = .TRUE.
+<span class="ln">138</span>
+<span class="ln">139</span>C G Somers 11/14 WRITE ATMOSHPHERE HEADER TO .STORE FILE, AND ADDED
+<span class="ln">140</span>C I/O FLAGS TO THE ATMOSPHERE CALLS
+<span class="ln">141</span>      IF(LPRT.AND.LSTATM)THEN 
+<span class="ln">142</span>         IF(.NOT.LSTCH)WRITE(ISTOR,60)
+<span class="ln">143</span>      ENDIF   
+<span class="ln">144</span> 60   FORMAT(/,&#x27;******** ATMOSPHERE BEGIN ********&#x27;)
+<span class="ln">145</span>
+<span class="ln">146</span>C GET PRESSURE AT T=Teff BY INTERPOLATION IN TABLE ATMPL.
+<span class="ln">147</span>      IF (KTTAU .EQ. 3) THEN
+<span class="ln">148</span>C KURUCZ ATMOSPHERES
+<span class="ln">149</span>         IF(LSTCH) LSTATM=.FALSE.
+<span class="ln">150</span>         CALL <a href="../files/surfp.f.html#def-SURFP" title="SURFP in surfp.f">SURFP</a>(TEFFL,GL,LPRT.AND.LSTATM)
+<span class="ln">151</span>         GOTO 200
+<span class="ln">152</span>C JNT 06/14
+<span class="ln">153</span>C GET PRESSURE AT T=Teff BY INTERPOLATION IN TABLE ATMPLC.
+<span class="ln">154</span>      ELSE IF (KTTAU .EQ. 5) THEN
+<span class="ln">155</span>C KURUCZ ATMOSPHERES
+<span class="ln">156</span>         IF(LSTCH) LSTATM=.FALSE.
+<span class="ln">157</span>         CALL <a href="../files/kcsurfp.f.html#def-KCSURFP" title="KCSURFP in kcsurfp.f">KCSURFP</a>(TEFFL,GL,LPRT.AND.LSTATM)
+<span class="ln">158</span>         GOTO 200
+<span class="ln">159</span>C We have Kurucz atmosphere boundary conditions
+<span class="ln">160</span>      ELSE IF (KTTAU .EQ. 4) THEN
+<span class="ln">161</span>C ALLARD &amp; HAUSCHILDT ATMOSPHERES
+<span class="ln">162</span>         IF(LSTCH) LSTATM=.FALSE.
+<span class="ln">163</span>         CALL <a href="../files/alsurfp.f.html#def-ALSURFP" title="ALSURFP in alsurfp.f">ALSURFP</a>(TEFFL,GL,LPRT.AND.LSTATM,LAlFail)
+<span class="ln">164</span>C Changed to Allard atmosphere code
+<span class="ln">165</span>         IF(LAlFail) then
+<span class="ln">166</span>            KTTAU=0
+<span class="ln">167</span>            LTTAU = .TRUE.
+<span class="ln">168</span>C Set to gray atmosphere (KTTAU=0), as
+<span class="ln">169</span>C TeffL is above Allard max, or GL is out of range.
+<span class="ln">170</span>            WRITE(*,*) &#x27;ENVINT: Change to gray atmosphere (KTTAU=0)&#x27;
+<span class="ln">171</span>            WRITE(ISHORT,*)&#x27;ENVINT: Change to gray atmosphere (KTTAU=0)&#x27;
+<span class="ln">172</span>            goto 2
+<span class="ln">173</span>         ENDIF
+<span class="ln">174</span>         GOTO 200
+<span class="ln">175</span>C We have Allard atmosphere boundary conditions
+<span class="ln">176</span>      ENDIF
+<span class="ln">177</span>    2 CONTINUE
+<span class="ln">178</span>C Start gray atmosphere bounary conditions
+<span class="ln">179</span>C GUESS THE TEMPERATURE FOR AN OPTICAL DEPTH NEAR ZERO.
+<span class="ln">180</span>      IDT = 15
+<span class="ln">181</span>      DO 5 JJ = 1,4
+<span class="ln">182</span>       IDD(JJ) = 5
+<span class="ln">183</span>    5 CONTINUE
+<span class="ln">184</span>      ERRSUM(1) = 0.0D0
+<span class="ln">185</span>      IF(KTTAU .EQ. 0) THEN
+<span class="ln">186</span>            TL = TEFFL - 0.031235D0 + 0.25D0*DLOG10(CC23)
+<span class="ln">187</span>      ELSE IF (KTTAU .EQ. 1) THEN
+<span class="ln">188</span>            TL = TEFFL - 0.031235D0 + 0.25D0*DLOG10(0.550D0)
+<span class="ln">189</span>      ELSE IF (KTTAU .EQ. 2) THEN
+<span class="ln">190</span>            TL = TEFFL + <a href="../files/hra.f.html#def-HRA" title="HRA in hra.f">HRA</a>(CC23) - HRAS
+<span class="ln">191</span>      END IF
+<span class="ln">192</span>C                 For kttau = 0,1,or 2, very occasionally the integration
+<span class="ln">193</span>C                 fails because the starting point (X0) is past the end
+<span class="ln">194</span>C                 point (XLIM). When this happens, we divide the effective
+<span class="ln">195</span>C                 starting density (atmd0) by 10 and retry.
+<span class="ln">196</span>      atmdx = atmd0
+<span class="ln">197</span> 1998 continue
+<span class="ln">198</span>C Return point if X0 &gt; XLIM
+<span class="ln">199</span>      T = DEXP(CLN*TL)
+<span class="ln">200</span>C FIND THE PRESSURE CORRESPONDING TO THIS T AND THE DENSITY CHOSEN
+<span class="ln">201</span>C FOR THE START OF THE ATMOSPHERE INTEGRATION.
+<span class="ln">202</span>
+<span class="ln">203</span>c      PL = DLOG10((CGAS*ATMD0 + CA3*T**3)*T)
+<span class="ln">204</span>      PL = DLOG10((CGAS*ATMDX + CA3*T**3)*T)
+<span class="ln">205</span>
+<span class="ln">206</span>C NOW FIND THE OPTICAL DEPTH(X0) WHERE THE ATMOSPHERE INTEGRATION BEGINS.
+<span class="ln">207</span>C YC   IF LMHD USE MHD EQUATION OF STATE.
+<span class="ln">208</span>      IF(LMHD)THEN
+<span class="ln">209</span>         CALL <a href="../files/meqos.f.html#def-MEQOS" title="MEQOS in meqos.f">MEQOS</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">210</span>     *        AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP)
+<span class="ln">211</span>C     *        QCPP,LDERIV,LATMO,KSAHA)  ! KC 2025-05-31
+<span class="ln">212</span>      ELSE
+<span class="ln">213</span>         CALL <a href="../files/eqstat.f.html#def-EQSTAT" title="EQSTAT in eqstat.f">EQSTAT</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">214</span>     *        AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,
+<span class="ln">215</span>     *        QCPP,LDERIV,LATMO,KSAHA)
+<span class="ln">216</span>      ENDIF
+<span class="ln">217</span>C DBG 12/95 GET OPACITY
+<span class="ln">218</span>      CALL <a href="../files/getopac.f.html#def-GETOPAC" title="GETOPAC in getopac.f">GETOPAC</a>(DL, TL, X, Z, O, OL, QOD, QOT, FXION)
+<span class="ln">219</span>      X0 = PL - GL + DLOG10(O)
+<span class="ln">220</span>      Y(1) = PL
+<span class="ln">221</span>      DYDX(1) = DEXP(CLN*(GL+X0-OL-PL))
+<span class="ln">222</span>c G Somers 11/14 ADDED I/O FLAG AND CHANGED WRITE OUTS TO .STORE.
+<span class="ln">223</span>      IF(LPRT.AND.LSTATM) THEN
+<span class="ln">224</span>       IF(.NOT.LSTCH) WRITE(ISTOR,10)
+<span class="ln">225</span>         BETA = 1.0D0 - CA3*(T**2)**2/P
+<span class="ln">226</span>         CHRH = 1.0D0/QDP
+<span class="ln">227</span>         CHT = -CHRH*QDT
+<span class="ln">228</span>         CV = QCPP - EXP(CLN*(PL-DL-TL))*CHT**2/CHRH
+<span class="ln">229</span>         GAM1 = CHRH*QCPP/CV
+<span class="ln">230</span>           IF(.NOT.LSTCH)THEN
+<span class="ln">231</span>             WRITE(ISTOR,20)X0,PL,TL,DL,O,(FXION(I),I=1,3),KSAHA,KATM,
+<span class="ln">232</span>     *                   GAM1,QDP,QDT,BETA,QCPP,CV
+<span class="ln">233</span>           ENDIF
+<span class="ln">234</span>   10    FORMAT(6X,&#x27;TAU&#x27;,9X,&#x27;P&#x27;,10X,&#x27;T&#x27;,10X,&#x27;D&#x27;,11X,&#x27;O&#x27;,9X,
+<span class="ln">235</span>     *         &#x27;HII  HEII HEIII   SAHA   KATM&#x27;)
+<span class="ln">236</span>   20    FORMAT(1X,4F11.7,1PE14.7,0P3F6.3,2I7,4F12.8,1P2E12.5)
+<span class="ln">237</span>      ENDIF
+<span class="ln">238</span>C DBG PULSE INITIAL POINT FOR PULSATION
+<span class="ln">239</span>      IF (LPULPT.AND.LPRT) THEN
+<span class="ln">240</span>        QQED = 0.0D0
+<span class="ln">241</span>        QESUM = 0.0D0
+<span class="ln">242</span>        QQET = 0.0D0
+<span class="ln">243</span>        QFS = 1.0D0
+<span class="ln">244</span>        TAUP = DEXP(CLN*X0)
+<span class="ln">245</span>        OP = O
+<span class="ln">246</span>        DP = DEXP(CLN*DL)
+<span class="ln">247</span>        DELTR = 0.0D0
+<span class="ln">248</span>        PELPF = CGAS * T * D * EMU
+<span class="ln">249</span>C FROM FIRST LINES OF TPGRAD
+<span class="ln">250</span>        DELR = O*B*DEXP(CLN*(PL-HSTOT-4.0D0*TL+CLSUNL-CGL+
+<span class="ln">251</span>     *           CDELRL))*FTL/FPL
+<span class="ln">252</span>        IF (DELR-DELA .LE. 1.0D-6) THEN
+<span class="ln">253</span>            DEL = DELR
+<span class="ln">254</span>        ELSE
+<span class="ln">255</span>            DEL = DELA
+<span class="ln">256</span>        END IF
+<span class="ln">257</span>        IF(IPVER.EQ.1) THEN
+<span class="ln">258</span>C MHP 10/02 TYPO - QED SHOULD HAVE BEEN QQED
+<span class="ln">259</span>C     *         PL, QESUM,O,QDP,QED,
+<span class="ln">260</span>           WRITE(IOPATM,5001)DELTR,QFS,B,TL,DL,
+<span class="ln">261</span>     *         PL, QESUM,O,QDP,QQED,
+<span class="ln">262</span>     *         QQET,QOD,QOT,DEL,DELA,
+<span class="ln">263</span>     *         QCP,RMU,QDT,PELPF
+<span class="ln">264</span>C     *         PL, TAUP ,O,QDP,QED,
+<span class="ln">265</span>          ELSE IF (IPVER.EQ.2 .OR. IPVER.EQ.3) THEN
+<span class="ln">266</span>           WRITE(IOPATM,6001)DELTR,QFS,B,TL,DL,
+<span class="ln">267</span>     *         PL, TAUP ,O,QDP,QQED,
+<span class="ln">268</span>     *         QQET,QOD,QOT,DEL,DELA,
+<span class="ln">269</span>     *         QCP,RMU,QDT,PELPF
+<span class="ln">270</span>          END IF
+<span class="ln">271</span>
+<span class="ln">272</span> 5001 FORMAT(5E16.9,/,5E16.9,/,5E16.9,/,4E16.9)
+<span class="ln">273</span> 6001 FORMAT(5E23.16,/,5E23.16,/,5E23.16,/,4E23.16)
+<span class="ln">274</span> 6003 FORMAT(6E23.16,/,6E23.16,/,6E23.16,/,4E23.16)
+<span class="ln">275</span>      END IF
+<span class="ln">276</span>
+<span class="ln">277</span>
+<span class="ln">278</span>
+<span class="ln">279</span>C INTEGRATE DP/DTAU FROM THIS STARTING TAU TO TAU = 2/3.
+<span class="ln">280</span>C SET NUMERICAL PARAMETERS UP.
+<span class="ln">281</span>      NV = 1
+<span class="ln">282</span>      EPS = ATMERR
+<span class="ln">283</span>      IF (KTTAU .EQ. 1) THEN
+<span class="ln">284</span>C KRISHNA-SWAMY T TAU HAS DIFFERENT ZERO THAN EDDINGTON T TAU
+<span class="ln">285</span>C TAU = 0.312156330 AT TEFF.
+<span class="ln">286</span>            XLIM = -0.505627854D0
+<span class="ln">287</span>      ELSE
+<span class="ln">288</span>C TAU = 2/3 AT TEFF.
+<span class="ln">289</span>            XLIM = -0.176091259D0
+<span class="ln">290</span>      END IF
+<span class="ln">291</span>
+<span class="ln">292</span>      if  (x0 .gt. xlim) then ! Check that starting point is before endpoint
+<span class="ln">293</span>         write(ishort,*)&quot;ENVINT: X0&gt;XLIM, X0,XLIM:&quot;,x0,xlim
+<span class="ln">294</span>       write(ishort,*)&quot;ENVINT: get new X0 by dividing ATMD0 by 10&quot;
+<span class="ln">295</span>       atmdx = atmdx / 10D0   ! If not before, divide starting density by 10
+<span class="ln">296</span>       goto 1998              ! and retry.
+<span class="ln">297</span>      endif
+<span class="ln">298</span>
+<span class="ln">299</span>      HMAX = ATMMAX
+<span class="ln">300</span>      HMIN = ATMMIN
+<span class="ln">301</span>      H = ATMBEG
+<span class="ln">302</span>      STOLER = STOLR0
+<span class="ln">303</span>      NOK = 0
+<span class="ln">304</span>      NBAD = 0
+<span class="ln">305</span>
+<span class="ln">306</span>C INTEGRATION LOOP.
+<span class="ln">307</span>      DO 40 NSTEP = 1,MAXSTP
+<span class="ln">308</span>C YSCAL IS THE ARRAY THAT THE NUMERICAL ERRORS ARE SCALED AGAINST.
+<span class="ln">309</span>       DO 30 I = 1,NV
+<span class="ln">310</span>          YSCAL(I) = DABS(Y(I)) + DABS(H*DYDX(I))+TINY
+<span class="ln">311</span>   30    CONTINUE
+<span class="ln">312</span>C ENSURE THAT STEP DOESN&#x27;T EXCEED MAXIMUM STEP SIZE OR GO PAST
+<span class="ln">313</span>C THE LIMIT OF THE INTEGRATION.
+<span class="ln">314</span>       IF((X0-XLIM)*(X0+H-XLIM).LT.0.0D0) H = XLIM - X0
+<span class="ln">315</span>       IF(H.GT.HMAX) H = HMAX
+<span class="ln">316</span>C INTEGRATE THE ATMOSPHERE FROM TAU TO TAU + H
+<span class="ln">317</span>C H IS THE ATTEMPTED STEP,HDID IS THE ONE PERFORMED, AND HNEXT IS THE
+<span class="ln">318</span>C PREDICTED NEXT STEP.
+<span class="ln">319</span>       CALL <a href="../files/bsstep.f.html#def-BSSTEP" title="BSSTEP in bsstep.f">BSSTEP</a>(Y,DYDX,NV,X0,H,EPS,YSCAL,HDID,
+<span class="ln">320</span>     x      HNEXT,QATM, B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,LPRT,RL,
+<span class="ln">321</span>     X      TEFFL,X,Z,KATM,KSAHA,ERR)
+<span class="ln">322</span>C FIND DP/DTAU AT THE START OF THE NEXT STEP.
+<span class="ln">323</span>       ERRSUM(1) = ERRSUM(1) + ERR(1)
+<span class="ln">324</span>       CALL <a href="../files/qatm.f.html#def-QATM" title="QATM in qatm.f">QATM</a>(X0,Y,DYDX,B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,
+<span class="ln">325</span>     *             LPRT,RL,TEFFL,X,Z,KATM,KSAHA)
+<span class="ln">326</span>c G Somers 11/14 ADDED I/O FLAG AND CHANGED WRITE OUTS TO .STORE.
+<span class="ln">327</span>       IF(LPRT.AND.LSTATM) THEN
+<span class="ln">328</span>            BETA = 1.0D0 - CA3*EXP(CLN*(4.0D0*AT-AP))
+<span class="ln">329</span>            CHRH = 1.0D0/QQDP
+<span class="ln">330</span>            CHT = -CHRH*QQDT
+<span class="ln">331</span>            CV = QQCP - EXP(CLN*(AP-AD-AT))*CHT**2/CHRH
+<span class="ln">332</span>            GAM1 = CHRH*QQCP/CV
+<span class="ln">333</span>          IF(.NOT.LSTCH)THEN  
+<span class="ln">334</span>            WRITE(ISTOR,20)TAU,AP,AT,AD,AO,(AFXION(I),I=1,3),
+<span class="ln">335</span>     *               KSAHA,KATM,GAM1,QQDP,QQDT,BETA,QQCP,CV
+<span class="ln">336</span>          ENDIF
+<span class="ln">337</span>C JvS: SAVE STRUCTURE TO COMMON BLOCK
+<span class="ln">338</span>          ATMOP(NSTEP) = AP
+<span class="ln">339</span>          ATMOT(NSTEP) = AT
+<span class="ln">340</span>          ATMOD(NSTEP) = AD
+<span class="ln">341</span>          ABETAS(NSTEP) = BETA
+<span class="ln">342</span>          AGAM1(NSTEP) = GAM1
+<span class="ln">343</span>          AQDT(NSTEP) = QQDT
+<span class="ln">344</span>          AFXIONS(1,NSTEP) = AFXION(1)
+<span class="ln">345</span>          AFXIONS(2,NSTEP) = AFXION(2)
+<span class="ln">346</span>          AFXIONS(3,NSTEP) = AFXION(3)        
+<span class="ln">347</span>          ATMOO(NSTEP) = AO
+<span class="ln">348</span>          ATMOCP(NSTEP) = QQCP
+<span class="ln">349</span>       ENDIF
+<span class="ln">350</span>       IF(HDID.EQ.H) THEN
+<span class="ln">351</span>          NOK = NOK + 1
+<span class="ln">352</span>       ELSE
+<span class="ln">353</span>          NBAD = NBAD + 1
+<span class="ln">354</span>       ENDIF
+<span class="ln">355</span>C DBG PULSE ATMOSPHERE VALUES FOR PULSATION
+<span class="ln">356</span>C JVS 02/11 - Added LCLCD option to IF statement
+<span class="ln">357</span>       IF ((LPULPT.AND.LPRT) .OR. LCLCD .OR. LSTCH) THEN
+<span class="ln">358</span>          QQED = 0.0D0
+<span class="ln">359</span>          QESUM = 0.0D0
+<span class="ln">360</span>          QQET = 0.0D0
+<span class="ln">361</span>          QFS = 1.0D0
+<span class="ln">362</span>          ON = QO
+<span class="ln">363</span>          DN = DEXP(CLN*QDL)
+<span class="ln">364</span>          TAUN = DEXP(CLN*TAU)
+<span class="ln">365</span>C SEE J.P. COX PRINC. OF STELL. STRUC. P590
+<span class="ln">366</span>          DELTR =  (TAUN - TAUP)/(((DN*ON)+(DP*OP))/2)
+<span class="ln">367</span>          PELPF = CGAS * QT * QD * QEMU
+<span class="ln">368</span>          OP = ON
+<span class="ln">369</span>CFROM FIRST LINES OF TPGRAD
+<span class="ln">370</span>          DELR = QO*B*DEXP(CLN*(QPL-HSTOT-4.0D0*QTL+CLSUNL-CGL+
+<span class="ln">371</span>     *           CDELRL))*FTL/FPL
+<span class="ln">372</span>          IF (DELR-QDELA .LE. 1.0D-6) THEN
+<span class="ln">373</span>            DEL = DELR
+<span class="ln">374</span>          ELSE
+<span class="ln">375</span>            DEL = QDELA
+<span class="ln">376</span>          END IF
+<span class="ln">377</span>          IF (LPULPT.AND.LPRT) THEN
+<span class="ln">378</span>                IF (IPVER.EQ.1) THEN
+<span class="ln">379</span>                         WRITE(IOPATM,5001)DELTR,QFS,B,QTL,QDL,
+<span class="ln">380</span>     *                     QPL, QESUM ,QO,QQDP,QQED,
+<span class="ln">381</span>     *                     QQET,QQOD,QQOT,DEL,QDELA,
+<span class="ln">382</span>     *                     QQCP,QRMU,QQDT,PELPF
+<span class="ln">383</span>                        ELSE IF (IPVER.EQ.2.OR.IPVER.EQ.3) THEN
+<span class="ln">384</span>                         WRITE(IOPATM,6001)DELTR,QFS,B,QTL,QDL,
+<span class="ln">385</span>     *                     QPL, TAUN ,QO,QQDP,QQED,
+<span class="ln">386</span>     *                     QQET,QQOD,QQOT,DEL,QDELA,
+<span class="ln">387</span>     *                     QQCP,QRMU,QQDT,PELPF
+<span class="ln">388</span>                       END IF
+<span class="ln">389</span>            END IF
+<span class="ln">390</span>C JvS SAVE TO COMMON ATMSTRUCT COMMON BLOCK
+<span class="ln">391</span>          ATMOR(NSTEP) = DELTR
+<span class="ln">392</span>          ADELS(1,NSTEP) = DELR
+<span class="ln">393</span>          ADELS(2,NSTEP) = DEL
+<span class="ln">394</span>          ADELS(3,NSTEP) = QDELA
+<span class="ln">395</span>          NUMATM = NSTEP
+<span class="ln">396</span>          
+<span class="ln">397</span>          TAUP = TAUN
+<span class="ln">398</span>          DP = DN
+<span class="ln">399</span>       END IF
+<span class="ln">400</span>C DBG END
+<span class="ln">401</span>
+<span class="ln">402</span>
+<span class="ln">403</span>C  CHECK IF INTEGRATION COMPLETE
+<span class="ln">404</span>       IF(DABS(X0 - XLIM).LE.STOLER) THEN
+<span class="ln">405</span>          WRITE(ISHORT,35)NOK,NBAD,ERRSUM(1)
+<span class="ln">406</span>   35       FORMAT(1X,&#x27;ATMOSPHERE INTEGRATION COMPLETE&#x27;,1X,
+<span class="ln">407</span>     *            &#x27;NUMBER OF STEPS ACCEPTED&#x27;,I5,&#x27; REJECTED&#x27;,
+<span class="ln">408</span>     *            I5/5X,&#x27;MAXIMUM RELATIVE ERROR IN P &#x27;,1PE22.13)
+<span class="ln">409</span>          GOTO 200
+<span class="ln">410</span>       ENDIF
+<span class="ln">411</span>       IF(HNEXT.LT.HMIN) HNEXT = HMIN
+<span class="ln">412</span>       H = HNEXT
+<span class="ln">413</span>40    CONTINUE
+<span class="ln">414</span>C INTEGRATION HAS FAILED TO FINISH IN MAXSTP STEPS;
+<span class="ln">415</span>C PRINT NASTY MESSAGE AND QUIT.
+<span class="ln">416</span>      WRITE(IOWR,50)
+<span class="ln">417</span>      WRITE(ISHORT,50)
+<span class="ln">418</span>   50 FORMAT(5X,&#x27;ATMOSPHERE INTEGRATION FAILED AFTER MAXSTP&#x27;,1X,
+<span class="ln">419</span>     *       &#x27;INTEGRATIONS.I QUIT.&#x27;)
+<span class="ln">420</span>      STOP
+<span class="ln">421</span>C ENVELOPE INTEGRATION
+<span class="ln">422</span>C HERE P IS THE INDEPENDENT VARIABLE AND M,R,AND T ARE
+<span class="ln">423</span>C DEPENDENT VARIABLES.  INTEGRATE FROM TAU = 2/3 TO THE LAST
+<span class="ln">424</span>C MASS POINT IN THE MODEL.
+<span class="ln">425</span>
+<span class="ln">426</span>
+<span class="ln">427</span>  200 CONTINUE   ! Kurucz and Allard (KTTAU=3 and 4) bypass atmosphere
+<span class="ln">428</span>                 !  integration and come here
+<span class="ln">429</span>C G Somers 3/17, IF INTERESTED ONLY IN PPHOT, BREAK HERE.
+<span class="ln">430</span>      PPHOT = AP
+<span class="ln">431</span>      IF(.NOT.LCALCENV) GOTO 555
+<span class="ln">432</span>
+<span class="ln">433</span>C G Somers 11/14 WRITE ENVELOPE HEADER
+<span class="ln">434</span>      IF(LPRT.AND.LSTENV)THEN
+<span class="ln">435</span>         IF(.NOT.LSTCH) WRITE(ISTOR,61)
+<span class="ln">436</span>      ENDIF   
+<span class="ln">437</span> 61   FORMAT(/,&#x27;******** ENVELOPE BEGIN ********&#x27;)
+<span class="ln">438</span>
+<span class="ln">439</span>C DBG PULSE WRITE END OF DATA INDICATOR
+<span class="ln">440</span>      IF (LPULPT.AND.LPRT) THEN
+<span class="ln">441</span>C         XYZ = 99.99D0
+<span class="ln">442</span>         IF(IPVER.EQ.1) THEN
+<span class="ln">443</span>            WRITE(IOPATM, 5001) (XYZ(I),I=1,19)
+<span class="ln">444</span>         ELSE IF (IPVER.EQ.2.OR.IPVER.EQ.3) THEN
+<span class="ln">445</span>            WRITE(IOPATM, 6001) (XYZ(I),I=1,19)
+<span class="ln">446</span>         END IF
+<span class="ln">447</span>C 5002    FORMAT(E16.9)
+<span class="ln">448</span>C 6002    FORMAT(E23.16)
+<span class="ln">449</span>      ENDIF
+<span class="ln">450</span>C DBG
+<span class="ln">451</span>C  IF ENVELOPE MASS(SENV) SMALL ENOUGH,SKIP ENVELOPE INTEGRATION.
+<span class="ln">452</span>C DBG 2/92 CHANGED FROM 1.0D-10 to 1.0D-12
+<span class="ln">453</span>      IF(SENV.GT.-1.0D-12) THEN
+<span class="ln">454</span>       IF(LSBC) THEN
+<span class="ln">455</span>          PS(IE) = AP
+<span class="ln">456</span>          RS(IE) = RL
+<span class="ln">457</span>          TS(IE) = AT
+<span class="ln">458</span>          IF(LPRT)THEN
+<span class="ln">459</span>            IF(.NOT.LSTCH)WRITE(ISTOR,230)PS(IE),TS(IE),RS(IE),SENV
+<span class="ln">460</span>          ENDIF  
+<span class="ln">461</span>       ENDIF
+<span class="ln">462</span> 230     FORMAT(4X,3F16.12,8X,F16.12)
+<span class="ln">463</span>       GOTO 300
+<span class="ln">464</span>      ENDIF
+<span class="ln">465</span>C  INITIALIZE VARIABLES AND SET NUMERICAL PARAMETERS.
+<span class="ln">466</span>      LATMO = .FALSE.
+<span class="ln">467</span>      DO 235 I = 1,3
+<span class="ln">468</span>       ERRSUM(I) = 0.0D0
+<span class="ln">469</span> 235  CONTINUE
+<span class="ln">470</span>      NOK = 0
+<span class="ln">471</span>      NBAD = 0
+<span class="ln">472</span>      X0 = AP
+<span class="ln">473</span>      SL = 0.0D0
+<span class="ln">474</span>      Y(1) = SL
+<span class="ln">475</span>      Y(2) = AT
+<span class="ln">476</span>      Y(3) = RL
+<span class="ln">477</span>      NV = 3
+<span class="ln">478</span>      EPS = ENVERR
+<span class="ln">479</span>      HMAX = ENVMAX
+<span class="ln">480</span>      HMIN = ENVMIN
+<span class="ln">481</span>      H = ENVBEG
+<span class="ln">482</span>      STOLER = DABS(STOLR0*SENV)
+<span class="ln">483</span>      RSURF = DEXP(CLN*RL)
+<span class="ln">484</span>      IF(ISTORE.EQ.IE) ISTORE = 0
+<span class="ln">485</span>      LLSTORE = .FALSE.
+<span class="ln">486</span>      IF (LSBC) THEN
+<span class="ln">487</span>         LTEST = .FALSE.
+<span class="ln">488</span>      ELSE
+<span class="ln">489</span>         LTEST = .TRUE.
+<span class="ln">490</span>      END IF
+<span class="ln">491</span>C  FIND DY/DX AT THE START OF THE STEP.
+<span class="ln">492</span>      CALL <a href="../files/qenv.f.html#def-QENV" title="QENV in qenv.f">QENV</a>(X0,Y,DYDX,B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,
+<span class="ln">493</span>     *     LPRT,RL,TEFFL,X,Z,KENV,KSAHA)
+<span class="ln">494</span>C DBG PULSE WRITE FIRST POINT OF ENVELOPE
+<span class="ln">495</span>      IF (LPULPT.AND.LPRT) THEN
+<span class="ln">496</span>C         REWIND IOPENV
+<span class="ln">497</span>         QQED = 0.0D0
+<span class="ln">498</span>         QESUM = 0.0D0
+<span class="ln">499</span>         QQET = 0.0D0
+<span class="ln">500</span>         PELPF = CGAS * QT * QD * QEMU
+<span class="ln">501</span>         IF(IPVER.EQ.1) THEN
+<span class="ln">502</span>          WRITE(IOPENV,5001)RL,QFS,B,QTL,QDL,
+<span class="ln">503</span>     *           QPL, QESUM,QO,QQDP,QQED,
+<span class="ln">504</span>     *           QQET,QQOD,QQOT,QDEL,QDELA,
+<span class="ln">505</span>     *           QQCP,QRMU,QQDT,PELPF
+<span class="ln">506</span>         ELSE IF (IPVER.EQ.2) THEN
+<span class="ln">507</span>          WRITE(IOPENV,6001)RL,QFS,B,QTL,QDL,
+<span class="ln">508</span>     *           QPL, QESUM,QO,QQDP,QQED,
+<span class="ln">509</span>     *           QQET,QQOD,QQOT,QDEL,QDELA,
+<span class="ln">510</span>     *           QQCP,QRMU,QQDT,PELPF
+<span class="ln">511</span>         ELSE IF (IPVER.EQ.3) THEN
+<span class="ln">512</span>C DBG 7/95 Appended mixing length info at end of first three lines
+<span class="ln">513</span>          WRITE(IOPENV,6003)RL,QFS,B,QTL,QDL,ALFMLT,
+<span class="ln">514</span>     *           QPL, QESUM,QO,QQDP,QQED,PHMLT,
+<span class="ln">515</span>     *           QQET,QQOD,QQOT,QDEL,QDELA,CMXMLT,
+<span class="ln">516</span>     *           QQCP,QRMU,QQDT,PELPF
+<span class="ln">517</span>         END IF
+<span class="ln">518</span>      END IF   !uncertain!
+<span class="ln">519</span>C DBG
+<span class="ln">520</span>c G Somers 11/14 ADDED I/O FLAG AND CHANGED WRITE OUTS TO .STORE.
+<span class="ln">521</span>      IF(LPRT.AND.LSTENV) THEN
+<span class="ln">522</span>       IF(.NOT.LSTCH) WRITE(ISTOR,240) &#x27;GRAV  &#x27;,&#x27;P   &#x27;,&#x27;T   &#x27;,&#x27;DEPTH    &#x27;,&#x27;M      &#x27;,
+<span class="ln">523</span>     *       &#x27;D    &#x27;,&#x27;O   &#x27;,&#x27;BETA&#x27;,&#x27;DELR  &#x27;,&#x27;DELA&#x27;,&#x27;DEL &#x27;,&#x27;HII &#x27;,
+<span class="ln">524</span>     *       &#x27;HEII&#x27;,&#x27;HEIII&#x27;,&#x27;V   &#x27;,&#x27;GAM1   &#x27;,&#x27;QQDP   &#x27;
+<span class="ln">525</span> 240     FORMAT(1X,3A10,2A14,2A10,A7,A9,5A6,A9,2A12)
+<span class="ln">526</span>c     X&#x27; &#x27;,4X,&#x27;GRAV&#x27;,7X,&#x27;P&#x27;,8X,&#x27;T&#x27;,8X,&#x27;DEPTH&#x27;,6X,&#x27;M&#x27;,
+<span class="ln">527</span>c     *        9X,&#x27;D&#x27;,6X,&#x27;O&#x27;,7X,&#x27;BETA&#x27;,3X,&#x27;DELR&#x27;,5X,&#x27;DELA&#x27;,3X,
+<span class="ln">528</span>c     *        &#x27;DEL&#x27;,3X,&#x27;HII&#x27;,3X,&#x27;HEII&#x27;,1X,&#x27;HEIII&#x27;,3X,&#x27;V&#x27;)
+<span class="ln">529</span>
+<span class="ln">530</span>c 260        FORMAT(1X,1PE10.3,0P2F10.7,1P2E14.7,0P1F10.7,
+<span class="ln">531</span>c     *           1PE10.2,0PF7.3,1PE9.2,0P3F6.3,2F6.3,1PE9.2,
+<span class="ln">532</span>c     *           0P2F12.8)
+<span class="ln">533</span>
+<span class="ln">534</span>
+<span class="ln">535</span>       SRAD = DEXP(CLN*RL)
+<span class="ln">536</span>       DE = (RSURF-SRAD)/RSURF
+<span class="ln">537</span>       SGL = CGL+HSTOT-2.0D0*RL
+<span class="ln">538</span>       EG = DEXP(CLN*SGL)
+<span class="ln">539</span>         CHRH = 1.0D0/QQDP
+<span class="ln">540</span>         CHT = -CHRH*QQDT
+<span class="ln">541</span>         CV = QQCP - EXP(CLN*(EP-ED-ET))*CHT**2/CHRH
+<span class="ln">542</span>         GAM1 = CHRH*QQCP/CV
+<span class="ln">543</span>       IF(.NOT.LSTCH) WRITE(ISTOR,260)EG,EP,ET,DE,ES,ED,EO,EBETA,
+<span class="ln">544</span>     *        (EDEL(K),K=1,3),(EFXION(K),K=1,3),EVEL,
+<span class="ln">545</span>     *        GAM1,QQDP
+<span class="ln">546</span>      ENDIF
+<span class="ln">547</span>C STORE STARTING VALUES OF THE INTEGRATION
+<span class="ln">548</span>C 07/02 INITIALIZE NUMBER OF STORED ENVELOPE POINTS TO 1
+<span class="ln">549</span>      LSURCZ = .FALSE.
+<span class="ln">550</span>      TAUCZENV = 0.0D0
+<span class="ln">551</span>      ENVD(1) = ED
+<span class="ln">552</span>      ENVP(1) = EP
+<span class="ln">553</span>      ENVR(1) = ER
+<span class="ln">554</span>      ENVS(1) = ES
+<span class="ln">555</span>      ENVT(1) = ET
+<span class="ln">556</span>      ENVX(1) = X
+<span class="ln">557</span>      ENVZ(1) = Z
+<span class="ln">558</span>      LCENV(1) = EVEL.GT.0.0D0
+<span class="ln">559</span>C JVS 03/28
+<span class="ln">560</span>      EDELS(1,1) = EDEL(1)
+<span class="ln">561</span>      EDELS(2,1) = EDEL(2)
+<span class="ln">562</span>      EDELS(3,1) = EDEL(3)
+<span class="ln">563</span>      EVELS(1) = EVEL
+<span class="ln">564</span>      EBETAS(1) = EBETA
+<span class="ln">565</span>c JVS end
+<span class="ln">566</span>C JVS 08/25
+<span class="ln">567</span>C Always save these     
+<span class="ln">568</span>      CHRH = 1.0D0/QQDP
+<span class="ln">569</span>      CHT = -CHRH*QQDT
+<span class="ln">570</span>      CV = QQCP - EXP(CLN*(EP-ED-ET))*CHT**2/CHRH
+<span class="ln">571</span>      EGAM1(1) = CHRH*QQCP/CV
+<span class="ln">572</span>      EQCP(1) = QQCP
+<span class="ln">573</span>      EFXIONS(1,1) = EFXION(1) 
+<span class="ln">574</span>      EFXIONS(2,1) = EFXION(2) 
+<span class="ln">575</span>      EFXIONS(3,1) = EFXION(3)   
+<span class="ln">576</span>      ENVO(1) = EO   
+<span class="ln">577</span>      ENVL(1) = B
+<span class="ln">578</span>      EQDT(1) = QQDT
+<span class="ln">579</span>C JVS 10/10
+<span class="ln">580</span>      CHDELJ = EDEL(2)
+<span class="ln">581</span>      CHDELD = QDELA
+<span class="ln">582</span>      IF(LCENV(1))LSURCZ = .TRUE.
+<span class="ln">583</span>      NUMENV = 1
+<span class="ln">584</span>      DO 220 NSTEP = 1,MAXSTP
+<span class="ln">585</span>       XSTART = X0
+<span class="ln">586</span>       DO 210 I = 1,NV
+<span class="ln">587</span>          YSTART(I) = Y(I)
+<span class="ln">588</span>          YSCAL(I) = DABS(Y(I)) + DABS(H*DYDX(I))+TINY
+<span class="ln">589</span> 210     CONTINUE
+<span class="ln">590</span>       SEST = Y(1) + H*DYDX(1)
+<span class="ln">591</span>       IF(SENV - Y(1).GT.0.0D0 .OR. SENV - SEST.GT.0.0D0) THEN
+<span class="ln">592</span>C  IF THE INTEGRATION HAS OVERSHOT THE FITTING POINT, OR THE NEXT
+<span class="ln">593</span>C  STEP WILL DO SO,LIMIT STEP SIZE OR INTEGRATE BACKWARDS TO THE
+<span class="ln">594</span>C  CORRECT MASS.
+<span class="ln">595</span>          H = (SENV - Y(1))/DYDX(1)
+<span class="ln">596</span>       ENDIF
+<span class="ln">597</span>C  ENSURE THAT STEP DOESN&#x27;T EXCEED MAXIMUM STEP SIZE
+<span class="ln">598</span>       IF(H.LT.0.0D0) THEN
+<span class="ln">599</span>          IF(H.LT.-HMAX) H = -HMAX
+<span class="ln">600</span>       ELSE
+<span class="ln">601</span>          IF(H.GT.HMAX)  H = HMAX
+<span class="ln">602</span>       ENDIF
+<span class="ln">603</span>C  PLIM IS AN ESTIMATE OF THE ENDING PRESSURE FOR THE INTEGRATION,
+<span class="ln">604</span>C  BASED ON THE PRESSURE OF THE LAST MODEL POINT.
+<span class="ln">605</span>C  THE FIRST TIME THE INTEGRATOR TRIES TO PASS IT,LIMIT THE STEP
+<span class="ln">606</span>C  IN PRESSURE.
+<span class="ln">607</span>       IF(LTEST) THEN
+<span class="ln">608</span>          IF(X0 + H.GT.PLIM) THEN
+<span class="ln">609</span>             H = PLIM - X0
+<span class="ln">610</span>             LTEST = .FALSE.
+<span class="ln">611</span>          ENDIF
+<span class="ln">612</span>       ENDIF
+<span class="ln">613</span>C  INTEGRATE THE EQUATIONS FROM X0 TO X0 + H
+<span class="ln">614</span>C  H IS THE ATTEMPTED STEP,HDID IS THE ONE PERFORMED, AND HNEXT IS THE
+<span class="ln">615</span>C  PREDICTED NEXT STEP.      
+<span class="ln">616</span>       CALL <a href="../files/bsstep.f.html#def-BSSTEP" title="BSSTEP in bsstep.f">BSSTEP</a>(Y,DYDX,NV,X0,H,EPS,YSCAL,HDID,HNEXT,QENV,
+<span class="ln">617</span>     *        B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,LPRT,RL,
+<span class="ln">618</span>     *        TEFFL,X,Z,KENV,KSAHA,ERR)
+<span class="ln">619</span>       DO 255 K = 1,3
+<span class="ln">620</span>          ERRSUM(K) = ERRSUM(K) + ERR(K)
+<span class="ln">621</span> 255     CONTINUE
+<span class="ln">622</span>C  FIND DY/DX AT THE START OF THE NEXT STEP.
+<span class="ln">623</span>       CALL <a href="../files/qenv.f.html#def-QENV" title="QENV in qenv.f">QENV</a>(X0,Y,DYDX,B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,
+<span class="ln">624</span>     *        LPRT,RL,TEFFL,X,Z,KENV,KSAHA)
+<span class="ln">625</span>C DBG PULSE
+<span class="ln">626</span>         IF (LPULPT.AND.LPRT) THEN
+<span class="ln">627</span>          QQED = 0.0D0
+<span class="ln">628</span>          QESUM = 0.0D0
+<span class="ln">629</span>          QQET = 0.0D0
+<span class="ln">630</span>          PELPF = CGAS * QT * QD * QEMU
+<span class="ln">631</span>          IF(IPVER.EQ.1) THEN
+<span class="ln">632</span>               WRITE(IOPENV,5001)RL,QFS,B,QTL,QDL,
+<span class="ln">633</span>     *              QPL, QESUM,QO,QQDP,QQED,
+<span class="ln">634</span>     *              QQET,QQOD,QQOT,QDEL,QDELA,
+<span class="ln">635</span>     *              QQCP,QRMU,QQDT,PELPF
+<span class="ln">636</span>            ELSE IF (IPVER.EQ.2) THEN
+<span class="ln">637</span>               WRITE(IOPENV,6001)RL,QFS,B,QTL,QDL,
+<span class="ln">638</span>     *              QPL, QESUM,QO,QQDP,QQED,
+<span class="ln">639</span>     *              QQET,QQOD,QQOT,QDEL,QDELA,
+<span class="ln">640</span>     *              QQCP,QRMU,QQDT,PELPF
+<span class="ln">641</span>            ELSE IF (IPVER.EQ.3) THEN
+<span class="ln">642</span>C DBG 7/95 Appended mixing length info at end of first three lines
+<span class="ln">643</span>               WRITE(IOPENV,6003)RL,QFS,B,QTL,QDL,ALFMLT,
+<span class="ln">644</span>     *              QPL, QESUM,QO,QQDP,QQED,PHMLT,
+<span class="ln">645</span>     *              QQET,QQOD,QQOT,QDEL,QDELA,CMXMLT,
+<span class="ln">646</span>     *              QQCP,QRMU,QQDT,PELPF
+<span class="ln">647</span>            END IF
+<span class="ln">648</span>         END IF
+<span class="ln">649</span>C DBG END
+<span class="ln">650</span>c G Somers 11/14 ADDED I/O FLAG AND CHANGED WRITE OUTS TO .STORE.
+<span class="ln">651</span>       IF(LPRT.AND.LSTENV) THEN
+<span class="ln">652</span>          SRAD = DEXP(CLN*RL)
+<span class="ln">653</span>          DE = (RSURF-SRAD)/RSURF
+<span class="ln">654</span>          SGL = CGL+HSTOT-2.0D0*RL
+<span class="ln">655</span>          EG = DEXP(CLN*SGL)
+<span class="ln">656</span>            CHRH = 1.0D0/QQDP
+<span class="ln">657</span>            CHT = -CHRH*QQDT
+<span class="ln">658</span>            CV = QQCP - EXP(CLN*(EP-ED-ET))*CHT**2/CHRH
+<span class="ln">659</span>            GAM1 = CHRH*QQCP/CV
+<span class="ln">660</span>          IF(.NOT.LSTCH) WRITE(ISTOR,260)EG,EP,ET,DE,ES,ED,EO,EBETA,
+<span class="ln">661</span>     *           (EDEL(K),K=1,3),(EFXION(K),K=1,3),EVEL,
+<span class="ln">662</span>     *           GAM1,QQDP
+<span class="ln">663</span> 260        FORMAT(1X,1PE10.3,0P2F10.7,1P2E14.7,0P1F10.7,
+<span class="ln">664</span>     *           1PE10.2,0PF7.3,1PE9.2,0P3F6.3,2F6.3,1PE9.2,
+<span class="ln">665</span>     *           0P2F12.8)
+<span class="ln">666</span>       ENDIF
+<span class="ln">667</span>       IF(HDID.EQ.H) THEN
+<span class="ln">668</span>          NOK = NOK + 1
+<span class="ln">669</span>       ELSE
+<span class="ln">670</span>          NBAD = NBAD + 1
+<span class="ln">671</span>       ENDIF
+<span class="ln">672</span>C  CHECK IF INTEGRATION COMPLETE
+<span class="ln">673</span>       SDIF = SENV - Y(1)
+<span class="ln">674</span>C 07/02 STORE ENVELOPE TERMS IF THE INTEGRATION
+<span class="ln">675</span>C HAS NOT OVERSHOT THE FITTING POINT.
+<span class="ln">676</span>         IF(SDIF.LE.STOLER)THEN
+<span class="ln">677</span>            NUMENV = NUMENV + 1
+<span class="ln">678</span>            ENVD(NUMENV) = ED
+<span class="ln">679</span>            ENVP(NUMENV) = EP
+<span class="ln">680</span>            ENVR(NUMENV) = ER
+<span class="ln">681</span>            ENVS(NUMENV) = ES
+<span class="ln">682</span>            ENVT(NUMENV) = ET
+<span class="ln">683</span>            ENVX(NUMENV) = X
+<span class="ln">684</span>            ENVZ(NUMENV) = Z
+<span class="ln">685</span>            LCENV(NUMENV) = EVEL.GT.0.0D0
+<span class="ln">686</span>C JVS 08/13 ADD RUN FOR CZ CALCULATION
+<span class="ln">687</span>            EDELS(1,NUMENV) = EDEL(1)
+<span class="ln">688</span>            EDELS(2,NUMENV) = EDEL(2)
+<span class="ln">689</span>            EDELS(3,NUMENV) = EDEL(3)
+<span class="ln">690</span>            EVELS(NUMENV) = EVEL
+<span class="ln">691</span>            EBETAS(NUMENV) = EBETA
+<span class="ln">692</span>C JVS 08/25	
+<span class="ln">693</span>C Always save these     
+<span class="ln">694</span>            CHRH = 1.0D0/QQDP
+<span class="ln">695</span>            CHT = -CHRH*QQDT
+<span class="ln">696</span>            CV = QQCP - EXP(CLN*(EP-ED-ET))*CHT**2/CHRH
+<span class="ln">697</span>            EGAM1(NUMENV) = CHRH*QQCP/CV
+<span class="ln">698</span>            EQCP(NUMENV) = QQCP
+<span class="ln">699</span>            EFXIONS(1,NUMENV) = EFXION(1) 
+<span class="ln">700</span>            EFXIONS(2,NUMENV) = EFXION(2) 
+<span class="ln">701</span>            EFXIONS(3,NUMENV) = EFXION(3)      
+<span class="ln">702</span>            ENVO(NUMENV) = EO   
+<span class="ln">703</span>            ENVL(NUMENV) = B
+<span class="ln">704</span>            EQDT(NUMENV) = QQDT
+<span class="ln">705</span>
+<span class="ln">706</span>            IF(.NOT.LSURCZ)THEN
+<span class="ln">707</span>               IF(LCENV(NUMENV))THEN
+<span class="ln">708</span>                  LSURCZ = .TRUE.
+<span class="ln">709</span>               ENDIF
+<span class="ln">710</span>            ELSE IF(EVEL.GT.0.0D0)THEN
+<span class="ln">711</span>               DR = 10.0D0**ENVR(NUMENV-1) -
+<span class="ln">712</span>     *              10.0D0**ENVR(NUMENV)
+<span class="ln">713</span>               TAUCZENV = TAUCZENV + DR/EVEL
+<span class="ln">714</span>            ENDIF
+<span class="ln">715</span>         ENDIF
+<span class="ln">716</span>       IF(DABS(SDIF).LE.STOLER)THEN
+<span class="ln">717</span>C            WRITE(*,*)TAUCZENV/CSECYR
+<span class="ln">718</span>          IF(LSBC) THEN
+<span class="ln">719</span>             WT0 = SDIF/(YSTART(1)-Y(1))
+<span class="ln">720</span>             PS(IE) = X0 + WT0*(XSTART - X0)
+<span class="ln">721</span>             RS(IE) = Y(3) + WT0*(YSTART(3) - Y(3))
+<span class="ln">722</span>             TS(IE) = Y(2) + WT0*(YSTART(2) - Y(2))
+<span class="ln">723</span>             IF(LPRT)WRITE(ISHORT,230)PS(IE),TS(IE),RS(IE),SENV
+<span class="ln">724</span>          ENDIF
+<span class="ln">725</span>          GOTO 300
+<span class="ln">726</span>       ELSE IF(.NOT.LLSTORE) THEN
+<span class="ln">727</span>          IF(Y(2).GE.TENV .AND. LSBC) THEN
+<span class="ln">728</span>             LLSTORE = .TRUE.
+<span class="ln">729</span>             ISTORE = IE
+<span class="ln">730</span>             ESTORE(1) = X0
+<span class="ln">731</span>             ESTORE(2) = Y(2)
+<span class="ln">732</span>             ESTORE(3) = Y(3)
+<span class="ln">733</span>             ESTORE(4) = Y(1)
+<span class="ln">734</span>          ENDIF
+<span class="ln">735</span>       ENDIF
+<span class="ln">736</span>       IF(HNEXT.LT.HMIN) HNEXT = HMIN
+<span class="ln">737</span>       H = HNEXT
+<span class="ln">738</span> 220  CONTINUE
+<span class="ln">739</span>C INTEGRATION HAS FAILED TO FINISH IN MAXSTP STEPS;
+<span class="ln">740</span>C PRINT NASTY MESSAGE AND QUIT.
+<span class="ln">741</span>      WRITE(IOWR,911)
+<span class="ln">742</span>      WRITE(ISHORT,911)
+<span class="ln">743</span> 911  FORMAT(5X,&#x27;ENVELOPE INTEGRATION FAILED AFTER MAXSTP TRIES.&#x27;,1X,
+<span class="ln">744</span>     *     &#x27;I QUIT&#x27;)
+<span class="ln">745</span>      STOP
+<span class="ln">746</span> 300  CONTINUE
+<span class="ln">747</span>C 07/02 NOW INVERT THE ENVELOPE VECTOR.
+<span class="ln">748</span>      IF(SENV.LT.-1.0D-12)THEN
+<span class="ln">749</span>         DO I = 1,NUMENV
+<span class="ln">750</span>            I1 = I
+<span class="ln">751</span>            I2 = NUMENV - I + 1
+<span class="ln">752</span>            IF(I1.GE.I2)GOTO 310
+<span class="ln">753</span>            DUM1 = ENVD(I1)
+<span class="ln">754</span>            ENVD(I1) = ENVD(I2)
+<span class="ln">755</span>            ENVD(I2) = DUM1
+<span class="ln">756</span>            DUM1 = ENVP(I1)
+<span class="ln">757</span>            ENVP(I1) = ENVP(I2)
+<span class="ln">758</span>            ENVP(I2) = DUM1
+<span class="ln">759</span>            DUM1 = ENVR(I1)
+<span class="ln">760</span>            ENVR(I1) = ENVR(I2)
+<span class="ln">761</span>            ENVR(I2) = DUM1
+<span class="ln">762</span>            DUM1 = ENVS(I1)
+<span class="ln">763</span>            ENVS(I1) = ENVS(I2)
+<span class="ln">764</span>            ENVS(I2) = DUM1
+<span class="ln">765</span>            DUM1 = ENVT(I1)
+<span class="ln">766</span>            ENVT(I1) = ENVT(I2)
+<span class="ln">767</span>            ENVT(I2) = DUM1
+<span class="ln">768</span>            DUM1 = ENVX(I1)
+<span class="ln">769</span>            ENVX(I1) = ENVX(I2)
+<span class="ln">770</span>            ENVX(I2) = DUM1
+<span class="ln">771</span>            DUM1 = ENVZ(I1)
+<span class="ln">772</span>            ENVZ(I1) = ENVZ(I2)
+<span class="ln">773</span>            ENVZ(I2) = DUM1
+<span class="ln">774</span>            LDUM = LCENV(I1)
+<span class="ln">775</span>            LCENV(I1) = LCENV(I2)
+<span class="ln">776</span>            LCENV(I2) = LDUM
+<span class="ln">777</span>C  08/25 JVS 
+<span class="ln">778</span>            DUM1 = ENVO(I1)
+<span class="ln">779</span>            ENVO(I1) = ENVO(I2)
+<span class="ln">780</span>            ENVO(I2) = DUM1
+<span class="ln">781</span>            DUM1 = ENVL(I1)
+<span class="ln">782</span>            ENVL(I1) = ENVL(I2)
+<span class="ln">783</span>            DUM1 = EQDT(I1)
+<span class="ln">784</span>            EQDT(I1) = EQDT(I2)
+<span class="ln">785</span>            EQDT(I2) = DUM1    
+<span class="ln">786</span>                  
+<span class="ln">787</span>C 08/13 JVS ADDED DEL VECTORS
+<span class="ln">788</span>            DUM1 = EDELS(1,I1)
+<span class="ln">789</span>            EDELS(1,I1) = EDELS(1,I2)
+<span class="ln">790</span>            EDELS(1,I2) = DUM1
+<span class="ln">791</span>            DUM1 = EDELS(2,I1)
+<span class="ln">792</span>            EDELS(2,I1) = EDELS(2,I2)
+<span class="ln">793</span>            EDELS(2,I2) = DUM1
+<span class="ln">794</span>            DUM1 = EDELS(3,I1)
+<span class="ln">795</span>            EDELS(3,I1) = EDELS(3,I2)
+<span class="ln">796</span>            EDELS(3,I2) = DUM1
+<span class="ln">797</span>            DUM1 = EVELS(I1)
+<span class="ln">798</span>            EVELS(I1) = EVELS(I2)
+<span class="ln">799</span>            EVELS(I2) = DUM1
+<span class="ln">800</span>            DUM1 = EBETAS(I1)
+<span class="ln">801</span>            EBETAS(I1) = EBETAS(I2)
+<span class="ln">802</span>            EBETAS(I2) = DUM1
+<span class="ln">803</span>C  08/25 JVS
+<span class="ln">804</span>            DUM1 = EGAM1(I1)
+<span class="ln">805</span>            EGAM1(I1) = EGAM1(I2)
+<span class="ln">806</span>            EGAM1(I2) = DUM1
+<span class="ln">807</span>            DUM1 = EQCP(I1)
+<span class="ln">808</span>            EQCP(I1) = EQCP(I2)
+<span class="ln">809</span>            EQCP(I2) = DUM1
+<span class="ln">810</span>            DUM1 = EFXIONS(1,I1)
+<span class="ln">811</span>            EFXIONS(1,I1) = EFXIONS(1,I2)
+<span class="ln">812</span>            EFXIONS(1,I2) = DUM1
+<span class="ln">813</span>            DUM1 = EFXIONS(2,I1)
+<span class="ln">814</span>            EFXIONS(2,I1) = EFXIONS(2,I2)
+<span class="ln">815</span>            EFXIONS(2,I2) = DUM1
+<span class="ln">816</span>            DUM1 = EFXIONS(3,I1)
+<span class="ln">817</span>            EFXIONS(3,I1) = EFXIONS(3,I2)
+<span class="ln">818</span>            EFXIONS(3,I2) = DUM1
+<span class="ln">819</span>                       
+<span class="ln">820</span>         END DO
+<span class="ln">821</span> 310     CONTINUE
+<span class="ln">822</span>C JVS 07/12 Save the last envelope point pressure
+<span class="ln">823</span>C      PPHOT = ENVP(NUMENV) ! G Somers 3/17, MOVED PPHOT DEF HIGHER UP
+<span class="ln">824</span>C END JVS
+<span class="ln">825</span>      ENDIF
+<span class="ln">826</span>C DBG PULSE WRITE END OF DATA INDICATOR
+<span class="ln">827</span>      IF (LPULPT.AND.LPRT) THEN
+<span class="ln">828</span>C         XYZ = 99.99D0
+<span class="ln">829</span>         IF(IPVER.EQ.1) THEN
+<span class="ln">830</span>            WRITE(IOPENV, 5001) (XYZ(I),I=1,19)
+<span class="ln">831</span>         ELSE IF (IPVER.EQ.2 .OR. IPVER.EQ.3)THEN
+<span class="ln">832</span>            WRITE(IOPENV, 6003) (XYZ(I),I=1,22)
+<span class="ln">833</span>         END IF
+<span class="ln">834</span>      ENDIF
+<span class="ln">835</span>
+<span class="ln">836</span>      WRITE(ISHORT,215)NOK,NBAD,SDIF,Y(1),(ERRSUM(J),J=1,3)
+<span class="ln">837</span> 215  FORMAT(1X,&#x27;ENVELOPE INTEGRATION COMPLETE&#x27;,1X,
+<span class="ln">838</span>     *     &#x27;NUMBER OF STEPS ACCEPTED&#x27;,I5,&#x27; REJECTED&#x27;,
+<span class="ln">839</span>     *     I5/5X,&#x27;SENV-LAST M=&#x27;,1PE22.13,&#x27;  LAST M=&#x27;,E22.13/
+<span class="ln">840</span>     *     5X,&#x27;MAX RELATIVE ERRORS:M &#x27;,1PE14.5,&#x27;  T &#x27;,E14.5,
+<span class="ln">841</span>     *     &#x27;  R &#x27;,E14.5)
+<span class="ln">842</span>
+<span class="ln">843</span>C JVS 08/13
+<span class="ln">844</span>C IF THE CZ IS IN THE ENVELOPE (.I.E. BEYOND THE FITTING POINT) TRACK ITS
+<span class="ln">845</span>C LOCATION IN MASS AND RADIUS FOR USE WITH AM LOSS ROUTINES
+<span class="ln">846</span>C
+<span class="ln">847</span>C G Somers 3/17, SKIP TAUCAL CALL IF USING NEW TAUCZ ROUTINES
+<span class="ln">848</span>        IF(LNEWTCZ)GOTO 555
+<span class="ln">849</span>C G Somers END
+<span class="ln">850</span>      JENV = 0.0
+<span class="ln">851</span>      DO I=1,NUMENV
+<span class="ln">852</span>            IF (JENV .EQ. 0.0 .AND. LCENV(I) ) JENV = I
+<span class="ln">853</span>      END DO
+<span class="ln">854</span>
+<span class="ln">855</span>      IF (JENV .GT. 1) THEN
+<span class="ln">856</span>            ! Calculate the the location of the base sof the surface CZ in radius
+<span class="ln">857</span>            DD2 = EDELS(1,JENV-1)-EDELS(2,JENV-1)
+<span class="ln">858</span>            DD1 = EDELS(1,JENV)-EDELS(2,JENV)
+<span class="ln">859</span>            FX = DD2/(DD2-DD1)
+<span class="ln">860</span>
+<span class="ln">861</span>            ENVCZL = ENVR(JENV-1)+FX*(ENVR(JENV)-ENVR(JENV-1))-CRSUNL
+<span class="ln">862</span>            ENVRCZ = EXP(CLN*ENVCZL)
+<span class="ln">863</span>
+<span class="ln">864</span>            DO I=1,NUMENV
+<span class="ln">865</span>                  ENVS1(I) = DEXP(CLN*(ENVS(I)+HSTOT))
+<span class="ln">866</span>
+<span class="ln">867</span>                  IF (I.EQ.NUMENV) THEN
+<span class="ln">868</span>                        ENVS2(I) = 0.0
+<span class="ln">869</span>                  ELSE
+<span class="ln">870</span>                        ENVS2(I)=DEXP(CLN*ENVS(I+1))-DEXP(CLN*ENVS(I))
+<span class="ln">871</span>                  ENDIF
+<span class="ln">872</span>
+<span class="ln">873</span>                  EDEL1(I) = EDELS(1,I)
+<span class="ln">874</span>                  EDEL2(I) = EDELS(2,I)
+<span class="ln">875</span>            END DO
+<span class="ln">876</span>
+<span class="ln">877</span>C             CALL TAUCAL(ENVX,ENVS2,ENVS1,LCENV,ENVR,ENVP,ENVD,ENVG,NUMENV,  ! KC 2025-05-31
+<span class="ln">878</span>            CALL <a href="../files/taucal.f.html#def-TAUCAL" title="TAUCAL in taucal.f">TAUCAL</a>(ENVS2,ENVS1,LCENV,ENVR,ENVP,ENVD,ENVG,NUMENV,
+<span class="ln">879</span>     *            EVELS, EDEL1,EDEL2)
+<span class="ln">880</span>      ENDIF
+<span class="ln">881</span>
+<span class="ln">882</span>555      CONTINUE
+<span class="ln">883</span>      RETURN
+<span class="ln">884</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Wrong. Question 1 says <code>ENVL</code> "is wrong after the reversal". Every entry of <code>ENVL</code> is set to <code>B</code> (the luminosity is constant in the envelope), so the broken swap changes nothing now; it would matter only if <code>ENVL</code> ever varied. Fix: say so; keep it as a latent bug.</li>
+<li>Settled / sharpened. Question 2 (<code>ENVG</code>): <a href="../files/taucal.f.html#def-TAUCAL">TAUCAL</a> computes <code>HG</code> at the two points it needs from <code>HS1</code> when <code>LROT</code> is false; with rotation it uses <code>HG</code> as passed, and ENVINT's <code>ENVG</code> is never filled. Fix: make the question concrete on rotating models.</li>
+<li>Settled. Question 3 (mixed mass units): TAUCAL uses <code>ENVS2</code> only as weights in an average of the convective velocity (<code>UMER/DENOM</code>), so its unit cancels; <code>ENVS1</code> (grams) is what enters $g$. Fix: state it; drop the question.</li>
+<li>Missing. The step limit at <code>PLIM</code> applies only when <code>LSBC</code> is false (<code>LTEST</code>); and <code>PS(IE)</code>, <code>TS(IE)</code>, <code>RS(IE)</code> and <code>ESTORE</code>, <code>ISTORE</code> are set only when <code>LSBC</code> is true. Fix: add.</li>
+<li>Missing. The gray start for Krishna Swamy uses $T^4 = \tfrac34 T_\mathrm{eff}^4 \times 0.550$ (the factor at $\tau \to 0$), not the Eddington one. Fix: a clause.</li>
+<li>Minor. <code>LDERIV</code> is set by the pulsation test and then forced to <code>.TRUE.</code> just after (line 137). Fix: add to Design.</li>
+</ol>
+<p>Revised: question 1 corrected (harmless now); question 2 made concrete on rotating models; question 3 settled and dropped (stated under the method); the <code>LSBC</code> conditions, the Krishna Swamy start and the forced <code>LDERIV</code> added.</p></div></details>
+</main></body></html>

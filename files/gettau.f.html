@@ -1,0 +1,238 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>gettau.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ gettau.f</span></header><main>
+<h1>gettau.f</h1>
+<p class='muted'>173 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/gettau.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>GETTAU</code> computes the convective overturn timescale $\tau_\mathrm{cz}$ one pressure scale height above the base of the surface convection zone ("G Somers, 3/17"; its comment calls it "a new, systematic method"). Depending on where that point lies, it uses the interior model, the envelope integration, or the two stitched together.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/getw.f.html#def-GETW">GETW</a>, <a href="../files/starin.f.html#def-STARIN">STARIN</a> and <a href="../files/wrtout.f.html#def-WRTOUT">WRTOUT</a>.</li>
+<li><strong>Inputs:</strong> the model arrays (<code>HCOMP</code>, <code>HR</code>, <code>HP</code>, <code>HD</code>, <code>HS1</code>, <code>HT</code>, <code>LC</code>, <code>M</code>), the form factors <code>FP</code>, <code>FT</code>, the surface <code>TEFFL</code>, <code>BL</code>, <code>HSTOT</code>; and from <code>/SCRTCH/</code>, the interior's convective velocities <code>SVEL</code> and gradients <code>SDEL</code>, left there by an earlier physics pass.</li>
+<li><strong>What it calls:</strong> <a href="../files/envint.f.html#def-ENVINT">ENVINT</a> (the envelope, which also sets the photospheric pressure <code>PPHOT</code> and, in the old scheme, <code>TAUCZ</code>), then <a href="../files/tauintnew.f.html#def-TAUINTNEW">TAUINTNEW</a> or <a href="../files/tauint.f.html#def-TAUINT">TAUINT</a>.</li>
+<li><strong>Outputs:</strong> <code>TAUCZ</code> and <code>PPHOT</code> in <code>/OVRTRN/</code>, read by about twenty routines (wind and magnetic braking among them: <a href="../files/mwind.f.html#def-MWIND">MWIND</a>, <code>COWIND</code>, <code>DADCOEFT</code>, …); <code>RBCZ</code> (argument), the radius of the convection zone's base in solar radii, set by <code>TAUINTNEW</code> (0 if it finds none); the old method (<code>TAUINT</code>) leaves it unchanged.</li>
+<li><strong>COMMON blocks:</strong> <code>/OVRTRN/</code> (<code>LNEWTCZ</code> selects the new method, <code>LCALCENV</code> tells <code>ENVINT</code> whether to store the envelope's structure); <code>/ENVSTRUCT/</code> (the envelope solution); <code>/SCRTCH/</code> (interior velocities and gradients); <code>/SPOTS/</code>; <code>/INTENV/</code>, <code>/INTATM/</code>, <code>/ENVGEN/</code> (declared, not used here); constants.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Find the base of the surface convection zone, <code>IMAX</code>, scanning inward from the surface.</li>
+<li>If $\log P_\mathrm{base} - \log P_\mathrm{surf} &lt; 1$ (or the old method is chosen), the point one scale height up may be in the envelope, so <code>LCALCENV</code> is set and the envelope's structure kept.</li>
+<li>Integrate the envelope with <code>ENVINT</code> from the surface conditions (radius and gravity from $L$ and $T_\mathrm{eff}$, as in <a href="../files/getnewenv.f.html#def-GETNEWENV">GETNEWENV</a>, with the starspot correction to $T_\mathrm{eff}$). In the old method, <code>ENVINT</code> sets <code>TAUCZ</code> itself and the routine ends there.</li>
+<li>Copy the interior into work arrays, with $g = Gm/r^2$, the velocities and gradients from <code>/SCRTCH/</code>: <code>DELF1</code> = $\nabla_\mathrm{rad}$ (<code>SDEL(1,·)</code>) and <code>DELF2</code> = $\nabla_\mathrm{ad}$ (<code>SDEL(3,·)</code>, as PHYSIC stores them). With the new method and <code>LCALCENV</code>, append the envelope points 2 to <code>NUMENV</code> (the first is the last interior point), taking the same two gradients from <code>EDELS(1,·)</code> and <code>EDELS(2,·)</code>, which QENV stores in the order $\nabla_\mathrm{rad}$, $\nabla_\mathrm{ad}$, $\nabla$.</li>
+<li><code>TAUINTNEW</code> (new method) or <code>TAUINT</code> (old) integrates the overturn time over these arrays.</li>
+<li><code>LCALCENV</code> is reset to true.</li>
+</ol>
+<p><strong>KC's changes.</strong> The unused arguments <code>HG</code> (here), <code>HCOMPF</code>, <code>HS2</code> and <code>HSTOT</code> (in the calls to <code>TAUINTNEW</code> and <code>TAUINT</code>) were removed (2025-05-31); the elements of <code>/ENVSTRUCT/</code> were reordered (2025-05-30).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Composition from beyond the model.</strong> The envelope points copy their composition from <code>HCOMP(J,M+1)</code>, one point past the model's last point. Should it be <code>HCOMP(J,M)</code>? (The composition is not passed on to <code>TAUINT*</code> since KC's change, so this may have no effect now.)</li>
+<li><strong>"At least 3 pressure scale heights".</strong> The comment says a difference of 1 in $\log P$ means "at least 3 PSCAS", but one dex in $P$ is $\ln 10 \approx 2.3$ scale heights. Is the threshold of 1 meant to be safe for one scale height, or should the comment change?</li>
+<li><strong>Stale interior velocities.</strong> <code>SVEL</code> and <code>SDEL</code> come from <code>/SCRTCH/</code>, written by whichever routine ran the physics last. Are they guaranteed to belong to the current model when <code>GETTAU</code> is called from <code>STARIN</code> and <code>WRTOUT</code>?</li>
+<li><strong>Unused variable.</strong> <code>LALLCZ</code> (fully convective star) is set but never used.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+GETTAU                              C
+G Somers, 3/17                         C
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+SUBROUTINE GETTAU(HCOMP,HR,HP,HD,HG,HS1,HT,FP,FT,TEFFL,HSTOT,BL,M,  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-GETTAU'>GETTAU</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-GETTAU'><h3><span class='kind'>subroutine</span>GETTAU</h3>
+<p class='muted'>lines 6–173 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/gettau.f#L6-L173'>GitHub</a></p>
+<pre>SUBROUTINE GETTAU(HCOMP,HR,HP,HD,HS1,HT,FP,FT,TEFFL,HSTOT,BL,M,</pre>
+<div class='notes'><p>Convective overturn time one pressure scale height above the base of the surface convection zone, from the interior, the envelope, or both stitched together (method above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+GETTAU                              C
+G Somers, 3/17                         C
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+SUBROUTINE GETTAU(HCOMP,HR,HP,HD,HG,HS1,HT,FP,FT,TEFFL,HSTOT,BL,M,  ! KC 2025-05-31</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-ENVGEN'>/ENVGEN/</a>, <a href='../commons.html#c-ENVSTRUCT'>/ENVSTRUCT/</a>, <a href='../commons.html#c-INTATM'>/INTATM/</a>, <a href='../commons.html#c-INTENV'>/INTENV/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-OVRTRN'>/OVRTRN/</a>, <a href='../commons.html#c-SCRTCH'>/SCRTCH/</a>, <a href='../commons.html#c-SPOTS'>/SPOTS/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+<li><a href='../files/tauint.f.html#def-TAUINT'>TAUINT</a> <span class='muted'>(tauint.f)</span></li>
+<li><a href='../files/tauintnew.f.html#def-TAUINTNEW'>TAUINTNEW</a> <span class='muted'>(tauintnew.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/getw.f.html#def-GETW'>GETW</a> <span class='muted'>(getw.f)</span></li>
+<li><a href='../files/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span></li>
+<li><a href='../files/wrtout.f.html#def-WRTOUT'>WRTOUT</a> <span class='muted'>(wrtout.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE GETTAU(HCOMP,HR,HP,HD,HS1,HT,FP,FT,TEFFL,HSTOT,BL,M,
+<span class="ln">7</span>     *                  LC,RBCZ)
+<span class="ln">8</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">9</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">10</span>      PARAMETER (JSON=5000)
+<span class="ln">11</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">12</span>      COMMON/ENVGEN/ATMSTP,ENVSTP,LENVG
+<span class="ln">13</span>      COMMON/INTATM/ATMERR,ATMD0,ATMBEG,ATMMIN,ATMMAX
+<span class="ln">14</span>      COMMON/INTENV/ENVERR,ENVBEG,ENVMIN,ENVMAX
+<span class="ln">15</span>      COMMON/CONST1/CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">16</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">17</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">18</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">19</span>C JvS 08/25 Updated with new elements
+<span class="ln">20</span>      COMMON/ENVSTRUCT/ENVP(JSON),ENVT(JSON),ENVS(JSON),ENVD(JSON),
+<span class="ln">21</span>     *     ENVR(JSON),ENVX(JSON),ENVZ(JSON),LCENV(JSON),
+<span class="ln">22</span>     *     EDELS(3,JSON),EVELS(JSON),EBETAS(JSON),
+<span class="ln">23</span>     *     EGAM1(JSON),EQCP(JSON),EFXIONS(3,JSON),
+<span class="ln">24</span>     *     ENVO(JSON), ENVL(JSON),EQDT(JSON),NUMENV     
+<span class="ln">25</span>      COMMON/SCRTCH/SESUM(JSON),SEG(7,JSON),SBETA(JSON),SETA(JSON),
+<span class="ln">26</span>     * LOCONS(JSON),SO(JSON),SDEL(3,JSON),SFXION(3,JSON),SVEL(JSON),SCP(JSON)
+<span class="ln">27</span>C       DIMENSION HCOMP(15,JSON),HR(JSON),HP(JSON),HD(JSON),HG(JSON),HS1(JSON),  ! KC 2025-05-31
+<span class="ln">28</span>      DIMENSION HCOMP(15,JSON),HR(JSON),HP(JSON),HD(JSON),HS1(JSON),
+<span class="ln">29</span>     *      HT(JSON),FP(JSON),FT(JSON),HCOMPF(15,JSON),HRF(JSON),HPF(JSON),
+<span class="ln">30</span>     *      HDF(JSON),HSF(JSON),HTF(JSON),LC(JSON),HGF(JSON),HVF(JSON),
+<span class="ln">31</span>     *  DELF1(JSON),DELF2(JSON),LCF(JSON)
+<span class="ln">32</span>      REAL*8 DUM1(4),DUM2(3),DUM3(3),DUM4(3)
+<span class="ln">33</span>      INTEGER*4 KATM, KENV, KSAHA
+<span class="ln">34</span>      COMMON/OVRTRN/LNEWTCZ,LCALCENV,TAUCZ,TAUCZ0,PPHOT,PPHOT0,FRACSTEP
+<span class="ln">35</span>      COMMON/SPOTS/SPOTF,SPOTX,LSDEPTH
+<span class="ln">36</span>      SAVE
+<span class="ln">37</span>C
+<span class="ln">38</span>C This routine devises a new, systematic method for determining the
+<span class="ln">39</span>C convective overturn timescale. It will calculate the overturn timescale
+<span class="ln">40</span>C one pressure scale height above the BCZ for whichever of the following three
+<span class="ln">41</span>C conditions holds.
+<span class="ln">42</span>C
+<span class="ln">43</span>C 1) 1 PSCA above the BCZ is in the interior model.
+<span class="ln">44</span>C 2) 1 PSCA above the BCZ is in the envelope model.
+<span class="ln">45</span>C 3) The BCZ is in the interior, but 1 PSCA above is in the envelope.
+<span class="ln">46</span>C
+<span class="ln">47</span>C If none of these are satisfied, TAUCZ is set to 0.0.
+<span class="ln">48</span>C
+<span class="ln">49</span>C If 1): Call ENVINT to determine PPHOT, TAUINT(NEW) to determine TAUCZ
+<span class="ln">50</span>C If 2): Call ENVINT to determine PPHOT, which calls TAUCAL for TAUCZ.
+<span class="ln">51</span>C If 3): Stitch together interior and envelope.
+<span class="ln">52</span>
+<span class="ln">53</span>      TAUCZ = 0.0
+<span class="ln">54</span>      PPHOT = 0.0
+<span class="ln">55</span>
+<span class="ln">56</span>C Check if 1 PSCA above BCZ is within envelope. If so, only the interior
+<span class="ln">57</span>C model should be considered for TAUCZ. Set LCALCENV = .FALSE.. If not,
+<span class="ln">58</span>C have ENVINT calculate the full structure, and stitch the envelope
+<span class="ln">59</span>C and interior together.
+<span class="ln">60</span>C
+<span class="ln">61</span>C Determine where the BCZ is.
+<span class="ln">62</span>      DO 71 I = M-1,1,-1
+<span class="ln">63</span>         IF(.NOT.LC(I)) GOTO 81
+<span class="ln">64</span>   71 CONTINUE
+<span class="ln">65</span>      LALLCZ = .TRUE.
+<span class="ln">66</span>      I = 0
+<span class="ln">67</span>   81 IMAX = I + 1
+<span class="ln">68</span>C Compare the pressure there to the surface pressure.
+<span class="ln">69</span>      CHKPRS = HP(IMAX)-HP(M)
+<span class="ln">70</span>C IF CHKPRS &gt; 1.0, AT LEAST 3 PSCAS, SO LOOK INTERIOR.
+<span class="ln">71</span>C IF CHKPRS &lt; 1.0, 1 PSCA UP MIGHT BE IN ENV. STITCH TOGETHER.
+<span class="ln">72</span>C FINALLY, IF LNEWTCZ = .FALSE., MAKE SURE TO CALC AN ENV.
+<span class="ln">73</span>      IF(CHKPRS.LT.1.0.OR..NOT.LNEWTCZ)THEN
+<span class="ln">74</span>         LCALCENV = .TRUE.
+<span class="ln">75</span>      ELSE
+<span class="ln">76</span>         LCALCENV = .FALSE.
+<span class="ln">77</span>      ENDIF
+<span class="ln">78</span>C
+<span class="ln">79</span>C CALL ENVINT
+<span class="ln">80</span>C
+<span class="ln">81</span>      FPL = FP(M)
+<span class="ln">82</span>      FTL = FT(M)
+<span class="ln">83</span>      IDUM = 0
+<span class="ln">84</span>      B = DEXP(CLN*BL)
+<span class="ln">85</span>      KATM = 0
+<span class="ln">86</span>      KENV = 0
+<span class="ln">87</span>      KSAHA = 0
+<span class="ln">88</span>      IXX=0
+<span class="ln">89</span>      LPRT=.TRUE.
+<span class="ln">90</span>      LSBC0 = .FALSE.
+<span class="ln">91</span>      LPULPT = .FALSE.
+<span class="ln">92</span>      X = HCOMP(1,M)
+<span class="ln">93</span>      Z = HCOMP(3,M)
+<span class="ln">94</span>      RL = 0.5D0*(BL + CLSUNL - 4.0D0*TEFFL - C4PIL - CSIGL)
+<span class="ln">95</span>      GL = CGL + HSTOT - RL - RL
+<span class="ln">96</span>      PLIM = HP(M)
+<span class="ln">97</span>C G Somers 10/14, FOR SPOTTED RUNS, FIND THE
+<span class="ln">98</span>C PRESSURE AT THE AMBIENT TEMPERATURE ATEFFL
+<span class="ln">99</span>      IF(LC(M).AND.SPOTF.NE.0.0.AND.SPOTX.NE.1.0)THEN
+<span class="ln">100</span>         ATEFFL = TEFFL - 0.25*LOG10(SPOTF*SPOTX**4.0+1.0-SPOTF)
+<span class="ln">101</span>      ELSE
+<span class="ln">102</span>         ATEFFL = TEFFL
+<span class="ln">103</span>      ENDIF
+<span class="ln">104</span>      CALL <a href="../files/envint.f.html#def-ENVINT" title="ENVINT in envint.f">ENVINT</a>(B,FPL,FTL,GL,HSTOT,IXX,LPRT,LSBC0,
+<span class="ln">105</span>     *      PLIM,RL,ATEFFL,X,Z,DUM1,IDUM,KATM,KENV,KSAHA,
+<span class="ln">106</span>     *      DUM2,DUM3,DUM4,LPULPT)
+<span class="ln">107</span>C PPHOT is now set, and structure variables are caluclated if
+<span class="ln">108</span>C LCALCENV = .TRUE..
+<span class="ln">109</span>C
+<span class="ln">110</span>C IF LNEWTCZ IS FALSE, THEN TAUCZ WILL HAVE BEEN SET IN ENVINT, IF THE
+<span class="ln">111</span>C TOP OF THE INTERIOR MODEL IS RADIATIVE. CHECK IF TAUCZ = 0.0. IF NOT,
+<span class="ln">112</span>C THEN GO TO THE END.
+<span class="ln">113</span>C
+<span class="ln">114</span>      IF (TAUCZ.NE.0.0) GOTO 100
+<span class="ln">115</span>C
+<span class="ln">116</span>C COLLECT THE NECESSARY STRUCTURE VARIABLES INTO DUMMY VECTORS.
+<span class="ln">117</span>      MM = M
+<span class="ln">118</span>      DO I=1,MM
+<span class="ln">119</span>         DO J=1,15
+<span class="ln">120</span>            HCOMPF(J,I) = HCOMP(J,I)
+<span class="ln">121</span>         ENDDO
+<span class="ln">122</span>         HRF(I) = HR(I)
+<span class="ln">123</span>         HPF(I) = HP(I)
+<span class="ln">124</span>         HDF(I) = HD(I)
+<span class="ln">125</span>         HSF(I) = HS1(I)
+<span class="ln">126</span>         HGF(I) = HS1(I)*EXP(CLN*(CGL-2.0D0*HR(I)))
+<span class="ln">127</span>         HTF(I) = HT(I)
+<span class="ln">128</span>
+<span class="ln">129</span>         HVF(I) = SVEL(I)
+<span class="ln">130</span>         DELF1(I) = SDEL(1,I)
+<span class="ln">131</span>         DELF2(I) = SDEL(3,I)
+<span class="ln">132</span>         LCF(I) = LC(I)
+<span class="ln">133</span>      ENDDO
+<span class="ln">134</span>C
+<span class="ln">135</span>      IF(LCALCENV.AND.LNEWTCZ)THEN
+<span class="ln">136</span>C IF CHKPRS &lt; 1, THEN STITCH THE ENVELOPE ONTO THE INTERIOR.
+<span class="ln">137</span>C ENVELOPE WAS JUST INTEGRATED IN ENVINT ABOVE, SO USE THAT RUN.
+<span class="ln">138</span>C THIS CODE BORROWED FROM STITCH.F.
+<span class="ln">139</span>         MM = M+NUMENV-1
+<span class="ln">140</span>         DO I=M+1,MM
+<span class="ln">141</span>            DO J=1,15
+<span class="ln">142</span>               HCOMPF(J,I) = HCOMP(J,M+1)
+<span class="ln">143</span>            ENDDO
+<span class="ln">144</span>            HRF(I) = ENVR(I-M+1)
+<span class="ln">145</span>            HPF(I) = ENVP(I-M+1)
+<span class="ln">146</span>            HDF(I) = ENVD(I-M+1)
+<span class="ln">147</span>            HSF(I) = EXP(CLN*(HSTOT+ENVS(I-M+1)))
+<span class="ln">148</span>            HGF(I) = HSF(I)*EXP(CLN*(CGL-2.0D0*HRF(I)))
+<span class="ln">149</span>            HTF(I) = ENVT(I-M+1)
+<span class="ln">150</span>
+<span class="ln">151</span>            HVF(I) = EVELS(I-M+1)
+<span class="ln">152</span>            DELF1(I) = EDELS(1,I-M+1)
+<span class="ln">153</span>            DELF2(I) = EDELS(2,I-M+1)
+<span class="ln">154</span>            LCF(I) = LCENV(I-M+1)
+<span class="ln">155</span>         ENDDO
+<span class="ln">156</span>      ENDIF
+<span class="ln">157</span>C CALL TAUINT
+<span class="ln">158</span>      IF(LNEWTCZ)THEN
+<span class="ln">159</span>C          CALL TAUINTNEW(HCOMPF,HS2,HSF,LCF,HRF,HPF,HDF,HGF,MM,M,HVF,
+<span class="ln">160</span>C      *                  DELF1,DELF2,HSTOT,RBCZ)  ! KC 2025-05-31
+<span class="ln">161</span>         CALL <a href="../files/tauintnew.f.html#def-TAUINTNEW" title="TAUINTNEW in tauintnew.f">TAUINTNEW</a>(HSF,LCF,HRF,HPF,HDF,HGF,MM,M,HVF,
+<span class="ln">162</span>     *                  DELF1,DELF2,RBCZ)
+<span class="ln">163</span>      ELSE
+<span class="ln">164</span>C          CALL TAUINT(HCOMPF,HS2,HSF,LCF,HRF,HPF,HDF,HGF,MM,HVF,
+<span class="ln">165</span>C      *               DELF1,DELF2,HSTOT)  ! KC 2025-05-31
+<span class="ln">166</span>         CALL <a href="../files/tauint.f.html#def-TAUINT" title="TAUINT in tauint.f">TAUINT</a>(HSF,LCF,HRF,HPF,HDF,HGF,MM,HVF,
+<span class="ln">167</span>     *               DELF1,DELF2)
+<span class="ln">168</span>      ENDIF
+<span class="ln">169</span>C RETURN FULL FUNCTIONALITY TO ENVINT
+<span class="ln">170</span> 100  CONTINUE
+<span class="ln">171</span>      LCALCENV = .TRUE.
+<span class="ln">172</span>      RETURN
+<span class="ln">173</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong premise (question 1).</strong> "<code>SDEL(3,I)</code> for the interior points but <code>EDELS(2,·)</code> for the envelope points … one of them is wrong." The two arrays store the gradients in different orders: PHYSIC sets <code>SDEL(1..3)</code> = $\nabla_\mathrm{rad}$, $\nabla$, $\nabla_\mathrm{ad}$ (physic.f lines 80–82), QENV sets <code>EDEL(1..3)</code> = $\nabla_\mathrm{rad}$, $\nabla_\mathrm{ad}$, $\nabla$ (qenv.f lines 64–66), copied into <code>EDELS</code>. Both give $\nabla_\mathrm{ad}$. Fix: state it in step 4 and drop the question.</li>
+<li><strong>Unclear.</strong> "<code>RBCZ</code> … presumably set by <code>TAUINTNEW</code>". TAUINTNEW sets it (tauintnew.f lines 136–144, in solar radii at line 247, 0 at line 250); TAUINT does not. Fix: say so.</li>
+<li><strong>Unclear.</strong> Step 4 "if needed, append the envelope points": only with the new method and <code>LCALCENV</code>, points 2 to <code>NUMENV</code>. Fix: say so.</li>
+</ol>
+<p>Otherwise checked: the base search, the threshold, the ENVINT call with the spot correction, the early exit on <code>TAUCZ</code> ≠ 0, the reset of <code>LCALCENV</code>, the callers and the COMMON blocks; questions 2–5 are real.</p>
+<p>Revised: question 1 answered in step 4 and dropped (the others renumbered); <code>RBCZ</code> and the appending stated.</p></div></details>
+</main></body></html>

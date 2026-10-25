@@ -1,0 +1,116 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>amcalc.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ amcalc.f</span></header><main>
+<h1>amcalc.f</h1>
+<p class='muted'>53 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/amcalc.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file computes the structure-dependent factor of the magnetic-braking torque, "according to the Matt et al. (2012) formulation" (comment by G. Somers, 6/16). The factor scales the angular-momentum loss of the wind with the star's mass, radius, luminosity, photospheric pressure and, optionally, its convective overturn time.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>SMASS</code> (the star's mass in solar masses: <a href="../files/mdot.f.html#def-MDOT">MDOT</a> updates it as <code>SMASS + DELM/CMSUN</code>, and COWIND's header says "stellar mass (solar units)"), <code>BL</code> ($\log L/L_\odot$) and <code>TEFFL</code> ($\log T_\mathrm{eff}$); the exponents <code>EXM</code>, <code>EXR</code>, <code>EXL</code>, <code>EXPR</code>, <code>EXTAU</code> in <code>/CWIND/</code>; the solar normalizations <code>PMMSOLP</code> and <code>PMMSOLTAU</code> and the switch <code>LROSSBY</code> in <code>/PMMWIND/</code> (set in <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a>); the photospheric pressure <code>PPHOT</code>, <code>PPHOT0</code>, the overturn time <code>TAUCZ</code>, <code>TAUCZ0</code> and <code>FRACSTEP</code> in <code>/OVRTRN/</code>.</li>
+<li><strong>Who calls it:</strong> <a href="../files/mwind.f.html#def-MWIND">MWIND</a> and <a href="../files/mcowind.f.html#def-MCOWIND">MCOWIND</a>.</li>
+<li><strong>Output:</strong> <code>STRUCTFACTOR</code> in <code>/CWIND/</code>, which MWIND and MCOWIND multiply with <code>CONSTFACTOR</code> and the time step to get the spin-down.</li>
+<li><strong>COMMON blocks:</strong> the constants <code>/CONST/</code>, <code>/CONST1/</code>, <code>/CONST2/</code>, <code>/CONST3/</code>; <code>/CWIND/</code> (12 units, among them <a href="../files/cowind.f.html#def-COWIND">COWIND</a>, <a href="../files/dadcoeft.f.html#def-DADCOEFT">DADCOEFT</a>); <code>/PMMWIND/</code> (MWIND, MCOWIND, PARMIN); <code>/OVRTRN/</code> (21 units).</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>
+<p>The radius from the Stefan–Boltzmann law, in cgs units:
+$$\log R = \tfrac12\left(\log L - \log 4\pi - \log\sigma - 4\log T_\mathrm{eff}\right),$$
+with $\log L$ = <code>BL + CLSUNL</code>; then $R/R_\odot$ (<code>RRAD</code>).</p>
+</li>
+<li>
+<p>$L/L_\odot = 10^{\mathtt{BL}}$.</p>
+</li>
+<li>
+<p>The photospheric pressure, interpolated within the step between its values at the start (<code>PPHOT0</code>) and end (<code>PPHOT</code>) of the step, both $\log P$, and normalized to the solar value:
+$$\frac{P_\mathrm{phot}}{P_{\mathrm{phot},\odot}} = \frac{10^{\,p_0 + f\,(p - p_0)}}{10^{\,p_\odot}},$$
+with $f$ = <code>FRACSTEP</code>.</p>
+</li>
+<li>
+<p>If <code>LROSSBY</code>, the overturn time likewise, $\tau/\tau_\odot = [\tau_0 + f(\tau - \tau_0)]/\tau_\odot$; otherwise 1.</p>
+</li>
+<li>The factor:
+$$\mathtt{STRUCTFACTOR} = M^{a_M}\,\left(\frac{R}{R_\odot}\right)^{a_R}\left(\frac{L}{L_\odot}\right)^{a_L}\left(\frac{P_\mathrm{phot}}{P_{\mathrm{phot},\odot}}\right)^{a_P}\left(\frac{\tau}{\tau_\odot}\right)^{a_\tau}.$$</li>
+</ol>
+<p><strong>Design.</strong> The radius comes from $L$ and $T_\mathrm{eff}$, not from the model's outer radius. The mass is used as given, with no solar normalization in this routine.</p>
+<p><strong>KC's changes.</strong> 2025-05-30: the elements of <code>/PMMWIND/</code> reordered (reals first, then logicals and the character <code>AWIND</code>); the old order is kept as a comment.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Unused constants.</strong> <code>/CONST2/</code> and <code>/CONST3/</code> and the declaration of <code>AWIND</code> are included but only <code>CSIGL</code> (from <code>/CONST2/</code>) is used. Harmless; noted for the overhaul.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+AMCALC
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-AMCALC'>AMCALC</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-AMCALC'><h3><span class='kind'>subroutine</span>AMCALC</h3>
+<p class='muted'>lines 5–53 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/amcalc.f#L5-L53'>GitHub</a></p>
+<pre>SUBROUTINE AMCALC(SMASS,BL,TEFFL)</pre>
+<div class='notes'><p>Sets <code>STRUCTFACTOR</code>, the product of $M$, $R/R_\odot$, $L/L_\odot$, $P_\mathrm{phot}/P_{\mathrm{phot},\odot}$ and optionally $\tau/\tau_\odot$, each to its exponent from <code>/CWIND/</code> (Matt et al. 2012).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+AMCALC
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-CONST3'>/CONST3/</a>, <a href='../commons.html#c-CWIND'>/CWIND/</a>, <a href='../commons.html#c-OVRTRN'>/OVRTRN/</a>, <a href='../commons.html#c-PMMWIND'>/PMMWIND/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/mcowind.f.html#def-MCOWIND'>MCOWIND</a> <span class='muted'>(mcowind.f)</span></li>
+<li><a href='../files/mwind.f.html#def-MWIND'>MWIND</a> <span class='muted'>(mwind.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">5</span>      SUBROUTINE AMCALC(SMASS,BL,TEFFL)
+<span class="ln">6</span>
+<span class="ln">7</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">8</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">9</span>      IMPLICIT INTEGER*4(I,J,K,M,N)
+<span class="ln">10</span>
+<span class="ln">11</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">12</span>      COMMON/CONST1/CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">13</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">14</span>      COMMON/CONST3/CDELRL,CMIXL,CMIXL2,CMIXL3,CLNDP,CSECYR
+<span class="ln">15</span>C MHP 8/17 ADDED EXCEN, C_2 TO COMMON BLOCK FOR MATT ET AL. 2012 CENT. TERM
+<span class="ln">16</span>      COMMON/CWIND/WMAX,EXMD,EXW,EXTAU,EXR,EXM,EXL,EXPR,CONSTFACTOR,
+<span class="ln">17</span>     *             STRUCTFACTOR,EXCEN,C_2,LJDOT0
+<span class="ln">18</span>C      COMMON/CWIND/WMAX,EXMD,EXW,EXTAU,EXR,EXM,CONSTFACTOR,STRUCTFACTOR,LJDOT0
+<span class="ln">19</span>      CHARACTER*3 AWIND
+<span class="ln">20</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">21</span>C       COMMON/PMMWIND/AWIND,LMWIND,LROSSBY,LBSCALE,PMMA,PMMB,PMMC,PMMD,PMMM,
+<span class="ln">22</span>C      *         PMMJD,PMMMD,PMMSOLP,PMMSOLW,PMMSOLTAU
+<span class="ln">23</span>      COMMON/PMMWIND/PMMA,PMMB,PMMC,PMMD,PMMM,PMMJD,PMMMD,PMMSOLP,PMMSOLW,PMMSOLTAU,
+<span class="ln">24</span>     *         LMWIND,LROSSBY,LBSCALE,AWIND
+<span class="ln">25</span>      COMMON/OVRTRN/LNEWTCZ,LCALCENV,TAUCZ,TAUCZ0,PPHOT,PPHOT0,FRACSTEP
+<span class="ln">26</span>      SAVE
+<span class="ln">27</span>
+<span class="ln">28</span>C G Somers, 6/16
+<span class="ln">29</span>C THIS SHORT SUBROUTINE WILL USE THE DELIVERED STRUCTURAL VARIABLES TO DETERMINE
+<span class="ln">30</span>C THE STRENGTH OF THE TORQUE, ACCORDING TO THE MATT ET AL. (2012) FORMULATION.
+<span class="ln">31</span>C
+<span class="ln">32</span>C COLLECT THE RELEVANT STRUCTURE VARIABLES, AND
+<span class="ln">33</span>C     MASS
+<span class="ln">34</span>      RMASS = SMASS
+<span class="ln">35</span>C     RADIUS
+<span class="ln">36</span>      RL = 0.5D0*(BL+CLSUNL-C4PIL-CSIGL-4.D0*TEFFL)
+<span class="ln">37</span>      RTOT  = DEXP(CLN*RL)
+<span class="ln">38</span>      RRAD = RTOT/CRSUN
+<span class="ln">39</span>C     LUMINOSITY
+<span class="ln">40</span>      RLUM = 10.**BL
+<span class="ln">41</span>C     PHOTOSPHERIC PRESSURE
+<span class="ln">42</span>      RPHOT = 10.**(PPHOT0+FRACSTEP*(PPHOT-PPHOT0))/(10.**PMMSOLP)
+<span class="ln">43</span>C     CONVECTIVE OVERTURN TIMESCALE
+<span class="ln">44</span>      IF(LROSSBY)THEN
+<span class="ln">45</span>         RTAU = (TAUCZ0+FRACSTEP*(TAUCZ-TAUCZ0))/PMMSOLTAU
+<span class="ln">46</span>      ELSE
+<span class="ln">47</span>         RTAU = 1.
+<span class="ln">48</span>      ENDIF
+<span class="ln">49</span>C     COMBINE THEM ALL
+<span class="ln">50</span>      STRUCTFACTOR = RMASS**EXM * RRAD**EXR * RLUM**EXL * RPHOT**EXPR
+<span class="ln">51</span>     *               * RTAU**EXTAU
+<span class="ln">52</span>      RETURN
+<span class="ln">53</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Settled. Question 1 (units of <code>SMASS</code>): <a href="../files/mdot.f.html#def-MDOT">MDOT</a> updates it as <code>SMASS + DELM/CMSUN</code>, and COWIND's header says "stellar mass (solar units)". Fix: state it; drop the question.</li>
+<li>Wrong question. Question 2 (mixed precision of <code>10.**BL</code>): <code>10.</code> is exact in single precision and is promoted to double before the power, so nothing is lost. Fix: drop it.</li>
+</ol>
+<p>Revised: <code>SMASS</code> in solar masses stated; questions 1 and 2 dropped.</p></div></details>
+</main></body></html>

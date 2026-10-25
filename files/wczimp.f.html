@@ -1,0 +1,187 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>wczimp.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ wczimp.f</span></header><main>
+<h1>wczimp.f</h1>
+<p class='muted'>134 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/wczimp.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>WCZIMP</code> sets the rotation of a convection zone (shells <code>ISTART</code>–<code>IEND</code>) at fixed total angular momentum, as <a href="../files/wcz.f.html">wcz.f</a> did, and adds options to impose a rotation profile on the radiative interior below the surface convection zone (JNT, 2015/05/14, copied into this code 2025/09/03–04). <code>IMPJMOD</code> ("impose J model", <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a>'s comment) chooses: 0, no effect; 1, solid-body rotation; 2, a solid-body core decoupled from the surface convection zone; 3, a solid-body core coupled to it.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/getrot.f.html#def-GETROT">GETROT</a> and <a href="../files/getw.f.html#def-GETW">GETW</a> (in place of <code>WCZ</code> since 09/25).</li>
+<li><strong>What it calls:</strong> <a href="../files/solid.f.html#def-SOLID">SOLID</a>, for the zone, single shells, or the interior.</li>
+<li><strong>Inputs and outputs:</strong> the arguments, as in <a href="../files/solid.f.html">solid.f</a>: <code>HJM</code>, <code>OMEGA</code>, <code>HI</code>, <code>QIW</code>, <code>ETA2</code>, <code>R0</code> are updated.</li>
+<li><strong>COMMON blocks:</strong> <code>SBROT</code> (<code>LSOLID</code>, <code>IMPJMOD</code>, set by <code>PARMIN</code>; shared with <code>GETW</code>, <code>MIDMOD</code>, <code>SECULR</code>), <code>ROT</code> (<code>WALPCZ</code>), <code>CONST1</code>.</li>
+</ul>
+<p><strong>The method.</strong> With $m_j$ = <code>HS2</code>, $j_j$ = <code>HJM</code>, $I_j$ = <code>HI</code>, $\alpha$ = <code>WALPCZ</code>, $r_j = 10^{\texttt{HR}(j)}$:</p>
+<ul>
+<li><strong>Solid body</strong> for the zone if $\alpha &gt; 0$, <code>LSOLID</code>, <code>IMPJMOD = 1</code>, or the zone is not the surface one (<code>IEND &lt; M</code>).</li>
+<li><strong><code>IMPJMOD = 2</code>:</strong> the zone follows $\Omega_j = \Omega_0 r_j^{\alpha}$ with $\Omega_0 = \sum_\mathrm{cz} m_j j_j / \sum_\mathrm{cz} r_j^{\alpha} I_j$; the interior (shells 1 to <code>ISTART-1</code>) is then made a solid body on its own, keeping its own angular momentum.</li>
+<li><strong><code>IMPJMOD = 3</code>:</strong> the interior and the zone share one angular momentum budget; the interior rotates at the rate of the zone's base:
+  $$\Omega_0 = \frac{\sum_{j \le N} m_j j_j}{r_\mathrm{s}^{\alpha}\sum_{j \le \mathrm{s}} I_j + \sum_{\mathrm{s} &lt; j \le N} r_j^{\alpha} I_j},$$
+  with s = <code>ISTART</code> and $N$ = <code>IEND</code>; then $\Omega_j = \Omega_0 r_j^{\alpha}$ in the zone, $\Omega_j = \Omega_\mathrm{s}$ below it.</li>
+<li><strong>Constant specific angular momentum</strong> if $\alpha \le -2$ (and <code>IMPJMOD = 0</code>), as in <code>WCZ</code>.</li>
+<li><strong>Otherwise the power law</strong> for the zone alone, as in <code>WCZ</code>.
+After each assignment, <code>SOLID</code> is called on single shells to make $\Omega$, $I$ and $j$ consistent.</li>
+</ul></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The interior's moments of inertia.</strong> In <code>IMPJMOD = 2</code> and <code>3</code>, the interior's $I_j$ are those in <code>HI</code> on entry (from the previous rotation), and only the final <code>SOLID</code> call updates them. Is one pass enough, or should the budget be iterated?</li>
+<li><strong><code>IMPJMOD = 3</code> and <code>SOLID</code>.</strong> After the interior is set to $\Omega_\mathrm{s}$, <code>SOLID</code> is called on shells 1 to <code>ISTART-1</code>, which conserves their total angular momentum and may change $\Omega$ again. Does the interior stay at the base's rate?</li>
+<li><strong>Dates in the comments.</strong> The header says "copy of 2025/05/14", the next comments "2015/05/14"; <code>PARMIN</code> says "05/15". Which is the original date?</li>
+<li><strong>$\alpha = 0$.</strong> <code>WALPCZ = 0</code> (with <code>IMPJMOD = 0</code>) reaches the power-law branch, while <a href="../files/wcz.f.html#def-WCZ">WCZ</a> treated it as solid body; the result is the same rotation, computed shell by shell.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-WCZIMP'>WCZIMP</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-WCZIMP'><h3><span class='kind'>subroutine</span>WCZIMP</h3>
+<p class='muted'>lines 2–134 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/wczimp.f#L2-L134'>GitHub</a></p>
+<pre>SUBROUTINE WCZIMP(HD,HJM,HR,HS,HS2,ISTART,IEND,ETA2,HI,OMEGA,</pre>
+<div class='notes'><p>Rotation of a convection zone at fixed angular momentum (solid body, constant $j$, $\Omega \propto r^{\alpha}$), with options to impose solid-body rotation on the interior, decoupled from or coupled to the surface zone (<code>IMPJMOD</code>).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-ROT'>/ROT/</a>, <a href='../commons.html#c-SBROT'>/SBROT/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/solid.f.html#def-SOLID'>SOLID</a> <span class='muted'>(solid.f)</span> ×7</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/getrot.f.html#def-GETROT'>GETROT</a> <span class='muted'>(getrot.f)</span> ×2</li>
+<li><a href='../files/getw.f.html#def-GETW'>GETW</a> <span class='muted'>(getw.f)</span> ×2</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE WCZIMP(HD,HJM,HR,HS,HS2,ISTART,IEND,ETA2,HI,OMEGA,
+<span class="ln">3</span>     *               QIW,R0,M)
+<span class="ln">4</span>
+<span class="ln">5</span>      PARAMETER(JSON=5000)
+<span class="ln">6</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">7</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">8</span>      COMMON/SBROT/LSOLID,IMPJMOD
+<span class="ln">9</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">10</span>      COMMON/ROT/WNEW,WALPCZ,ACFPFT,ITFP1,ITFP2,LROT,LINSTB,LWNEW
+<span class="ln">11</span>      DIMENSION HD(JSON),HJM(JSON),HR(JSON),HS(JSON),HS2(JSON),
+<span class="ln">12</span>     *  ETA2(JSON),HI(JSON),OMEGA(JSON),QIW(JSON),R0(JSON)
+<span class="ln">13</span>      SAVE
+<span class="ln">14</span>
+<span class="ln">15</span>C JNT 2025/09/03 copy of 2025/05/14 TO MAKE THE CODE ENFORCE
+<span class="ln">16</span>C SPECIFIC ROTATION PROFILES
+<span class="ln">17</span>
+<span class="ln">18</span>C JNT 2025/09/03 COPY OF 2015/05/07 ADD IEND.LT.M TO ENFORCE SB
+<span class="ln">19</span>C ROTATION IN CONVECTIVE ZONES THAT ARE NOT THE SURFACE CONVECTIVE
+<span class="ln">20</span>C ZONE EVEN IF WALPCZ IS TURNED ON (I.E. WALPCZ NOW ONLY AFFECTS
+<span class="ln">21</span>C SURFACE CONVECTION ZONES)
+<span class="ln">22</span>
+<span class="ln">23</span>      IF((WALPCZ.GT.0.0D0) .OR. (LSOLID) .OR. (IMPJMOD.EQ.1) .OR. (IEND.LT.M)) THEN
+<span class="ln">24</span>C  SOLID BODY ROTATION IN CONVECTIVE REGIONS.
+<span class="ln">25</span>         CALL <a href="../files/solid.f.html#def-SOLID" title="SOLID in solid.f">SOLID</a>(HD,HJM,HR,HS,HS2,ISTART,IEND,ETA2,HI,OMEGA,
+<span class="ln">26</span>     *              QIW,R0,M)     
+<span class="ln">27</span>C JNT 2025/09/03 COPY OF 2015/05/14 ADD OPTION TO MAKE EVERYTHING
+<span class="ln">28</span>C BELOW THE SURFACE CONVECTION ZONE ROTATE AS A SOLID BODY, 
+<span class="ln">29</span>C DETACHED FROM WHAT IS HAPPENING IN THE CONVECTION ZONE
+<span class="ln">30</span>      ELSE IF(IMPJMOD.EQ.2)THEN
+<span class="ln">31</span>         CJTOT = HJM(ISTART)*HS2(ISTART)
+<span class="ln">32</span>         CMTOT = DEXP(CLN*WALPCZ*HR(ISTART))*HI(ISTART)
+<span class="ln">33</span>         DO 30 J = ISTART+1,IEND
+<span class="ln">34</span>            CJTOT = CJTOT + HJM(J)*HS2(J)
+<span class="ln">35</span>            CMTOT = CMTOT + DEXP(CLN*WALPCZ*HR(J))*HI(J)
+<span class="ln">36</span>   30    CONTINUE      
+<span class="ln">37</span> 
+<span class="ln">38</span>C  ASSIGN NEW RUN OF J/M IN THE C.Z. AND FIND THE NEW RUN OF OMEGA.
+<span class="ln">39</span>         W0 = CJTOT/CMTOT
+<span class="ln">40</span>         DO 31 J = ISTART,IEND
+<span class="ln">41</span>            OMEGA(J) = W0*DEXP(CLN*WALPCZ*HR(J))
+<span class="ln">42</span>            HJM(J) = OMEGA(J)*HI(J)/HS2(J)
+<span class="ln">43</span>            JSTART = J
+<span class="ln">44</span>            JEND = J
+<span class="ln">45</span>            CALL <a href="../files/solid.f.html#def-SOLID" title="SOLID in solid.f">SOLID</a>(HD,HJM,HR,HS,HS2,JSTART,JEND,ETA2,HI,
+<span class="ln">46</span>     *                 OMEGA,QIW,R0,M)
+<span class="ln">47</span>   31    CONTINUE
+<span class="ln">48</span>         IF (ISTART.GT.1) THEN
+<span class="ln">49</span>            CALL <a href="../files/solid.f.html#def-SOLID" title="SOLID in solid.f">SOLID</a>(HD,HJM,HR,HS,HS2,1,ISTART-1,ETA2,HI,
+<span class="ln">50</span>     *                 OMEGA,QIW,R0,M)
+<span class="ln">51</span>         ENDIF
+<span class="ln">52</span>C JNT 2025/09/04 REPLICATING 2015/05/14 ADD OPTION TO MAKE 
+<span class="ln">53</span>C EVERYTHING BELOW THE SURFACE CONVECTION ZONE ROTATE AS A
+<span class="ln">54</span>C SOLID BODY AT THE RATE OF THE BASE OF THE CONVECTION ZONE.
+<span class="ln">55</span>      ELSE IF(IMPJMOD.EQ.3) THEN
+<span class="ln">56</span>         CJTOT = HJM(1)*HS2(1)
+<span class="ln">57</span>         CMTOT = DEXP(CLN*WALPCZ*HR(ISTART))*HI(1)
+<span class="ln">58</span>         IF (ISTART.GT.1) THEN
+<span class="ln">59</span>            DO 32 J = 2,ISTART
+<span class="ln">60</span>               CJTOT = CJTOT + HJM(J)*HS2(J)
+<span class="ln">61</span>               CMTOT = CMTOT + DEXP(CLN*WALPCZ*HR(ISTART))*HI(J)
+<span class="ln">62</span>   32       CONTINUE
+<span class="ln">63</span>         ENDIF
+<span class="ln">64</span>         DO 33 J = (ISTART+1),IEND
+<span class="ln">65</span>            CJTOT = CJTOT + HJM(J)*HS2(J)
+<span class="ln">66</span>            CMTOT = CMTOT + DEXP(CLN*WALPCZ*HR(J))*HI(J)
+<span class="ln">67</span>   33    CONTINUE
+<span class="ln">68</span>C  ASSIGN NEW RUN OF J/M IN THE C.Z. AND FIND THE NEW RUN OF OMEGA.
+<span class="ln">69</span>
+<span class="ln">70</span>         W0 = CJTOT/CMTOT
+<span class="ln">71</span>         DO 34 J = ISTART,IEND
+<span class="ln">72</span>            OMEGA(J) = W0*DEXP(CLN*WALPCZ*HR(J))
+<span class="ln">73</span>            HJM(J) = OMEGA(J)*HI(J)/HS2(J) 
+<span class="ln">74</span>            JSTART = J
+<span class="ln">75</span>            JEND = J
+<span class="ln">76</span>            CALL <a href="../files/solid.f.html#def-SOLID" title="SOLID in solid.f">SOLID</a>(HD,HJM,HR,HS,HS2,JSTART,JEND,ETA2,HI,
+<span class="ln">77</span>     *                 OMEGA,QIW,R0,M)
+<span class="ln">78</span>   34    CONTINUE         
+<span class="ln">79</span>         IF (ISTART.GT.1) THEN
+<span class="ln">80</span>            DO 35 J = 1,(ISTART-1)
+<span class="ln">81</span>               OMEGA(J) = OMEGA(ISTART)
+<span class="ln">82</span>               HJM(J) = OMEGA(J)*HI(J)/HS2(J) 
+<span class="ln">83</span>   35       CONTINUE   
+<span class="ln">84</span>            CALL <a href="../files/solid.f.html#def-SOLID" title="SOLID in solid.f">SOLID</a>(HD,HJM,HR,HS,HS2,1,ISTART-1,ETA2,HI,
+<span class="ln">85</span>     *                 OMEGA,QIW,R0,M)
+<span class="ln">86</span>         ENDIF              
+<span class="ln">87</span>        
+<span class="ln">88</span>         
+<span class="ln">89</span>      
+<span class="ln">90</span>      ELSE IF((WALPCZ.LE.-2.0D0) .AND. (IMPJMOD.EQ.0))THEN
+<span class="ln">91</span>C  CONSTANT SPECIFIC ANGULAR MOMENTUM PER UNIT MASS IN THE C.Z.
+<span class="ln">92</span>C  FIND TOTAL MASS AND ANGULAR MOMENTUM OF C.Z.
+<span class="ln">93</span>         CJTOT = HJM(ISTART)*HS2(ISTART)
+<span class="ln">94</span>         CMTOT = HS2(ISTART)
+<span class="ln">95</span>         DO 36 J = ISTART+1,IEND
+<span class="ln">96</span>            CJTOT = CJTOT + HJM(J)*HS2(J)
+<span class="ln">97</span>            CMTOT = CMTOT + HS2(J)
+<span class="ln">98</span>   36    CONTINUE
+<span class="ln">99</span>C  ASSIGN NEW RUN OF J/M IN THE C.Z. AND FIND THE NEW RUN OF OMEGA.
+<span class="ln">100</span>         CJNEW = CJTOT/CMTOT
+<span class="ln">101</span>         DO 40 J = ISTART,IEND
+<span class="ln">102</span>            HJM(J) = CJNEW
+<span class="ln">103</span>            OMEGA(J) = CJNEW*HS2(J)/HI(J)
+<span class="ln">104</span>            JSTART = J
+<span class="ln">105</span>            JEND = J
+<span class="ln">106</span>            CALL <a href="../files/solid.f.html#def-SOLID" title="SOLID in solid.f">SOLID</a>(HD,HJM,HR,HS,HS2,JSTART,JEND,ETA2,HI,
+<span class="ln">107</span>     *                 OMEGA,QIW,R0,M)
+<span class="ln">108</span>   40    CONTINUE
+<span class="ln">109</span>      ELSE
+<span class="ln">110</span>C  GENERAL LAW FOR OMEGA IN C.Z.: OMEGA = C*R**WALPCZ,WHERE C IS A CONSTANT
+<span class="ln">111</span>C  FOR THE ENTIRE C.Z. IF THIS HOLDS, THE RUN OF J/M CAN BE FOUND BY
+<span class="ln">112</span>C  SOLVING FOR THE CONSTANT BY REQUIRING THAT THE TOTAL J OF THE C.Z. BE
+<span class="ln">113</span>C  CONSERVED AND THEN USING J/M=C*R**WALPCZ*(MOMENT OF INERTIA PER UNIT
+<span class="ln">114</span>C  MASS).
+<span class="ln">115</span>C  FIND TOTAL MASS AND ANGULAR MOMENTUM OF C.Z.
+<span class="ln">116</span>         CJTOT = HJM(ISTART)*HS2(ISTART)
+<span class="ln">117</span>         CMTOT = DEXP(CLN*WALPCZ*HR(ISTART))*HI(ISTART)
+<span class="ln">118</span>         DO 50 J = ISTART+1,IEND
+<span class="ln">119</span>            CJTOT = CJTOT + HJM(J)*HS2(J)
+<span class="ln">120</span>            CMTOT = CMTOT + DEXP(CLN*WALPCZ*HR(J))*HI(J)
+<span class="ln">121</span>   50    CONTINUE
+<span class="ln">122</span>C  ASSIGN NEW RUN OF J/M IN THE C.Z. AND FIND THE NEW RUN OF OMEGA.
+<span class="ln">123</span>         W0 = CJTOT/CMTOT
+<span class="ln">124</span>         DO 60 J = ISTART,IEND
+<span class="ln">125</span>            OMEGA(J) = W0*DEXP(CLN*WALPCZ*HR(J))
+<span class="ln">126</span>            HJM(J) = OMEGA(J)*HI(J)/HS2(J)
+<span class="ln">127</span>            JSTART = J
+<span class="ln">128</span>            JEND = J
+<span class="ln">129</span>            CALL <a href="../files/solid.f.html#def-SOLID" title="SOLID in solid.f">SOLID</a>(HD,HJM,HR,HS,HS2,JSTART,JEND,ETA2,HI,
+<span class="ln">130</span>     *                 OMEGA,QIW,R0,M)
+<span class="ln">131</span>   60    CONTINUE
+<span class="ln">132</span>      ENDIF
+<span class="ln">133</span>      RETURN
+<span class="ln">134</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings.</p>
+<p>No change.</p></div></details>
+</main></body></html>

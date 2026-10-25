@@ -1,0 +1,242 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>microdiff_run.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ microdiff_run.f</span></header><main>
+<h1>microdiff_run.f</h1>
+<p class='muted'>164 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/microdiff_run.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Diffuses one species over one time step on the equally spaced grid, for <a href="../files/microdiff.f.html#def-MICRODIFF">MICRODIFF</a>, and returns the change in its abundance. The comments describe the diffusion equation as two terms: one with $d\ln P/dr$ and the abundance gradient (solved explicitly, by the two-step Lax–Wendroff scheme of Numerical Recipes), and one with the second derivative of the abundance (solved implicitly).</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the equal grid and midpoint variables from <a href="../files/microdiff_mte.f.html#def-MICRODIFF_MTE">MICRODIFF_MTE</a>: mass <code>EM</code>, radius <code>ER</code>, density, temperature, $d\ln P/dr$, $\nabla$ and the three-species abundances <code>ESPEC(3,·)</code>; the spacing <code>DR</code>; <code>DT</code> and <code>STOT</code> in Bahcall–Loeb units; and the species' weight <code>THEA</code>, charge <code>THEZ</code> and column <code>J</code> (1 for hydrogen, 3 for metals or a light element).</li>
+<li><strong>Who calls it:</strong> only <code>MICRODIFF</code>, once per diffused species.</li>
+<li><strong>What it calls:</strong> <a href="../files/microdiff_cod.f.html#def-MICRODIFF_COD">MICRODIFF_COD</a> (the coefficients, twice), <a href="../files/lax_wendrof1.f.html#def-LAX_WENDROF1">LAX_WENDROF1</a> and <a href="../files/lax_wendrof2.f.html#def-LAX_WENDROF2">LAX_WENDROF2</a> (the explicit term), <a href="../files/get_imp_diffco.f.html#def-GET_IMP_DIFFCO">GET_IMP_DIFFCO</a> (the matrix) and <a href="../files/tridiag_gs.f.html#def-TRIDIAG_GS">TRIDIAG_GS</a> (its solution).</li>
+<li><strong>Output:</strong> <code>ESPEC(J,·)</code> is overwritten with the change $X^\mathrm{new}_i - X^\mathrm{old}_i$; <code>EDXDR</code> (the hydrogen concentration gradient, filled on the hydrogen call) is kept for later calls. A line per iteration goes to <code>ISHORT</code>, and a warning to <code>IOWR</code> and <code>ISHORT</code> if the iteration does not converge.</li>
+<li><strong>COMMON blocks:</strong> <code>/GRAVST/</code> (<code>GRTOL</code>, <code>NITER_GS</code>), <code>/CONST1/</code> ($4\pi$), <code>/LUOUT/</code>; <code>/THEAGE/</code> is declared but not used.</li>
+</ul>
+<p><strong>The method.</strong> Let $X_i$ be the abundance at grid point $i$ (radius $r_i$, mass $m_i$), and $X_{i+1/2}$ at the midpoints.</p>
+<ol>
+<li><strong>Coefficients at the points.</strong> <code>MICRODIFF_COD</code> gives the advective coefficient $C_{1,i}$ (<code>ECOD1</code>) and the diffusion coefficient $C_{2,i}$ (<code>ECOD2</code>).</li>
+<li>
+<p><strong>Lax–Wendroff, first half step</strong> (<code>LAX_WENDROF1</code>), the change at the midpoints:
+$$\Delta X_{i+1/2} = \frac{4\pi\,\Delta t}{2}\;\frac{C_{1,i+1} - C_{1,i}}{m_{i+1} - m_i},$$
+where the first cell takes $C_{1,1} = 0$ and $m_1 = 0$, and the last cell $C_{1,N} = 0$ and $m_N =$ <code>STOT</code>, so the first and last cells reach to the centre and the surface.</p>
+</li>
+<li>
+<p><strong>Coefficients at the midpoints</strong>, from the half-step abundances $X_{i+1/2} + \Delta X_{i+1/2}$.</p>
+</li>
+<li>
+<p><strong>Lax–Wendroff, full step</strong> (<code>LAX_WENDROF2</code>), at the points:
+$$X&#x27;_i = X_i + 4\pi\,\Delta t\;\frac{C_{1,i+1/2} - C_{1,i-1/2}}{m_{i+1/2} - m_{i-1/2}},$$
+with $C_{1,1/2} = m_{1/2} = 0$ at the first point, and $C_{1,N+1/2} = 0$, $m_{N+1/2} =$ <code>STOT</code> at the last.</p>
+</li>
+<li>
+<p><strong>The implicit term.</strong> With $\alpha_i = 4\pi\,\Delta t / (\Delta r\, \Delta m_i)$ (<code>ALPHA</code>, where $\Delta m_i = m_{i+1/2} - m_{i-1/2}$, from the centre for $i=1$ and to <code>STOT</code> for $i=N$), <code>GET_IMP_DIFFCO</code> builds and <code>TRIDIAG_GS</code> solves
+$$X_i - \alpha_i\left[C_{2,i+1/2}\,(X_{i+1}-X_i) - C_{2,i-1/2}\,(X_i - X_{i-1})\right] = X&#x27;_i .$$
+The loop repeats until the largest change between iterations is below <code>GRTOL</code>, at most <code>NITER_GS</code> times.</p>
+</li>
+<li>
+<p><strong>Result:</strong> $\Delta X_i = X^\mathrm{new}_i - X_i$ in <code>ESPEC(J,·)</code>.</p>
+</li>
+</ol>
+<p><strong>Design.</strong> The change rather than the new abundance is returned, as the comments explain, so that the interpolation back to the model grid adds less error. The first and last cells hold the masses of the convective core and envelope, whose changes <a href="../files/microdiff_etm.f.html#def-MICRODIFF_ETM">MICRODIFF_ETM</a> then applies to every point inside them.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: unused arguments <code>NLIGHT</code> and <code>CSLIGHT</code> removed.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>An iteration that cannot change anything.</strong> Inside the loop, <code>GET_IMP_DIFFCO</code> corrects <code>ECOD2_H</code> by <code>EQCOD2X_H * ED_H</code>, but <code>EQCOD2X_H</code> is set to zero just before ("only used in GRSETT … retained for legacy"). So the matrix and the right-hand side are the same in every iteration, and the second iteration always reproduces the first. Is the loop (and the convergence test on <code>GRTOL</code>) still meaningful, or should the coefficients be recomputed from the new abundances?</li>
+<li><strong>The convergence test is one-sided.</strong> <code>DXMAX</code> takes the largest <em>signed</em> change <code>ED(I)-ED_P(I)</code>, starting from zero; negative changes are never seen. Should it be the absolute value?</li>
+<li><strong>The midpoint change.</strong> <code>ED_H(I) = 0.5*(ED(I)+ED(I-1)-…)</code> for <code>I = 2..NPT</code> assigns to midpoint <code>I</code> the mean of points <code>I-1</code> and <code>I</code>, while in <code>MICRODIFF_MTE</code> midpoint <code>I</code> lies between points <code>I</code> and <code>I+1</code>. It has no effect now (see question 1), but would if <code>EQCOD2X_H</code> were used.</li>
+<li><strong>A comment that names a different element.</strong> The convergence comment speaks of "the corrections to the hydrogen abundance" and the solve of "the new run of Li"; the routine diffuses any species.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+MICRODIFF_RUN
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+SUBROUTINE MICRODIFF_RUN(NLIGHT,CSLIGHT,DR,DT,STOT,NPT,EM,ER,EDEN,ETEM,  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MICRODIFF_RUN'>MICRODIFF_RUN</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MICRODIFF_RUN'><h3><span class='kind'>subroutine</span>MICRODIFF_RUN</h3>
+<p class='muted'>lines 5–164 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/microdiff_run.f#L5-L164'>GitHub</a></p>
+<pre>SUBROUTINE MICRODIFF_RUN(DR,DT,STOT,NPT,EM,ER,EDEN,ETEM,</pre>
+<div class='notes'><p>One species, one step: explicit two-step Lax–Wendroff for the advective term, then an implicit tridiagonal solve for the diffusive term (equations above). Returns the change in abundance.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+MICRODIFF_RUN
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+SUBROUTINE MICRODIFF_RUN(NLIGHT,CSLIGHT,DR,DT,STOT,NPT,EM,ER,EDEN,ETEM,  ! KC 2025-05-31</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-GRAVST'>/GRAVST/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-THEAGE'>/THEAGE/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/get_imp_diffco.f.html#def-GET_IMP_DIFFCO'>GET_IMP_DIFFCO</a> <span class='muted'>(get_imp_diffco.f)</span></li>
+<li><a href='../files/lax_wendrof1.f.html#def-LAX_WENDROF1'>LAX_WENDROF1</a> <span class='muted'>(lax_wendrof1.f)</span></li>
+<li><a href='../files/lax_wendrof2.f.html#def-LAX_WENDROF2'>LAX_WENDROF2</a> <span class='muted'>(lax_wendrof2.f)</span></li>
+<li><a href='../files/microdiff_cod.f.html#def-MICRODIFF_COD'>MICRODIFF_COD</a> <span class='muted'>(microdiff_cod.f)</span> ×2</li>
+<li><a href='../files/tridiag_gs.f.html#def-TRIDIAG_GS'>TRIDIAG_GS</a> <span class='muted'>(tridiag_gs.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/microdiff.f.html#def-MICRODIFF'>MICRODIFF</a> <span class='muted'>(microdiff.f)</span> ×3</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">5</span>      SUBROUTINE MICRODIFF_RUN(DR,DT,STOT,NPT,EM,ER,EDEN,ETEM,
+<span class="ln">6</span>     *               EHQPR,EDELR,ESPEC,EDXDR,EM_H,ER_H,EDEN_H,ETEM_H,EHQPR_H,
+<span class="ln">7</span>     *               EDELR_H,ESPEC_H,EDXDR_H,THEA,THEZ,J)
+<span class="ln">8</span>
+<span class="ln">9</span>      PARAMETER (JSON=5000)
+<span class="ln">10</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">11</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">12</span>      COMMON/GRAVST/GRTOL,ILAMBDA,NITER_GS,LDIFY
+<span class="ln">13</span>      COMMON/THEAGE/DAGE
+<span class="ln">14</span>C MHP 3/94 ADDED METAL DIFFUSION
+<span class="ln">15</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">16</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK, ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">17</span>C       DIMENSION HCOMP(15,JSON),HQPR(JSON),HR(JSON),HS1(JSON),HT(JSON),
+<span class="ln">18</span>C      *          HD(JSON),HRU(JSON),HTU(JSON),LC(JSON)
+<span class="ln">19</span>      DIMENSION EM(JSON),ER(JSON),EDEN(JSON),ETEM(JSON),EHQPR(JSON),
+<span class="ln">20</span>     *          EDELR(JSON),ESPEC(3,JSON),EDXDR(JSON),EM_H(JSON),ER_H(JSON),
+<span class="ln">21</span>     *          EDEN_H(JSON),ETEM_H(JSON),EHQPR_H(JSON),EDELR_H(JSON),
+<span class="ln">22</span>     *          ESPEC_H(3,JSON),EDXDR_H(JSON)
+<span class="ln">23</span>      DIMENSION ED(JSON),ED_H(JSON),ED_ORIG(JSON),ED_ORIG_H(JSON),
+<span class="ln">24</span>     *          ED_P(JSON),ED_PRIME(JSON),ECOD1(JSON),  ! ED_HALF(JSON)
+<span class="ln">25</span>     *          ECOD1_H(JSON),ECOD2(JSON),ECOD2_H(JSON),
+<span class="ln">26</span>     *          EQCOD2X_H(JSON)
+<span class="ln">27</span>      DIMENSION ALPHA(JSON),A(JSON),B(JSON),C(JSON)
+<span class="ln">28</span>      SAVE
+<span class="ln">29</span>C
+<span class="ln">30</span>C THIS PROGRAM EXECUTES THE DIFFUSING OF ELEMENTS. ALL OF THE RELEVANT
+<span class="ln">31</span>C PARAMETERS ARE DEFINED AT BOTH THE GRID POINTS AND MIDPOINTS.
+<span class="ln">32</span>C
+<span class="ln">33</span>C CREATE DUMMY VECTORS FOR THE DIFFUSING ELEMENT. THIS ALLOWS A SINGLE
+<span class="ln">34</span>C ELEMENT TO BE EASILY PASSED INTO SUB-ROUTINES.
+<span class="ln">35</span>C
+<span class="ln">36</span>      DO I=1,NPT-1
+<span class="ln">37</span>         ED(I) = ESPEC(J,I)
+<span class="ln">38</span>         ED_H(I) = ESPEC_H(J,I)
+<span class="ln">39</span>      ENDDO
+<span class="ln">40</span>      ED(NPT) = ESPEC(J,NPT)
+<span class="ln">41</span>C
+<span class="ln">42</span>C STORE ORIGINAL RUN OF LIGHT ELEMENT MASS FRACTIONS IN VECTOR ED_ORIG.
+<span class="ln">43</span>C THE CHANGE IN ELEMENTS (ED - ED_ORIG) IS INTERPOLATED BACK TO THE
+<span class="ln">44</span>C ORIGINAL GRID AT THE END OF THE ROUTINE; THE CHANGE IN ABUNDANCE
+<span class="ln">45</span>C (RATHER THAN THE NEW RUN OF ABUNDANCE) IS USED TO MINIMIZE ERRORS
+<span class="ln">46</span>C ARISING FROM THE INTERPOLATION.
+<span class="ln">47</span>      DO I = 1,NPT-1
+<span class="ln">48</span>         ED_ORIG(I) = ED(I)
+<span class="ln">49</span>         ED_ORIG_H(I) = ED_H(I)
+<span class="ln">50</span>      ENDDO
+<span class="ln">51</span>      ED_ORIG(NPT) = ED(NPT)
+<span class="ln">52</span>c
+<span class="ln">53</span>C  SET THE FLAG LDOLI = TRUE, SO THAT THE LAX-WENDROF ROUTINES KNOW TO NOT
+<span class="ln">54</span>C  USE THE OLD METAL DIFFUSION VECTORS.
+<span class="ln">55</span>      LDOLI = .TRUE.
+<span class="ln">56</span>c
+<span class="ln">57</span>C NOW USE THE EQUALLY SPACED GRID TO CALUCLATE DIFFUSION COEFFICIENTS IN THE
+<span class="ln">58</span>C METHOD OF THE THOUL ROUTINE. MUCH OF THE FOLLOWING CODE WAS TAKEN FROM
+<span class="ln">59</span>c SETUP_LISETT.F.
+<span class="ln">60</span>C
+<span class="ln">61</span>      CALL <a href="../files/microdiff_cod.f.html#def-MICRODIFF_COD" title="MICRODIFF_COD in microdiff_cod.f">MICRODIFF_COD</a>(NPT,ESPEC,ER,EDEN,ETEM,EHQPR,EDELR,ECOD1,ECOD2,
+<span class="ln">62</span>     *                   EDXDR,THEA,THEZ,J)
+<span class="ln">63</span>C
+<span class="ln">64</span>C FIRST STEP OF TWO STEP LAX-WENDROFF METHOD. COMPUTE NEW ABUNDANCES AT ZONE
+<span class="ln">65</span>C MIDPOINTS USING THE LAX SCHEME :
+<span class="ln">66</span>C X(N+1/2,J+1/2)=1/2(X(N,J+1/2)-1/2(DT/DR)(COD1(N,J+1)-COD1(N,J))
+<span class="ln">67</span>C WHERE N IS THE TIME VARIABLE, J IS THE SPATIAL ONE, AND COD1 IS THE
+<span class="ln">68</span>C DIFFUSION COEFFICIENT.
+<span class="ln">69</span>C
+<span class="ln">70</span>      CALL <a href="../files/lax_wendrof1.f.html#def-LAX_WENDROF1" title="LAX_WENDROF1 in lax_wendrof1.f">LAX_WENDROF1</a>(DT,ECOD1,EM,NPT,STOT,ED_H,LDOLI)
+<span class="ln">71</span>C
+<span class="ln">72</span>C UPDATE ESPEC WITH THE NEW RUN OF ED_H, FOR THE PURPOSE OF
+<span class="ln">73</span>C CALUCLATING NEW DIFFUSION COEFFICIENTS.
+<span class="ln">74</span>C
+<span class="ln">75</span>      DO I=1,NPT-1
+<span class="ln">76</span>         ESPEC_H(J,I) = ED_ORIG_H(I) + ED_H(I)
+<span class="ln">77</span>      ENDDO
+<span class="ln">78</span>C
+<span class="ln">79</span>C GET NEW DIFFUSION COEFFICIENTS AT THE ZONE MIDPOINTS, USING THE
+<span class="ln">80</span>C PROVISIONAL SOLUTION. NOTE THAT NPT-1 MUST BE PASSED IN, AS THE
+<span class="ln">81</span>c MIDPOINTS HAVE ONE LESS GRID ELEMENT.
+<span class="ln">82</span>C
+<span class="ln">83</span>      NPT2 = NPT-1
+<span class="ln">84</span>      CALL <a href="../files/microdiff_cod.f.html#def-MICRODIFF_COD" title="MICRODIFF_COD in microdiff_cod.f">MICRODIFF_COD</a>(NPT2,ESPEC_H,ER_H,EDEN_H,ETEM_H,EHQPR_H,
+<span class="ln">85</span>     *     EDELR_H,ECOD1_H,ECOD2_H,EDXDR_H,THEA,THEZ,J)
+<span class="ln">86</span>C
+<span class="ln">87</span>C USING THE NEW COEFFICIENTS, SOLVE FOR THE NEW RUN OF ABUNDANCES.
+<span class="ln">88</span>C NOTE : THE SR ACTUALLY RETURNS THE *CHANGE* IN THE ABUNDANCE AS A FUNCTION
+<span class="ln">89</span>C OF RADIUS, WHICH IS APPLIED TO THE ORIGINAL RUN OF ELEMENTS, RATHER THAN
+<span class="ln">90</span>C COMPUTING A NEW RUN OF ABUNDANCE AND TRANSFORMING IT BACK.  THIS IS DONE
+<span class="ln">91</span>C TO MINIMIZE ERRORS FROM THE INTERPOLATION.
+<span class="ln">92</span>C
+<span class="ln">93</span>      CALL <a href="../files/lax_wendrof2.f.html#def-LAX_WENDROF2" title="LAX_WENDROF2 in lax_wendrof2.f">LAX_WENDROF2</a>(DT,ECOD1_H,EM_H,ED,NPT,STOT,LDOLI)
+<span class="ln">94</span>C
+<span class="ln">95</span>C  NOW IMPLICITLY SOLVE FOR THE SECOND TERM (INVOLVING THE SECOND
+<span class="ln">96</span>C  DERIVATIVE OF THE COMPOSITION GRADIENT). FIRST DEFINE VECTOR ED_P,
+<span class="ln">97</span>C  WHICH IS THE ABUNDANCE AT THE START OF THE TIMESTEP, AND ELI_PRIME,
+<span class="ln">98</span>C  THE ABUNDANCE ONE WOULD HAVE WITHOUT THE SECOND TERM IN THE DIFFUSION
+<span class="ln">99</span>C  EQUATION.
+<span class="ln">100</span>      DO I = 1,NPT
+<span class="ln">101</span>         ED_P(I) = ED_ORIG(I)
+<span class="ln">102</span>         ED_PRIME(I) = ED(I)
+<span class="ln">103</span>      ENDDO
+<span class="ln">104</span>C  ALPHA IS THE NUMERICAL FACTOR IN FRONT OF THE DIFFUSION COEFFICIENTS.
+<span class="ln">105</span>      FAC = C4PI*DT/DR
+<span class="ln">106</span>      ALPHA(1) = FAC/EM_H(1)
+<span class="ln">107</span>      DO I = 2,NPT-1
+<span class="ln">108</span>         ALPHA(I) = FAC/(EM_H(I)-EM_H(I-1))
+<span class="ln">109</span>      ENDDO
+<span class="ln">110</span>      ALPHA(NPT) = FAC/(STOT-EM_H(NPT-1))
+<span class="ln">111</span>C  START ITERATION LOOP FOR THE NEW RUN OF ABUNDANCES.
+<span class="ln">112</span>      DO 100 ITER=1,NITER_GS
+<span class="ln">113</span>C  FIND CHANGE IN D AT THE ZONE MIDPOINTS, GIVEN CHANGE IN D AT
+<span class="ln">114</span>C  THE ZONE CENTERS.
+<span class="ln">115</span>         DO I = 2,NPT
+<span class="ln">116</span>            ED_H(I) = 0.5D0*(ED(I)+ED(I-1)-ED_P(I)-ED_P(I-1))
+<span class="ln">117</span>         ENDDO
+<span class="ln">118</span>C  STORE CURRENT RUN OF ABUNDANCES IN VECTOR ED_P. THE ITERATION
+<span class="ln">119</span>C  LOOP IS COMPLETED ONCE ED - ED_P IS EVERYWHERE LESS THAN THE TOLERANCE
+<span class="ln">120</span>C  GRTOL. ALSO ZERO OUT EQCOD2X_H, WHICH IS ONLY USED IN GRSETT (OLD SETTLING
+<span class="ln">121</span>C  ROUTINE), BUT RETAINED FOR LEGACY.
+<span class="ln">122</span>         DO I = 1,NPT-1
+<span class="ln">123</span>            ED_P(I) = ED(I)
+<span class="ln">124</span>            EQCOD2X_H(I) = 0.0
+<span class="ln">125</span>         ENDDO
+<span class="ln">126</span>         ED_P(NPT) = ED(NPT)
+<span class="ln">127</span>C  GET NEW DIFFUSION COEFFICIENTS, TAKING INTO ACCOUNT THE CHANGE IN D
+<span class="ln">128</span>C  FROM THE PREVIOUS ITERATION.
+<span class="ln">129</span>C
+<span class="ln">130</span>         CALL <a href="../files/get_imp_diffco.f.html#def-GET_IMP_DIFFCO" title="GET_IMP_DIFFCO in get_imp_diffco.f">GET_IMP_DIFFCO</a>(ALPHA,ECOD2_H,ED_H,EQCOD2X_H,A,B,C,NPT)
+<span class="ln">131</span>C
+<span class="ln">132</span>C  SOLVE THE TRIDIAGONAL MATRIX SYSTEM FOR THE NEW RUN OF LI.
+<span class="ln">133</span>C
+<span class="ln">134</span>         CALL <a href="../files/tridiag_gs.f.html#def-TRIDIAG_GS" title="TRIDIAG_GS in tridiag_gs.f">TRIDIAG_GS</a>(A,B,C,ED_PRIME,NPT,ED)
+<span class="ln">135</span>C
+<span class="ln">136</span>C  CHECK TO SEE IF THE CORRECTIONS TO THE HYDROGEN ABUNDANCE ARE SMALL
+<span class="ln">137</span>C  ENOUGH TO EXIT.
+<span class="ln">138</span>         DXMAX = 0.0D0
+<span class="ln">139</span>         IMAX = 0
+<span class="ln">140</span>         DO I = 1,NPT
+<span class="ln">141</span>            DX = ED(I)-ED_P(I)
+<span class="ln">142</span>            IF(DX.GT.DXMAX)THEN
+<span class="ln">143</span>               DXMAX = DX
+<span class="ln">144</span>               IMAX = I
+<span class="ln">145</span>            ENDIF
+<span class="ln">146</span>         ENDDO
+<span class="ln">147</span>         WRITE(ISHORT,90)ITER,DXMAX,IMAX
+<span class="ln">148</span> 90      FORMAT(1X,&#x27;ITERATION &#x27;,I3,&#x27; DXMAX &#x27;,1PE10.2,&#x27; IMAX &#x27;,I4)
+<span class="ln">149</span>C  EXIT ITERATION LOOP IF SYSTEM HAS CONVERGED.
+<span class="ln">150</span>         IF(DXMAX.LT.GRTOL)GOTO 120
+<span class="ln">151</span> 100  CONTINUE
+<span class="ln">152</span>      WRITE(IOWR,110)GRTOL,NITER_GS,DXMAX,IMAX
+<span class="ln">153</span>      WRITE(ISHORT,110)GRTOL,NITER_GS,DXMAX,IMAX
+<span class="ln">154</span> 110  FORMAT(1X,&#x27;MICRODIFF FAILED TO CONVERGE TO WITHIN &#x27;,1PE9.3,&#x27; IN &#x27;,I3,
+<span class="ln">155</span>     *     &#x27;ITERATIONS&#x27;/1X,&#x27;LAST ITERATION CHANGE IN D &#x27;,1PE9.3,
+<span class="ln">156</span>     *     &#x27; IN EQUALLY SPACED SHELL &#x27;,I5)
+<span class="ln">157</span> 120  CONTINUE
+<span class="ln">158</span>C
+<span class="ln">159</span>C  STORE THE RUN OF CHANGES IN THE DIFFUSED ELEMENT.
+<span class="ln">160</span>      DO I = 1,NPT
+<span class="ln">161</span>         ESPEC(J,I) = ED(I)-ED_ORIG(I)
+<span class="ln">162</span>      ENDDO
+<span class="ln">163</span>      RETURN
+<span class="ln">164</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong (small).</strong> "with $m_1 = 0$ in the first cell": in <code>LAX_WENDROF1</code> the first cell also takes $C_{1,1} = 0$ (<code>DT2*ECOD1(2)/EM(2)</code>), and the last cell $C_{1,N} = 0$ with $m_N =$ <code>STOT</code>. In <code>LAX_WENDROF2</code> the same holds at $i = 1$ and $i = N$. Fix: state the boundary values for both steps.</li>
+</ol>
+<p>Revised: the boundary values of both Lax–Wendroff steps stated.</p></div></details>
+</main></body></html>

@@ -1,0 +1,150 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>setkrz.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ setkrz.f</span></header><main>
+<h1>setkrz.f</h1>
+<p class='muted'>104 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/setkrz.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Reads the Kurucz low-temperature opacity table (and, when two metallicities are needed, a second one), then sets up its interpolation coefficients.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/setupopac.f.html#def-SETUPOPAC"><code>SETUPOPAC</code></a>, when <code>LKUR90</code> is true (and neither of the Alexander/Ferguson options is chosen).</li>
+<li><strong>Inputs:</strong> the files <code>FKUR</code> (unit <code>IKUR</code>, from <code>/LUNUM/</code>) and, when <code>L2Z</code> is true (<code>/NEWOPAC/</code>), <code>FKUR2</code> (unit <code>IKUR2</code>, from <code>/MISCOPAC/</code>).</li>
+<li><strong>Outputs, through COMMON:</strong> <code>/GKRZ/</code> (<code>GRIDT</code>, the temperature grid), <code>/KRZ/</code> (<code>OPACITY(T, i)</code> and <code>RHO(T, i)</code>, <code>NUMTM</code>), and <code>/GKRZ2/</code>, <code>/KRZ2/</code> for the second table. They are read by <a href="../files/ykoeff.f.html#def-YKOEFF"><code>YKOEFF</code></a>, called at the end, and by <a href="../files/kurucz.f.html#def-KURUCZ"><code>KURUCZ</code></a> and <a href="../files/kurucz2.f.html#def-KURUCZ2"><code>KURUCZ2</code></a>, which interpolate.</li>
+</ul>
+<p><strong>The method.</strong> After a two-line header, each record holds the temperature <code>TOUT</code>, the pressure, five opacity columns (<code>OKURU0</code>, <code>OKURU1</code>, <code>OKURU2</code>, <code>OKURU4</code>, <code>OKURU8</code>), electron and atom densities and the density <code>DENS</code>. A new temperature starts a new row of the grid; within a row, entries are stored in the order read. Only the first opacity column is kept, as $\kappa = 10^{\,\texttt{OKURU0}}$, with its density; the other columns are read and dropped. Records that fail to read are skipped (<code>ERR=110</code>). The run stops with "KURUCZ INPUT ERROR" if there are more than 60 temperatures (<code>NUMT</code>).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>No check on the number of densities.</strong> <code>ID</code> grows for every record at one temperature, but nothing checks it against <code>NUMD</code> = 50; a longer row would write past <code>OPACITY</code> and <code>RHO</code>. Add a check?</li>
+<li><strong>Bad records skipped silently.</strong> <code>ERR=110</code> skips any record that fails to read, which also hides a corrupted table. Is it meant only for the header and separator lines?</li>
+<li><strong>Which opacity column?</strong> Only <code>OKURU0</code> is used. What do the other four columns hold (by their names, perhaps different microturbulent velocities, 0, 1, 2, 4, 8 km/s)? The choice of column 0 should be documented.</li>
+<li><strong>Comment and unused values.</strong> The comment above <code>/KRZ/</code> says "LOS ALAMOS OPACITY", a leftover from another reader; <code>CONST</code> = 11604.5 and <code>NUMX</code> are not used.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+SETKRZ
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-SETKRZ'>SETKRZ</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-SETKRZ'><h3><span class='kind'>subroutine</span>SETKRZ</h3>
+<p class='muted'>lines 6–104 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/setkrz.f#L6-L104'>GitHub</a></p>
+<pre>SUBROUTINE SETKRZ(FKUR,FKUR2)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+SETKRZ
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-GKRZ'>/GKRZ/</a>, <a href='../commons.html#c-GKRZ2'>/GKRZ2/</a>, <a href='../commons.html#c-KRZ'>/KRZ/</a>, <a href='../commons.html#c-KRZ2'>/KRZ2/</a>, <a href='../commons.html#c-LUNUM'>/LUNUM/</a>, <a href='../commons.html#c-MISCOPAC'>/MISCOPAC/</a>, <a href='../commons.html#c-NEWOPAC'>/NEWOPAC/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/ykoeff.f.html#def-YKOEFF'>YKOEFF</a> <span class='muted'>(ykoeff.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/setupopac.f.html#def-SETUPOPAC'>SETUPOPAC</a> <span class='muted'>(setupopac.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE SETKRZ(FKUR,FKUR2)
+<span class="ln">7</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">8</span>      IMPLICIT LOGICAL*4 (L)
+<span class="ln">9</span>      PARAMETER (NUMT=60)
+<span class="ln">10</span>      PARAMETER (NUMD=50)
+<span class="ln">11</span>      PARAMETER (NUMX=1)
+<span class="ln">12</span>      PARAMETER (NUMXT=NUMT*NUMX)
+<span class="ln">13</span>      PARAMETER (CONST=11604.5D0)
+<span class="ln">14</span>C MHP 8/25 Remove unused variables
+<span class="ln">15</span>      CHARACTER*256 FKUR,FKUR2
+<span class="ln">16</span>C MHP 10/02 missing comma after IDYN
+<span class="ln">17</span>      COMMON/LUNUM/IFIRST, IRUN, ISTAND, IFERMI,
+<span class="ln">18</span>     1    IOPMOD, IOPENV, IOPATM, IDYN,
+<span class="ln">19</span>     2    ILLDAT, ISNU, ISCOMP, IKUR
+<span class="ln">20</span>C      COMMON/LUFNM/ FLAST, FFIRST, FRUN, FSTAND, FFERMI,
+<span class="ln">21</span>C     1    FDEBUG, FTRACK, FSHORT, FMILNE, FMODPT,
+<span class="ln">22</span>C     2    FSTOR, FPMOD, FPENV, FPATM, FDYN,
+<span class="ln">23</span>C     3    FLLDAT, FSNU, FSCOMP, FKUR,
+<span class="ln">24</span>C     4    FMHD1, FMHD2, FMHD3, FMHD4, FMHD5, FMHD6, FMHD7, FMHD8
+<span class="ln">25</span>C GRID ENTRIES FOR TEMPERATURE, AND ABUNDANCE (X)
+<span class="ln">26</span>      COMMON /GKRZ/GRIDT(NUMT)
+<span class="ln">27</span>      COMMON /GKRZ2/GRIDT2(NUMT)
+<span class="ln">28</span>C LOS ALAMOS OPACITY
+<span class="ln">29</span>      COMMON /KRZ/OPACITY(NUMXT,NUMD),RHO(NUMXT,NUMD),NUMTM
+<span class="ln">30</span>      COMMON /KRZ2/OPACITY2(NUMXT,NUMD),RHO2(NUMXT,NUMD),NUMTM2
+<span class="ln">31</span>C OPACITY COMMON BLOCKS - modified 3/09
+<span class="ln">32</span>      COMMON /NEWOPAC/ZLAOL1,ZLAOL2,ZOPAL1,ZOPAL2, ZOPAL951,
+<span class="ln">33</span>     +       ZALEX1, ZKUR1, ZKUR2,TMOLMIN,TMOLMAX,LALEX06,
+<span class="ln">34</span>     +       LLAOL89,LOPAL92,LOPAL95,LKUR90,LALEX95,L2Z
+<span class="ln">35</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">36</span>      COMMON /MISCOPAC/IKUR2,IcondOpacP,LcondOpacP
+<span class="ln">37</span>      SAVE
+<span class="ln">38</span>C
+<span class="ln">39</span>      I=NUMX
+<span class="ln">40</span>    1 FORMAT(2F5.2,5F7.3,3F9.5,F8.3)
+<span class="ln">41</span>C     OPEN TABLE
+<span class="ln">42</span>      OPEN(IKUR,FILE=FKUR, STATUS=&#x27;OLD&#x27;)
+<span class="ln">43</span>      READ(IKUR,&#x27;(/)&#x27;)
+<span class="ln">44</span>C
+<span class="ln">45</span>      IPUT=0
+<span class="ln">46</span>      TOUTK=0.0D0
+<span class="ln">47</span> 110  CONTINUE
+<span class="ln">48</span>      READ(IKUR,1,ERR=110,END=120)TOUT,PRES,OKURU0,OKURU1,
+<span class="ln">49</span>     +     OKURU2, OKURU4,OKURU8,DENNE,DENNA,DENS,DUMM
+<span class="ln">50</span>      IF(TOUTK.NE.TOUT)THEN
+<span class="ln">51</span>         IPUT=IPUT+1
+<span class="ln">52</span>         IF(IPUT.GT.NUMT)STOP &#x27; KURUCZ INPUT ERROR&#x27;
+<span class="ln">53</span>         GRIDT(IPUT)=TOUT
+<span class="ln">54</span>         TOUTK=TOUT
+<span class="ln">55</span>         ID=1
+<span class="ln">56</span>      ENDIF
+<span class="ln">57</span>      IF(IPUT.LT.1)STOP &#x27; KURUCZ INPUT ERROR&#x27;
+<span class="ln">58</span>      RHO(IPUT,ID)=DENS
+<span class="ln">59</span>      OPACITY(IPUT,ID)=10.0D0**OKURU0
+<span class="ln">60</span>      ID=ID+1
+<span class="ln">61</span>      GOTO 110
+<span class="ln">62</span>C
+<span class="ln">63</span> 120  CONTINUE
+<span class="ln">64</span>      NUMTM=IPUT
+<span class="ln">65</span>C     CLOSE THE TABLE WE HAVE READ
+<span class="ln">66</span>      CLOSE(IKUR,ERR=99)
+<span class="ln">67</span>C
+<span class="ln">68</span>C
+<span class="ln">69</span>C
+<span class="ln">70</span>C DBG 12/95 read in second Z table if requested
+<span class="ln">71</span>      IF(L2Z) THEN
+<span class="ln">72</span>C     OPEN TABLE
+<span class="ln">73</span>         OPEN(IKUR2,FILE=FKUR2, STATUS=&#x27;OLD&#x27;)
+<span class="ln">74</span>         READ(IKUR2,&#x27;(/)&#x27;)
+<span class="ln">75</span>C
+<span class="ln">76</span>         IPUT=0
+<span class="ln">77</span>         TOUTK=0.0D0
+<span class="ln">78</span> 210     CONTINUE
+<span class="ln">79</span>         READ(IKUR2,1,ERR=210,END=220)TOUT,PRES,OKURU0,OKURU1,
+<span class="ln">80</span>     +        OKURU2, OKURU4,OKURU8,DENNE,DENNA,DENS,DUMM
+<span class="ln">81</span>         IF(TOUTK.NE.TOUT)THEN
+<span class="ln">82</span>            IPUT=IPUT+1
+<span class="ln">83</span>            IF(IPUT.GT.NUMT)STOP &#x27; KURUCZ INPUT ERROR&#x27;
+<span class="ln">84</span>            GRIDT2(IPUT)=TOUT
+<span class="ln">85</span>            TOUTK=TOUT
+<span class="ln">86</span>            ID=1
+<span class="ln">87</span>         ENDIF
+<span class="ln">88</span>         IF(IPUT.LT.1)STOP &#x27; KURUCZ INPUT ERROR&#x27;
+<span class="ln">89</span>         RHO2(IPUT,ID)=DENS
+<span class="ln">90</span>         OPACITY2(IPUT,ID)=10.0D0**OKURU0
+<span class="ln">91</span>         ID=ID+1
+<span class="ln">92</span>         GOTO 210
+<span class="ln">93</span>
+<span class="ln">94</span> 220     CONTINUE
+<span class="ln">95</span>         NUMTM2=IPUT
+<span class="ln">96</span>C CLOSE THE TABLE WE HAVE READ
+<span class="ln">97</span>         CLOSE(IKUR2,ERR=99)
+<span class="ln">98</span>      END IF
+<span class="ln">99</span>
+<span class="ln">100</span>      CALL <a href="../files/ykoeff.f.html#def-YKOEFF" title="YKOEFF in ykoeff.f">YKOEFF</a>
+<span class="ln">101</span>
+<span class="ln">102</span>      RETURN
+<span class="ln">103</span> 99   STOP &#x27;ERROR IN FILE CLOSING&#x27;
+<span class="ln">104</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ul>
+<li><strong>Missing (detail).</strong> The stop "KURUCZ INPUT ERROR" when a table has more than 60 temperatures is not mentioned. Fix: add a sentence.</li>
+</ul>
+<p>Revised: applied.</p></div></details>
+</main></body></html>

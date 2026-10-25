@@ -1,0 +1,206 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>ll95tbl.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ ll95tbl.f</span></header><main>
+<h1>ll95tbl.f</h1>
+<p class='muted'>150 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/ll95tbl.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>LL95TBL</code> reads the full set of OPAL 1995 opacity tables from a file into memory: $\log\kappa$ as a function of $Z$, $X$, $\log T$ and $\log R$ with $R = \rho/T_6^3$. Then it builds the table at the run's metallicity with <a href="../files/op95ztab.f.html#def-OP95ZTAB"><code>OP95ZTAB</code></a>.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../files/setupopac.f.html#def-SETUPOPAC"><code>SETUPOPAC</code></a>, at set-up, when the run uses the OPAL95 tables.</li>
+<li><strong>Input:</strong> the file name <code>FLIV95</code> (argument) and its unit <code>ILIV95</code> (COMMON <code>LOPAL95</code>, set by <a href="../files/parmin.f.html#def-PARMIN"><code>PARMIN</code></a>).</li>
+<li><strong>Output:</strong> COMMON <code>LLOT95A</code> (the grids <code>TGR</code>, <code>XXG</code>, <code>R0GR</code>, <code>ZZG</code>, the tables <code>CAPPA2(126,70,19)</code>, and <code>NUMXM</code>, <code>NZ</code>), read by <a href="../files/getopal95.f.html#def-GETOPAL95"><code>GETOPAL95</code></a>, <a href="../files/op95xtab.f.html#def-OP95XTAB"><code>OP95XTAB</code></a>, <a href="../files/op95ztab.f.html#def-OP95ZTAB"><code>OP95ZTAB</code></a> and <a href="../files/op954d.f.html#def-OP954D"><code>OP954D</code></a>; and the starting interpolation indices in <code>OP95INDX</code>.</li>
+<li><strong>Calls:</strong> <a href="../files/op95ztab.f.html#def-OP95ZTAB"><code>OP95ZTAB</code></a> with $Z$ = <code>ZOPAL951</code> (from COMMON <code>NEWOPAC</code>).</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Skip the file's header until the first line starting with "TABLE"; read its $X$ and $Z$.</li>
+<li>For each table: check that its $X$ and $Z$ are the expected ones (from the grids <code>XXG</code>, 10 values from 0 to 1, and <code>ZZG</code>, 13 values from 0 to 0.1; the last $X$ is $1 - Z$), else stop; read the 19 values of $\log R$; read 70 rows in $\log T$. The last 13 rows have fewer densities (the corner of the table without data), and the missing entries are set to 9.999.</li>
+<li>The file is ordered by $X$ and, within each $X$, by $Z$; fewer $Z$ values exist for the high $X$ (10 for $X = 0.95$, 12 for $X = 1-Z$). Table $(Z_i, X_j)$ is stored at index $N = \texttt{NZ}(i) + j$. It stops after 126 tables.</li>
+<li>Build the fixed-$Z$ table: <code>OP95ZTAB(ZOPAL951)</code>.</li>
+</ol></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The <code>NEWOPAC</code> layout differs from every other unit.</strong> Here it reads <code>…, ZOPAL951, ZOPAL952, ZALEX1, ZALEX2, ZKUR1, ZKUR2, LLAOL89, …, L2Z</code> (16 items), while the other 17 units declare <code>…, ZOPAL951, ZALEX1, ZKUR1, ZKUR2, TMOLMIN, TMOLMAX, LALEX06, LLAOL89, …, L2Z</code> (17 items). Only <code>ZOPAL951</code>, at the same position in both, is used here, so the run works, but any later use of the other names in this routine would read the wrong values. Should it take the common layout?</li>
+<li><strong>Index collisions for high Z.</strong> The table at $X = 1 - Z$ is stored at <code>NZ(IZ)+10</code>. For $Z$ = 0.06 and 0.08 (<code>IZ</code> = 11, 12), <code>NZ(IZ)+10</code> equals <code>NZ(IZ+1)+1</code>, the slot of the next metallicity's $X = 0$ table; since the file is read $X$-major, the later $X = 1-Z$ table overwrites it. <code>NUMXM</code> (9, 9, 8 tables at the three highest $Z$) suggests the intended slots were <code>NZ(IZ)+9</code> or less. Do the readers (<code>OP95ZTAB</code> uses <code>NZ(…)+9</code> and <code>NZ(…)+10</code>) ever reach these metallicities?</li>
+<li><strong>Silent end of file.</strong> An end of file in the header loop or in the table rows jumps to the end without closing the file, without building the fixed-$Z$ table, and without a message. (An end of file at a table's $\log R$ line instead closes the file and builds the table from the tables read so far, also silently.)</li>
+<li><strong>Hard-coded table shape.</strong> The number of complete rows (57), the row ranges with 18, 17, 16, 15, 14 densities, and the filler 9.999 are written into the code.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+LL95TBL
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-LL95TBL'>LL95TBL</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-LL95TBL'><h3><span class='kind'>subroutine</span>LL95TBL</h3>
+<p class='muted'>lines 6–150 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/ll95tbl.f#L6-L150'>GitHub</a></p>
+<pre>SUBROUTINE LL95TBL(FLIV95)</pre>
+<div class='notes'><p>Reads the OPAL95 opacity file into <code>LLOT95A</code> and builds the fixed-$Z$ table (above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+LL95TBL
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-LLOT95A'>/LLOT95A/</a>, <a href='../commons.html#c-LOPAL95'>/LOPAL95/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-NEWOPAC'>/NEWOPAC/</a>, <a href='../commons.html#c-OP95INDX'>/OP95INDX/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/op95ztab.f.html#def-OP95ZTAB'>OP95ZTAB</a> <span class='muted'>(op95ztab.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/setupopac.f.html#def-SETUPOPAC'>SETUPOPAC</a> <span class='muted'>(setupopac.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE LL95TBL(FLIV95)
+<span class="ln">7</span>c MHP 7/98 MODIFIED TO READ IN ALL METAL ABUNDACES FOR OPACITY TABLES.
+<span class="ln">8</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">9</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">10</span>      PARAMETER (NUMT=70)
+<span class="ln">11</span>      PARAMETER (NUMD=19)
+<span class="ln">12</span>      PARAMETER (NUMX=10)
+<span class="ln">13</span>      PARAMETER (NUMZ=13)
+<span class="ln">14</span>      PARAMETER (NUMXZ=126)
+<span class="ln">15</span>      CHARACTER*256 FLIV95
+<span class="ln">16</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">17</span>      COMMON /LOPAL95/ILIV95
+<span class="ln">18</span>      SAVE
+<span class="ln">19</span>C FULL SET OF TABLES: OPACITY AS A FUNCTION OF Z AND X, T, RHO/T6**3
+<span class="ln">20</span>C TABLES ARE INCREMENTED IN SETS OF NZ*NX.  SO THE TABLES FOR THE
+<span class="ln">21</span>C THIRD METAL ABUNDANCE (3 X 10**-4)BEGIN AT TABLE 21 AND END AT TABLE 30.
+<span class="ln">22</span>C FOR THE HIGH VALUES OF Z, THE NUMBER OF X TABLES IS NOT THE SAME (I.E.
+<span class="ln">23</span>C X&lt;0.9 FOR Z=0.1).
+<span class="ln">24</span>C FOR EACH COMPOSITION A FULL GRID IN (T,RHO/T6**3) IS RETAINED.
+<span class="ln">25</span>      COMMON /LLOT95A/TGR(NUMT),XXG(NUMX),R0GR(NUMD),ZZG(NUMZ),
+<span class="ln">26</span>     *                CAPPA2(NUMXZ,NUMT,NUMD),NUMXM(NUMZ),NZ(NUMZ)
+<span class="ln">27</span>C INDICES FOR INTERPOLATION IN Z,X,T, AND R
+<span class="ln">28</span>      COMMON/OP95INDX/JZ,JX(4,4),JT,JD(4)
+<span class="ln">29</span>      COMMON /NEWOPAC/ZLAOL1,ZLAOL2,ZOPAL1,ZOPAL2, ZOPAL951,
+<span class="ln">30</span>     +       ZOPAL952, ZALEX1, ZALEX2, ZKUR1, ZKUR2,
+<span class="ln">31</span>     +       LLAOL89,LOPAL92,LOPAL95,LKUR90,LALEX95,L2Z
+<span class="ln">32</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">33</span>C NUMBER OF COMPOSITION TABLES AT LOWER Z FOR EACH ABUNDANCE
+<span class="ln">34</span>      DATA NZ/0,10,20,30,40,50,60,70,80,90,100,109,118/
+<span class="ln">35</span>C NUMBER OF X TABLES AT EACH Z
+<span class="ln">36</span>      DATA NUMXM/10,10,10,10,10,10,10,10,10,10,9,9,8/
+<span class="ln">37</span>C TABULTED SET OF X
+<span class="ln">38</span>      DATA XXG/0.0D0, 0.1D0,0.2D0,0.35D0,0.5D0,0.7D0,0.8D0,0.9D0,
+<span class="ln">39</span>     *          0.95D0,1.0D0/
+<span class="ln">40</span>C TABULATED SET OF Z
+<span class="ln">41</span>      DATA ZZG/0.0D0, 0.0001D0, 0.0003D0, 0.001D0, 0.002D0,
+<span class="ln">42</span>     +         0.004D0, 0.01D0, 0.02D0, 0.03D0,
+<span class="ln">43</span>     +         0.04D0, 0.06D0, 0.08D0, 0.10D0/
+<span class="ln">44</span>c INDICES FOR INTERPOLATION
+<span class="ln">45</span>      DATA JZ,JX,JT,JD/1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1/
+<span class="ln">46</span>C  LOCAL VECTOR, USED TO SKIP LONG HEADER.
+<span class="ln">47</span>      CHARACTER*132 DUMMY
+<span class="ln">48</span>C     READ IN OPACITY TABLES, SKIPPING HEADER.  HEY, IT WORKS.
+<span class="ln">49</span>      OPEN(ILIV95,FILE=FLIV95,STATUS=&#x27;OLD&#x27;,ACCESS=&#x27;SEQUENTIAL&#x27;)
+<span class="ln">50</span>      NFMT=1
+<span class="ln">51</span>
+<span class="ln">52</span> 10   READ(ILIV95,1,END=9999)DUMMY
+<span class="ln">53</span>      IF( DUMMY(NFMT:NFMT+4).NE.&#x27;TABLE&#x27; ) GO TO 10
+<span class="ln">54</span>  1   FORMAT(A)
+<span class="ln">55</span>      READ(DUMMY,&#x27;(36X,F7.4,11X,F7.4)&#x27;)XX,ZZ
+<span class="ln">56</span>      IZ = 1
+<span class="ln">57</span>      IX = 1
+<span class="ln">58</span>      NN = 1
+<span class="ln">59</span>C ENTRY POINT FOR GETTING NEW TABLES.
+<span class="ln">60</span> 15   CONTINUE
+<span class="ln">61</span>      N = NZ(IZ)+IX
+<span class="ln">62</span>      IF(IX.LT.NUMX)THEN
+<span class="ln">63</span>         XXT = XXG(IX)
+<span class="ln">64</span>      ELSE
+<span class="ln">65</span>         XXT = 1.0D0 - ZZG(IZ)
+<span class="ln">66</span>      ENDIF
+<span class="ln">67</span>      IF(ZZG(IZ).NE.ZZ .OR. XXT.NE.XX)THEN
+<span class="ln">68</span>       WRITE(ISHORT,*)&#x27; OPAL95: Z ERROR INCOMPATIBLE TABLE&#x27;
+<span class="ln">69</span>         STOP
+<span class="ln">70</span>      ENDIF
+<span class="ln">71</span>
+<span class="ln">72</span>C READ IN HEADER INFO: GRID IN RHO/T6**3
+<span class="ln">73</span>      READ(ILIV95,20,END=1000) (R0GR(I),I=1,NUMD)
+<span class="ln">74</span> 20   FORMAT(///,4X,19F7.1,/)
+<span class="ln">75</span>C READ IN FULL TABLE: LOG CAPPA AS A FUNCTION OF LOG T AND
+<span class="ln">76</span>C LOG R = RHO/T6**3
+<span class="ln">77</span>      DO I = 1,57
+<span class="ln">78</span>         READ(ILIV95,30,END=9999)TGR(I),(CAPPA2(N,I,J),J=1,NUMD)
+<span class="ln">79</span>      END DO
+<span class="ln">80</span> 30   FORMAT(F4.2,19F7.3)
+<span class="ln">81</span>C MHP 12/97 NOW TREAT CORNER WITHOUT DATA.
+<span class="ln">82</span>      READ(ILIV95,31,END=9999)TGR(58),(CAPPA2(N,58,J),J=1,NUMD-1)
+<span class="ln">83</span> 31   FORMAT(F4.2,18F7.3)
+<span class="ln">84</span>
+<span class="ln">85</span>      CAPPA2(N,58,19) = 9.999D0
+<span class="ln">86</span>      DO I = 59,60
+<span class="ln">87</span>         READ(ILIV95,32,END=9999)TGR(I),(CAPPA2(N,I,J),J=1,NUMD-2)
+<span class="ln">88</span> 32      FORMAT(F4.2,17F7.3)
+<span class="ln">89</span>         DO J = 18,19
+<span class="ln">90</span>            CAPPA2(N,I,J) = 9.999D0
+<span class="ln">91</span>         END DO
+<span class="ln">92</span>      END DO
+<span class="ln">93</span>      DO I = 61,64
+<span class="ln">94</span>         READ(ILIV95,33,END=9999)TGR(I),(CAPPA2(N,I,J),J=1,NUMD-3)
+<span class="ln">95</span> 33      FORMAT(F4.2,16F7.3)
+<span class="ln">96</span>         DO J = 17,19
+<span class="ln">97</span>            CAPPA2(N,I,J) = 9.999D0
+<span class="ln">98</span>         END DO
+<span class="ln">99</span>      END DO
+<span class="ln">100</span>      DO I = 65,69
+<span class="ln">101</span>         READ(ILIV95,34,END=9999)TGR(I),(CAPPA2(N,I,J),J=1,NUMD-4)
+<span class="ln">102</span> 34      FORMAT(F4.2,15F7.3)
+<span class="ln">103</span>         DO J = 16,19
+<span class="ln">104</span>            CAPPA2(N,I,J) = 9.999D0
+<span class="ln">105</span>         END DO
+<span class="ln">106</span>      END DO
+<span class="ln">107</span>      I = 70
+<span class="ln">108</span>      READ(ILIV95,35,END=9999)TGR(I),(CAPPA2(N,I,J),J=1,NUMD-5)
+<span class="ln">109</span> 35   FORMAT(F4.2,14F7.3)
+<span class="ln">110</span>      DO J = 15,19
+<span class="ln">111</span>         CAPPA2(N,I,J) = 9.999D0
+<span class="ln">112</span>      END DO
+<span class="ln">113</span>
+<span class="ln">114</span>C EXIT IF CORRECT NUMBER OF TABLES READ IN.
+<span class="ln">115</span>      IF(NN.GE.NUMXZ)GOTO 1000
+<span class="ln">116</span>      NN = NN + 1
+<span class="ln">117</span>C NEED TO ACCOUNT FOR FEWER X VALUES AT HIGHER Z.
+<span class="ln">118</span>      IF(IX.LE.8)THEN
+<span class="ln">119</span>         NMAX = NUMZ
+<span class="ln">120</span>      ELSE IF(IX.EQ.9)THEN
+<span class="ln">121</span>         NMAX = NUMZ - 3
+<span class="ln">122</span>      ELSE
+<span class="ln">123</span>         NMAX = NUMZ - 1
+<span class="ln">124</span>      ENDIF
+<span class="ln">125</span>C READ IN NEXT METAL ABUNDANCE (AT FIXED X) OR READ IN FIRST METAL
+<span class="ln">126</span>C ABUNDANCE AT NEXT X.
+<span class="ln">127</span>      IF(IZ.LT.NMAX)THEN
+<span class="ln">128</span>         IZ = IZ + 1
+<span class="ln">129</span>      ELSE
+<span class="ln">130</span>         IZ = 1
+<span class="ln">131</span>         IX = IX + 1
+<span class="ln">132</span>      ENDIF
+<span class="ln">133</span>
+<span class="ln">134</span>C RETURN TO READ IN NEXT TABLE.
+<span class="ln">135</span>      READ(ILIV95,900)XX,ZZ
+<span class="ln">136</span> 900  FORMAT(/36X,F7.4,11X,F7.4)
+<span class="ln">137</span>      GOTO 15
+<span class="ln">138</span> 1000 CONTINUE
+<span class="ln">139</span>
+<span class="ln">140</span>      CLOSE(ILIV95)
+<span class="ln">141</span>C  NOW GENERATE A TABLE AT A FIXED VALUE OF Z.
+<span class="ln">142</span>C  NOTE THAT FOR METAL DIFFUSION A 4-D INTERPOLATION (IN X,Z,T,RHO)
+<span class="ln">143</span>C  IS PERFORMED RATHER THAN A LINEAR INTERPOLATION BETWEEN TWO FIXED
+<span class="ln">144</span>C  Z TABLES.
+<span class="ln">145</span>      Z = ZOPAL951
+<span class="ln">146</span>
+<span class="ln">147</span>      CALL <a href="../files/op95ztab.f.html#def-OP95ZTAB" title="OP95ZTAB in op95ztab.f">OP95ZTAB</a>(Z)
+<span class="ln">148</span> 9999 CONTINUE
+<span class="ln">149</span>      RETURN
+<span class="ln">150</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> Question 1: "the other 16 units": <code>NEWOPAC</code> is declared in 18 units, so 17 others, all with the 17-item layout (checked). Fix.</li>
+<li><strong>Unclear.</strong> Question 3: the <code>READ</code> of the $\log R$ line has <code>END=1000</code>, which closes the file and builds the table; only the header loop and the rows use <code>END=9999</code>. Fix: say so.</li>
+</ol>
+<p>Checked otherwise: the table counts (8 × 13 + 10 + 12 = 126), the corner rows 58–70 and the filler, <code>NZ</code>, <code>NUMXM</code>. Question 2 holds: the $X = 1-Z$ tables of $Z$ = 0.06 and 0.08 land in slots 110 and 119, the slots of the next metallicity's $X = 0$ table, and overwrite them (an apparent bug).</p>
+<p>Revised: findings 1–2 applied.</p></div></details>
+</main></body></html>

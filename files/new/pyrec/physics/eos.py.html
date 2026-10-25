@@ -1,0 +1,326 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>new/pyrec/physics/eos.py · YREC rp_1</title><link rel='stylesheet' href='../../../../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../../../../index.html'>YREC rp_1</a><span class='muted'>/ New version (Python) / pyrec/physics/eos.py</span></header><main>
+<h1>pyrec/physics/eos.py</h1>
+<p class='muted'>New version (Python) (stubs): 144 lines · 14 definitions</p>
+<h2>Header comments</h2>
+<pre class='doc'>The equation of state: a base class, one subclass per source, and the blend.
+
+Classes
+-------
+EosBase : Base of the family.
+YaleEos : EQSAHA below TSCUT, EQRELV above.
+ScvEos : SCV tables for the envelope mix.
+OpalEosTable : One OPAL release&#x27;s grid, edges and values.
+OpalEos : One class, three releases.
+MhdEos : The MHD tables, one array of tables.
+EosBlend : Chooses and ramps between sources.
+
+Counterpart: new-fortran/microphysics.md</pre>
+
+<p><strong>Counterpart</strong> (the design pages)</p><ul class='calls'><li><a href='../../../../new-fortran/microphysics.html'>Microphysics: Physics and its families</a> <span class='muted'>(new-fortran/microphysics.md)</span></li></ul>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-EosBase'>EosBase</a> <span class='muted'>class · Base of the equation-of-state family.</span></li>
+<li><a href='#def-EosBase.eval'>EosBase.eval</a> <span class='muted'>method · Density and thermodynamic derivatives at log10 T, log10 P.</span></li>
+<li><a href='#def-EosBase.eval_shells'>EosBase.eval_shells</a> <span class='muted'>method · :meth:`eval` over shells, shape `(m,)` each, into ``out`` (shape `(n_q, m)`).</span></li>
+<li><a href='#def-EosBase.covers'>EosBase.covers</a> <span class='muted'>method · Weight in [0, 1] of this source at (T, rho); 1 everywhere in the base class.</span></li>
+<li><a href='#def-YaleEos'>YaleEos</a> <span class='muted'>class · EQSAHA below TSCUT, EQRELV above; Debye-Hueckel and relativistic options.</span></li>
+<li><a href='#def-ScvEos'>ScvEos</a> <span class='muted'>class · SCV tables for the envelope mix.</span></li>
+<li><a href='#def-OpalEosTable'>OpalEosTable</a> <span class='muted'>class · One OPAL release&#x27;s grid, edges (KRA, NRA) and values, read from its file.</span></li>
+<li><a href='#def-OpalEosTable.__init__'>OpalEosTable.__init__</a> <span class='muted'>method · Store the release and file.</span></li>
+<li><a href='#def-OpalEosTable.__call__'>OpalEosTable.__call__</a> <span class='muted'>method · Read the table; sizes from the file, not from DATA statements.</span></li>
+<li><a href='#def-opal_interp'>opal_interp</a> <span class='muted'>function · Interpolate an OPAL table at (T6, rho, X), into ``out``.</span></li>
+<li><a href='#def-OpalEos'>OpalEos</a> <span class='muted'>class · The OPAL equation of state: one class for the 1995, 2001 and 2006 releases.</span></li>
+<li><a href='#def-OpalEos.radiation'>OpalEos.radiation</a> <span class='muted'>method · The release&#x27;s treatment of radiation, the one overridden difference.</span></li>
+<li><a href='#def-MhdEos'>MhdEos</a> <span class='muted'>class · The MHD equation of state: one loop over an array of tables.</span></li>
+<li><a href='#def-EosBlend'>EosBlend</a> <span class='muted'>class · Chooses and ramps between sources, with optional numerical derivatives.</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-EosBase'><h3><span class='kind'>class</span>EosBase</h3>
+<p class='muted'>lines 23–52</p>
+<pre>class EosBase:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Base of the equation-of-state family.
+
+Methods
+-------
+eval : Density and thermodynamic derivatives at (log T, log P).
+eval_shells : The same over arrays of shells.
+covers : Weight in [0, 1] of this source at (T, rho).</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">23</span>class EosBase:
+<span class="ln">24</span>    &quot;&quot;&quot;Base of the equation-of-state family.
+<span class="ln">25</span>
+<span class="ln">26</span>    Methods
+<span class="ln">27</span>    -------
+<span class="ln">28</span>    eval : Density and thermodynamic derivatives at (log T, log P).
+<span class="ln">29</span>    eval_shells : The same over arrays of shells.
+<span class="ln">30</span>    covers : Weight in [0, 1] of this source at (T, rho).
+<span class="ln">31</span>    &quot;&quot;&quot;
+<span class="ln">32</span>
+<span class="ln">33</span>    def eval(self, tl: float, pl: float, x: float, z: float, derivs: bool = False) -&gt; PointState:
+<span class="ln">34</span>        &quot;&quot;&quot;Density and thermodynamic derivatives at log10 T, log10 P.
+<span class="ln">35</span>
+<span class="ln">36</span>        This is a hook for derived classes. The base class does nothing.
+<span class="ln">37</span>        &quot;&quot;&quot;
+<span class="ln">38</span>        ...
+<span class="ln">39</span>
+<span class="ln">40</span>    def eval_shells(self, tl: np.ndarray, pl: np.ndarray, x: np.ndarray, z: np.ndarray,
+<span class="ln">41</span>                    out: np.ndarray) -&gt; None:
+<span class="ln">42</span>        &quot;&quot;&quot;:meth:`eval` over shells, shape `(m,)` each, into ``out`` (shape `(n_q, m)`).
+<span class="ln">43</span>
+<span class="ln">44</span>        Notes
+<span class="ln">45</span>        -----
+<span class="ln">46</span>        Calls each subclass&#x27;s Numba kernel; the per-shell loop of PHYSIC.
+<span class="ln">47</span>        &quot;&quot;&quot;
+<span class="ln">48</span>        ...
+<span class="ln">49</span>
+<span class="ln">50</span>    def covers(self, tl: float, dl: float) -&gt; float:
+<span class="ln">51</span>        &quot;&quot;&quot;Weight in [0, 1] of this source at (T, rho); 1 everywhere in the base class.&quot;&quot;&quot;
+<span class="ln">52</span>        ...</pre></details>
+</section>
+<section class='def' id='def-EosBase.eval'><h3><span class='kind'>method</span>EosBase.eval</h3>
+<p class='muted'>lines 33–38</p>
+<pre>def eval(self, tl: float, pl: float, x: float, z: float, derivs: bool = False) -&gt; PointState:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Density and thermodynamic derivatives at log10 T, log10 P.
+
+This is a hook for derived classes. The base class does nothing.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">33</span>    def eval(self, tl: float, pl: float, x: float, z: float, derivs: bool = False) -&gt; PointState:
+<span class="ln">34</span>        &quot;&quot;&quot;Density and thermodynamic derivatives at log10 T, log10 P.
+<span class="ln">35</span>
+<span class="ln">36</span>        This is a hook for derived classes. The base class does nothing.
+<span class="ln">37</span>        &quot;&quot;&quot;
+<span class="ln">38</span>        ...</pre></details>
+</section>
+<section class='def' id='def-EosBase.eval_shells'><h3><span class='kind'>method</span>EosBase.eval_shells</h3>
+<p class='muted'>lines 40–48</p>
+<pre>def eval_shells(self, tl: np.ndarray, pl: np.ndarray, x: np.ndarray, z: np.ndarray,
+                    out: np.ndarray) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>:meth:`eval` over shells, shape `(m,)` each, into ``out`` (shape `(n_q, m)`).
+
+Notes
+-----
+Calls each subclass&#x27;s Numba kernel; the per-shell loop of PHYSIC.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">40</span>    def eval_shells(self, tl: np.ndarray, pl: np.ndarray, x: np.ndarray, z: np.ndarray,
+<span class="ln">41</span>                    out: np.ndarray) -&gt; None:
+<span class="ln">42</span>        &quot;&quot;&quot;:meth:`eval` over shells, shape `(m,)` each, into ``out`` (shape `(n_q, m)`).
+<span class="ln">43</span>
+<span class="ln">44</span>        Notes
+<span class="ln">45</span>        -----
+<span class="ln">46</span>        Calls each subclass&#x27;s Numba kernel; the per-shell loop of PHYSIC.
+<span class="ln">47</span>        &quot;&quot;&quot;
+<span class="ln">48</span>        ...</pre></details>
+</section>
+<section class='def' id='def-EosBase.covers'><h3><span class='kind'>method</span>EosBase.covers</h3>
+<p class='muted'>lines 50–52</p>
+<pre>def covers(self, tl: float, dl: float) -&gt; float:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Weight in [0, 1] of this source at (T, rho); 1 everywhere in the base class.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">50</span>    def covers(self, tl: float, dl: float) -&gt; float:
+<span class="ln">51</span>        &quot;&quot;&quot;Weight in [0, 1] of this source at (T, rho); 1 everywhere in the base class.&quot;&quot;&quot;
+<span class="ln">52</span>        ...</pre></details>
+</section>
+<section class='def' id='def-YaleEos'><h3><span class='kind'>class</span>YaleEos</h3>
+<p class='muted'>lines 55–59</p>
+<pre>class YaleEos(EosBase):</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>EQSAHA below TSCUT, EQRELV above; Debye-Hueckel and relativistic options.
+
+Replaces: eqsaha.f#EQSAHA, eqrelv.f#EQRELV, mu.f#MU</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/eqsaha.f.html#def-EQSAHA'>EQSAHA</a> <span class='muted'>(eqsaha.f)</span></li><li><a href='../../../../files/eqrelv.f.html#def-EQRELV'>EQRELV</a> <span class='muted'>(eqrelv.f)</span></li><li><a href='../../../../files/mu.f.html#def-MU'>MU</a> <span class='muted'>(mu.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">55</span>class YaleEos(EosBase):
+<span class="ln">56</span>    &quot;&quot;&quot;EQSAHA below TSCUT, EQRELV above; Debye-Hueckel and relativistic options.
+<span class="ln">57</span>
+<span class="ln">58</span>    Replaces: eqsaha.f#EQSAHA, eqrelv.f#EQRELV, mu.f#MU
+<span class="ln">59</span>    &quot;&quot;&quot;</pre></details>
+</section>
+<section class='def' id='def-ScvEos'><h3><span class='kind'>class</span>ScvEos</h3>
+<p class='muted'>lines 62–66</p>
+<pre>class ScvEos(EosBase):</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>SCV tables for the envelope mix.
+
+Replaces: eqscve.f#EQSCVE, eqscvg.f#EQSCVG, setscv.f#SETSCV</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/eqscve.f.html#def-EQSCVE'>EQSCVE</a> <span class='muted'>(eqscve.f)</span></li><li><a href='../../../../files/eqscvg.f.html#def-EQSCVG'>EQSCVG</a> <span class='muted'>(eqscvg.f)</span></li><li><a href='../../../../files/setscv.f.html#def-SETSCV'>SETSCV</a> <span class='muted'>(setscv.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">62</span>class ScvEos(EosBase):
+<span class="ln">63</span>    &quot;&quot;&quot;SCV tables for the envelope mix.
+<span class="ln">64</span>
+<span class="ln">65</span>    Replaces: eqscve.f#EQSCVE, eqscvg.f#EQSCVG, setscv.f#SETSCV
+<span class="ln">66</span>    &quot;&quot;&quot;</pre></details>
+</section>
+<section class='def' id='def-OpalEosTable'><h3><span class='kind'>class</span>OpalEosTable</h3>
+<p class='muted'>lines 69–89</p>
+<pre>class OpalEosTable:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>One OPAL release&#x27;s grid, edges (KRA, NRA) and values, read from its file.
+
+Attributes
+----------
+release : str
+    &#x27;1995&#x27;, &#x27;2001&#x27; or &#x27;2006&#x27;.
+values : np.ndarray, shape: `(n_q, n_x, n_t, n_rho)`, dtype: ``float64``
+quad_cache : np.ndarray
+    The QUAD cache, owned by the table so two releases cannot share it.
+
+Replaces: readco.f#READCO, readcoeos01.f#READCOEOS01, readcoeos06.f#READCOEOS06, blkdta000.f</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/readco.f.html#def-READCO'>READCO</a> <span class='muted'>(readco.f)</span></li><li><a href='../../../../files/readcoeos01.f.html#def-READCOEOS01'>READCOEOS01</a> <span class='muted'>(readcoeos01.f)</span></li><li><a href='../../../../files/readcoeos06.f.html#def-READCOEOS06'>READCOEOS06</a> <span class='muted'>(readcoeos06.f)</span></li><li><a href='../../../../files/blkdta000.f.html'>blkdta000.f</a></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">69</span>class OpalEosTable:
+<span class="ln">70</span>    &quot;&quot;&quot;One OPAL release&#x27;s grid, edges (KRA, NRA) and values, read from its file.
+<span class="ln">71</span>
+<span class="ln">72</span>    Attributes
+<span class="ln">73</span>    ----------
+<span class="ln">74</span>    release : str
+<span class="ln">75</span>        &#x27;1995&#x27;, &#x27;2001&#x27; or &#x27;2006&#x27;.
+<span class="ln">76</span>    values : np.ndarray, shape: `(n_q, n_x, n_t, n_rho)`, dtype: ``float64``
+<span class="ln">77</span>    quad_cache : np.ndarray
+<span class="ln">78</span>        The QUAD cache, owned by the table so two releases cannot share it.
+<span class="ln">79</span>
+<span class="ln">80</span>    Replaces: readco.f#READCO, readcoeos01.f#READCOEOS01, readcoeos06.f#READCOEOS06, blkdta000.f
+<span class="ln">81</span>    &quot;&quot;&quot;
+<span class="ln">82</span>
+<span class="ln">83</span>    def __init__(self, release: str, path) -&gt; None:
+<span class="ln">84</span>        &quot;&quot;&quot;Store the release and file.&quot;&quot;&quot;
+<span class="ln">85</span>        ...
+<span class="ln">86</span>
+<span class="ln">87</span>    def __call__(self) -&gt; None:
+<span class="ln">88</span>        &quot;&quot;&quot;Read the table; sizes from the file, not from DATA statements.&quot;&quot;&quot;
+<span class="ln">89</span>        ...</pre></details>
+</section>
+<section class='def' id='def-OpalEosTable.__init__'><h3><span class='kind'>method</span>OpalEosTable.__init__</h3>
+<p class='muted'>lines 83–85</p>
+<pre>def __init__(self, release: str, path) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Store the release and file.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">83</span>    def __init__(self, release: str, path) -&gt; None:
+<span class="ln">84</span>        &quot;&quot;&quot;Store the release and file.&quot;&quot;&quot;
+<span class="ln">85</span>        ...</pre></details>
+</section>
+<section class='def' id='def-OpalEosTable.__call__'><h3><span class='kind'>method</span>OpalEosTable.__call__</h3>
+<p class='muted'>lines 87–89</p>
+<pre>def __call__(self) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Read the table; sizes from the file, not from DATA statements.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">87</span>    def __call__(self) -&gt; None:
+<span class="ln">88</span>        &quot;&quot;&quot;Read the table; sizes from the file, not from DATA statements.&quot;&quot;&quot;
+<span class="ln">89</span>        ...</pre></details>
+</section>
+<section class='def' id='def-opal_interp'><h3><span class='kind'>function</span>opal_interp</h3>
+<p class='muted'>lines 93–102</p>
+<pre>def opal_interp(values: np.ndarray, t6: float, rho: float, x: float, out: np.ndarray) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Interpolate an OPAL table at (T6, rho, X), into ``out``.
+
+Notes
+-----
+Numba: hot loop, called per shell per iteration.
+
+Replaces: esac.f#ESAC, esac01.f#ESAC01, esac06.f#ESAC06, t6rinterp.f#T6RINTERP, t6rinteos01.f#T6RINTEOS01, t6rinteos06.f#T6RINTEOS06, quad.f#QUAD, quadeos01.f#QUADEOS01, quadeos06.f#QUADEOS06</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/esac.f.html#def-ESAC'>ESAC</a> <span class='muted'>(esac.f)</span></li><li><a href='../../../../files/esac01.f.html#def-ESAC01'>ESAC01</a> <span class='muted'>(esac01.f)</span></li><li><a href='../../../../files/esac06.f.html#def-ESAC06'>ESAC06</a> <span class='muted'>(esac06.f)</span></li><li><a href='../../../../files/t6rinterp.f.html#def-T6RINTERP'>T6RINTERP</a> <span class='muted'>(t6rinterp.f)</span></li><li><a href='../../../../files/t6rinteos01.f.html#def-T6RINTEOS01'>T6RINTEOS01</a> <span class='muted'>(t6rinteos01.f)</span></li><li><a href='../../../../files/t6rinteos06.f.html#def-T6RINTEOS06'>T6RINTEOS06</a> <span class='muted'>(t6rinteos06.f)</span></li><li><a href='../../../../files/quad.f.html#def-QUAD'>QUAD</a> <span class='muted'>(quad.f)</span></li><li><a href='../../../../files/quadeos01.f.html#def-QUADEOS01'>QUADEOS01</a> <span class='muted'>(quadeos01.f)</span></li><li><a href='../../../../files/quadeos06.f.html#def-QUADEOS06'>QUADEOS06</a> <span class='muted'>(quadeos06.f)</span></li></ul>
+
+<details><summary>External calls (1)</summary><p><code>numba.njit</code></p></details>
+<details><summary>Source</summary><pre class='src'><span class="ln">93</span>def opal_interp(values: np.ndarray, t6: float, rho: float, x: float, out: np.ndarray) -&gt; None:
+<span class="ln">94</span>    &quot;&quot;&quot;Interpolate an OPAL table at (T6, rho, X), into ``out``.
+<span class="ln">95</span>
+<span class="ln">96</span>    Notes
+<span class="ln">97</span>    -----
+<span class="ln">98</span>    Numba: hot loop, called per shell per iteration.
+<span class="ln">99</span>
+<span class="ln">100</span>    Replaces: esac.f#ESAC, esac01.f#ESAC01, esac06.f#ESAC06, t6rinterp.f#T6RINTERP, t6rinteos01.f#T6RINTEOS01, t6rinteos06.f#T6RINTEOS06, quad.f#QUAD, quadeos01.f#QUADEOS01, quadeos06.f#QUADEOS06
+<span class="ln">101</span>    &quot;&quot;&quot;
+<span class="ln">102</span>    ...</pre></details>
+</section>
+<section class='def' id='def-OpalEos'><h3><span class='kind'>class</span>OpalEos</h3>
+<p class='muted'>lines 105–120</p>
+<pre>class OpalEos(EosBase):</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>The OPAL equation of state: one class for the 1995, 2001 and 2006 releases.
+
+Attributes
+----------
+tab : OpalEosTable
+
+Replaces: oeqos.f#OEQOS, oeqos01.f#OEQOS01, oeqos06.f#OEQOS06, rhoofp.f#RHOOFP, rhoofp01.f#RHOOFP01, rhoofp06.f#RHOOFP06, eqbound.f#EQBOUND, eqbound01.f#EQBOUND01, eqbound06.f#EQBOUND06, gmass.f#GMASS, gmass01.f#GMASS01, gmass06.f#GMASS06</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/oeqos.f.html#def-OEQOS'>OEQOS</a> <span class='muted'>(oeqos.f)</span></li><li><a href='../../../../files/oeqos01.f.html#def-OEQOS01'>OEQOS01</a> <span class='muted'>(oeqos01.f)</span></li><li><a href='../../../../files/oeqos06.f.html#def-OEQOS06'>OEQOS06</a> <span class='muted'>(oeqos06.f)</span></li><li><a href='../../../../files/rhoofp.f.html#def-RHOOFP'>RHOOFP</a> <span class='muted'>(rhoofp.f)</span></li><li><a href='../../../../files/rhoofp01.f.html#def-RHOOFP01'>RHOOFP01</a> <span class='muted'>(rhoofp01.f)</span></li><li><a href='../../../../files/rhoofp06.f.html#def-RHOOFP06'>RHOOFP06</a> <span class='muted'>(rhoofp06.f)</span></li><li><a href='../../../../files/eqbound.f.html#def-EQBOUND'>EQBOUND</a> <span class='muted'>(eqbound.f)</span></li><li><a href='../../../../files/eqbound01.f.html#def-EQBOUND01'>EQBOUND01</a> <span class='muted'>(eqbound01.f)</span></li><li><a href='../../../../files/eqbound06.f.html#def-EQBOUND06'>EQBOUND06</a> <span class='muted'>(eqbound06.f)</span></li><li><a href='../../../../files/gmass.f.html#def-GMASS'>GMASS</a> <span class='muted'>(gmass.f)</span></li><li><a href='../../../../files/gmass01.f.html#def-GMASS01'>GMASS01</a> <span class='muted'>(gmass01.f)</span></li><li><a href='../../../../files/gmass06.f.html#def-GMASS06'>GMASS06</a> <span class='muted'>(gmass06.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">105</span>class OpalEos(EosBase):
+<span class="ln">106</span>    &quot;&quot;&quot;The OPAL equation of state: one class for the 1995, 2001 and 2006 releases.
+<span class="ln">107</span>
+<span class="ln">108</span>    Attributes
+<span class="ln">109</span>    ----------
+<span class="ln">110</span>    tab : OpalEosTable
+<span class="ln">111</span>
+<span class="ln">112</span>    Replaces: oeqos.f#OEQOS, oeqos01.f#OEQOS01, oeqos06.f#OEQOS06, rhoofp.f#RHOOFP, rhoofp01.f#RHOOFP01, rhoofp06.f#RHOOFP06, eqbound.f#EQBOUND, eqbound01.f#EQBOUND01, eqbound06.f#EQBOUND06, gmass.f#GMASS, gmass01.f#GMASS01, gmass06.f#GMASS06
+<span class="ln">113</span>    &quot;&quot;&quot;
+<span class="ln">114</span>
+<span class="ln">115</span>    def radiation(self, tl: float, dl: float) -&gt; tuple[float, float]:
+<span class="ln">116</span>        &quot;&quot;&quot;The release&#x27;s treatment of radiation, the one overridden difference.
+<span class="ln">117</span>
+<span class="ln">118</span>        Replaces: radsub.f#RADSUB, radsub01.f#RADSUB01, radsub06.f#RADSUB06
+<span class="ln">119</span>        &quot;&quot;&quot;
+<span class="ln">120</span>        ...</pre></details>
+</section>
+<section class='def' id='def-OpalEos.radiation'><h3><span class='kind'>method</span>OpalEos.radiation</h3>
+<p class='muted'>lines 115–120</p>
+<pre>def radiation(self, tl: float, dl: float) -&gt; tuple[float, float]:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>The release&#x27;s treatment of radiation, the one overridden difference.
+
+Replaces: radsub.f#RADSUB, radsub01.f#RADSUB01, radsub06.f#RADSUB06</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/radsub.f.html#def-RADSUB'>RADSUB</a> <span class='muted'>(radsub.f)</span></li><li><a href='../../../../files/radsub01.f.html#def-RADSUB01'>RADSUB01</a> <span class='muted'>(radsub01.f)</span></li><li><a href='../../../../files/radsub06.f.html#def-RADSUB06'>RADSUB06</a> <span class='muted'>(radsub06.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">115</span>    def radiation(self, tl: float, dl: float) -&gt; tuple[float, float]:
+<span class="ln">116</span>        &quot;&quot;&quot;The release&#x27;s treatment of radiation, the one overridden difference.
+<span class="ln">117</span>
+<span class="ln">118</span>        Replaces: radsub.f#RADSUB, radsub01.f#RADSUB01, radsub06.f#RADSUB06
+<span class="ln">119</span>        &quot;&quot;&quot;
+<span class="ln">120</span>        ...</pre></details>
+</section>
+<section class='def' id='def-MhdEos'><h3><span class='kind'>class</span>MhdEos</h3>
+<p class='muted'>lines 123–127</p>
+<pre>class MhdEos(EosBase):</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>The MHD equation of state: one loop over an array of tables.
+
+Replaces: meqos.f#MEQOS, mhdpx.f#MHDPX, mhdpx1.f#MHDPX1, mhdpx2.f#MHDPX2, mhdst.f#MHDST, mhdst1.f#MHDST1, rabu.f#RABU, rtab.f#RTAB, intpt.f#INTPT</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/meqos.f.html#def-MEQOS'>MEQOS</a> <span class='muted'>(meqos.f)</span></li><li><a href='../../../../files/mhdpx.f.html#def-MHDPX'>MHDPX</a> <span class='muted'>(mhdpx.f)</span></li><li><a href='../../../../files/mhdpx1.f.html#def-MHDPX1'>MHDPX1</a> <span class='muted'>(mhdpx1.f)</span></li><li><a href='../../../../files/mhdpx2.f.html#def-MHDPX2'>MHDPX2</a> <span class='muted'>(mhdpx2.f)</span></li><li><a href='../../../../files/mhdst.f.html#def-MHDST'>MHDST</a> <span class='muted'>(mhdst.f)</span></li><li><a href='../../../../files/mhdst1.f.html#def-MHDST1'>MHDST1</a> <span class='muted'>(mhdst1.f)</span></li><li><a href='../../../../files/rabu.f.html#def-RABU'>RABU</a> <span class='muted'>(rabu.f)</span></li><li><a href='../../../../files/rtab.f.html#def-RTAB'>RTAB</a> <span class='muted'>(rtab.f)</span></li><li><a href='../../../../files/intpt.f.html#def-INTPT'>INTPT</a> <span class='muted'>(intpt.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">123</span>class MhdEos(EosBase):
+<span class="ln">124</span>    &quot;&quot;&quot;The MHD equation of state: one loop over an array of tables.
+<span class="ln">125</span>
+<span class="ln">126</span>    Replaces: meqos.f#MEQOS, mhdpx.f#MHDPX, mhdpx1.f#MHDPX1, mhdpx2.f#MHDPX2, mhdst.f#MHDST, mhdst1.f#MHDST1, rabu.f#RABU, rtab.f#RTAB, intpt.f#INTPT
+<span class="ln">127</span>    &quot;&quot;&quot;</pre></details>
+</section>
+<section class='def' id='def-EosBlend'><h3><span class='kind'>class</span>EosBlend</h3>
+<p class='muted'>lines 130–144</p>
+<pre>class EosBlend(EosBase):</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Chooses and ramps between sources, with optional numerical derivatives.
+
+Attributes
+----------
+base : EosBase
+cores : list[EosBase]
+numeric_derivs : bool
+    LNUMDERIV.
+
+Replaces: eqstat.f#EQSTAT, eqstat2.f#EQSTAT2</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/eqstat.f.html#def-EQSTAT'>EQSTAT</a> <span class='muted'>(eqstat.f)</span></li><li><a href='../../../../files/eqstat2.f.html#def-EQSTAT2'>EQSTAT2</a> <span class='muted'>(eqstat2.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">130</span>class EosBlend(EosBase):
+<span class="ln">131</span>    &quot;&quot;&quot;Chooses and ramps between sources, with optional numerical derivatives.
+<span class="ln">132</span>
+<span class="ln">133</span>    Attributes
+<span class="ln">134</span>    ----------
+<span class="ln">135</span>    base : EosBase
+<span class="ln">136</span>    cores : list[EosBase]
+<span class="ln">137</span>    numeric_derivs : bool
+<span class="ln">138</span>        LNUMDERIV.
+<span class="ln">139</span>
+<span class="ln">140</span>    Replaces: eqstat.f#EQSTAT, eqstat2.f#EQSTAT2
+<span class="ln">141</span>    &quot;&quot;&quot;
+<span class="ln">142</span>
+<span class="ln">143</span>    DLOGT_NUM = 3.0e-4  # Step in log T of the numerical derivatives (EQSTAT).
+<span class="ln">144</span>    DLOGP_NUM = 1.5e-3  # Step in log P of the numerical derivatives (EQSTAT).</pre></details>
+</section>
+</main></body></html>

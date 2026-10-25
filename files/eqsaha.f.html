@@ -1,0 +1,388 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>eqsaha.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ eqsaha.f</span></header><main>
+<h1>eqsaha.f</h1>
+<p class='muted'>319 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/eqsaha.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>EQSAHA</code> is the Yale equation of state for partially ionized gas: it solves the Saha equations for hydrogen, helium (two stages) and ten metals, and returns the density, the ionization fractions and the thermodynamic derivatives. The name "Prather EOS" in <a href="../files/eqstat2.f.html#def-EQSTAT2">EQSTAT2</a>'s comments refers to it.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <code>EQSTAT2</code>, below the temperature <code>TSCUT</code>. It is called even when the SCV tables are used, since "this EOS replaces the call to EQSAHA, except for derivative purposes"; <a href="../files/eqscve.f.html#def-EQSCVE">EQSCVE</a> then overwrites what it can.</li>
+<li><strong>Inputs:</strong> <code>FX</code>, the number fractions of the twelve species (set by <code>EQSTAT2</code> from <code>FXENV</code> in <code>/COMP/</code>); <code>TL</code>, <code>PL</code>; <code>BETA</code> and its relatives; <code>AMU</code>; <code>LATMO</code> (skip the derivatives, for atmospheres); <code>LDERIV</code> (also compute second derivatives).</li>
+<li><strong>Outputs:</strong> <code>D</code>, <code>DL</code>, <code>EMU</code>, <code>RMU</code> = $R(\mu_\mathrm{ion}^{-1}+\mu_e^{-1})$, <code>FXION</code> (H$^+$, He$^+$, He$^{++}$ fractions), <code>QDT</code>, <code>QDP</code>, <code>QCP</code>, <code>DELA</code> and, with <code>LDERIV</code>, their derivatives. <code>KSAHA</code> is the caller's iteration counter, to which this call adds its iterations.</li>
+<li><strong>COMMON blocks:</strong> only constants (<code>/CONST1/</code>, <code>/CONST2/</code>, with <code>CMKH</code> the constant term of the Saha equation) and <code>/LUOUT/</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>
+<p><strong>Saha constants.</strong> For each species $i$, with ionization temperature $\chi_i/k$ (<code>SAHAT</code>, in K: 59 630 for Na up to 250 200 for Ne; <code>SAHET0</code> = 285 270 and <code>SAHET1</code> = 631 370 for He and He$^+$) and a constant $u_i$ (<code>SAHAU</code>),
+$$K_i = \frac{1}{\beta}\exp\!\left[\ln 10\,(u_i + 2.5\log T - \log P + C) - \frac{\chi_i}{kT}\right].$$
+The species order is that of <code>ATOMW2</code> in <code>EQSTAT2</code>: Na, Al, Mg, Fe, Si, C, H, O, N, Ar, Ne, He. The list is in order of increasing ionization temperature. The loop stops at the first species whose exponent is below $-40$: that species and all later ones are treated as neutral (so hydrogen, seventh, counts as ionized only if <code>NZ0</code> ≥ 7, and <code>FXION(1)</code> is 0 otherwise). A species whose exponent is above $+40$ gets $K_i = 10^{16}$ (fully ionized) and is left out of the derivative sums.</p>
+</li>
+<li>
+<p><strong>Electron number.</strong> With $E$ the electrons per atom (<code>E</code>) and $\epsilon = E/(1+E)$, the ionized fraction of species $i$ (the ten metals and hydrogen) is $x_i = K_i/(K_i + \epsilon)$, and charge balance reads
+$$E = \sum_i f_i x_i + f_\mathrm{He}\,(x_1 + 2x_2),$$
+with the helium fractions $x_1, x_2$ from their own Saha equations. The routine solves this coupled system by Newton iteration (at most 20 steps, tolerance $10^{-9}$), reducing the 3×3 Jacobian by hand; <code>E</code> and the helium fractions keep their values between calls as the next starting guess.</p>
+</li>
+<li>
+<p><strong>Density:</strong> $\mu_e^{-1} = E\,\mu_\mathrm{ion}^{-1}$ and $\rho = \beta P / [R(\mu_\mathrm{ion}^{-1} + \mu_e^{-1})T]$.</p>
+</li>
+<li><strong>Derivatives.</strong> Differentiating the Saha system gives $\partial\ln E/\partial\ln T$ and $\partial\ln E/\partial\ln P$, then $Q_{\rho T}$, $Q_{\rho P}$, the energy derivative $\partial U/\partial T$ (including ionization energy), $c_P = \partial U/\partial T - (P/\rho T)Q_{\rho T}$ and $\nabla_\mathrm{ad} = -(P/\rho T)Q_{\rho T}/c_P$.</li>
+</ol>
+<p><strong>KC's changes.</strong> Three <code>DO</code> loops that ended on an assignment were rewritten to end on <code>CONTINUE</code> (2025-05-30); the arithmetic is unchanged.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>No-convergence path.</strong> After 20 iterations the routine writes "SAHA FAILURE" and continues with the unconverged $E$. Is that acceptable, or should the caller be told?</li>
+<li><strong>State between calls.</strong> <code>E</code>, <code>SAHEX1</code> and <code>SAHEX2</code> persist between calls (<code>SAVE</code> and <code>DATA</code>). The result can then depend slightly on the order of calls (for example during the numerical derivatives in <a href="../files/eqstat.f.html#def-EQSTAT">EQSTAT</a>). Is that a concern at the tolerance used?</li>
+<li><strong>The constants $u_i$.</strong> <code>SAHAU</code> has no comment; they are probably the logarithms of the partition-function ratios. Could their source be cited?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+EQSAHA
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-EQSAHA'>EQSAHA</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-EQSAHA'><h3><span class='kind'>subroutine</span>EQSAHA</h3>
+<p class='muted'>lines 6–319 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/eqsaha.f#L6-L319'>GitHub</a></p>
+<pre>SUBROUTINE EQSAHA(FX,TL,T,PL,P,DL,D,BETA,BETAI,BETA14,FXION,RMU,</pre>
+<div class='notes'><p>Solves the Saha equations for 12 species and returns $\rho$, the ionization fractions, $c_P$, $\nabla_\mathrm{ad}$ and their derivatives (method above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+EQSAHA
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/eqstat2.f.html#def-EQSTAT2'>EQSTAT2</a> <span class='muted'>(eqstat2.f)</span> ×2</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE EQSAHA(FX,TL,T,PL,P,DL,D,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">7</span>     *AMU,EMU,LDERIV,LATMO,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP,
+<span class="ln">8</span>     *KSAHA)
+<span class="ln">9</span>
+<span class="ln">10</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">11</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">12</span>
+<span class="ln">13</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">14</span>      DIMENSION FX(12),FXION(3)
+<span class="ln">15</span>      DIMENSION SAHATT(11),FXT(11)
+<span class="ln">16</span>      DIMENSION SAHAU(13),SAHAT(11),SAHAK(11),SAHAX(11),FXS(11)
+<span class="ln">17</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">18</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">19</span>      DATA SAHAT,SAHET0,SAHET1/59630.,69450.,88710.,91330.,94570.,
+<span class="ln">20</span>     T 130630.,157800.,158000.,168630.,183080.,250200.,285270.,631370./
+<span class="ln">21</span>      DATA SAHAU/-.01,-.47,.60,.49,.08,.11,.0,-.04,.64,.99,1.03,.6,.0/
+<span class="ln">22</span>      DATA NZ/11/
+<span class="ln">23</span>      DATA MAXS/20/
+<span class="ln">24</span>      DATA STOL/4.0D1/
+<span class="ln">25</span>      DATA E,SAHEX1,SAHEX2/0.1D0,0.0D0,0.0D0/
+<span class="ln">26</span>      DATA STOLEE/1.0D-09/
+<span class="ln">27</span>      SAVE
+<span class="ln">28</span>
+<span class="ln">29</span>C  1    FXHE = FX(12)
+<span class="ln">30</span>      FXHE = FX(12)
+<span class="ln">31</span>      EMAX = 1.0D0 + FXHE
+<span class="ln">32</span>      TI = 1.0D0/T
+<span class="ln">33</span>C BEGIN SAHA ROUTINE
+<span class="ln">34</span>C COMPUTE SAHA K&#x27;S
+<span class="ln">35</span>      STEMP = 2.50D0*TL - PL + CMKH
+<span class="ln">36</span>      NZ1 = 1
+<span class="ln">37</span>      DO 11 I=1,NZ
+<span class="ln">38</span>         SAHATT(I) = SAHAT(I)*TI
+<span class="ln">39</span>         SAHAK(I) = CLN*(SAHAU(I) + STEMP) - SAHATT(I)
+<span class="ln">40</span>         IF(SAHAK(I).LT.-STOL) GO TO 12
+<span class="ln">41</span>         IF(SAHAK(I).GT.+STOL) GO TO 10
+<span class="ln">42</span>         SAHAK(I) = BETAI*DEXP(SAHAK(I))
+<span class="ln">43</span>         GO TO 11
+<span class="ln">44</span> 10      SAHAK(I) = 1.0D16
+<span class="ln">45</span>         NZ1 = I + 1
+<span class="ln">46</span> 11   CONTINUE
+<span class="ln">47</span>      I = NZ + 1
+<span class="ln">48</span> 12   NZ0 = I - 1
+<span class="ln">49</span>      NZ1 = MIN0(NZ,NZ1)
+<span class="ln">50</span>      LNOHE = .TRUE.
+<span class="ln">51</span>      LNOHE2= .TRUE.
+<span class="ln">52</span>      IF(FXHE.LT.1.0D-10) GO TO 13
+<span class="ln">53</span>      SAHEK0 = CLN*(SAHAU(12) + STEMP) - SAHET0/T
+<span class="ln">54</span>      IF(SAHEK0.LT.-STOL) GO TO 13
+<span class="ln">55</span>      LNOHE = .FALSE.
+<span class="ln">56</span>      SAHEK0 = BETAI*DEXP(SAHEK0)
+<span class="ln">57</span>      SAHEK1 = CLN*(SAHAU(13) + STEMP) - SAHET1/T
+<span class="ln">58</span>      IF(SAHEK1.LT.-STOL) GO TO 14
+<span class="ln">59</span>      LNOHE2= .FALSE.
+<span class="ln">60</span>      SAHEK1 = BETAI*DEXP(SAHEK1)
+<span class="ln">61</span>      GO TO 15
+<span class="ln">62</span> 13   SAHEX1 = 0.0D0
+<span class="ln">63</span> 14   SAHEX2 = 0.0D0
+<span class="ln">64</span> 15   CONTINUE
+<span class="ln">65</span>C BEGIN ITERATIONS FOR SOLUTION OF E
+<span class="ln">66</span>      DO 28 ISAHA=1,MAXS
+<span class="ln">67</span>         KSAHA = KSAHA + 1
+<span class="ln">68</span>         EP1 = 1.0D0/(1.0D0 + E)
+<span class="ln">69</span>         EP1E = EP1/E
+<span class="ln">70</span>         EP12 = EP1*EP1
+<span class="ln">71</span>         EEP1 = E*EP1
+<span class="ln">72</span>         C33 = -E*(1.0D0 + E)
+<span class="ln">73</span>         R3 = E
+<span class="ln">74</span>         IF(NZ0.LE.0) GO TO 22
+<span class="ln">75</span>         DO 21 I=1,NZ0
+<span class="ln">76</span>            DIV = 1.0D0/(SAHAK(I) + EEP1)
+<span class="ln">77</span>            TEMP8 = SAHAK(I)*DIV
+<span class="ln">78</span>            SAHAX(I) = TEMP8
+<span class="ln">79</span>            TEMP8 = TEMP8*FX(I)
+<span class="ln">80</span>            R3 = R3 - TEMP8
+<span class="ln">81</span>            TEMP8 = TEMP8*EEP1*DIV
+<span class="ln">82</span>            C33 = C33 - TEMP8
+<span class="ln">83</span>            FXS(I) = TEMP8
+<span class="ln">84</span> 21      CONTINUE
+<span class="ln">85</span> 22      C33 = C33*EP1E
+<span class="ln">86</span>         R3 = R3 - FXHE*(SAHEX1 + SAHEX2+SAHEX2)
+<span class="ln">87</span>         LFIN = DABS(R3).LT.STOLEE
+<span class="ln">88</span>         IF(LNOHE) GO TO 25
+<span class="ln">89</span>         C22 = SAHEK0 + EEP1
+<span class="ln">90</span>         C23 = SAHEX1*EP12
+<span class="ln">91</span>         C32 = FXHE
+<span class="ln">92</span>         R2 = SAHEK0*(1.0D0-SAHEX1-SAHEX2) - SAHEX1*EEP1
+<span class="ln">93</span>         IF(LNOHE2) GO TO 23
+<span class="ln">94</span>         C11 = EEP1
+<span class="ln">95</span>         C12 = -SAHEK1
+<span class="ln">96</span>         C13 = SAHEX2*EP12
+<span class="ln">97</span>         C21 = SAHEK0
+<span class="ln">98</span>         C31 = 2.0D0*FXHE
+<span class="ln">99</span>         R1 = SAHEX1*SAHEK1 - SAHEX2*EEP1
+<span class="ln">100</span>C REDUCTION OF SAHA MATRIX TO DIAGONAL FORM
+<span class="ln">101</span>         CR12 = - C21/C11
+<span class="ln">102</span>         CR13 = - C31/C11
+<span class="ln">103</span>         C22 = C22 + CR12*C12
+<span class="ln">104</span>         C32 = C32 + CR13*C12
+<span class="ln">105</span>         C23 = C23 + CR12*C13
+<span class="ln">106</span>         C33 = C33 + CR13*C13
+<span class="ln">107</span>         IF (R1.EQ.0.0D0) GO TO 210
+<span class="ln">108</span>         R1L=DLOG10(DABS(R1))
+<span class="ln">109</span>         IF (CR12.EQ.0.0D0) GO TO 200
+<span class="ln">110</span>         CR12L=DLOG10(DABS(CR12))
+<span class="ln">111</span>         FACT=CR12L+R1L
+<span class="ln">112</span>         IF (FACT.LT.-38.0D0) GO TO 200
+<span class="ln">113</span>         R2 = R2 + CR12*R1
+<span class="ln">114</span> 200     CONTINUE
+<span class="ln">115</span>         IF (CR13.EQ.0.0D0) GO TO 210
+<span class="ln">116</span>         CR13L=DLOG10(DABS(CR13))
+<span class="ln">117</span>         FACT=CR13L+R1L
+<span class="ln">118</span>         IF (FACT.LT.-38.0D0) GO TO 210
+<span class="ln">119</span>         R3 = R3 + CR13*R1
+<span class="ln">120</span> 210     CONTINUE
+<span class="ln">121</span>C ENTRY FOR NO FULLY IONIZED HELIUM (SAHEX2 = 0.0)
+<span class="ln">122</span> 23      CR23 = - C32/C22
+<span class="ln">123</span>         C33 = C33 + CR23*C23
+<span class="ln">124</span>         R3 = R3 + CR23*R2
+<span class="ln">125</span>C ENTRY FOR NEUTRAL HELIUM
+<span class="ln">126</span> 25      DELTE = R3/C33
+<span class="ln">127</span>         IF(LNOHE) GO TO 26
+<span class="ln">128</span>         DELTX1 = (R2 - C23*DELTE)/C22
+<span class="ln">129</span>         SAHEX1 = SAHEX1 + DELTX1
+<span class="ln">130</span>         SAHEX1 = DMAX1(0.0D0,DMIN1(1.0D0,SAHEX1))
+<span class="ln">131</span>         IF(LNOHE2) GO TO 26
+<span class="ln">132</span>CCC   STATEMENT RECALCULATED FOR DEC-20 SYSTEM
+<span class="ln">133</span>         IF (C12.EQ.0.D0 .OR. DELTX1.EQ.0.D0) GO TO 100
+<span class="ln">134</span>         C12L=DLOG10(DABS(C12))
+<span class="ln">135</span>         DELX1L=DLOG10(DABS(DELTX1))
+<span class="ln">136</span>         FACT1=C12L+DELX1L
+<span class="ln">137</span>         IF (FACT1.GE.-38.0D0) GO TO 100
+<span class="ln">138</span>         FACT1=-38.0D0
+<span class="ln">139</span>         FACT1=DEXP(CLN*FACT1)*DSIGN(1.0D0,C12)*DSIGN(1.0D0,DELTX1)
+<span class="ln">140</span>         GO TO 105
+<span class="ln">141</span> 100     CONTINUE
+<span class="ln">142</span>         FACT1=C12*DELTX1
+<span class="ln">143</span> 105     CONTINUE
+<span class="ln">144</span>         IF (C13.EQ.0.D0 .OR. DELTE.EQ.0.D0) GO TO 110
+<span class="ln">145</span>         C13L=DLOG10(DABS(C13))
+<span class="ln">146</span>         DELTEL=DLOG10(DABS(DELTE))
+<span class="ln">147</span>         FACT2=C13L+DELTEL
+<span class="ln">148</span>         IF (FACT2.GE.-38.0D0) GO TO 110
+<span class="ln">149</span>         FACT2=-38.0D0
+<span class="ln">150</span>         FACT2=DEXP(CLN*FACT2)*DSIGN(1.0D0,C13)*DSIGN(1.0D0,DELTE)
+<span class="ln">151</span>         GO TO 115
+<span class="ln">152</span> 110     CONTINUE
+<span class="ln">153</span>         FACT2=C13*DELTE
+<span class="ln">154</span> 115     CONTINUE
+<span class="ln">155</span>         DELTX2=(R1-FACT1-FACT2)/C11
+<span class="ln">156</span>         SAHEX2 = SAHEX2 + DELTX2
+<span class="ln">157</span>         SAHEX2 = DMAX1(0.0D0,DMIN1(1.0D0,SAHEX2))
+<span class="ln">158</span> 26      E = E + DELTE
+<span class="ln">159</span>         E = DMAX1(1.0D-11,DMIN1(EMAX,E))
+<span class="ln">160</span>         LFIN = LFIN .AND. DABS(DELTE).LT.STOLEE
+<span class="ln">161</span>         IF(LFIN) GO TO 29
+<span class="ln">162</span> 28   CONTINUE
+<span class="ln">163</span>      WRITE(ISHORT,99) TL,PL,E,DELTE
+<span class="ln">164</span> 99   FORMAT(&#x27; -----SAHA FAILURE (TL,PL)=&#x27;,2F10.6,&#x27;  (E,DE)=&#x27;,2F20.12)
+<span class="ln">165</span>C SYSTEM HAS BEEN SOLVED FOR E
+<span class="ln">166</span> 29   EMU = E*AMU
+<span class="ln">167</span>      RMU = CGAS*(EMU + AMU)
+<span class="ln">168</span>      D = BETA*P/(RMU*T)
+<span class="ln">169</span>      DL = DLOG10(D)
+<span class="ln">170</span>      FXION(1) = 0.0D0
+<span class="ln">171</span>      IF(NZ0.GE.7) FXION(1) = SAHAX(7)
+<span class="ln">172</span>      FXION(2) = SAHEX1
+<span class="ln">173</span>      FXION(3) = SAHEX2
+<span class="ln">174</span>      IF(LATMO) GO TO 60
+<span class="ln">175</span>C COMPUTE FIRST DERIVATIVES
+<span class="ln">176</span>      RMUB = RMU*BETAI
+<span class="ln">177</span>      R3T = 0.0D0
+<span class="ln">178</span>      R3P = 0.0D0
+<span class="ln">179</span>      IF(NZ0.LE.0) GO TO 31
+<span class="ln">180</span>      DO 30 I=NZ1,NZ0
+<span class="ln">181</span>         R3P = R3P - FXS(I)
+<span class="ln">182</span>C KC 2025-05-30 fixed &quot;DO termination statement which is not END DO or CONTINUE&quot;
+<span class="ln">183</span>C  30   R3T = R3T -FXS(I)*(2.5D0 + BETA14 + SAHATT(I))
+<span class="ln">184</span>         R3T = R3T -FXS(I)*(2.5D0 + BETA14 + SAHATT(I))
+<span class="ln">185</span> 30   CONTINUE
+<span class="ln">186</span>      R3P = -BETAI*R3P
+<span class="ln">187</span> 31   IF(LNOHE) GO TO 33
+<span class="ln">188</span>      SAHEX0 = 1.0D0 - SAHEX1 - SAHEX2
+<span class="ln">189</span>      SK0QT = 2.5D0 + BETA14 + SAHET0*TI
+<span class="ln">190</span>      TEMP = SAHEK0*SAHEX0
+<span class="ln">191</span>      R2T = TEMP*SK0QT
+<span class="ln">192</span>      R2P = -TEMP*BETAI
+<span class="ln">193</span>      IF(LNOHE2) GO TO 32
+<span class="ln">194</span>      SK1QT = 2.5D0 + BETA14 + SAHET1*TI
+<span class="ln">195</span>      TEMP = SAHEK1*SAHEX1
+<span class="ln">196</span>      R1T = TEMP*SK1QT
+<span class="ln">197</span>      R1P = -TEMP*BETAI
+<span class="ln">198</span>      R2T = R2T + CR12*R1T
+<span class="ln">199</span>      R2P = R2P + CR12*R1P
+<span class="ln">200</span>      R3T = R3T + CR13*R1T
+<span class="ln">201</span>      R3P = R3P + CR13*R1P
+<span class="ln">202</span> 32   R3T = R3T + CR23*R2T
+<span class="ln">203</span>      R3P = R3P + CR23*R2P
+<span class="ln">204</span> 33   SQET = R3T/C33
+<span class="ln">205</span>      SQEP = R3P/C33
+<span class="ln">206</span>      QDT = -1.0D0 - BETA14 - EP1*SQET
+<span class="ln">207</span>      QDP = BETAI - EP1*SQEP
+<span class="ln">208</span>C COMPUTE INTERNAL ENERGY TEMPERATURE DERIVATIVE(QUT)
+<span class="ln">209</span>      USUM = 0.0D0
+<span class="ln">210</span>      IF(LNOHE) GO TO 35
+<span class="ln">211</span>      SX1QT = (R2T - C23*SQET)/C22
+<span class="ln">212</span>      SX1QP = (R2P - C23*SQEP)/C22
+<span class="ln">213</span>      SX2QT = 0.0D0
+<span class="ln">214</span>      SX2QP = 0.0D0
+<span class="ln">215</span>      IF(LNOHE2) GO TO 34
+<span class="ln">216</span>      SX2QT = (R1T - C12*SX1QT - C13*SQET)/C11
+<span class="ln">217</span>      SX2QP = (R1P - C12*SX1QP - C13*SQEP)/C11
+<span class="ln">218</span> 34   SX0QT = -(SX1QT + SX2QT)
+<span class="ln">219</span>      SX0QP = -(SX1QP + SX2QP)
+<span class="ln">220</span>      USUM = FXHE*(SX1QT*SAHET0 + SX2QT*(SAHET0 + SAHET1))
+<span class="ln">221</span> 35   IF(NZ0.LE.0) GO TO 37
+<span class="ln">222</span>      STEMP = 2.50D0 + BETA14 - EP1E*SQET
+<span class="ln">223</span>      DO 36 I=NZ1,NZ0
+<span class="ln">224</span>         FXT(I) = FXS(I)*(STEMP + SAHATT(I))
+<span class="ln">225</span>C KC 2025-05-30 fixed &quot;DO termination statement which is not END DO or CONTINUE&quot;
+<span class="ln">226</span>C  36   USUM = USUM + FXT(I)*SAHAT(I)
+<span class="ln">227</span>         USUM = USUM + FXT(I)*SAHAT(I)
+<span class="ln">228</span> 36   CONTINUE
+<span class="ln">229</span> 37   CONTINUE
+<span class="ln">230</span>      BETAUT = 0.75D0*(2.0D0 + BETA14)
+<span class="ln">231</span>      RAMU = CGAS*AMU
+<span class="ln">232</span>      QUT =RAMU*((1D0+E)*(BETAUT+3D0*BETAI*BETA14)+BETAUT*SQET+USUM*TI)
+<span class="ln">233</span>C COMPUTE SPECIFIC HEAT(QCP) AND ADIABATIC GRADIENT(DELA)
+<span class="ln">234</span>      PDT = P/(D*T)
+<span class="ln">235</span>      PDTQ = PDT*QDT
+<span class="ln">236</span>      QCP = QUT - PDTQ
+<span class="ln">237</span>      QCPI = 1.0D0/QCP
+<span class="ln">238</span>      DELA = -PDTQ*QCPI
+<span class="ln">239</span>      IF(.NOT.LDERIV) GO TO 60
+<span class="ln">240</span>C COMPUTE DERIVATIVES OF QDT,QCP,DELA
+<span class="ln">241</span>      BETA16 = 4.0D0*BETAI*BETA14
+<span class="ln">242</span>      R3T = 0.0D0
+<span class="ln">243</span>      R3P = 0.0D0
+<span class="ln">244</span>      UTSUM = 0.0D0
+<span class="ln">245</span>      UPSUM = 0.0D0
+<span class="ln">246</span>      IF(NZ0.LE.0) GO TO 42
+<span class="ln">247</span>      ETEMP = (1.0D0+E+E)/(E*(1.0D0+E))**2
+<span class="ln">248</span>      STEMP1 = 2.5D0 + BETA14 - SQET*EP1E
+<span class="ln">249</span>      STEMP2 = -BETAI - SQEP*EP1E
+<span class="ln">250</span>      STEMP3 = ETEMP*SQEP*SQET - BETAI*BETA14
+<span class="ln">251</span>      STEMP4 = ETEMP*SQET**2 + BETA16
+<span class="ln">252</span>      DO 41 I=NZ1,NZ0
+<span class="ln">253</span>         STEMP5 = (STEMP1 + SAHATT(I))*(1.0D0 - 2.0D0*SAHAX(I))
+<span class="ln">254</span>         STEMP6 = FXS(I)*(STEMP4 - SAHATT(I)) + FXT(I)*STEMP5
+<span class="ln">255</span>         R3T = R3T - STEMP6
+<span class="ln">256</span>         UTSUM = UTSUM + SAHAT(I)*(STEMP6 - FXT(I))
+<span class="ln">257</span>         STEMP7 = FXS(I)*(STEMP3 + STEMP2*STEMP5)
+<span class="ln">258</span>         R3P = R3P - STEMP7
+<span class="ln">259</span>C KC 2025-05-30 fixed &quot;DO termination statement which is not END DO or CONTINUE&quot;
+<span class="ln">260</span>C  41   UPSUM = UPSUM + SAHAT(I)*STEMP7
+<span class="ln">261</span>         UPSUM = UPSUM + SAHAT(I)*STEMP7
+<span class="ln">262</span> 41   CONTINUE
+<span class="ln">263</span> 42   CONTINUE
+<span class="ln">264</span>      IF(LNOHE) GO TO 44
+<span class="ln">265</span>      STEMP = 2.0D0*SAHEX1*EP1*SQET
+<span class="ln">266</span>      R2T = SAHEK0*(SAHEX0*(BETA16-SAHET0*TI+SK0QT**2)+2D0*SX0QT*SK0QT)
+<span class="ln">267</span>     2     +EP12*(STEMP*SQET - 2.0D0*SX1QT*SQET)
+<span class="ln">268</span>      R2P = SAHEK0*(SAHEX0*BETAI*(-BETA14-SK0QT)+SX0QP*SK0QT-BETAI*
+<span class="ln">269</span>     2     SX0QT) + EP12*(STEMP*SQEP - SX1QP*SQET - SX1QT*SQEP)
+<span class="ln">270</span>      IF(LNOHE2) GO TO 43
+<span class="ln">271</span>      STEMP = 2.0D0*SAHEX2*EP1*SQET
+<span class="ln">272</span>      R1T = SAHEK1*(SAHEX1*(BETA16-SAHET1*TI+SK1QT**2)+2D0*SX1QT*SK1QT)
+<span class="ln">273</span>     1     +EP12*(STEMP*SQET - 2.0D0*SX2QT*SQET)
+<span class="ln">274</span>      R1P = SAHEK1*(SAHEX1*BETAI*(-BETA14-SK1QT)+SX1QP*SK1QT-BETAI*
+<span class="ln">275</span>     1     SX1QT) + EP12*(STEMP*SQEP - SX2QP*SQET - SX2QT*SQEP)
+<span class="ln">276</span>      R2T = R2T + CR12*R1T
+<span class="ln">277</span>      R2P = R2P + CR12*R1P
+<span class="ln">278</span>      R3P = R3P + CR13*R1P
+<span class="ln">279</span>      R3T = R3T + CR13*R1T
+<span class="ln">280</span> 43   R3P = R3P + CR23*R2P
+<span class="ln">281</span>      R3T = R3T + CR23*R2T
+<span class="ln">282</span> 44   SQETT = R3T/C33
+<span class="ln">283</span>      SQETP = R3P/C33
+<span class="ln">284</span>      QDTT = -BETA16 + (EP1*SQET)**2 - EP1*SQETT
+<span class="ln">285</span>      QDTP = BETAI*BETA14 + EP12*SQET*SQEP - EP1*SQETP
+<span class="ln">286</span>      IF(NZ0.LE.0) GO TO 46
+<span class="ln">287</span>      STEMP = EP1E*SQETT
+<span class="ln">288</span>      STEMP1 = EP1E*SQETP
+<span class="ln">289</span>      DO 45 I=NZ1,NZ0
+<span class="ln">290</span>         UTSUM = UTSUM - FXS(I)*SAHAT(I)*STEMP
+<span class="ln">291</span>C KC 2025-05-30 fixed &quot;DO termination statement which is not END DO or CONTINUE&quot;
+<span class="ln">292</span>C  45   UPSUM = UPSUM - FXS(I)*SAHAT(I)*STEMP1
+<span class="ln">293</span>         UPSUM = UPSUM - FXS(I)*SAHAT(I)*STEMP1
+<span class="ln">294</span> 45   CONTINUE
+<span class="ln">295</span> 46   CONTINUE
+<span class="ln">296</span>      IF(LNOHE) GO TO 48
+<span class="ln">297</span>      SX1QTT = (R2T - C23*SQETT)/C22
+<span class="ln">298</span>      SX1QTP = (R2P - C23*SQETP)/C22
+<span class="ln">299</span>      IF(LNOHE2) GO TO 47
+<span class="ln">300</span>      SX2QTT = (R1T - C12*SX1QTT - C13*SQETT)/C11
+<span class="ln">301</span>      SX2QTP = (R1P - C12*SX1QTP - C13*SQETP)/C11
+<span class="ln">302</span>      UTSUM = UTSUM + FXHE*(SAHET0+SAHET1)*(SX2QTT - SX2QT)
+<span class="ln">303</span>      UPSUM = UPSUM + FXHE*(SAHET0+SAHET1)*SX2QTP
+<span class="ln">304</span> 47   UTSUM = UTSUM + FXHE*SAHET0*(SX1QTT - SX1QT)
+<span class="ln">305</span>      UPSUM = UPSUM + FXHE*SAHET0*SX1QTP
+<span class="ln">306</span> 48   CONTINUE
+<span class="ln">307</span>      BTEMP = (1.0D0+E)*BETA14*BETAI*(24.0D0*BETAI - 9.0D0)
+<span class="ln">308</span>      QQUTT = RAMU*(BTEMP+0.75D0*(2.0D0+BETA14*(8.0D0*BETAI+1D0))*SQET+
+<span class="ln">309</span>     .     BETAUT*SQETT + UTSUM*TI)
+<span class="ln">310</span>      QQUTP = RAMU*(-0.25D0*BTEMP+0.75D0*((2.0D0+BETA14*(4.0D0*BETAI
+<span class="ln">311</span>     .     +1.0D0))*SQEP-BETA14*BETAI*SQET) +BETAUT*SQETP+UPSUM*TI)
+<span class="ln">312</span>      QCPT = QCPI*(QQUTT + PDTQ*(1.0D0+QDT) - PDT*QDTT)
+<span class="ln">313</span>      QCPP = QCPI*(QQUTP - PDTQ*(1.0D0-QDP) - PDT*QDTP)
+<span class="ln">314</span>      QAT = -1.0D0 - QDT - QCPT + QDTT/QDT
+<span class="ln">315</span>      QAP = 1.0D0 - QDP - QCPP + QDTP/QDT
+<span class="ln">316</span> 60   CONTINUE
+<span class="ln">317</span>
+<span class="ln">318</span>      RETURN
+<span class="ln">319</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "Species with $K_i$ below $e^{-40}$ are treated as neutral; above $e^{40}$, as fully ionized." The test is on the exponent, and the loop stops at the first species below the limit (<code>GO TO 12</code>): that species and all later ones in the list are treated as neutral (the list is in order of increasing <code>SAHAT</code>). A species above the limit gets $K_i = 10^{16}$ and is left out of the derivative sums (<code>NZ1</code>). Fix: state both.</li>
+<li><strong>Unclear.</strong> "the ionized fraction of a metal is $x_i = K_i/(K_i+\epsilon)$": the same holds for hydrogen, which is one of the eleven species in the loop. Fix: "of species $i$ (the ten metals and hydrogen)".</li>
+<li><strong>Wrong premise (question 4).</strong> "<code>FXION(1)</code> … is 0 even if hydrogen is slightly ionized." Since the loop stops at the first species below $e^{-40}$, and the species before hydrogen have lower ionization temperatures, <code>NZ0 &lt; 7</code> means hydrogen's own $K$ is below the limit too (up to the small differences in <code>SAHAU</code>). Fix: drop the question and explain in step 1.</li>
+<li>
+<p><strong>Missing.</strong> <code>KSAHA</code> is not reset here; it adds this call's iterations to the caller's counter (callers such as CRRECT, GETNEWENV, GETTAU, HSUBP set it to 0). Fix: reword the output line.</p>
+</li>
+<li>
+<p><strong>Missing (a clear bug, not yet asked).</strong> For $X &lt; 10^{-6}$, ESAC sets <code>MH=1</code> twice (lines 134–135) where ESAC01 and ESAC06 set <code>MF=1</code> and <code>MH=1</code>. So <code>MF</code> keeps the value from the bisection, <code>IHI-2</code> = 0, and the code reads <code>XZ(0,…)</code>, <code>EPL(0,…)</code>, <code>ZZ(0)</code> and copies <code>ESK = EPL(MF,…)</code> from outside the arrays. Fix: add a question.</p>
+</li>
+</ol>
+<p>Revised: all five applied (5 as question 6).</p></div></details>
+</main></body></html>

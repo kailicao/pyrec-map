@@ -1,0 +1,395 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>checkj.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ checkj.f</span></header><main>
+<h1>checkj.f</h1>
+<p class='muted'>342 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/checkj.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file checks each iteration of angular-momentum transport. Its header lists five tasks: catch negative specific angular momentum $j = J/M$; test convergence of the iteration on the diffusion coefficients; compute $\Omega$ (and the moment of inertia) from the new $j$; remove reversals of the $\Omega$ gradient by imposing solid-body rotation locally; and print details.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments, the model (<code>HD</code>, <code>HR</code>, <code>HS</code>, <code>HS2</code>, <code>LCZ</code>), <code>HJM</code> ($j$ after this iteration), <code>HJMP</code> ($j$ after the previous iteration), <code>HJMSAV</code> ($j$ at the start of the step), <code>IT</code>, <code>LOKAD</code>; <code>DJOK</code>, <code>ITDIF2</code> from <code>/DIFUS/</code>; <code>WOLD</code> ($\Omega$ of the previous model) from <code>/OLDROT/</code>; <code>TOLERI</code> (<code>/ERRMOM/</code>) and <code>ACFPFT</code> (<code>/ROT/</code>), the tolerances of the moment-of-inertia iteration.</li>
+<li><strong>Who calls it:</strong> <a href="../files/seculr.f.html#def-SECULR">SECULR</a>.</li>
+<li><strong>What it calls:</strong> <a href="../files/getrot.f.html#def-GETROT">GETROT</a> ($\Omega$, moment of inertia $I$ and $\partial I/\partial\Omega$ from $j$) and <a href="../files/solid.f.html#def-SOLID">SOLID</a> (solid-body rotation over a range of shells).</li>
+<li><strong>Outputs:</strong> <code>OMEGA</code>, <code>HI</code>, <code>QIW</code>, <code>ETA2</code>, <code>R0</code>, <code>HJMP</code> (set to <code>HJM</code>), <code>LOK</code>, <code>LREDO</code>, <code>DT</code>, <code>IREDO</code>.</li>
+<li><strong>COMMON blocks:</strong> <code>/CCOUT1/</code>, <code>/TEMP2/</code>, <code>/QUADD/</code>, <code>/EGRID/</code>, <code>/DIFAD/</code>, <code>/DIFAD2/</code>, <code>/VARFC/</code> are used only in the detailed print, which is now switched off (see Design).</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>If $j \le 0$ anywhere, stop (see question 1).</li>
+<li><strong>Convergence:</strong> $\delta_\mathrm{it} = \max_i |j_i - j_i^\mathrm{prev}|/j_i^\mathrm{prev}$; converged (<code>LOK</code>) if $\delta_\mathrm{it} \le$ <code>DJOK</code>. If <code>LOKAD</code> is set on entry, <code>LOK</code> starts true.</li>
+<li><strong>$\Omega$ from $j$:</strong> call GETROT. Before the last iteration and while not converged, the tolerances <code>TOLERI</code> and <code>ACFPFT</code> are relaxed to $\max(10^{-2}\,\mathrm{DJOK}, \text{tolerance})$, "because the error in the diffusion is of order DJOK", and restored after.</li>
+<li><strong>Gradient reversals:</strong> from the surface inward, where $\Omega_i - \Omega_{i-1}$ is positive (by more than 1, see question 2) but was not positive in the previous model (<code>WOLD</code>), mix the two shells (and any adjacent convection zone) to solid-body rotation with SOLID; then widen the range while the boundaries show new reversals.</li>
+<li><strong>Print</strong> at the last iteration or on convergence: the largest $\Delta j/j$ over the step, and $\delta$ of each iteration.</li>
+</ol>
+<p><strong>Design.</strong> The detailed output to <code>IMODPT</code> is switched off by <code>IF(.TRUE.)GOTO 240</code> (G. Somers 11/14: "this can be trivially extracted from the extended .STORE file"), so more than 60 lines below it never run.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused argument <code>LPRT</code> removed.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>No time-step cut.</strong> The test <code>IF(IREDO.GT.0)</code> (replacing the commented-out <code>IREDO.GT.3</code>) stops the run at the first negative $j$, so the branch that halves the time step never runs, while the message still says "3 attempts at cutting timestep failed". Which is intended?</li>
+<li><strong>The threshold of the reversal test.</strong> The first test is <code>OMEGA(I)-OMEGA(I-1).GT.1.0d0</code>, an increase of 1 rad s$^{-1}$, which is far larger than any stellar $\Omega$; the later tests use $10^{-15}$. With 1.0 the reversal correction practically never fires. Is <code>1.0D-15</code> meant?</li>
+<li><strong>Array bounds.</strong> <code>DELJI(16)</code> and <code>IMAXI(16)</code> are indexed by the iteration <code>IT</code>; if <code>ITDIF2</code> exceeds 16, they overflow.</li>
+<li><strong>Dead output.</strong> Can the switched-off print (and the COMMON blocks it alone needs) be removed in the overhaul?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+MHP 10/02 ECOD, ECOD2 NO LONGER USED; OMITTED FROM CALL</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-CHECKJ'>CHECKJ</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-CHECKJ'><h3><span class='kind'>subroutine</span>CHECKJ</h3>
+<p class='muted'>lines 3–342 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/checkj.f#L3-L342'>GitHub</a></p>
+<pre>SUBROUTINE CHECKJ(HD,HJMP,HJMSAV,HR,HS,HS2,HV,IMIN,IMAX,IT,LCZ,</pre>
+<div class='notes'><p>Checks one iteration of angular-momentum diffusion: stops on $j \le 0$, tests convergence against <code>DJOK</code>, gets $\Omega$ from $j$ (<a href="../files/getrot.f.html#def-GETROT">GETROT</a>), and removes $\Omega$-gradient reversals with <a href="../files/solid.f.html#def-SOLID">SOLID</a>.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+MHP 10/02 ECOD, ECOD2 NO LONGER USED; OMITTED FROM CALL</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CCOUT1'>/CCOUT1/</a>, <a href='../commons.html#c-DIFAD'>/DIFAD/</a>, <a href='../commons.html#c-DIFAD2'>/DIFAD2/</a>, <a href='../commons.html#c-DIFUS'>/DIFUS/</a>, <a href='../commons.html#c-EGRID'>/EGRID/</a>, <a href='../commons.html#c-ERRMOM'>/ERRMOM/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-OLDROT'>/OLDROT/</a>, <a href='../commons.html#c-QUADD'>/QUADD/</a>, <a href='../commons.html#c-ROT'>/ROT/</a>, <a href='../commons.html#c-TEMP2'>/TEMP2/</a>, <a href='../commons.html#c-VARFC'>/VARFC/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/getrot.f.html#def-GETROT'>GETROT</a> <span class='muted'>(getrot.f)</span></li>
+<li><a href='../files/solid.f.html#def-SOLID'>SOLID</a> <span class='muted'>(solid.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE CHECKJ(HD,HJMP,HJMSAV,HR,HS,HS2,HV,IMIN,IMAX,IT,LCZ,
+<span class="ln">4</span>C      *                  LPRT,M,DT,ETA2,HI,HJM,IREDO,LOK,LREDO,OMEGA,  ! KC 2025-05-31
+<span class="ln">5</span>     *                  M,DT,ETA2,HI,HJM,IREDO,LOK,LREDO,OMEGA,
+<span class="ln">6</span>     *                  QIW,R0,WSAV,ID,IDM,LOKAD)
+<span class="ln">7</span>C     *                  QIW,R0,WSAV,ID,IDM,ECOD,ECOD2,LOKAD)
+<span class="ln">8</span>      PARAMETER (JSON=5000)
+<span class="ln">9</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">10</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">11</span>      COMMON/CCOUT1/NPENV,NPRTMOD,NPRTPT,NPOINT
+<span class="ln">12</span>      COMMON/DIFUS/DTDIF,DJOK,ITDIF1,ITDIF2
+<span class="ln">13</span>      COMMON/ERRMOM/TOLERI
+<span class="ln">14</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">15</span>      COMMON/OLDROT/WOLD(JSON),HJX(JSON),HIO(JSON),HGO(JSON),R0X(JSON),
+<span class="ln">16</span>     *     ETA2X(JSON)
+<span class="ln">17</span>      COMMON/ROT/WNEW,WALPCZ,ACFPFT,ITFP1,ITFP2,LROT,LINSTB,LWNEW
+<span class="ln">18</span>      COMMON/TEMP2/VES(JSON),VES0(JSON),VSS(JSON),VSS0(JSON),
+<span class="ln">19</span>     *     HLE(JSON),VGSF(JSON),VGSF0(JSON),VMU(JSON)
+<span class="ln">20</span>C MHP 7/93
+<span class="ln">21</span>      COMMON/VARFC/VFC(JSON),LVFC,LDIFAD
+<span class="ln">22</span>C MHP 3/93
+<span class="ln">23</span>      COMMON/QUADD/PHISP(JSON),PHIROT(JSON),PHIDIS(JSON),RAT(JSON)
+<span class="ln">24</span>C MHP 11/94
+<span class="ln">25</span>      COMMON/EGRID/CHI(JSON),ECHI(JSON),ES1(JSON),DCHI,NTOT
+<span class="ln">26</span>      COMMON/DIFAD/ECOD3(JSON),ECOD4(JSON)
+<span class="ln">27</span>      COMMON/DIFAD2/VESA(JSON),VESA0(JSON),VESD(JSON),VESD0(JSON)
+<span class="ln">28</span>      DIMENSION HD(JSON),HJM(JSON),HJMP(JSON),HR(JSON),HS(JSON),
+<span class="ln">29</span>     *   HS2(JSON),LCZ(JSON),ETA2(JSON),HI(JSON),OMEGA(JSON),
+<span class="ln">30</span>     *   QIW(JSON),R0(JSON),HJMSAV(JSON),DELJI(16),IMAXI(16),
+<span class="ln">31</span>     *   ID(JSON),HV(JSON),WSAV(JSON)
+<span class="ln">32</span>C     *   ECOD(JSON),ECOD2(JSON)
+<span class="ln">33</span>      SAVE
+<span class="ln">34</span>
+<span class="ln">35</span>C  SR CHECKJ PERFORMS SEVERAL FUNCTIONS.
+<span class="ln">36</span>C  FIRST, IT CHECKS FOR NEGATIVE SPECIFIC ANGULAR MOMENTA.
+<span class="ln">37</span>C  IF THEY ARE ENCOUNTERED, THE TIMESTEP IS CUT.
+<span class="ln">38</span>C  SECOND, IT GUARDS AGAINST REVERSAL OF ANGULAR VELOCITY GRADIENTS.
+<span class="ln">39</span>C  THIRD, IT COMPARES THE RUN OF OMEGA TO THAT FOR THE PREVIOUS ITERATION.
+<span class="ln">40</span>C  IF THE RUN HAS CHANGED BY LITTLE ENOUGH THEN THE DIFFUSION EQUATIONS
+<span class="ln">41</span>C  ARE CONSIDERED CONVERGED.  LOK=T IF THE RUN HAS CONVERGED.
+<span class="ln">42</span>C  FOURTH, IT CORRECTS THE MOMENT OF INERTIA FOR CHANGES IN OMEGA.
+<span class="ln">43</span>C  INPUT VARIABLES:
+<span class="ln">44</span>C  FIFTH, IT WRITES OUT DETAILS OF THE DIFFUSION IF REQUESTED.
+<span class="ln">45</span>C
+<span class="ln">46</span>C  HD : RUN OF LOG DENSITY.
+<span class="ln">47</span>C  HJM : RUN OF SPECIFIC ANGULAR MOMENTUM AFTER THE CURRENT ITERATION.
+<span class="ln">48</span>C  HJMP : RUN OF SPECIFIC ANGULAR MOMENTUM AFTER THE LAST ITERATION
+<span class="ln">49</span>C     FOR THE DIFFUSION COEFFICIENTS.
+<span class="ln">50</span>C  HJMSAV : RUN OF SPECIFIC ANGULAR MOMENTUM AT THE BEGINNING OF THE
+<span class="ln">51</span>C     TIMESTEP.
+<span class="ln">52</span>C  HR : RUN OF LOG RADIUS.
+<span class="ln">53</span>C  HS : RUN OF LOG MASS.
+<span class="ln">54</span>C  HS2 : MASS (UNLOGGED) CONTAINED IN EACH OF THE MODEL POINTS.
+<span class="ln">55</span>C  HV : RUN OF CHARACTERISTIC DIFFUSION VELOCITIES.  IF HV(I)&gt;0 THEN ZONE
+<span class="ln">56</span>C     I IS UNSTABLE WITH RESPECT TO ZONE I-1.
+<span class="ln">57</span>C  IMIN,IMAX : THE FIRST AND LAST ZONES AT WHICH HV IS COMPUTED.
+<span class="ln">58</span>C   *NOTE: IMIN = 2 AND IMAX = NUMBER OF MODEL POINTS UNLESS A SURFACE
+<span class="ln">59</span>C     OR CENTRAL CONVECTION ZONE EXISTS.
+<span class="ln">60</span>C  IT : ITERATION NUMBER.
+<span class="ln">61</span>C  ITDIF2 : MAXIMUM NUMBER OF ITERATIONS ALLOWED IN A GIVEN DIFFUSION
+<span class="ln">62</span>C     TIMESTEP.
+<span class="ln">63</span>C  LCZ : ARRAY SET T IF A ZONE IS CONVECTIVE FOR ANGULAR MOMENTUM
+<span class="ln">64</span>C     REDISTRIBUTION PURPOSES (I.E. INCLUDES OVERSHOOT REGION.)
+<span class="ln">65</span>C  LPRT : FLAG SET T IF MODEL I/O DESIRED.
+<span class="ln">66</span>C  M : NUMBER OF MODEL POINTS.
+<span class="ln">67</span>C
+<span class="ln">68</span>C  OUTPUT VARIABLES:
+<span class="ln">69</span>C
+<span class="ln">70</span>C  DT : DIFFUSION TIMESTEP, WHICH CAN BE CUT IF ERRORS IN THE DIFFUSION
+<span class="ln">71</span>C     ARE DETECTED.
+<span class="ln">72</span>C  ETA2,R0 : AUXILLARY QUANTITIES USED TO FIND OMEGA GIVEN J/M.
+<span class="ln">73</span>C  HI,QIW : RUN OF MOMENTS OF INERTIA AND THEIR DERIVATIVES WITH RESPECT
+<span class="ln">74</span>C  TO OMEGA.
+<span class="ln">75</span>C  HJMP : ARRAY HJMP IS SET EQUAL TO HJM AFTER CONVERGENCE IS CHECKED.
+<span class="ln">76</span>C  IREDO : NUMBER OF TIMES DIFFUSION TIMESTEP HAS BEEN CUT.
+<span class="ln">77</span>C  LOK : FLAG SET T IF DIFFUSION CEOFFICIENTS HAVE CONVERGED.
+<span class="ln">78</span>C  LREDO : FLAG SET T IF A PROBLEM REQUIRES CUTTING THE DIFFUSION TIMESTEP.
+<span class="ln">79</span>C  OMEGA : RUN OF ANGULAR VELOCITY.
+<span class="ln">80</span>C
+<span class="ln">81</span>C  CHECK FOR NEGATIVE J/M.
+<span class="ln">82</span>      LOK = .FALSE.
+<span class="ln">83</span>      LREDO = .FALSE.
+<span class="ln">84</span>      IF(LOKAD)THEN
+<span class="ln">85</span>         LOK = .TRUE.
+<span class="ln">86</span>         LREDO = .FALSE.
+<span class="ln">87</span>      ENDIF
+<span class="ln">88</span>      DO 10 I = 1,M
+<span class="ln">89</span>         IF(HJM(I).LE.0.0D0) THEN
+<span class="ln">90</span>            IREDO = IREDO + 1
+<span class="ln">91</span>C  STOP IF TIMESTEP CUT MORE THAN 3 TIMES.
+<span class="ln">92</span>C            IF(IREDO.GT.3)THEN
+<span class="ln">93</span>            IF(IREDO.GT.0)THEN
+<span class="ln">94</span>               WRITE(6,1000) I
+<span class="ln">95</span>               WRITE(ISHORT,1000) I
+<span class="ln">96</span> 1000          FORMAT(1X,39(&#x27;&gt;&#x27;),39(&#x27;&lt;&#x27;)/5X,&#x27;ERROR IN SR CHECKJ&#x27;/
+<span class="ln">97</span>     *                5X,&#x27;NEGATIVE J/M ENCOUNTERED IN ZONE&#x27;,I5,
+<span class="ln">98</span>     *                &#x27; AND 3 ATTEMPTS AT CUTTING TIMESTEP FAILED&#x27;/
+<span class="ln">99</span>     *                &#x27;RUN STOPPED&#x27;)
+<span class="ln">100</span>               STOP
+<span class="ln">101</span>            ELSE
+<span class="ln">102</span>               LREDO = .TRUE.
+<span class="ln">103</span>               DT = 0.5D0*DT
+<span class="ln">104</span>               WRITE(6,1005)IREDO,I
+<span class="ln">105</span>               WRITE(ISHORT,1005)IREDO,I
+<span class="ln">106</span> 1005          FORMAT(5X,&#x27;ERROR IN SR CHECKJ&#x27;/5X,&#x27;TIMESTEP CUT,&#x27;,1X,
+<span class="ln">107</span>     *                &#x27;NUMBER&#x27;,I5,&#x27; DUE TO NEGATIVE J/M IN ZONE&#x27;,I5)
+<span class="ln">108</span>               GOTO 240
+<span class="ln">109</span>            ENDIF
+<span class="ln">110</span>         ENDIF
+<span class="ln">111</span>   10 CONTINUE
+<span class="ln">112</span>C  CHECK IF THE FRACTIONAL CHANGE IN OMEGA RELATIVE TO THE PREVIOUS
+<span class="ln">113</span>C  ITERATION IS SMALL ENOUGH TO BE CONSIDERED CONVERGED.
+<span class="ln">114</span>C  ALSO LOCATE THE ZONE WHERE THE MAXIMUM CHANGE OCCURS FOR I/O.
+<span class="ln">115</span>      DELJI(IT) = (HJM(1)-HJMP(1))/HJMP(1)
+<span class="ln">116</span>      HJMP(1) = HJM(1)
+<span class="ln">117</span>      IMAXI(IT) = 1
+<span class="ln">118</span>      DO 140 I = 2,M
+<span class="ln">119</span>         DJ = (HJM(I)-HJMP(I))/HJMP(I)
+<span class="ln">120</span>         IF(ABS(DJ).GT.ABS(DELJI(IT))) THEN
+<span class="ln">121</span>            DELJI(IT) = DJ
+<span class="ln">122</span>            IMAXI(IT) = I
+<span class="ln">123</span>         ENDIF
+<span class="ln">124</span>         HJMP(I) = HJM(I)
+<span class="ln">125</span>  140 CONTINUE
+<span class="ln">126</span>      IF(ABS(DELJI(IT)).LE.DJOK) THEN
+<span class="ln">127</span>C         LOK = .FALSE.
+<span class="ln">128</span>C      ELSE
+<span class="ln">129</span>         LOK = .TRUE.
+<span class="ln">130</span>      ENDIF
+<span class="ln">131</span>C  FIND THE RUN OF OMEGA THAT CORRESPONDS TO THE NEW RUN OF J/M.
+<span class="ln">132</span>C  THE MOMENT OF INERTIA IS A FUNCTION OF OMEGA WHICH IS SOLVED
+<span class="ln">133</span>C  ITERATIVELY.  BECAUSE THE ERROR IN THE DIFFUSION IS OF ORDER DJOK,
+<span class="ln">134</span>C  RELAX TOLERANCE FOR MOMENT OF INERTIA ITERATION EXCEPT FOR THE
+<span class="ln">135</span>C  FINAL STEP.
+<span class="ln">136</span>      TOLER0 = TOLERI
+<span class="ln">137</span>      ACC = ACFPFT
+<span class="ln">138</span>      IF(IT.LT.ITDIF2.AND..NOT.LOK)THEN
+<span class="ln">139</span>         TOLERI = MAX(DJOK*1.0D-2,TOLER0)
+<span class="ln">140</span>         ACFPFT = MAX(DJOK*1.0D-2,ACC)
+<span class="ln">141</span>      ENDIF
+<span class="ln">142</span>      CALL <a href="../files/getrot.f.html#def-GETROT" title="GETROT in getrot.f">GETROT</a>(HD,HJM,HR,HS,HS2,LCZ,M,ETA2,HI,OMEGA,QIW,R0)
+<span class="ln">143</span>      TOLERI = TOLER0
+<span class="ln">144</span>      ACFPFT = ACC
+<span class="ln">145</span>C  SEARCH FOR REVERSAL OF OMEGA GRADIENTS.  IF ONE EXISTS, ENFORCE
+<span class="ln">146</span>C  SOLID-BODY ROTATION IN THE OFFENDING PAIR OF ZONES.
+<span class="ln">147</span>      I = M
+<span class="ln">148</span>      IBOT = M
+<span class="ln">149</span>   20 CONTINUE
+<span class="ln">150</span>C  POSITIVE OMEGA GRADIENT ENCOUNTERED.
+<span class="ln">151</span>      IF(OMEGA(I)-OMEGA(I-1).GT.1.0d0)THEN
+<span class="ln">152</span>C  IF PREVIOUS GRADIENT WAS POSITIVE, LEAVE ALONE.
+<span class="ln">153</span>         IF(WOLD(I)-WOLD(I-1).GT.1.0D-15)THEN
+<span class="ln">154</span>            I = IBOT-1
+<span class="ln">155</span>            IBOT = I
+<span class="ln">156</span>            IF(I.GT.1)THEN
+<span class="ln">157</span>               GOTO 20
+<span class="ln">158</span>            ELSE
+<span class="ln">159</span>               GOTO 130
+<span class="ln">160</span>            ENDIF
+<span class="ln">161</span>         ENDIF
+<span class="ln">162</span>C  SIGN OF D OMEGA/DR HAS CHANGED,INDICATING AN ERROR IN DIFFUSION.
+<span class="ln">163</span>C  MIX THE OFFENDING ZONES TO SOLID BODY ROTATION.
+<span class="ln">164</span>C  ITOP IS THE UPPERMOST UNSTABLE SHELL.
+<span class="ln">165</span>         ITOP = I
+<span class="ln">166</span>C  IF ADJACENT TO A CONVECTION ZONE, MIX THE CONVECTION ZONE AS WELL.
+<span class="ln">167</span>         IF(LCZ(ITOP) .AND. ITOP.LT.M) THEN
+<span class="ln">168</span>            DO 30 J = ITOP + 1,M
+<span class="ln">169</span>               IF(.NOT.LCZ(J)) GOTO 40
+<span class="ln">170</span>   30       CONTINUE
+<span class="ln">171</span>   40       ITOP = J - 1
+<span class="ln">172</span>         ENDIF
+<span class="ln">173</span>C  IBOT IS THE BOTTOM UNSTABLE ZONE. CHECK FOR ADJACENT CZ AS ABOVE.
+<span class="ln">174</span>         IBOT = I - 1
+<span class="ln">175</span>         IF(LCZ(IBOT) .AND. IBOT.GT.1) THEN
+<span class="ln">176</span>            DO 50 J = IBOT - 1,1,-1
+<span class="ln">177</span>               IF(.NOT.LCZ(J)) GOTO 60
+<span class="ln">178</span>   50       CONTINUE
+<span class="ln">179</span>   60       IBOT = J + 1
+<span class="ln">180</span>         ENDIF
+<span class="ln">181</span>C  ENFORCE A SOLID BODY ROTATION CURVE FROM IBOT TO ITOP.
+<span class="ln">182</span>         CALL <a href="../files/solid.f.html#def-SOLID" title="SOLID in solid.f">SOLID</a>(HD,HJM,HR,HS,HS2,IBOT,ITOP,ETA2,HI,
+<span class="ln">183</span>     *              OMEGA,QIW,R0,M)
+<span class="ln">184</span>C  NOW CHECK TO SEE IF THE REDISTRIBUTION HAS GENERATED ANY NEW REVERSALS.
+<span class="ln">185</span>   70    CONTINUE
+<span class="ln">186</span>         LREDO = .FALSE.
+<span class="ln">187</span>C  CHECK FOR GRADIENT REVERSALS BELOW ZONE IBOT.
+<span class="ln">188</span>         IF(IBOT.GT.1) THEN
+<span class="ln">189</span>            IF(OMEGA(IBOT)-OMEGA(IBOT-1).GT.1.0D-15)THEN
+<span class="ln">190</span>               IF(WOLD(IBOT)-WOLD(IBOT-1).LT.1.0D-15)THEN
+<span class="ln">191</span>                  LREDO = .TRUE.
+<span class="ln">192</span>                  IBOT = IBOT - 1
+<span class="ln">193</span>                  IF(LCZ(IBOT) .AND. IBOT.GT.1) THEN
+<span class="ln">194</span>                     DO 80 J = IBOT - 1,1,-1
+<span class="ln">195</span>                        IF(.NOT.LCZ(J)) GOTO 90
+<span class="ln">196</span>   80                CONTINUE
+<span class="ln">197</span>   90                IBOT = J + 1
+<span class="ln">198</span>                  ENDIF
+<span class="ln">199</span>               ENDIF
+<span class="ln">200</span>            ENDIF
+<span class="ln">201</span>         ENDIF
+<span class="ln">202</span>C  CHECK FOR GRADIENT REVERSALS ABOVE ZONE ITOP.
+<span class="ln">203</span>         IF(ITOP.LT.M) THEN
+<span class="ln">204</span>            IF(OMEGA(ITOP+1)-OMEGA(ITOP).GT.1.0D-15)THEN
+<span class="ln">205</span>               IF(WOLD(ITOP+1)-WOLD(ITOP).LT.1.0D-15)THEN
+<span class="ln">206</span>                  LREDO = .TRUE.
+<span class="ln">207</span>                  ITOP = ITOP+1
+<span class="ln">208</span>                  IF(LCZ(ITOP) .AND. ITOP.LT.M) THEN
+<span class="ln">209</span>                     DO 100 J = ITOP+1,M
+<span class="ln">210</span>                        IF(.NOT.LCZ(J)) GOTO 110
+<span class="ln">211</span>  100                CONTINUE
+<span class="ln">212</span>  110                ITOP = J - 1
+<span class="ln">213</span>                  ENDIF
+<span class="ln">214</span>               ENDIF
+<span class="ln">215</span>            ENDIF
+<span class="ln">216</span>         ENDIF
+<span class="ln">217</span>C  IF LREDO=T THEN THE REDISTRIBUTION OF ANGULAR MOMENTUM IN A REVERSED
+<span class="ln">218</span>C  REGION HAS EFFECTED A CHANGE IN OMEGA AT ONE OF BOTH OF THE BOUNDARIES
+<span class="ln">219</span>C  THAT HAS CAUSED A NEW GRADIENT REVERSAL AT THE BOUNDARY.
+<span class="ln">220</span>         IF(LREDO) THEN
+<span class="ln">221</span>            CALL <a href="../files/solid.f.html#def-SOLID" title="SOLID in solid.f">SOLID</a>(HD,HJM,HR,HS,HS2,IBOT,ITOP,ETA2,HI,
+<span class="ln">222</span>     *                 OMEGA,QIW,R0,M)
+<span class="ln">223</span>            GOTO 70
+<span class="ln">224</span>         ENDIF
+<span class="ln">225</span>         IF(IT.EQ.ITDIF2.OR.LOK)WRITE(*,120)IBOT,ITOP,IT
+<span class="ln">226</span>  120    FORMAT(5X,&#x27;OMEGA GRADIENT REVERSAL BETWEEN ZONES &#x27;,
+<span class="ln">227</span>     *          I5,&#x27; AND &#x27;,I5,&#x27; ITERATION &#x27;,I5)
+<span class="ln">228</span>      ENDIF
+<span class="ln">229</span>  130 CONTINUE
+<span class="ln">230</span>C  RETURN FOR NEXT ZONE.
+<span class="ln">231</span>      I = IBOT - 1
+<span class="ln">232</span>      IBOT = I
+<span class="ln">233</span>      IF(I.GT.1) GOTO 20
+<span class="ln">234</span>C  I/O FOR END OF DIFFUSION STEP.
+<span class="ln">235</span>      IF(IT.EQ.ITDIF2.OR.LOK)THEN
+<span class="ln">236</span>C  FIND MAXIMUM FRACTIONAL CHANGE IN J/M OVER TIMESTEP.
+<span class="ln">237</span>         DELJ = 0.0D0
+<span class="ln">238</span>         IJMAX = 0
+<span class="ln">239</span>C MHP 10/02 ICRIT REMOVED
+<span class="ln">240</span>C         IF(ICRIT.EQ.0)THEN
+<span class="ln">241</span>           II = 1
+<span class="ln">242</span>C         ELSE
+<span class="ln">243</span>C           II = ICRIT
+<span class="ln">244</span>C         ENDIF
+<span class="ln">245</span>         DO 150 I = II,M
+<span class="ln">246</span>            DJ = (HJM(I)-HJMSAV(I))/HJMSAV(I)
+<span class="ln">247</span>            IF(ABS(DJ).GT.ABS(DELJ)) THEN
+<span class="ln">248</span>               DELJ = DJ
+<span class="ln">249</span>               IJMAX = I
+<span class="ln">250</span>            ENDIF
+<span class="ln">251</span>  150    CONTINUE
+<span class="ln">252</span>         IF(.NOT.LOKAD)THEN
+<span class="ln">253</span>            WRITE(*,160)DELJ,IJMAX,(DELJI(J),IMAXI(J),J=1,IT)
+<span class="ln">254</span>  160       FORMAT(&#x27; MAX D(J/M)/(J/M)&#x27;,1PE12.3,&#x27; AT PT.&#x27;,I5,
+<span class="ln">255</span>     *      &#x27; BY ITERATION&#x27;/5(1X,E11.3,I4))
+<span class="ln">256</span>         ENDIF
+<span class="ln">257</span>C
+<span class="ln">258</span>C G Somers 11/14, I AM TURNING OFF THE OUTPUT TO THE .FULL FILE.
+<span class="ln">259</span>C THE AM CHANGES WILL NOT BE RECORDED, BUT THIS CAN BE TRIVIALLY
+<span class="ln">260</span>C EXTRACTED FROM THE EXTENDED .STORE FILE.
+<span class="ln">261</span>C
+<span class="ln">262</span>C SKIP OUTPUT IF NOT DESIRED.
+<span class="ln">263</span>C         IF(.NOT.LPRT)GOTO 240
+<span class="ln">264</span>         IF(.TRUE.)GOTO 240
+<span class="ln">265</span>C G Somers END
+<span class="ln">266</span>C
+<span class="ln">267</span>C  IF NPRTPT IS SET TO A LARGE NUMBER, SKIP DETAILED OUTPUT.
+<span class="ln">268</span>         IF(NPRTPT.GT.M)GOTO 240
+<span class="ln">269</span>         WRITE(IMODPT,170)
+<span class="ln">270</span>  170 FORMAT(&#x27; SHELL&#x27;,3X,&#x27;OMEGA&#x27;,5X,&#x27;DEL OMEGA&#x27;,6X,&#x27;J/M&#x27;,7X,&#x27;DEL J/M&#x27;)
+<span class="ln">271</span>C  DETERMINE WHICH SHELLS TO PRINT.
+<span class="ln">272</span>C  FIRST POINT ALWAYS PRINTED OUT.
+<span class="ln">273</span>         ID(1) = 1
+<span class="ln">274</span>         IDM = 2
+<span class="ln">275</span>         IBEG = MAX(IMIN,NPRTPT)
+<span class="ln">276</span>         IEND = MIN(IMAX,INT(IMAX/NPRTPT)*NPRTPT)
+<span class="ln">277</span>C PRINT OUT EVERY NPRTPT POINTS. WHEN V=0, SKIP POINTS.
+<span class="ln">278</span>         DO 180 J = IBEG,IEND,NPRTPT
+<span class="ln">279</span>C            IF(HV(J).EQ.0.0D0)GOTO 180
+<span class="ln">280</span>            ID(IDM) = J
+<span class="ln">281</span>            IDM = IDM + 1
+<span class="ln">282</span>  180    CONTINUE
+<span class="ln">283</span>C OUTERMOST MODEL POINT (OR POINT AT BASE OF SURFACE C.Z.)ALWAYS PRINTED.
+<span class="ln">284</span>         IF(ID(IDM-1).NE.IMAX)THEN
+<span class="ln">285</span>            ID(IDM) = IMAX
+<span class="ln">286</span>         ELSE
+<span class="ln">287</span>            IDM = IDM-1
+<span class="ln">288</span>         ENDIF
+<span class="ln">289</span>C  I/O CONCERNING ANGULAR MOMENTUM TRANSPORT.
+<span class="ln">290</span>         DO 200 I=1,IDM
+<span class="ln">291</span>            WRITE(IMODPT,190)ID(I),OMEGA(ID(I)),OMEGA(ID(I))-
+<span class="ln">292</span>     *      WSAV(ID(I)),HJM(ID(I)),HJM(ID(I))-HJMSAV(ID(I))
+<span class="ln">293</span>  190 FORMAT(1X,I5,1P4E12.3)
+<span class="ln">294</span>  200    CONTINUE
+<span class="ln">295</span>C  I/O CONCERNING DIFFUSION VELOCITIES AND SCALE LENGTHS.
+<span class="ln">296</span>         WRITE(IMODPT,210)
+<span class="ln">297</span>  210 FORMAT(1X,&#x27;SHELL&#x27;,4X,&#x27;VES0&#x27;,9X,&#x27;VES&#x27;,7X,&#x27;VGSF0&#x27;,8X,&#x27;VGSF&#x27;,9X,
+<span class="ln">298</span>     *       &#x27;VSS&#x27;,9X,&#x27;RAT&#x27;,8X,&#x27;VTOT&#x27;,7X,&#x27;LENGTH&#x27;,8X,&#x27;VMU&#x27;)
+<span class="ln">299</span>         DO 230 I = 1,IDM
+<span class="ln">300</span>            WRITE(IMODPT,220)ID(I),VES0(ID(I)),VES(ID(I)),VGSF0(ID(I)),
+<span class="ln">301</span>     *      VGSF(ID(I)),VSS(ID(I)),RAT(ID(I)),HV(ID(I)),HLE(ID(I)),
+<span class="ln">302</span>     *      VMU(ID(I))
+<span class="ln">303</span>  220 FORMAT(1X,I5,1P10E12.3)
+<span class="ln">304</span>  230    CONTINUE
+<span class="ln">305</span>         IF(LDIFAD)THEN
+<span class="ln">306</span>C            DO I = 1,IDM
+<span class="ln">307</span>C               WRITE(IMODPT,221)ID(I),VES(ID(I)),VESA(ID(I)),
+<span class="ln">308</span>C     *         VESD(ID(I)),
+<span class="ln">309</span>C     *         ECOD(ID(I)),ECOD2(ID(I)),ECOD3(ID(I)),ECOD4(ID(I))
+<span class="ln">310</span>C 221           FORMAT(1X,I5,1P7E12.3)
+<span class="ln">311</span>C            END DO
+<span class="ln">312</span>            IF(IDM.EQ.NTOT)THEN
+<span class="ln">313</span>            DO I = 1,IDM
+<span class="ln">314</span>               WRITE(IMODPT,221)I,CHI(I),VES(I),VESA(I),
+<span class="ln">315</span>     *         VESD(I),ECHI(I),ECOD3(I),ECOD4(I)
+<span class="ln">316</span> 221           FORMAT(1X,I5,1P7E12.3)
+<span class="ln">317</span>            END DO
+<span class="ln">318</span>            ELSE IF(IDM.LT.NTOT)THEN
+<span class="ln">319</span>            DO I = 1,IDM
+<span class="ln">320</span>               WRITE(IMODPT,221)I,CHI(I),VES(I),VESA(I),
+<span class="ln">321</span>     *         VESD(I),ECHI(I),ECOD3(I),ECOD4(I)
+<span class="ln">322</span>            END DO
+<span class="ln">323</span>            DO I = IDM+1,NTOT
+<span class="ln">324</span>               WRITE(IMODPT,222)I,ECHI(I),ECOD3(I),ECOD4(I)
+<span class="ln">325</span> 222           FORMAT(1X,I5,48X,1P3E12.3)
+<span class="ln">326</span>            END DO
+<span class="ln">327</span>            ELSE
+<span class="ln">328</span>            DO I = 1,NTOT
+<span class="ln">329</span>               WRITE(IMODPT,221)I,CHI(I),VES(I),VESA(I),
+<span class="ln">330</span>     *         VESD(I),ECHI(I),ECOD3(I),ECOD4(I)
+<span class="ln">331</span>            END DO
+<span class="ln">332</span>            DO I = NTOT+1,IDM
+<span class="ln">333</span>               WRITE(IMODPT,223)I,CHI(I),VES(I),VESA(I),
+<span class="ln">334</span>     *         VESD(I)
+<span class="ln">335</span> 223           FORMAT(1X,I5,1P4E12.3)
+<span class="ln">336</span>            END DO
+<span class="ln">337</span>            ENDIF
+<span class="ln">338</span>         ENDIF
+<span class="ln">339</span>      ENDIF
+<span class="ln">340</span>  240 CONTINUE
+<span class="ln">341</span>      RETURN
+<span class="ln">342</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No change: correct (the five tasks, the tolerances and the questions checked).</p></div></details>
+</main></body></html>

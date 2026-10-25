@@ -1,0 +1,142 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>cowind.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ cowind.f</span></header><main>
+<h1>cowind.f</h1>
+<p class='muted'>87 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/cowind.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file gives the change of the surface convection zone's angular velocity over a time step due to magnetized-wind angular-momentum loss, with the older "Kawaler-type" wind law and a saturation threshold. It is used when the newer Matt et al. law (<code>LMWIND</code>) is off.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>BL</code> ($\log L/L_\odot$), <code>TEFFL</code>, <code>SMASS</code> ($M/M_\odot$), <code>DT</code> (the time step), <code>HICZ</code> (the moment of inertia of the surface convection zone), <code>OMEGAS</code> (the surface $\Omega$ after the previous iteration), <code>WOLD</code> (at the start of the step), <code>IT</code> (the iteration); <code>WMAX</code>, <code>EXMD</code>, <code>EXW</code>, <code>EXR</code>, <code>EXM</code>, <code>CONSTFACTOR</code> in <code>/CWIND/</code> (set in <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a> from the input index "ALFA", per the comment); <code>TAUCZ</code> (the convective overturn time) in <code>/OVRTRN/</code>.</li>
+<li><strong>Who calls it:</strong> <a href="../files/mcowind.f.html#def-MCOWIND">MCOWIND</a>, when <code>LMWIND</code> is false ("run old windlaw").</li>
+<li><strong>Outputs:</strong> <code>WIND1</code>, <code>WIND2</code>, the change of $\Omega$ over the step computed with $\Omega$ at its start and at its end. The comment says they enter the diffusion equations and are averaged: <a href="../files/seculr.f.html#def-SECULR">SECULR</a>, which calls MCOWIND, passes them to <a href="../files/dcoeft.f.html#def-DCOEFT">DCOEFT</a> or <a href="../files/dadcoeft.f.html#def-DADCOEFT">DADCOEFT</a>, where the surface boundary takes $-\tfrac12(\mathtt{WIND1}+\mathtt{WIND2})$ times the moment of inertia.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Saturation.</strong> If <code>WMAX</code> $&gt; 1$, it is read as $\Omega_\mathrm{sat,\odot}\,\tau_\odot$ and $\Omega_\mathrm{sat} = \mathtt{WMAX}/\tau_\mathrm{CZ}$ (MHP 3/09; the run stops if $\tau_\mathrm{CZ}$ is not defined); otherwise $\Omega_\mathrm{sat} = \mathtt{WMAX}$.</li>
+<li>The radius from $L$ and $T_\mathrm{eff}$: $\log R = \tfrac12(\log(L/L_\odot) + \log L_\odot - \log 4\pi - \log\sigma - 4\log T_\mathrm{eff})$, in cm.</li>
+<li>
+<p>The comment's law, $dJ/dt \propto K\,(\dot M/10^{-14})^{a}\,\Omega^{n}\,(M/M_\odot)^{c}(R/R_\odot)^{b}$, gives
+$$C = \frac{\Delta t}{I_\mathrm{CZ}}\,K\left(\frac{\dot M}{10^{-14}\,M_\odot\,\mathrm{yr}^{-1}}\right)^{a}\left(\frac{R}{R_\odot}\right)^{b}\left(\frac{M}{M_\odot}\right)^{c},$$
+$$\Delta\Omega = C\,\min(\Omega, \Omega_\mathrm{sat})^{\,n-1}\,\Omega,$$
+with $K$ = <code>CONSTFACTOR</code>, $a$ = <code>EXMD</code>, $b$ = <code>EXR</code>, $c$ = <code>EXM</code>, $n$ = <code>EXW</code>. So $\Delta\Omega \propto \Omega^n$ below saturation and $\propto \Omega\,\Omega_\mathrm{sat}^{n-1}$ above.</p>
+</li>
+<li>
+<p><code>WIND1</code> uses <code>WOLD</code>. <code>WIND2</code> uses <code>OMEGAS</code>; from the second iteration on, it is the mean of its previous value and the new one, which damps the iteration.</p>
+</li>
+</ol>
+<p><strong>Design.</strong> The mass-loss rate is fixed: <code>DMDOT = 2.0D-14</code> ($M_\odot$ yr$^{-1}$), so the factor $(\dot M/10^{-14})^a$ is the constant $2^a$.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A fixed mass-loss rate.</strong> $\dot M$ is hard-coded to $2\times10^{-14}\,M_\odot$ yr$^{-1}$, not taken from the model's mass loss (<code>/MASSCHG/</code>). Intended as a calibration constant?</li>
+<li><strong>The damping of <code>WIND2</code>.</strong> Averaging the previous <code>WIND2</code> with the new value at each iteration means the converged <code>WIND2</code> mixes values from several iterations. Is this only for stability, and does it converge to the right value?</li>
+<li><strong>Unused inputs.</strong> <code>/DEUTER/</code> is included (with the comment "added option to scale the saturation rate by the overturn timescale", which in fact uses <code>/OVRTRN/</code>), and <code>EXTAU</code>, <code>EXL</code>, <code>EXPR</code>, <code>EXCEN</code>, <code>C_2</code> of <code>/CWIND/</code> are not used here. Can <code>/DEUTER/</code> go?</li>
+<li><strong>The test <code>WMAX &gt; 1</code>.</strong> A real $\Omega_\mathrm{sat}$ is far below 1 rad s$^{-1}$, so the test works as a switch; is that documented for users?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-COWIND'>COWIND</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-COWIND'><h3><span class='kind'>subroutine</span>COWIND</h3>
+<p class='muted'>lines 2–87 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/cowind.f#L2-L87'>GitHub</a></p>
+<pre>SUBROUTINE COWIND(BL,DT,HICZ,IT,OMEGAS,SMASS,</pre>
+<div class='notes'><p>Older wind law: $\Delta\Omega = (\Delta t/I_\mathrm{CZ})\,K\,(\dot M/10^{-14})^{a}(R/R_\odot)^{b}(M/M_\odot)^{c}\,\min(\Omega,\Omega_\mathrm{sat})^{n-1}\,\Omega$, at the start (<code>WIND1</code>) and end (<code>WIND2</code>) of the step; saturation optionally scaled by the overturn time.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-CWIND'>/CWIND/</a>, <a href='../commons.html#c-DEUTER'>/DEUTER/</a>, <a href='../commons.html#c-OVRTRN'>/OVRTRN/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/mcowind.f.html#def-MCOWIND'>MCOWIND</a> <span class='muted'>(mcowind.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE COWIND(BL,DT,HICZ,IT,OMEGAS,SMASS,
+<span class="ln">3</span>     *                  TEFFL,WOLD,WIND1,WIND2)
+<span class="ln">4</span>
+<span class="ln">5</span>      PARAMETER (JSON=5000)
+<span class="ln">6</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">7</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">8</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">9</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">10</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">11</span>C MHP 8/17 ADDED EXCEN, C_2 TO COMMON BLOCK FOR MATT ET AL. 2012 CENT. TERM
+<span class="ln">12</span>      COMMON/CWIND/WMAX,EXMD,EXW,EXTAU,EXR,EXM,EXL,EXPR,CONSTFACTOR,
+<span class="ln">13</span>     *             STRUCTFACTOR,EXCEN,C_2,LJDOT0
+<span class="ln">14</span>C      COMMON/CWIND/WMAX,EXMD,EXW,EXTAU,EXR,EXM,CONSTFACTOR,STRUCTFACTOR,LJDOT0
+<span class="ln">15</span>C MHP 3/09 ADDED OPTION TO SCALE THE SATURATION RATE BY THE OVERTURN TIMESCALE
+<span class="ln">16</span>      COMMON/DEUTER/DRATE(JSON),DRATE0(JSON),FMASSACC,JCZ
+<span class="ln">17</span>      COMMON/OVRTRN/LNEWTCZ,LCALCENV,TAUCZ,TAUCZ0,PPHOT,PPHOT0,FRACSTEP
+<span class="ln">18</span>      SAVE
+<span class="ln">19</span>C  COWIND RETURNS THE CHANGE IN THE ANGULAR VELOCITY OF THE SURFACE
+<span class="ln">20</span>C  CONVECTION ZONE OF A STAR WHICH IS EXPERIENCING ANGULAR MOMENTUM LOSS.
+<span class="ln">21</span>C
+<span class="ln">22</span>C  INPUT VARIABLES:
+<span class="ln">23</span>C
+<span class="ln">24</span>C       DECLARED
+<span class="ln">25</span>C  BL : TOTAL LUMINOSITY
+<span class="ln">26</span>C  DT : DIFFUSION TIMESTEP.
+<span class="ln">27</span>C  HICZ : TOTAL MOMENT OF INERTIA OF THE SURFACE C.Z.
+<span class="ln">28</span>C  IT : ITERATION NUMBER (IN THE DIFFUSION ROUTINES).
+<span class="ln">29</span>C  OMEGAS : SURFACE ANGULAR VELOCITY AT THE END OF THE PREVIOUS ITERATION.
+<span class="ln">30</span>C  SMASS : STELLAR MASS (SOLAR UNITS)
+<span class="ln">31</span>C  TEFFL : STELLAR EFFECTIVE TEMPERATURE.
+<span class="ln">32</span>C  WOLD : SURFACE ANGULAR VELOCITY AT THE BEGINNING OF THE TIMESTEP.
+<span class="ln">33</span>C       IN COMMON BLOCKS
+<span class="ln">34</span>C
+<span class="ln">35</span>C  EXMD,EXW,EXR,EXM,CONSTFACTOR : USER PARAMETERS WHICH VARY THE STRENGTH
+<span class="ln">36</span>C  OF ANGULAR MOMENTUM LOSS AND ITS DEPENDENCE ON SURFACE ROTATION RATE
+<span class="ln">37</span>C  AND OTHER STELLAR PARAMETERS.
+<span class="ln">38</span>C
+<span class="ln">39</span>C  OUTPUT VARIABLES
+<span class="ln">40</span>C
+<span class="ln">41</span>C  WIND1,WIND2:CHANGE IN ANGULAR VELOCITY OF THE SURFACE C.Z. FOR THE TIMESTEP
+<span class="ln">42</span>C  BASED ON THE ANGULAR VELOCITY AT THE BEGINNING AND END OF THE TIMESTEP
+<span class="ln">43</span>C  RESPECTIVELY.
+<span class="ln">44</span>C
+<span class="ln">45</span>C  WIND1 AND WIND2 ARE INCORPORATED INTO THE DIFFUSION EQUATIONS;
+<span class="ln">46</span>C  THEY ARE AVERAGED TO FIND THE TOTAL ANGULAR MOMENTUM LOSS FOR THE
+<span class="ln">47</span>C  TIMESTEP.
+<span class="ln">48</span>C FIND TOTAL RADIUS OF STAR.
+<span class="ln">49</span>C mhp 10/02 cgrav not used; omit
+<span class="ln">50</span>C      CGRAV = EXP(CLN*CGL)
+<span class="ln">51</span>C MHP 3/09 IF WMAX &gt; 1 THEN ASSUME THAT THE PARAMETER WMAX IS DEFINED BY
+<span class="ln">52</span>C WMAX = WMAX(SUN)*TAUCZ(SUN) AND THE SATURATION THRESHOLD WSAT = WMAX/TAUCZ(STAR)
+<span class="ln">53</span>      IF(WMAX.GT.1.0D0)THEN
+<span class="ln">54</span>         IF(TAUCZ.GT.1.0D0)THEN
+<span class="ln">55</span>            WSAT = WMAX/TAUCZ
+<span class="ln">56</span>c            WRITE(*,912)WSAT,TAUCZ
+<span class="ln">57</span>c 912        FORMAT(&#x27;Omega sat, Tau&#x27;,1p2e12.3)
+<span class="ln">58</span>         ELSE
+<span class="ln">59</span>            WRITE(*,911)WMAX,TAUCZ
+<span class="ln">60</span> 911        FORMAT(&#x27;ERROR IN WIND - TAUCZ NOT DEFINED &#x27;,1P2E12.3,&#x27;STOPPED&#x27;)
+<span class="ln">61</span>            STOP
+<span class="ln">62</span>         ENDIF
+<span class="ln">63</span>      ELSE
+<span class="ln">64</span>         WSAT = WMAX
+<span class="ln">65</span>      ENDIF
+<span class="ln">66</span>      RL=0.5D0*(BL+CLSUNL-C4PIL-CSIGL-4.D0*TEFFL)
+<span class="ln">67</span>      RTOT = EXP(CLN*RL)
+<span class="ln">68</span>C DMDOT IS THE MASS LOSS RATE IN SOLAR MASSES PER YEAR.
+<span class="ln">69</span>      DMDOT = 2.0D-14
+<span class="ln">70</span>C DJ/DT = DT*CONSTFACTOR*(DMDOT/1.0D-14)**EXMD*OMEGA**EXW*(M/MSUN)**EXM
+<span class="ln">71</span>C         *(R/RSUN)**EXR
+<span class="ln">72</span>C  THE CONSTANT AND EXPONENTS ARE SET IN PARMIN BASED ON THE INPUT
+<span class="ln">73</span>C  INDEX ALFA;SEE PARMIN FOR DETAILS ON THE DEPENDENCE OF EACH ON ALFA.
+<span class="ln">74</span>      C = DT/HICZ*CONSTFACTOR*(DMDOT/1.0D-14)**EXMD
+<span class="ln">75</span>     *    *(RTOT/CRSUN)**EXR*SMASS**EXM
+<span class="ln">76</span>      WP = MIN(WOLD,WSAT)
+<span class="ln">77</span>      WN = MIN(OMEGAS,WSAT)
+<span class="ln">78</span>      WIND1 = C*WP**(EXW-1.0D0)*WOLD
+<span class="ln">79</span>      TEMP = C*WN**(EXW-1.0D0)*OMEGAS
+<span class="ln">80</span>      IF(IT.EQ.1) THEN
+<span class="ln">81</span>         WIND2 = TEMP
+<span class="ln">82</span>      ELSE
+<span class="ln">83</span>         WIND2 = 0.5D0*(WIND2+TEMP)
+<span class="ln">84</span>      ENDIF
+<span class="ln">85</span>
+<span class="ln">86</span>      RETURN
+<span class="ln">87</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Settled. "they go to DADCOEFT as arguments, probably through MCOWIND's caller": <a href="../files/seculr.f.html#def-SECULR">SECULR</a> calls MCOWIND and passes <code>WIND1</code>, <code>WIND2</code> to <a href="../files/dcoeft.f.html#def-DCOEFT">DCOEFT</a> or <a href="../files/dadcoeft.f.html#def-DADCOEFT">DADCOEFT</a>, where the surface boundary uses their mean, $-\tfrac12(\mathtt{WIND1}+\mathtt{WIND2})\,I$. Fix: state it.</li>
+<li>Unclear. Step 2's $\log R$ omits $\log L_\odot$: <code>BL</code> is $\log L/L_\odot$, and the code adds <code>CLSUNL</code>. Fix: write $\log R = \tfrac12(\log(L/L_\odot) + \log L_\odot - \log 4\pi - \log\sigma - 4\log T_\mathrm{eff})$.</li>
+</ol>
+<p>Revised: where <code>WIND1</code>, <code>WIND2</code> go (SECULR, DCOEFT, DADCOEFT) stated; the radius formula corrected.</p></div></details>
+</main></body></html>

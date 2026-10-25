@@ -1,0 +1,169 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>lirate88.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ lirate88.f</span></header><main>
+<h1>lirate88.f</h1>
+<p class='muted'>115 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/lirate88.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>LIRATE88</code> computes the burning rates of ⁶Li, ⁷Li and ⁹Be by protons at every point, from the fits of Caughlan and Fowler (1988) (spelled "Caughlin" in the comment), scaled by user factors. Called with <code>J</code> = 1 it computes the rates for the current model; with <code>J</code> = 2, for the model at the start of the step.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> the main program, <a href="../files/main.f.html#def-_file_level_">main.f</a> (with <code>J</code> = 1 before the structure iteration and <code>J</code> = 2 after it, then <a href="../files/liburn.f.html#def-LIBURN"><code>LIBURN</code></a>), and <a href="../files/getw.f.html#def-GETW"><code>GETW</code></a> (<code>J</code> = 2) for rotating models.</li>
+<li><strong>Inputs:</strong> with <code>J</code> = 1, the arguments <code>HD</code> ($\log\rho$), <code>HT</code> ($\log T$), <code>HCOMP(1)</code> ($X$); with <code>J</code> = 2, the old model <code>HDO</code>, <code>HTO</code>, <code>HCOMPP</code> from COMMON <code>OLDMOD</code>. The scale factors <code>SLI6</code>, <code>SLI7</code>, <code>SBE91</code>, <code>SBE92</code>, <code>SBE93</code> from COMMON <code>BURNSCS</code> (set by <a href="../files/parmin.f.html#def-PARMIN"><code>PARMIN</code></a>; G. Somers 6/14).</li>
+<li><strong>Outputs:</strong> <code>RLI6</code>, <code>RLI7</code>, <code>RBE9</code> in <code>NEWRAT</code> (<code>J</code> = 1) or <code>RLI60</code>, <code>RLI70</code>, <code>RBE90</code> in <code>OLDRAT</code> (<code>J</code> = 2), read by <code>LIBURN</code>, <a href="../files/liburn2.f.html#def-LIBURN2"><code>LIBURN2</code></a>, <a href="../files/bursmix.f.html#def-BURSMIX"><code>BURSMIX</code></a> and <code>GETW</code>.</li>
+</ul>
+<p><strong>The method.</strong> With $T_9 = T/10^9$, each rate is the Caughlan–Fowler fit $N_A\langle\sigma v\rangle(T_9)$ for: ⁶Li(p,³He)α; ⁷Li(p,α)α; and the sum of ⁹Be(p,γ)¹⁰B, ⁹Be(p,d)2α and ⁹Be(p,α)⁶Li. For example ⁷Li(p,α)α, with $T_{9a} = T_9/(1 + 0.759\,T_9)$:</p>
+<p>$$N_A\langle\sigma v\rangle = \frac{1.096\times10^{9}}{T_9^{2/3}}\,e^{-8.472/T_9^{1/3}} - 4.830\times10^{8}\,\frac{T_{9a}^{5/6}}{T_9^{3/2}}\,e^{-8.472/T_{9a}^{1/3}} + \frac{1.06\times10^{10}}{T_9^{3/2}}\,e^{-30.442/T_9}.$$</p>
+<p>Each is multiplied by its scale factor and by $\rho X$, giving the rate per nucleus, $\lambda = \rho X\,N_A\langle\sigma v\rangle$ (per second, if the fits are in the usual cm³ mol⁻¹ s⁻¹; the code does not say). The loop runs from the centre outward and stops at the first point where both the new and the old $\log T$ are below 6 (<code>TLIM</code>); from there to the surface all six rate arrays are set to zero.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Zeroing both sets.</strong> Above the cut, a call with <code>J</code> = 1 also zeroes the start-of-step rates (<code>OLDRAT</code>) and a call with <code>J</code> = 2 the new ones. Harmless if the cut point is the same in both calls, but it depends on both the old and new temperatures; intended?</li>
+<li><strong>Unused arguments with <code>J</code> = 2.</strong> With <code>J</code> = 2 the arguments <code>HD</code>, <code>HT</code> and <code>HCOMP</code> serve only for the temperature cut; the rates come from <code>OLDMOD</code>. Is <code>OLDMOD</code> always on the current grid at that point (it is after <code>HPOINT</code>)?</li>
+<li><strong>Hard-coded cut.</strong> <code>TLIM</code> = 6 (in $\log T$).</li>
+<li>
+<p><strong>Old typos noted in the comments.</strong> The comments record a typo in the old ⁶Li rate (0.50 for 0.050; the $T_9^{5/3}$ coefficient also differs, 0.006 in the old line, 0.005 in the code) and a changed last term of ⁹Be(p,γ) (2.72 vs 2.76 × 10⁶). Have these been checked against the published table?</p>
+</li>
+<li>
+<p><strong>Are end-of-step rates ever computed? (apparent bug)</strong> main.f saves the starting model into <code>OLDMOD</code> (through <code>HPOINT</code> at line 632, or at lines 643–647 when <code>LKUTHE</code> is set), then calls <code>LIRATE88</code> with <code>J</code> = 1 (line 673, comment "find burning rates at the beginning of the time step"), which fills <code>NEWRAT</code> from that same starting model. After convergence it calls <code>J</code> = 2 (line 889, comment "end of the time step"), which fills <code>OLDRAT</code> from <code>OLDMOD</code>, again the starting model. So <code>LIBURN</code> receives the starting rates in both arrays, and the rates of the converged model are never used. <a href="../files/getw.f.html#def-GETW"><code>GETW</code></a> also calls <code>J</code> = 2 "at the end of the time step" (line 342), and after <code>LIBURN</code> copies <code>NEWRAT</code> into <code>OLDRAT</code> as the next step's start. The callers' comments fit the code if, with <code>J</code> = 2, the routine used the arguments <code>HD</code>, <code>HT</code>, <code>HCOMP</code> and filled <code>NEWRAT</code>. Are the two branches swapped?</p>
+</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+LIRATE88
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-LIRATE88'>LIRATE88</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-LIRATE88'><h3><span class='kind'>subroutine</span>LIRATE88</h3>
+<p class='muted'>lines 6–115 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/lirate88.f#L6-L115'>GitHub</a></p>
+<pre>SUBROUTINE LIRATE88(HCOMP,HD,HT,M,J)</pre>
+<div class='notes'><p>The Caughlan–Fowler (1988) rates for ⁶Li, ⁷Li and ⁹Be, times $\rho X$ and the user scale factors (above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+LIRATE88
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-BURNSCS'>/BURNSCS/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-NEWRAT'>/NEWRAT/</a>, <a href='../commons.html#c-OLDMOD'>/OLDMOD/</a>, <a href='../commons.html#c-OLDRAT'>/OLDRAT/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/getw.f.html#def-GETW'>GETW</a> <span class='muted'>(getw.f)</span></li>
+<li><a href='../files/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span> ×2</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE LIRATE88(HCOMP,HD,HT,M,J)
+<span class="ln">7</span>
+<span class="ln">8</span>      PARAMETER(JSON=5000)
+<span class="ln">9</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">10</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">11</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">12</span>      COMMON/NEWRAT/RLI6(JSON),RLI7(JSON),RBE9(JSON)
+<span class="ln">13</span>      COMMON/OLDMOD/HPO(JSON),HTO(JSON),HRO(JSON),HLO(JSON),HDO(JSON),
+<span class="ln">14</span>     *              HCOMPP(15,JSON),HSS(JSON),LCO(JSON),LCZO(JSON),TEFFLO,MO
+<span class="ln">15</span>      COMMON/OLDRAT/RLI60(JSON),RLI70(JSON),RBE90(JSON)
+<span class="ln">16</span>C G Somers 6/14, IMPORT LIGHT ELEMENT SCALE FACTOR BLOCK
+<span class="ln">17</span>      COMMON/BURNSCS/SLI6,SLI7,SBE91,SBE92,SBE93
+<span class="ln">18</span>C G Somers END
+<span class="ln">19</span>      DIMENSION HCOMP(15,JSON),HD(JSON),HT(JSON)
+<span class="ln">20</span>      DATA TLIM/6.0D0/
+<span class="ln">21</span>      SAVE
+<span class="ln">22</span>
+<span class="ln">23</span>C THIS ROUTINE COMPUTES THE BURNING RATES FOR LI6,LI7,BE9 AT THE
+<span class="ln">24</span>C BEGINNING AND END OF A TIMESTEP AND STORES THEM IN COMMON BLOCKS
+<span class="ln">25</span>C NEWRAT AND OLDRAT.
+<span class="ln">26</span>C
+<span class="ln">27</span>C BURNING RATES FROM CAUGHLIN AND FOWLER (1988).
+<span class="ln">28</span>C
+<span class="ln">29</span>      DO 100 I = 1,M
+<span class="ln">30</span>         IF(HT(I).LT.TLIM.AND.HTO(I).LT.TLIM)GOTO 110
+<span class="ln">31</span>         IF(J.EQ.1)THEN
+<span class="ln">32</span>            RHOX = EXP(CLN*HD(I))*HCOMP(1,I)
+<span class="ln">33</span>            T9=EXP(CLN*(HT(I)-9.0D0))
+<span class="ln">34</span>         ELSE
+<span class="ln">35</span>            RHOX = EXP(CLN*HDO(I))*HCOMPP(1,I)
+<span class="ln">36</span>            T9=EXP(CLN*(HTO(I)-9.0D0))
+<span class="ln">37</span>         ENDIF
+<span class="ln">38</span>         T913=T9**CC13
+<span class="ln">39</span>         T923=T913*T913
+<span class="ln">40</span>         T943=T923*T923
+<span class="ln">41</span>C MHP 10/91 ADDED DEFINITION
+<span class="ln">42</span>         T953 = T943*T913
+<span class="ln">43</span>         T932=T9**1.5D0
+<span class="ln">44</span>         T934=T9**7.5D-1
+<span class="ln">45</span>C
+<span class="ln">46</span>C LI6(P,HE3)ALPHA
+<span class="ln">47</span>C
+<span class="ln">48</span>C           FLI6=3.73D10/T923*EXP(-8.413/T913-(T9/5.50)**2)*
+<span class="ln">49</span>C    1      (1.+%TYPO%0.50*T913-0.061*T923-0.021*T9+0.006*T943+0.006*T953)
+<span class="ln">50</span>C    2      +1.33D10/T932*EXP(-17.763/T9)+1.29D9/T9*EXP(-21.820/T9)
+<span class="ln">51</span>C ***TYPO IN OLD RATE***
+<span class="ln">52</span>         FLI6=3.73D10/T923*EXP(-8.413D0/T913-(T9/5.50D0)**2)*
+<span class="ln">53</span>     1   (1.D0+0.050D0*T913-0.061D0*T923-0.021D0*T9+0.006D0*T943
+<span class="ln">54</span>     2    +0.005D0*T953)+1.33D10/T932*EXP(-17.763D0/T9)
+<span class="ln">55</span>     3    +1.29D9/T9*EXP(-21.820D0/T9)
+<span class="ln">56</span>C
+<span class="ln">57</span>C LI7(P,ALFA)HE4
+<span class="ln">58</span>C
+<span class="ln">59</span>C           FLI7=8.04D08/T923*EXP(-8.471/T913-(T9/30.068)**2)*
+<span class="ln">60</span>C    1      (1.+0.049*T913+0.230*T923+0.079*T9-0.027*T943-0.023*T953)
+<span class="ln">61</span>C    2      +1.54D06/T932*EXP(-4.479/T9)+1.07D10/T932*EXP(-30.443/T9)
+<span class="ln">62</span>         T9A = T9/(1.0D0+0.759D0*T9)
+<span class="ln">63</span>         C56 = 1.25D0*CC23
+<span class="ln">64</span>         FLI7=1.096D9/T923*EXP(-8.472D0/T913)-4.830D8*T9A**C56/
+<span class="ln">65</span>     1   T932*EXP(-8.472D0/T9A**CC13)+1.06D10/T932*EXP(-30.442D0/T9)
+<span class="ln">66</span>C
+<span class="ln">67</span>C BE9(P,GAMMA)B10
+<span class="ln">68</span>C
+<span class="ln">69</span>         FBE91=1.33D+07/T923*EXP(-10.359D0/T913-(T9/0.846D0)**2)
+<span class="ln">70</span>     1   *(1.0D0+4.0D-2*T913+1.52D0*T923+4.28D-1*T9+2.15D0*T943+
+<span class="ln">71</span>     2   1.54D0*T953) + 9.64D+4/T932*EXP(-3.445D0/T9) +
+<span class="ln">72</span>     3   2.72D+6/T932*EXP(-10.62D0/T9)
+<span class="ln">73</span>C    3      2.76D+6/T932*EXP(-10.62D0/T9) %OLD LAST LINE%
+<span class="ln">74</span>C
+<span class="ln">75</span>C BE9(P,D)2HE4 - UNCHANGED.
+<span class="ln">76</span>C
+<span class="ln">77</span>         FX=2.11D+11/T923*EXP(-10.359D0/T913-(T9/5.2D-1)**2)
+<span class="ln">78</span>     1   *(1.0D0+4.0D-2*T913+1.09D0*T923+3.07D-1*T9+3.21D0*T943
+<span class="ln">79</span>     2   +2.3D0*T953)
+<span class="ln">80</span>         EX = EXP(-3.046D0/T9)/T9
+<span class="ln">81</span>         FBE92=FX+5.79D+8*EX+8.5D+8/T934*EXP(-5.8D0/T9)
+<span class="ln">82</span>C
+<span class="ln">83</span>C BE9(P,ALPHA)LI6
+<span class="ln">84</span>C
+<span class="ln">85</span>         FBE93=FX+4.51D+8*EX+6.7D+8/T934*EXP(-5.16D0/T9)
+<span class="ln">86</span>C G Somers 6/14, SCALE BY THE NEW CROSS SECTIONS
+<span class="ln">87</span>         FLI6=SLI6*FLI6
+<span class="ln">88</span>         FLI7=SLI7*FLI7
+<span class="ln">89</span>         FBE91=SBE91*FBE91
+<span class="ln">90</span>         FBE92=SBE92*FBE92
+<span class="ln">91</span>         FBE93=SBE93*FBE93
+<span class="ln">92</span>C G Somers END
+<span class="ln">93</span>C SUM RATES
+<span class="ln">94</span>         FSBE9 = FBE91 + FBE92 + FBE93
+<span class="ln">95</span>         IF(J.EQ.1)THEN
+<span class="ln">96</span>            RLI6(I) = FLI6*RHOX
+<span class="ln">97</span>            RLI7(I) = FLI7*RHOX
+<span class="ln">98</span>            RBE9(I) = FSBE9*RHOX
+<span class="ln">99</span>         ELSE
+<span class="ln">100</span>            RLI60(I) = FLI6*RHOX
+<span class="ln">101</span>            RLI70(I) = FLI7*RHOX
+<span class="ln">102</span>            RBE90(I) = FSBE9*RHOX
+<span class="ln">103</span>         ENDIF
+<span class="ln">104</span>  100 CONTINUE
+<span class="ln">105</span>  110 CONTINUE
+<span class="ln">106</span>      DO 120 K = I,M
+<span class="ln">107</span>         RLI6(K)=0.0D0
+<span class="ln">108</span>         RLI7(K)=0.0D0
+<span class="ln">109</span>         RBE9(K)=0.0D0
+<span class="ln">110</span>         RLI60(K)=0.0D0
+<span class="ln">111</span>         RLI70(K)=0.0D0
+<span class="ln">112</span>         RBE90(K)=0.0D0
+<span class="ln">113</span>  120 CONTINUE
+<span class="ln">114</span>      RETURN
+<span class="ln">115</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing (apparent bug).</strong> End-of-step rates seem never to be computed. main.f stores the starting model in <code>OLDMOD</code>, then <code>J</code> = 1 (main.f line 673, "beginning of the time step") fills <code>NEWRAT</code> from the same starting model, and <code>J</code> = 2 (line 889, "end of the time step") fills <code>OLDRAT</code> from <code>OLDMOD</code>. <code>GETW</code> (line 342) also calls <code>J</code> = 2 "at the end". The callers' comments fit the code only if the branches were swapped. Fix: add question 5.</li>
+<li><strong>Missing.</strong> The ⁶Li fit also differs from the commented old line in the $T_9^{5/3}$ coefficient (0.006 → 0.005), not mentioned. Fix: add to question 4.</li>
+</ol>
+<p>Checked otherwise: the ⁷Li formula ($T_{9a}$, exponent 5/6), the scale factors, $\rho X$, the temperature cut and the zeroing.</p>
+<p>Revised: questions 4 and 5.</p></div></details>
+</main></body></html>

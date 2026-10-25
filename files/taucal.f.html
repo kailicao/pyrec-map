@@ -1,0 +1,262 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>taucal.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ taucal.f</span></header><main>
+<h1>taucal.f</h1>
+<p class='muted'>201 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/taucal.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>TAUCAL</code> computes the convective overturn time scale $\tau_\mathrm{cz}$ (<code>TAUCZ</code>) near the base of the surface convection zone, for a convection zone that lies within the envelope (JVS 02/12). Its comments say the code was taken from <code>MIDMOD</code>, and that the routine is called only from <code>ENVINT</code>.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the envelope's profile, passed by <a href="../files/envint.f.html#def-ENVINT">ENVINT</a> as arguments: the shell masses <code>HS2</code>, unlogged masses <code>HS1</code>, convective flags <code>LCZ</code>, $\log r$ (<code>HR</code>), $\log P$ (<code>HP</code>), $\log\rho$ (<code>HD</code>), gravity <code>HG</code>, the convective velocity <code>SVEL</code>, and two temperature gradients <code>DEL1</code>, <code>DEL2</code> (<code>EDEL1</code> and <code>EDEL2</code> in <code>ENVINT</code>, copied from <code>EDELS(1,·)</code> and <code>EDELS(2,·)</code>, which <a href="../files/stitch.f.html#def-STITCH">STITCH</a>'s column list names the radiative and the actual gradient; their difference changes sign at the zone's edge).</li>
+<li><strong>Who calls it:</strong> only <a href="../files/envint.f.html#def-ENVINT">ENVINT</a>.</li>
+<li><strong>Output:</strong> <code>TAUCZ</code> in COMMON <code>OVRTRN</code>, shared with <a href="../files/gettau.f.html#def-GETTAU">GETTAU</a>, <a href="../files/envint.f.html#def-ENVINT">ENVINT</a>, <a href="../files/massloss.f.html#def-MASSLOSS">MASSLOSS</a>, <a href="../files/getw.f.html#def-GETW">GETW</a> and others (the wind and mass-loss routines, by their names).</li>
+<li><strong>COMMON blocks:</strong> <code>OVRTRN</code>, <code>ROT</code> (<code>LROT</code>), the constants; <code>COMP</code> and <code>DEUTER</code> are declared but not used.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Going down from the surface, find the first convective shell, then the base of that zone, <code>IMAX</code>; note whether a second, deeper convective zone exists (<code>LTWOCZ</code>, its top <code>ICZTOP</code>).</li>
+<li>Locate the base $r_b$ where $\nabla_1 - \nabla_2$ changes sign, by linear interpolation between shells <code>IMAX-1</code> and <code>IMAX</code> (factor $f$), and the pressure scale height there,
+   $$H_P = \frac{P}{\rho\,g},\qquad g = \frac{G m}{r^2}\ \text{(computed here only without rotation)},$$
+   interpolated with the same $f$.</li>
+<li>If the zone is thin, that is, with $r_\mathrm{top}$ the radius of shell <code>ICZTOP</code>,
+   $$\left|1 - \frac{r_b + H_P - r_\mathrm{IMAX}}{r_\mathrm{top} - r_\mathrm{IMAX}}\right| &lt; 0.5,$$
+   so that the point $r_b + H_P$ lies between the zone's middle and half a width above its top, or there are two zones, the mass-weighted mean velocity over shells <code>IMAX</code> to <code>ICZTOP</code> is used:
+   $$\bar v = \frac{\sum_j \Delta m_j\,\tfrac12 (v_j + v_{j+1})}{\sum_j \Delta m_j},\qquad \tau_\mathrm{cz} = \frac{|r_\mathrm{top} - r_\mathrm{IMAX}|}{\bar v}.$$</li>
+<li>Otherwise (the original method), the velocity at one pressure scale height above the base, $v(r_b + H_P)$, by linear interpolation in $\log r$, gives
+   $$\tau_\mathrm{cz} = \frac{H_P}{v(r_b + H_P)} .$$</li>
+<li>With no convective zone the code sets <code>IMAX = M</code> and, unless <code>LALLCZ</code> is set, computes $\tau_\mathrm{cz}$ at the surface anyway (from shells <code>M-1</code> and <code>M</code>). $\tau_\mathrm{cz} = 0$ only when <code>LALLCZ</code> is set, by the test <code>IMAX .LT. 1</code>, which depends on a value of <code>IMAX</code> left from an earlier call (question 1).</li>
+</ol>
+<p><strong>Design.</strong> The routine prints "TauCal" to the screen at every call. A large commented-out block handled fully convective cases.</p>
+<p><strong>KC's changes.</strong> The unused arguments <code>HCOMP</code> and <code>MINT</code> were removed (2025-05-31).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>IMAX</code> and <code>ICZTOP</code> may be undefined.</strong> <code>IMAX</code> is set only when the loop leaves a convective zone; otherwise it keeps the value <code>SAVE</code>d from an earlier call, and the test <code>IMAX .LT. 1</code> (for a zone reaching the bottom) relies on that. <code>ICZTOP</code> is set only when there are two zones, but the averaging branch also runs for one thin zone (the first condition), and then uses <code>ICZTOP</code> undefined.</li>
+<li><strong><code>.AND.</code> became <code>.OR.</code></strong> The commented-out test required a thin zone <em>and</em> two zones; the active one takes either. Which is intended?</li>
+<li><strong>A debugging print.</strong> <code>print*, 'TauCal'</code> writes to the screen at every call.</li>
+<li><strong>Two widths.</strong> In the averaging branch, the width is $r_\mathrm{top} - r_\mathrm{IMAX}$, from the shells, rather than from the interpolated base $r_b$.</li>
+<li><strong><code>LCZSUR</code>.</strong> The test <code>(HSTOP-HSBOT)/CMSUN .GT. 0</code> is true for any zone, and <code>LCZSUR</code> is no longer used (its test was commented out, JVS 10/11/13).</li>
+<li><strong>No convective zone, but a turnover time.</strong> Without a convective zone (<code>LCZEX</code> false), <code>IMAX = M</code>, and unless <code>LALLCZ</code> happens to be set, $\tau_\mathrm{cz}$ is computed from the surface shells <code>M-1</code> and <code>M</code> as if a zone ended there. Should <code>TAUCZ</code> be 0 in that case?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+SUBROUTINE TAUCAL(HCOMP,HS2,HS1,LCZ,HR,HP,HD,HG,M,SVEL,DEL1,DEL2,MINT)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-TAUCAL'>TAUCAL</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-TAUCAL'><h3><span class='kind'>subroutine</span>TAUCAL</h3>
+<p class='muted'>lines 3–201 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/taucal.f#L3-L201'>GitHub</a></p>
+<pre>SUBROUTINE TAUCAL(HS2,HS1,LCZ,HR,HP,HD,HG,M,SVEL,DEL1,DEL2)</pre>
+<div class='notes'><p>The convective overturn time near the base of a surface convection zone within the envelope, $H_P/v$ one scale height above the base, or a zone's width over its mean velocity for thin or double zones.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+SUBROUTINE TAUCAL(HCOMP,HS2,HS1,LCZ,HR,HP,HD,HG,M,SVEL,DEL1,DEL2,MINT)  ! KC 2025-05-31</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-COMP'>/COMP/</a>, <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-DEUTER'>/DEUTER/</a>, <a href='../commons.html#c-OVRTRN'>/OVRTRN/</a>, <a href='../commons.html#c-ROT'>/ROT/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE TAUCAL(HS2,HS1,LCZ,HR,HP,HD,HG,M,SVEL,DEL1,DEL2)
+<span class="ln">4</span>      PARAMETER(JSON=5000)
+<span class="ln">5</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">6</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">7</span>      INTEGER*4 IMAX
+<span class="ln">8</span>      COMMON/COMP/XENV,ZENV,ZENVM,AMUENV,FXENV(12),XNEW,ZNEW,STOTAL,
+<span class="ln">9</span>     *     SENV
+<span class="ln">10</span>      COMMON/DEUTER/DRATE(JSON),DRATE0(JSON),FMASSACC,JCZ
+<span class="ln">11</span>      COMMON/ROT/WNEW,WALPCZ,ACFPFT,ITFP1,ITFP2,LROT,LINSTB,LWNEW
+<span class="ln">12</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">13</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">14</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">15</span>C G Somers 3/17, ADDING NEW TAUCZ COMMON BLOCK
+<span class="ln">16</span>      COMMON/OVRTRN/LNEWTCZ,LCALCENV,TAUCZ,TAUCZ0,PPHOT,PPHOT0,FRACSTEP
+<span class="ln">17</span>C       DIMENSION HCOMP(15,JSON),HS2(JSON),LCZ(JSON),  ! KC 2025-05-31
+<span class="ln">18</span>      DIMENSION HS2(JSON),LCZ(JSON),
+<span class="ln">19</span>     *     HR(JSON), HP(JSON), HD(JSON), HG(JSON), HS1(JSON),  ! XSUM(15)
+<span class="ln">20</span>     *     DEL1(JSON), DEL2(JSON), SVEL(JSON)
+<span class="ln">21</span>      SAVE
+<span class="ln">22</span>
+<span class="ln">23</span>
+<span class="ln">24</span>
+<span class="ln">25</span>C JVS 02/12 CALCULATE THE LOCAL CONVECTIVE OVERTURN TIMESCALE AT THE BASE
+<span class="ln">26</span>C OF THE CZ. IN OLDER VERSIONS THIS WAS ONLY DONE FOR ROTATING MODELS;
+<span class="ln">27</span>C THIS MAKES IT SO TAUCZ IS CALCULATED FOR ALL MODELS. THIS PARTICULAR SUBROUTINE
+<span class="ln">28</span>C DOES CALCULATES THE OVERTURN TIMESCALES IN MODELS WHERE THE CZ IS WITHIN
+<span class="ln">29</span>C THE ENVELOPE
+<span class="ln">30</span>
+<span class="ln">31</span>C THIS CODE SNAGGED FROM MIDMOD
+<span class="ln">32</span>
+<span class="ln">33</span>C  DETERMINE EXTENT OF SURFACE CONVECTION ZONE.
+<span class="ln">34</span>      LALLCZ = .FALSE.
+<span class="ln">35</span>C JVS Allows the last point to be stable.
+<span class="ln">36</span>C JVS 05/14 removed requirement for last point to be convective, since this routine
+<span class="ln">37</span>C is only called from ENVINT, the near surface points in the envelope are often
+<span class="ln">38</span>C radiative, despite the fact that a convective envelope exists. Code now checks
+<span class="ln">39</span>C to make sure there is a CZ somewhere in the envelope.
+<span class="ln">40</span>C      IF(LCZ(M) .OR. LCZ(M-1) .OR. LCZ(M-2))THEN
+<span class="ln">41</span>
+<span class="ln">42</span>
+<span class="ln">43</span>
+<span class="ln">44</span>C  SURFACE C.Z. EXISTS.  FIND LOWEST SHELL (IMAX), WHICH IS ALSO THE
+<span class="ln">45</span>C  UPPERMOST ZONE CONSIDERED FOR STABILITY AGAINST ROTATIONALLY INDUCED MIXING.
+<span class="ln">46</span>C         DO 71 I = M-1,1,-1
+<span class="ln">47</span>C            IF(.NOT.LCZ(I)) GOTO 81
+<span class="ln">48</span>C   71    CONTINUE
+<span class="ln">49</span>C         LALLCZ = .TRUE.
+<span class="ln">50</span>C         I = 0
+<span class="ln">51</span>C   81    IMAX = I + 1
+<span class="ln">52</span>
+<span class="ln">53</span>C DEAL THE POSSIBILITY OF TWO OR MORE SURFACE CONVECTION ZONES IN THE ENVELOPE
+<span class="ln">54</span>        LFLAG = .FALSE.
+<span class="ln">55</span>        LTWOCZ = .FALSE.
+<span class="ln">56</span>        LCZEX = .FALSE. ! Flag for the existence of a CZ
+<span class="ln">57</span>        DO 71 I = M-1,1,-1
+<span class="ln">58</span>            IF(.NOT.LCZ(I) .AND. .NOT. LFLAG .AND. LCZEX) THEN ! EXITING CZ
+<span class="ln">59</span>                  IMAX = I+1
+<span class="ln">60</span>                  LFLAG = .TRUE.
+<span class="ln">61</span>            ELSE IF (LFLAG .AND. LCZ(I)) THEN ! TWO CZS WITH RADIATIVE ZONE BETWEEN
+<span class="ln">62</span>                  LFLAG = .FALSE.
+<span class="ln">63</span>                  LTWOCZ = .TRUE.
+<span class="ln">64</span>                  ICZTOP = I
+<span class="ln">65</span>            ELSE IF( LCZ(I) .AND. .NOT. LCZEX) THEN !First convective point from surface
+<span class="ln">66</span>                  LCZEX = .TRUE.
+<span class="ln">67</span>            ENDIF
+<span class="ln">68</span>   71    CONTINUE
+<span class="ln">69</span>         IF(IMAX .LT. 1)THEN
+<span class="ln">70</span>              LALLCZ = .TRUE.
+<span class="ln">71</span>         ENDIF
+<span class="ln">72</span>
+<span class="ln">73</span>      IF(LCZEX) THEN ! REPLACES &quot;IF(LCZ(M)&quot; THEN JVS 05/14
+<span class="ln">74</span>
+<span class="ln">75</span>
+<span class="ln">76</span>C  HSTOP IS THE MASS AT THE TOP OF THE C.Z.
+<span class="ln">77</span>C  HSBOT IS THE MASS AT THE BOTTOM OF THE C.Z.
+<span class="ln">78</span>         HSTOP = HS1(M)
+<span class="ln">79</span>         IF(IMAX.GT.1)THEN
+<span class="ln">80</span>            HSBOT = 0.5D0*(HS1(IMAX)+HS1(IMAX-1))
+<span class="ln">81</span>         ELSE
+<span class="ln">82</span>            HSBOT = HS1(1)
+<span class="ln">83</span>         ENDIF
+<span class="ln">84</span>C  LCZSUR=T IF A SURFACE C.Z.DEEP ENOUGH FOR ANGULAR MOMENTUM LOSS EXISTS
+<span class="ln">85</span>         IF((HSTOP-HSBOT)/CMSUN.GT.0.0D0)THEN
+<span class="ln">86</span>            LCZSUR = .TRUE.
+<span class="ln">87</span>         ELSE
+<span class="ln">88</span>            LCZSUR= .FALSE.
+<span class="ln">89</span>         ENDIF
+<span class="ln">90</span>      ELSE
+<span class="ln">91</span>C  NO SURFACE C.Z.
+<span class="ln">92</span>         IMAX = M
+<span class="ln">93</span>         LCZSUR = .FALSE.
+<span class="ln">94</span>      ENDIF
+<span class="ln">95</span>
+<span class="ln">96</span>C JVS 10/11/13 Concerned that this is inappropriate for LCZSUR = FALSE.
+<span class="ln">97</span>C Should never be the case, but removed it.
+<span class="ln">98</span>C      IF(LCZSUR)THEN
+<span class="ln">99</span>         IF(.NOT.LALLCZ)THEN
+<span class="ln">100</span>            IF(.NOT.LROT)THEN
+<span class="ln">101</span>               HG(IMAX)=HS1(IMAX)*EXP(CLN*(CGL-2.0D0*HR(IMAX)))
+<span class="ln">102</span>               HG(IMAX-1)=HS1(IMAX-1)*EXP(CLN*(CGL-2.0D0*HR(IMAX-1)))
+<span class="ln">103</span>            ENDIF
+<span class="ln">104</span>C PINPOINT RCZ
+<span class="ln">105</span>            DD2 = DEL1(IMAX-1)-DEL2(IMAX-1)
+<span class="ln">106</span>            DD1 = DEL1(IMAX)-DEL2(IMAX)
+<span class="ln">107</span>            FX = DD2/(DD2-DD1)
+<span class="ln">108</span>C INFER HP
+<span class="ln">109</span>            ENVRL = HR(IMAX-1)+FX*(HR(IMAX)-HR(IMAX-1))
+<span class="ln">110</span>            ENVR = EXP(CLN*ENVRL)
+<span class="ln">111</span>            PS2 = EXP(CLN*(HP(IMAX)-HD(IMAX)))/HG(IMAX)
+<span class="ln">112</span>            PS1 = EXP(CLN*(HP(IMAX-1)-HD(IMAX-1)))/HG(IMAX-1)
+<span class="ln">113</span>            PSCA = PS1 + FX*(PS2-PS1)
+<span class="ln">114</span>            RTESTL = DLOG10(ENVR+PSCA)
+<span class="ln">115</span>C JVS 03/14 WHEN THERE ARE TWO CZS, THE DEEPER ONE CAN BE ~HP THICK. IN
+<span class="ln">116</span>C THIS CASE, WE&quot;LL WANT AND AVERAGE CONVECTIVE VELOCITY ACROSS THE REGION
+<span class="ln">117</span>C--------------------------------------------------------------
+<span class="ln">118</span>            TOL = 0.5
+<span class="ln">119</span>C            IF(ABS(1.0 - ((DEXP(CLN*(RTESTL-HR(IMAX))) - 1.0)/
+<span class="ln">120</span>C     *         (DEXP(CLN*(HR(ICZTOP)-HR(IMAX))) - 1.0))) .LT. TOL
+<span class="ln">121</span>C     *          .AND. LTWOCZ) THEN
+<span class="ln">122</span>            IF((ABS(1.0 - ((DEXP(CLN*(RTESTL-HR(IMAX))) - 1.0)/
+<span class="ln">123</span>     *         (DEXP(CLN*(HR(ICZTOP)-HR(IMAX))) - 1.0))) .LT. TOL) .OR. LTWOCZ) THEN
+<span class="ln">124</span>                  ! TAKE AVERAGE CONV VELOCITY
+<span class="ln">125</span>                  CVEAVG = 0.0
+<span class="ln">126</span>C                  DENOM = ABS(HS1(ICZTOP)-HS1(IMAX))/DEXP(CLN*STOTAL) ! MASS IN CZ
+<span class="ln">127</span>                  DENOM = 0.0
+<span class="ln">128</span>                  UMER = 0.0
+<span class="ln">129</span>                  CZWIDE = ABS(DEXP(CLN*HR(ICZTOP))-DEXP(CLN*HR(IMAX)))
+<span class="ln">130</span>                  DO J=IMAX,ICZTOP,1
+<span class="ln">131</span>                        DENOM = DENOM + HS2(J)
+<span class="ln">132</span>                        UMER = UMER+ 0.5d0*(SVEL(J)+SVEL(J+1))*HS2(J)
+<span class="ln">133</span>                  ENDDO
+<span class="ln">134</span>                  CVEAVG = UMER/DENOM
+<span class="ln">135</span>                  TAUCZ = CZWIDE/CVEAVG
+<span class="ln">136</span>            ELSE
+<span class="ln">137</span>C             (ORIGINAL ROUTINE)
+<span class="ln">138</span>C             FIND V
+<span class="ln">139</span>                       DO K = IMAX+1,M
+<span class="ln">140</span>                           IF(HR(K).GT.RTESTL)THEN
+<span class="ln">141</span>                                      FX = (RTESTL-HR(K-1))/(HR(K)-HR(K-1))
+<span class="ln">142</span>                                      CVEL = SVEL(K-1)+FX*(SVEL(K)-SVEL(K-1))
+<span class="ln">143</span>                                      GOTO 85
+<span class="ln">144</span>                           ENDIF
+<span class="ln">145</span>                    END DO
+<span class="ln">146</span>                    CVEL = SVEL(M)
+<span class="ln">147</span> 85                CONTINUE
+<span class="ln">148</span>C                  DEFINE TAUCZ
+<span class="ln">149</span>                  TAUCZ = PSCA/CVEL
+<span class="ln">150</span>            ENDIF
+<span class="ln">151</span>
+<span class="ln">152</span>C JVS 10/11/13
+<span class="ln">153</span>C         ELSE
+<span class="ln">154</span>CC INFER HP
+<span class="ln">155</span>C            IF(.NOT.LROT)THEN
+<span class="ln">156</span>C               HG(1)=HS1(1)*EXP(CLN*(CGL-2.0D0*HR(1)))
+<span class="ln">157</span>C            ENDIF
+<span class="ln">158</span>C            PSCA2 = EXP(CLN*(HP(1)-HD(1)))/HG(1)
+<span class="ln">159</span>C            RTEST2 = EXP(CLN*HR(1))
+<span class="ln">160</span>C            IF(PSCA2.LE.RTEST2)THEN
+<span class="ln">161</span>CC HP &lt; R AT THE FIRST POINT.  ASSUME V CONSTANT INSIDE AND HP = K/R FOR
+<span class="ln">162</span>CC SLOWLY VARYING DENSITY AND PRESSURE NEAR THE CENTER.
+<span class="ln">163</span>C               CVEL = SVEL(1)
+<span class="ln">164</span>C               PSCA = (PSCA2*RTEST2)**0.5D0
+<span class="ln">165</span>C               TAUCZ = PSCA/CVEL
+<span class="ln">166</span>C            ELSE
+<span class="ln">167</span>C               DO K = 2,M
+<span class="ln">168</span>C                  PSCA1 = PSCA2
+<span class="ln">169</span>C                  RTEST1 = RTEST2
+<span class="ln">170</span>C                  IF(.NOT.LROT)THEN
+<span class="ln">171</span>C                     HG(K)=HS1(K)*EXP(CLN*(CGL-2.0D0*HR(K)))
+<span class="ln">172</span>C                  ENDIF
+<span class="ln">173</span>C                  PSCA2 = EXP(CLN*(HP(K)-HD(K)))/HG(K)
+<span class="ln">174</span>C                  RTEST2 = EXP(CLN*HR(K))
+<span class="ln">175</span>CC FIND LOCATION WHERE HP = R
+<span class="ln">176</span>C                  IF(PSCA2.LE.RTEST2)THEN
+<span class="ln">177</span>C                     FX = (RTEST1-PSCA1)/((PSCA2-RTEST2)-(PSCA1-RTEST1))
+<span class="ln">178</span>CC FIND V
+<span class="ln">179</span>C                     CVEL = SVEL(K-1)+FX*(SVEL(K)-SVEL(K-1))
+<span class="ln">180</span>C                     PSCA = PSCA1+FX*(PSCA2-PSCA1)
+<span class="ln">181</span>CC DEFINE TAUCZ
+<span class="ln">182</span>C                     TAUCZ = PSCA/CVEL
+<span class="ln">183</span>C                     GOTO 95
+<span class="ln">184</span>C                  ENDIF
+<span class="ln">185</span>C               END DO
+<span class="ln">186</span>C               K = M
+<span class="ln">187</span>C               CVEL = SVEL(M)
+<span class="ln">188</span>C               PSCA = PSCA2
+<span class="ln">189</span>C               TAUCZ = PSCA/CVEL
+<span class="ln">190</span>C 95            CONTINUE
+<span class="ln">191</span>C            ENDIF
+<span class="ln">192</span>C         ENDIF
+<span class="ln">193</span>      ELSE
+<span class="ln">194</span>         TAUCZ = 0.0D0
+<span class="ln">195</span>      ENDIF
+<span class="ln">196</span>      print*, &#x27;TauCal&#x27;
+<span class="ln">197</span>
+<span class="ln">198</span>C END JVS
+<span class="ln">199</span>
+<span class="ln">200</span>      RETURN
+<span class="ln">201</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> Step 5, "With no convective zone … $\tau_\mathrm{cz} = 0$": with no convective zone the code sets <code>IMAX = M</code> and, unless <code>LALLCZ</code>, computes $\tau_\mathrm{cz}$ at the surface anyway; <code>TAUCZ = 0</code> only when <code>LALLCZ</code>, which depends on a stale <code>IMAX &lt; 1</code>. <strong>Fix:</strong> correct step 5 and add a question.</li>
+<li><strong>Unclear.</strong> Step 3, "the point $r_b + H_P$ lies in the upper half of the zone": the test is $\left|1 - \frac{r_b + H_P - r_\mathrm{IMAX}}{r_\mathrm{top} - r_\mathrm{IMAX}}\right| &lt; 0.5$, so the point lies between the zone's middle and half a width above its top. <strong>Fix:</strong> write the test.</li>
+<li><strong>Wrong.</strong> <code>DEL1</code>, <code>DEL2</code> "probably the radiative and adiabatic gradients": ENVINT passes <code>EDELS(1,·)</code> and <code>EDELS(2,·)</code>, which STITCH's column list names the radiative and the actual gradient. <strong>Fix:</strong> say so.</li>
+</ol>
+<p>Revised: step 3's test written out; step 5 corrected, new question 6; <code>DEL1</code>, <code>DEL2</code> named.</p></div></details>
+</main></body></html>

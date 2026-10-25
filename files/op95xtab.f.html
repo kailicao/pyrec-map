@@ -1,0 +1,148 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>op95xtab.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ op95xtab.f</span></header><main>
+<h1>op95xtab.f</h1>
+<p class='muted'>97 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/op95xtab.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Builds the OPAL95 opacity table at one fixed hydrogen abundance (the surface $X$), from the table at the model's $Z$ (MHP 7/98). The result is what <a href="../files/op952d.f.html#def-OP952D">OP952D</a> interpolates, for the outer layers, where $X$ and $Z$ are those of the surface.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the desired $X$ (the envelope's, <code>XENV</code>); the table at the model's $Z$, <code>CAPPA</code> in <code>/LLOT95/</code> (from <a href="../files/op95ztab.f.html#def-OP95ZTAB">OP95ZTAB</a>); the $X$ grid <code>XXG</code> in <code>/LLOT95A/</code>.</li>
+<li><strong>Who calls it:</strong> <a href="../files/setupopac.f.html#def-SETUPOPAC">SETUPOPAC</a> (at start-up) and <a href="../files/surfopac.f.html#def-SURFOPAC">SURFOPAC</a> (which rebuilds the surface tables for a new envelope $X$, <code>XENV</code>).</li>
+<li><strong>What it calls:</strong> <a href="../files/intrp2.f.html#def-INTRP2">INTRP2</a>, four-point Lagrange weights.</li>
+<li><strong>Output:</strong> <code>CAPPAE(70,19)</code> and <code>XTAB</code> in <code>/LLOT95E/</code>, read by <code>OP952D</code> and <a href="../files/getopal95.f.html#def-GETOPAL95">GETOPAL95</a>.</li>
+</ul>
+<p><strong>The method.</strong> It picks four $X$ tables around the desired $X$ and interpolates every $(T, R)$ entry with Lagrange weights $b_k$:
+$$\log\kappa_\mathrm{E}(T, R) = \sum_{k=1}^4 b_k\,\log\kappa(X_k, T, R).$$
+For $X \le 0.8$, or $Z \le 0.04$ (where all ten $X$ tables exist), the four nearest tables. For $0.04 &lt; Z &lt; 0.1$, tables 6, 7, 8 and 10 (table 9, $X = 0.95$, is missing). For $Z \ge 0.1$, tables 6–9.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Table 9 at $Z = 0.04$.</strong> This routine treats exactly $Z = 0.04$ as "low Z" (<code>ZTAB.LE.0.04</code>, all ten tables), while <a href="../files/op95ztab.f.html#def-OP95ZTAB">OP95ZTAB</a> skips table 9 for <code>Z.GE.0.04</code>, so for a surface $X &gt; 0.8$ the interpolation may use a table 9 that holds old values (zeros at first). Should the test here be <code>ZTAB.LT.0.04</code>?</li>
+<li><strong>The branch for $Z \ge 0.1$.</strong> It uses tables 6–9, but table 9 is never filled at that $Z$. The branch cannot be reached now, since <code>OP95ZTAB</code> stops the run for any $Z &gt; 0.08$; if that limit is raised, should it use tables 5–8?</li>
+<li><strong>A wrong comment.</strong> "Find interpolation factors in Z" precedes the interpolation in $X$.</li>
+<li><strong>The sentinel <code>IDX = 11</code>.</strong> The value marks the "6, 7, 8, 10" case for the index selection below; a named flag would be clearer.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+OP95XTAB
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-OP95XTAB'>OP95XTAB</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-OP95XTAB'><h3><span class='kind'>subroutine</span>OP95XTAB</h3>
+<p class='muted'>lines 6–97 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/op95xtab.f#L6-L97'>GitHub</a></p>
+<pre>SUBROUTINE OP95XTAB(X)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+OP95XTAB
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-LLOT95'>/LLOT95/</a>, <a href='../commons.html#c-LLOT95A'>/LLOT95A/</a>, <a href='../commons.html#c-LLOT95E'>/LLOT95E/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/intrp2.f.html#def-INTRP2'>INTRP2</a> <span class='muted'>(intrp2.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/setupopac.f.html#def-SETUPOPAC'>SETUPOPAC</a> <span class='muted'>(setupopac.f)</span></li>
+<li><a href='../files/surfopac.f.html#def-SURFOPAC'>SURFOPAC</a> <span class='muted'>(surfopac.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE OP95XTAB(X)
+<span class="ln">7</span>c MHP 7/98 COMPUTE OPACITY TABLE AT FIXED X FROM THE OP95 TABLE AT
+<span class="ln">8</span>C THE MODEL Z
+<span class="ln">9</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">10</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">11</span>      PARAMETER (NUMT=70)
+<span class="ln">12</span>      PARAMETER (NUMD=19)
+<span class="ln">13</span>      PARAMETER (NUMX=10)
+<span class="ln">14</span>      PARAMETER (NUMZ=13)
+<span class="ln">15</span>      PARAMETER (NUMXZ=126)
+<span class="ln">16</span>C FULL SET OF TABLES: OPACITY AS A FUNCTION OF Z AND X, T, RHO/T6**3
+<span class="ln">17</span>C TABLES ARE INCREMENTED IN SETS OF NZ*NX.  SO THE TABLES FOR THE
+<span class="ln">18</span>C THIRD METAL ABUNDANCE (3 X 10**-4)BEGIN AT TABLE 21 AND END AT TABLE 30.
+<span class="ln">19</span>C FOR THE HIGH VALUES OF Z, THE NUMBER OF X TABLES IS NOT THE SAME (I.E.
+<span class="ln">20</span>C X&lt;0.9 FOR Z=0.1).
+<span class="ln">21</span>C FOR EACH COMPOSITION A FULL GRID IN (T,RHO/T6**3) IS RETAINED.
+<span class="ln">22</span>      COMMON /LLOT95A/TGR(NUMT),XXG(NUMX),R0GR(NUMD),ZZG(NUMZ),
+<span class="ln">23</span>     *                CAPPA2(NUMXZ,NUMT,NUMD),NUMXM(NUMZ),NZ(NUMZ)
+<span class="ln">24</span>C GRID ENTRIES FOR TEMPERATURE, ABUNDANCE (X), AND RHO/T6**3
+<span class="ln">25</span>C OPACITY AS A FUNCTION OF X, T, AND RHO/T6**3
+<span class="ln">26</span>      COMMON /LLOT95/CAPPA(NUMX,NUMT,NUMD),ZTAB
+<span class="ln">27</span>C AS ABOVE FOR DESIRED SURFACE VALUE OF X.
+<span class="ln">28</span>      COMMON /LLOT95E/CAPPAE(NUMT,NUMD),XTAB
+<span class="ln">29</span>      DIMENSION A(4),B(4)
+<span class="ln">30</span>      SAVE
+<span class="ln">31</span>      XTAB = X
+<span class="ln">32</span>C  FIND 4 NEAREST TABLES IN X TO DESIRED VALUE.
+<span class="ln">33</span>      IF(X.LE.0.8D0)THEN
+<span class="ln">34</span>C DON&#x27;T NEED TO WORRY ABOUT MISSING X TABLES AT HIGH Z.
+<span class="ln">35</span>         DO I = 3,NUMX-1
+<span class="ln">36</span>            IF(XXG(I).GE.X)THEN
+<span class="ln">37</span>               IDX = I - 2
+<span class="ln">38</span>               GOTO 10
+<span class="ln">39</span>            ENDIF
+<span class="ln">40</span>         END DO
+<span class="ln">41</span>         IDX = NUMX - 3
+<span class="ln">42</span> 10      CONTINUE
+<span class="ln">43</span>         DO I = 1,4
+<span class="ln">44</span>            A(I) = XXG(IDX+I-1)
+<span class="ln">45</span>         END DO
+<span class="ln">46</span>      ELSE IF(ZTAB.LE.0.04D0)THEN
+<span class="ln">47</span>C HIGH X TABLES PRESENT AT LOW Z.
+<span class="ln">48</span>         DO I = 3,NUMX-1
+<span class="ln">49</span>            IF(XXG(I).GE.X)THEN
+<span class="ln">50</span>               IDX = I - 2
+<span class="ln">51</span>               GOTO 20
+<span class="ln">52</span>            ENDIF
+<span class="ln">53</span>         END DO
+<span class="ln">54</span>         IDX = NUMX - 3
+<span class="ln">55</span> 20      CONTINUE
+<span class="ln">56</span>         DO I = 1,4
+<span class="ln">57</span>            A(I) = XXG(IDX+I-1)
+<span class="ln">58</span>         END DO
+<span class="ln">59</span>      ELSE IF(ZTAB.GE.0.1D0)THEN
+<span class="ln">60</span>C USE TABLES 6-9
+<span class="ln">61</span>         IDX = 6
+<span class="ln">62</span>         DO I = 1,4
+<span class="ln">63</span>            A(I) = XXG(IDX+I-1)
+<span class="ln">64</span>         END DO
+<span class="ln">65</span>      ELSE
+<span class="ln">66</span>C IF Z IS BETWEEN 0.04 AND 0.1, TABLES 1-8 AND 10 EXIST.
+<span class="ln">67</span>C SINCE WE HAVE ALREADY DETERMINED THAT X &gt; 0.8, USE 6-8 AND 10.
+<span class="ln">68</span>         IDX = 11
+<span class="ln">69</span>         A(1) = XXG(6)
+<span class="ln">70</span>         A(2) = XXG(7)
+<span class="ln">71</span>         A(3) = XXG(8)
+<span class="ln">72</span>         A(4) = XXG(10)
+<span class="ln">73</span>      ENDIF
+<span class="ln">74</span>C
+<span class="ln">75</span>C  FIND INTERPOLATION FACTORS IN Z.
+<span class="ln">76</span>      CALL <a href="../files/intrp2.f.html#def-INTRP2" title="INTRP2 in intrp2.f">INTRP2</a>(A,B,X)
+<span class="ln">77</span>C INDICES FOR 4 DESIRED COMPOSITIONS.
+<span class="ln">78</span>      IF(IDX.LT.10)THEN
+<span class="ln">79</span>         I1 = IDX
+<span class="ln">80</span>         I2 = IDX + 1
+<span class="ln">81</span>         I3 = IDX + 2
+<span class="ln">82</span>         I4 = IDX + 3
+<span class="ln">83</span>      ELSE
+<span class="ln">84</span>         I1 = 6
+<span class="ln">85</span>         I2 = 7
+<span class="ln">86</span>         I3 = 8
+<span class="ln">87</span>         I4 = 10
+<span class="ln">88</span>      ENDIF
+<span class="ln">89</span>      DO J = 1,NUMT
+<span class="ln">90</span>         DO K = 1,NUMD
+<span class="ln">91</span>            CAPPAE(J,K) = B(1)*CAPPA(I1,J,K) +
+<span class="ln">92</span>     *      B(2)*CAPPA(I2,J,K) + B(3)*CAPPA(I3,J,K) +
+<span class="ln">93</span>     *      B(4)*CAPPA(I4,J,K)
+<span class="ln">94</span>         END DO
+<span class="ln">95</span>      END DO
+<span class="ln">96</span>      RETURN
+<span class="ln">97</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> Question 1 treats $Z \ge 0.1$ as a live case, but OP95ZTAB stops the run for any $Z &gt; 0.08$ (its search loop ends at <code>NUMZ-1</code>), so <code>ZTAB</code> never exceeds 0.08 and the branch "use tables 6–9" is unreachable. The live problem is $Z = 0.04$ exactly with surface $X &gt; 0.8$. Fix: split into two questions, the live one first.</li>
+<li><strong>Unclear.</strong> SURFOPAC "when the surface composition changes, probably": SURFOPAC is called by HPOINT (with <code>XNEW</code>) and STARIN (with <code>XENV</code>) and rebuilds the surface tables. Fix: drop "probably".</li>
+</ol>
+<p>Revised: questions 1–2 rewritten from the old question 1; the SURFOPAC line fixed.</p></div></details>
+</main></body></html>

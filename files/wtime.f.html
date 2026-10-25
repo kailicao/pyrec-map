@@ -1,0 +1,97 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>wtime.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ wtime.f</span></header><main>
+<h1>wtime.f</h1>
+<p class='muted'>58 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/wtime.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>WTIME</code> limits the time step of a rotating model by the change of the angular velocity since the previous model: if $\Omega$ changed by more than the user's fraction <code>DTWIND</code> somewhere (default 0.08, by the comment), the step shrinks; if less, it grows.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the previous step <code>DELTS</code>, <code>M</code>, the current <code>OMEGA</code>; through COMMON blocks, the previous model's rates <code>WOLD</code> (<code>OLDROT</code>, saved by <a href="../files/starin.f.html#def-STARIN">STARIN</a> and the rotation routines), <code>DTWIND</code> (<code>CT2</code>, from <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a>) and the step-change limit <code>ATIME(13)</code> (<code>CTLIM</code>).</li>
+<li><strong>Who calls it:</strong> only <a href="../files/htimer.f.html#def-HTIMER">HTIMER</a>, which takes the smallest of its candidate steps.</li>
+<li><strong>Outputs:</strong> <code>DELTSW</code>, the rotation-based step, and <code>DWMAX</code>, the largest relative change.</li>
+</ul>
+<p><strong>The method.</strong> The largest relative change over all shells,
+$$\delta_\mathrm{max} = \max_i \frac{2\,|\Omega_i - \Omega_i^\mathrm{old}|}{\Omega_i + \Omega_i^\mathrm{old}},$$
+gives $f = \delta_\mathrm{max}/$<code>DTWIND</code>, limited to $1/a \le f \le a$ with $a$ = <code>ATIME(13)</code> (MHP 10/14), and $\Delta t_\Omega = \Delta t/f$. If nothing changed ($f = 0$), $\Delta t_\Omega = 10^{20}$, so that rotation does not limit the step.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A non-rotating shell.</strong> If $\Omega_i = \Omega_i^\mathrm{old} = 0$ in any shell, the ratio is 0/0.</li>
+<li><strong>The comment and the limiter.</strong> The comment says the change is restricted to "a factor of ATIME(14)%", while the code uses <code>ATIME(13)</code> as a factor (MHP 10/14).</li>
+<li><strong><code>IWMAX</code></strong> (the shell of the largest change) is found but not returned or used.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-WTIME'>WTIME</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-WTIME'><h3><span class='kind'>subroutine</span>WTIME</h3>
+<p class='muted'>lines 2–58 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/wtime.f#L2-L58'>GitHub</a></p>
+<pre>SUBROUTINE WTIME(DELTS,M,OMEGA,DELTSW,DWMAX)</pre>
+<div class='notes'><p>Rotation-based time step: $\Delta t/f$ with $f$ the largest relative change of $\Omega$ over <code>DTWIND</code>, limited by <code>ATIME(13)</code>.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CT2'>/CT2/</a>, <a href='../commons.html#c-CTLIM'>/CTLIM/</a>, <a href='../commons.html#c-OLDROT'>/OLDROT/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/htimer.f.html#def-HTIMER'>HTIMER</a> <span class='muted'>(htimer.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE WTIME(DELTS,M,OMEGA,DELTSW,DWMAX)
+<span class="ln">3</span>
+<span class="ln">4</span>      PARAMETER (JSON=5000)
+<span class="ln">5</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">6</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">7</span>      COMMON/CT2/DTWIND
+<span class="ln">8</span>      COMMON/OLDROT/WOLD(JSON),HJX(JSON),HIO(JSON),HGO(JSON),R0X(JSON),
+<span class="ln">9</span>     *              ETA2X(JSON)
+<span class="ln">10</span>      COMMON/CTLIM/ATIME(14),TCUT(5),TSCUT,TENV0,TENV1,TENV,TGCUT
+<span class="ln">11</span>      DIMENSION OMEGA(JSON)
+<span class="ln">12</span>      SAVE
+<span class="ln">13</span>C  FOR ROTATING MODELS, LIMIT TIMESTEP BASED ON MAX CHANGE IN OMEGA.
+<span class="ln">14</span>C  THE USER PARAMETER DTWIND GOVERNS THE MAXIMUM CHANGE ALLOWED BETWEEN
+<span class="ln">15</span>C  MODELS.
+<span class="ln">16</span>C INPUT VARIABLES :
+<span class="ln">17</span>C DECLARED VARIABLES
+<span class="ln">18</span>C   DELTS : PREVIOUS MODEL TIMESTEP
+<span class="ln">19</span>C   M : NUMBER OF MODEL POINTS
+<span class="ln">20</span>C   OMEGA : RUN OF ANGULAR VELOCITY IN THE CURRENT MODEL.
+<span class="ln">21</span>C VARIABLES IN COMMON BLOCKS :
+<span class="ln">22</span>C   DTWIND : MAX DELTA OMEGA/OMEGA (DEFAULT =0.08).
+<span class="ln">23</span>C   WOLD : RUN OF ANGULAR VELOCITY IN THE PREVIOUS MODEL.
+<span class="ln">24</span>C
+<span class="ln">25</span>C OUTPUT VARIABLES :
+<span class="ln">26</span>C   DELTSW : ROTATION-BASED TIMESTEP.
+<span class="ln">27</span>C   DWMAX : MAXIMUM FRACTIONAL CHANGE IN OMEGA.
+<span class="ln">28</span>C
+<span class="ln">29</span>
+<span class="ln">30</span>      II = 1
+<span class="ln">31</span>      DWMAX = 2.0D0*ABS(OMEGA(II)-WOLD(II))/(OMEGA(II)+WOLD(II))
+<span class="ln">32</span>      IWMAX = II
+<span class="ln">33</span>      DO 50 I = II+1,M
+<span class="ln">34</span>         TESTW=2.0D0*ABS(OMEGA(I)-WOLD(I))/(OMEGA(I)+WOLD(I))
+<span class="ln">35</span>         IF(TESTW.GT.DWMAX) THEN
+<span class="ln">36</span>            DWMAX = TESTW
+<span class="ln">37</span>            IWMAX = I
+<span class="ln">38</span>         ENDIF
+<span class="ln">39</span> 50   CONTINUE
+<span class="ln">40</span>      FAC = DWMAX/DTWIND
+<span class="ln">41</span>C  IF NO CHANGE FROM PREVIOUS MODEL,SET DELTSW TO TIMESTEP
+<span class="ln">42</span>C  STORED IN THE PREVIOUS MODEL.
+<span class="ln">43</span>C      IF (FAC.EQ.0.D0) FAC=1.0D0
+<span class="ln">44</span>      IF (FAC.EQ.0.D0)THEN
+<span class="ln">45</span>          DELTSW = 1.0D20
+<span class="ln">46</span>          GOTO 999
+<span class="ln">47</span>      ENDIF
+<span class="ln">48</span>C  RESTRICT CHANGE IN TIMESTEP TO NO MORE THAN A FACTOR OF ATIME(14)%
+<span class="ln">49</span>C UP OR DOWN.
+<span class="ln">50</span>C      TEMP=1.0D0+ATIME(14)
+<span class="ln">51</span>C MHP 10/14 USE ATIME(13) AS THE GLOBAL TIMESTEP LIMITER FOR THE CODE
+<span class="ln">52</span>      TEMP = ATIME(13)
+<span class="ln">53</span>      IF (FAC.GT.TEMP) FAC=TEMP
+<span class="ln">54</span>      IF (FAC.LT.1.0D0/TEMP) FAC=1.0D0/TEMP
+<span class="ln">55</span>      DELTSW = DELTS/FAC
+<span class="ln">56</span> 999  CONTINUE
+<span class="ln">57</span>      RETURN
+<span class="ln">58</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings.</p>
+<p>No change.</p></div></details>
+</main></body></html>

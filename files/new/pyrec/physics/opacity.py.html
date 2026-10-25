@@ -1,0 +1,327 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>new/pyrec/physics/opacity.py · YREC rp_1</title><link rel='stylesheet' href='../../../../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../../../../index.html'>YREC rp_1</a><span class='muted'>/ New version (Python) / pyrec/physics/opacity.py</span></header><main>
+<h1>pyrec/physics/opacity.py</h1>
+<p class='muted'>New version (Python) (stubs): 143 lines · 17 definitions</p>
+<h2>Header comments</h2>
+<pre class='doc'>The opacity: one subclass per table family; a second metallicity is a second instance.
+
+Classes
+-------
+OpacityTable : Base of the family.
+Opal95Opacity, Opal92Opacity, Laol89Opacity, Alex06Opacity, Alex95Opacity,
+Kurucz90Opacity : The table families.
+ConductiveOpacity : Potekhin tables.
+OpacityBlend : Chooses and ramps tables, adds conduction.
+
+Counterpart: new-fortran/microphysics.md</pre>
+
+<p><strong>Counterpart</strong> (the design pages)</p><ul class='calls'><li><a href='../../../../new-fortran/microphysics.html'>Microphysics: Physics and its families</a> <span class='muted'>(new-fortran/microphysics.md)</span></li></ul>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-table_interp'>table_interp</a> <span class='muted'>function · Interpolate a log-kappa table in (X, log T, log R), into ``out`` (kappa and its two log-de</span></li>
+<li><a href='#def-OpacityTable'>OpacityTable</a> <span class='muted'>class · Base of the opacity family.</span></li>
+<li><a href='#def-OpacityTable.__init__'>OpacityTable.__init__</a> <span class='muted'>method · Store the metallicity.</span></li>
+<li><a href='#def-OpacityTable.read'>OpacityTable.read</a> <span class='muted'>method · Read the table; sizes from the file. A hook for derived classes.</span></li>
+<li><a href='#def-OpacityTable.prepare'>OpacityTable.prepare</a> <span class='muted'>method · Pre-interpolate to a fixed X. This is a hook for derived classes. The base class does noth</span></li>
+<li><a href='#def-OpacityTable.kappa'>OpacityTable.kappa</a> <span class='muted'>method · kappa, d log kappa/d log rho, d log kappa/d log T. A hook for derived classes.</span></li>
+<li><a href='#def-Opal95Opacity'>Opal95Opacity</a> <span class='muted'>class · OPAL 1995, 2D/3D/4D by composition.</span></li>
+<li><a href='#def-Opal92Opacity'>Opal92Opacity</a> <span class='muted'>class · OPAL 1992.</span></li>
+<li><a href='#def-Laol89Opacity'>Laol89Opacity</a> <span class='muted'>class · LAOL 1989; also the pure-Z table, as a third instance.</span></li>
+<li><a href='#def-Alex06Opacity'>Alex06Opacity</a> <span class='muted'>class · Alexander and Ferguson 2006, low temperatures.</span></li>
+<li><a href='#def-Alex95Opacity'>Alex95Opacity</a> <span class='muted'>class · Alexander and Ferguson 1995, low temperatures.</span></li>
+<li><a href='#def-Kurucz90Opacity'>Kurucz90Opacity</a> <span class='muted'>class · Kurucz 1990, low temperatures.</span></li>
+<li><a href='#def-ConductiveOpacity'>ConductiveOpacity</a> <span class='muted'>class · Conductive opacities from the Potekhin tables.</span></li>
+<li><a href='#def-ConductiveOpacity.kappa'>ConductiveOpacity.kappa</a> <span class='muted'>method · Conductive kappa and its log-derivatives.</span></li>
+<li><a href='#def-OpacityBlend'>OpacityBlend</a> <span class='muted'>class · Chooses low-T and interior tables, ramps between them, adds conduction harmonically.</span></li>
+<li><a href='#def-OpacityBlend.kappa'>OpacityBlend.kappa</a> <span class='muted'>method · The blended opacity at a point.</span></li>
+<li><a href='#def-OpacityBlend.kappa_shells'>OpacityBlend.kappa_shells</a> <span class='muted'>method · The blended opacity over shells (each `(m,)`), into ``out`` (`(3, m)`), through Numba kern</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-table_interp'><h3><span class='kind'>function</span>table_interp</h3>
+<p class='muted'>lines 22–33</p>
+<pre>def table_interp(logk: np.ndarray, x_grid: np.ndarray, t_grid: np.ndarray, r_grid: np.ndarray,
+                 x: float, tl: float, rl: float, out: np.ndarray) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Interpolate a log-kappa table in (X, log T, log R), into ``out`` (kappa and its two log-derivatives).
+
+Notes
+-----
+Numba: hot loop, shared by every table family (the 2D/3D/4D variants
+differ in the axes they pass).
+
+Replaces: op952d.f#OP952D, op953d.f#OP953D, op954d.f#OP954D, yllo2d.f#YLLO2D, yllo2d2.f#YLLO2D2, yllo3d.f#YLLO3D, yllo3d2.f#YLLO3D2, yalo3d.f#YALO3D</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/op952d.f.html#def-OP952D'>OP952D</a> <span class='muted'>(op952d.f)</span></li><li><a href='../../../../files/op953d.f.html#def-OP953D'>OP953D</a> <span class='muted'>(op953d.f)</span></li><li><a href='../../../../files/op954d.f.html#def-OP954D'>OP954D</a> <span class='muted'>(op954d.f)</span></li><li><a href='../../../../files/yllo2d.f.html#def-YLLO2D'>YLLO2D</a> <span class='muted'>(yllo2d.f)</span></li><li><a href='../../../../files/yllo2d2.f.html#def-YLLO2D2'>YLLO2D2</a> <span class='muted'>(yllo2d2.f)</span></li><li><a href='../../../../files/yllo3d.f.html#def-YLLO3D'>YLLO3D</a> <span class='muted'>(yllo3d.f)</span></li><li><a href='../../../../files/yllo3d2.f.html#def-YLLO3D2'>YLLO3D2</a> <span class='muted'>(yllo3d2.f)</span></li><li><a href='../../../../files/yalo3d.f.html#def-YALO3D'>YALO3D</a> <span class='muted'>(yalo3d.f)</span></li></ul>
+
+<details><summary>External calls (1)</summary><p><code>numba.njit</code></p></details>
+<details><summary>Source</summary><pre class='src'><span class="ln">22</span>def table_interp(logk: np.ndarray, x_grid: np.ndarray, t_grid: np.ndarray, r_grid: np.ndarray,
+<span class="ln">23</span>                 x: float, tl: float, rl: float, out: np.ndarray) -&gt; None:
+<span class="ln">24</span>    &quot;&quot;&quot;Interpolate a log-kappa table in (X, log T, log R), into ``out`` (kappa and its two log-derivatives).
+<span class="ln">25</span>
+<span class="ln">26</span>    Notes
+<span class="ln">27</span>    -----
+<span class="ln">28</span>    Numba: hot loop, shared by every table family (the 2D/3D/4D variants
+<span class="ln">29</span>    differ in the axes they pass).
+<span class="ln">30</span>
+<span class="ln">31</span>    Replaces: op952d.f#OP952D, op953d.f#OP953D, op954d.f#OP954D, yllo2d.f#YLLO2D, yllo2d2.f#YLLO2D2, yllo3d.f#YLLO3D, yllo3d2.f#YLLO3D2, yalo3d.f#YALO3D
+<span class="ln">32</span>    &quot;&quot;&quot;
+<span class="ln">33</span>    ...</pre></details>
+</section>
+<section class='def' id='def-OpacityTable'><h3><span class='kind'>class</span>OpacityTable</h3>
+<p class='muted'>lines 36–65</p>
+<pre>class OpacityTable:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Base of the opacity family.
+
+Attributes
+----------
+z : float
+    The table&#x27;s metallicity.
+
+Methods
+-------
+read : Read the table file.
+prepare : Pre-interpolate to a fixed X.
+kappa : log kappa and its log-derivatives.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">36</span>class OpacityTable:
+<span class="ln">37</span>    &quot;&quot;&quot;Base of the opacity family.
+<span class="ln">38</span>
+<span class="ln">39</span>    Attributes
+<span class="ln">40</span>    ----------
+<span class="ln">41</span>    z : float
+<span class="ln">42</span>        The table&#x27;s metallicity.
+<span class="ln">43</span>
+<span class="ln">44</span>    Methods
+<span class="ln">45</span>    -------
+<span class="ln">46</span>    read : Read the table file.
+<span class="ln">47</span>    prepare : Pre-interpolate to a fixed X.
+<span class="ln">48</span>    kappa : log kappa and its log-derivatives.
+<span class="ln">49</span>    &quot;&quot;&quot;
+<span class="ln">50</span>
+<span class="ln">51</span>    def __init__(self, z: float) -&gt; None:
+<span class="ln">52</span>        &quot;&quot;&quot;Store the metallicity.&quot;&quot;&quot;
+<span class="ln">53</span>        ...
+<span class="ln">54</span>
+<span class="ln">55</span>    def read(self, path: Path) -&gt; None:
+<span class="ln">56</span>        &quot;&quot;&quot;Read the table; sizes from the file. A hook for derived classes.&quot;&quot;&quot;
+<span class="ln">57</span>        ...
+<span class="ln">58</span>
+<span class="ln">59</span>    def prepare(self, x: float) -&gt; None:
+<span class="ln">60</span>        &quot;&quot;&quot;Pre-interpolate to a fixed X. This is a hook for derived classes. The base class does nothing.&quot;&quot;&quot;
+<span class="ln">61</span>        ...
+<span class="ln">62</span>
+<span class="ln">63</span>    def kappa(self, dl: float, tl: float, x: float, z: float) -&gt; tuple[float, float, float]:
+<span class="ln">64</span>        &quot;&quot;&quot;kappa, d log kappa/d log rho, d log kappa/d log T. A hook for derived classes.&quot;&quot;&quot;
+<span class="ln">65</span>        ...</pre></details>
+</section>
+<section class='def' id='def-OpacityTable.__init__'><h3><span class='kind'>method</span>OpacityTable.__init__</h3>
+<p class='muted'>lines 51–53</p>
+<pre>def __init__(self, z: float) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Store the metallicity.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">51</span>    def __init__(self, z: float) -&gt; None:
+<span class="ln">52</span>        &quot;&quot;&quot;Store the metallicity.&quot;&quot;&quot;
+<span class="ln">53</span>        ...</pre></details>
+</section>
+<section class='def' id='def-OpacityTable.read'><h3><span class='kind'>method</span>OpacityTable.read</h3>
+<p class='muted'>lines 55–57</p>
+<pre>def read(self, path: Path) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Read the table; sizes from the file. A hook for derived classes.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">55</span>    def read(self, path: Path) -&gt; None:
+<span class="ln">56</span>        &quot;&quot;&quot;Read the table; sizes from the file. A hook for derived classes.&quot;&quot;&quot;
+<span class="ln">57</span>        ...</pre></details>
+</section>
+<section class='def' id='def-OpacityTable.prepare'><h3><span class='kind'>method</span>OpacityTable.prepare</h3>
+<p class='muted'>lines 59–61</p>
+<pre>def prepare(self, x: float) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Pre-interpolate to a fixed X. This is a hook for derived classes. The base class does nothing.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">59</span>    def prepare(self, x: float) -&gt; None:
+<span class="ln">60</span>        &quot;&quot;&quot;Pre-interpolate to a fixed X. This is a hook for derived classes. The base class does nothing.&quot;&quot;&quot;
+<span class="ln">61</span>        ...</pre></details>
+</section>
+<section class='def' id='def-OpacityTable.kappa'><h3><span class='kind'>method</span>OpacityTable.kappa</h3>
+<p class='muted'>lines 63–65</p>
+<pre>def kappa(self, dl: float, tl: float, x: float, z: float) -&gt; tuple[float, float, float]:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>kappa, d log kappa/d log rho, d log kappa/d log T. A hook for derived classes.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">63</span>    def kappa(self, dl: float, tl: float, x: float, z: float) -&gt; tuple[float, float, float]:
+<span class="ln">64</span>        &quot;&quot;&quot;kappa, d log kappa/d log rho, d log kappa/d log T. A hook for derived classes.&quot;&quot;&quot;
+<span class="ln">65</span>        ...</pre></details>
+</section>
+<section class='def' id='def-Opal95Opacity'><h3><span class='kind'>class</span>Opal95Opacity</h3>
+<p class='muted'>lines 68–72</p>
+<pre>class Opal95Opacity(OpacityTable):</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>OPAL 1995, 2D/3D/4D by composition.
+
+Replaces: ll95tbl.f#LL95TBL, op95ztab.f#OP95ZTAB, op95xtab.f#OP95XTAB, getopal95.f#GETOPAL95</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/ll95tbl.f.html#def-LL95TBL'>LL95TBL</a> <span class='muted'>(ll95tbl.f)</span></li><li><a href='../../../../files/op95ztab.f.html#def-OP95ZTAB'>OP95ZTAB</a> <span class='muted'>(op95ztab.f)</span></li><li><a href='../../../../files/op95xtab.f.html#def-OP95XTAB'>OP95XTAB</a> <span class='muted'>(op95xtab.f)</span></li><li><a href='../../../../files/getopal95.f.html#def-GETOPAL95'>GETOPAL95</a> <span class='muted'>(getopal95.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">68</span>class Opal95Opacity(OpacityTable):
+<span class="ln">69</span>    &quot;&quot;&quot;OPAL 1995, 2D/3D/4D by composition.
+<span class="ln">70</span>
+<span class="ln">71</span>    Replaces: ll95tbl.f#LL95TBL, op95ztab.f#OP95ZTAB, op95xtab.f#OP95XTAB, getopal95.f#GETOPAL95
+<span class="ln">72</span>    &quot;&quot;&quot;</pre></details>
+</section>
+<section class='def' id='def-Opal92Opacity'><h3><span class='kind'>class</span>Opal92Opacity</h3>
+<p class='muted'>lines 75–79</p>
+<pre>class Opal92Opacity(OpacityTable):</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>OPAL 1992.
+
+Replaces: setllo.f#SETLLO, ylloc.f#YLLOC, ll4th.f#LL4TH</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/setllo.f.html#def-SETLLO'>SETLLO</a> <span class='muted'>(setllo.f)</span></li><li><a href='../../../../files/ylloc.f.html#def-YLLOC'>YLLOC</a> <span class='muted'>(ylloc.f)</span></li><li><a href='../../../../files/ll4th.f.html#def-LL4TH'>LL4TH</a> <span class='muted'>(ll4th.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">75</span>class Opal92Opacity(OpacityTable):
+<span class="ln">76</span>    &quot;&quot;&quot;OPAL 1992.
+<span class="ln">77</span>
+<span class="ln">78</span>    Replaces: setllo.f#SETLLO, ylloc.f#YLLOC, ll4th.f#LL4TH
+<span class="ln">79</span>    &quot;&quot;&quot;</pre></details>
+</section>
+<section class='def' id='def-Laol89Opacity'><h3><span class='kind'>class</span>Laol89Opacity</h3>
+<p class='muted'>lines 82–86</p>
+<pre>class Laol89Opacity(OpacityTable):</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>LAOL 1989; also the pure-Z table, as a third instance.
+
+Replaces: rdlaol.f#RDLAOL, sulaol.f#SULAOL, gtlaol.f#GTLAOL, gtlaol2.f#GTLAOL2, rdzlaol.f#RDZLAOL, zsulaol.f#ZSULAOL, gtpurz.f#GTPURZ</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/rdlaol.f.html#def-RDLAOL'>RDLAOL</a> <span class='muted'>(rdlaol.f)</span></li><li><a href='../../../../files/sulaol.f.html#def-SULAOL'>SULAOL</a> <span class='muted'>(sulaol.f)</span></li><li><a href='../../../../files/gtlaol.f.html#def-GTLAOL'>GTLAOL</a> <span class='muted'>(gtlaol.f)</span></li><li><a href='../../../../files/gtlaol2.f.html#def-GTLAOL2'>GTLAOL2</a> <span class='muted'>(gtlaol2.f)</span></li><li><a href='../../../../files/rdzlaol.f.html#def-RDZLAOL'>RDZLAOL</a> <span class='muted'>(rdzlaol.f)</span></li><li><a href='../../../../files/zsulaol.f.html#def-ZSULAOL'>ZSULAOL</a> <span class='muted'>(zsulaol.f)</span></li><li><a href='../../../../files/gtpurz.f.html#def-GTPURZ'>GTPURZ</a> <span class='muted'>(gtpurz.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">82</span>class Laol89Opacity(OpacityTable):
+<span class="ln">83</span>    &quot;&quot;&quot;LAOL 1989; also the pure-Z table, as a third instance.
+<span class="ln">84</span>
+<span class="ln">85</span>    Replaces: rdlaol.f#RDLAOL, sulaol.f#SULAOL, gtlaol.f#GTLAOL, gtlaol2.f#GTLAOL2, rdzlaol.f#RDZLAOL, zsulaol.f#ZSULAOL, gtpurz.f#GTPURZ
+<span class="ln">86</span>    &quot;&quot;&quot;</pre></details>
+</section>
+<section class='def' id='def-Alex06Opacity'><h3><span class='kind'>class</span>Alex06Opacity</h3>
+<p class='muted'>lines 89–93</p>
+<pre>class Alex06Opacity(OpacityTable):</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Alexander and Ferguson 2006, low temperatures.
+
+Replaces: readalex06.f#READALEX06, alex06tab.f#ALEX06TAB, getalex06.f#GETALEX06</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/readalex06.f.html#def-READALEX06'>READALEX06</a> <span class='muted'>(readalex06.f)</span></li><li><a href='../../../../files/alex06tab.f.html#def-ALEX06TAB'>ALEX06TAB</a> <span class='muted'>(alex06tab.f)</span></li><li><a href='../../../../files/getalex06.f.html#def-GETALEX06'>GETALEX06</a> <span class='muted'>(getalex06.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">89</span>class Alex06Opacity(OpacityTable):
+<span class="ln">90</span>    &quot;&quot;&quot;Alexander and Ferguson 2006, low temperatures.
+<span class="ln">91</span>
+<span class="ln">92</span>    Replaces: readalex06.f#READALEX06, alex06tab.f#ALEX06TAB, getalex06.f#GETALEX06
+<span class="ln">93</span>    &quot;&quot;&quot;</pre></details>
+</section>
+<section class='def' id='def-Alex95Opacity'><h3><span class='kind'>class</span>Alex95Opacity</h3>
+<p class='muted'>lines 96–100</p>
+<pre>class Alex95Opacity(OpacityTable):</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Alexander and Ferguson 1995, low temperatures.
+
+Replaces: alxtbl.f#ALXTBL, alxztab.f#ALXZTAB, alx8th.f#ALX8TH</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/alxtbl.f.html#def-ALXTBL'>ALXTBL</a> <span class='muted'>(alxtbl.f)</span></li><li><a href='../../../../files/alxztab.f.html#def-ALXZTAB'>ALXZTAB</a> <span class='muted'>(alxztab.f)</span></li><li><a href='../../../../files/alx8th.f.html#def-ALX8TH'>ALX8TH</a> <span class='muted'>(alx8th.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">96</span>class Alex95Opacity(OpacityTable):
+<span class="ln">97</span>    &quot;&quot;&quot;Alexander and Ferguson 1995, low temperatures.
+<span class="ln">98</span>
+<span class="ln">99</span>    Replaces: alxtbl.f#ALXTBL, alxztab.f#ALXZTAB, alx8th.f#ALX8TH
+<span class="ln">100</span>    &quot;&quot;&quot;</pre></details>
+</section>
+<section class='def' id='def-Kurucz90Opacity'><h3><span class='kind'>class</span>Kurucz90Opacity</h3>
+<p class='muted'>lines 103–107</p>
+<pre>class Kurucz90Opacity(OpacityTable):</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Kurucz 1990, low temperatures.
+
+Replaces: setkrz.f#SETKRZ, ykoeff.f#YKOEFF, kurucz.f#KURUCZ, kurucz2.f#KURUCZ2</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/setkrz.f.html#def-SETKRZ'>SETKRZ</a> <span class='muted'>(setkrz.f)</span></li><li><a href='../../../../files/ykoeff.f.html#def-YKOEFF'>YKOEFF</a> <span class='muted'>(ykoeff.f)</span></li><li><a href='../../../../files/kurucz.f.html#def-KURUCZ'>KURUCZ</a> <span class='muted'>(kurucz.f)</span></li><li><a href='../../../../files/kurucz2.f.html#def-KURUCZ2'>KURUCZ2</a> <span class='muted'>(kurucz2.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">103</span>class Kurucz90Opacity(OpacityTable):
+<span class="ln">104</span>    &quot;&quot;&quot;Kurucz 1990, low temperatures.
+<span class="ln">105</span>
+<span class="ln">106</span>    Replaces: setkrz.f#SETKRZ, ykoeff.f#YKOEFF, kurucz.f#KURUCZ, kurucz2.f#KURUCZ2
+<span class="ln">107</span>    &quot;&quot;&quot;</pre></details>
+</section>
+<section class='def' id='def-ConductiveOpacity'><h3><span class='kind'>class</span>ConductiveOpacity</h3>
+<p class='muted'>lines 110–118</p>
+<pre>class ConductiveOpacity:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Conductive opacities from the Potekhin tables.
+
+Replaces: condopacp.f#CONDOPACP, condopacpint.f#CONDOPACPINT</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/condopacp.f.html#def-CONDOPACP'>CONDOPACP</a> <span class='muted'>(condopacp.f)</span></li><li><a href='../../../../files/condopacpint.f.html#def-CONDOPACPINT'>CONDOPACPINT</a> <span class='muted'>(condopacpint.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">110</span>class ConductiveOpacity:
+<span class="ln">111</span>    &quot;&quot;&quot;Conductive opacities from the Potekhin tables.
+<span class="ln">112</span>
+<span class="ln">113</span>    Replaces: condopacp.f#CONDOPACP, condopacpint.f#CONDOPACPINT
+<span class="ln">114</span>    &quot;&quot;&quot;
+<span class="ln">115</span>
+<span class="ln">116</span>    def kappa(self, dl: float, tl: float, x: float, z: float) -&gt; tuple[float, float, float]:
+<span class="ln">117</span>        &quot;&quot;&quot;Conductive kappa and its log-derivatives.&quot;&quot;&quot;
+<span class="ln">118</span>        ...</pre></details>
+</section>
+<section class='def' id='def-ConductiveOpacity.kappa'><h3><span class='kind'>method</span>ConductiveOpacity.kappa</h3>
+<p class='muted'>lines 116–118</p>
+<pre>def kappa(self, dl: float, tl: float, x: float, z: float) -&gt; tuple[float, float, float]:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Conductive kappa and its log-derivatives.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">116</span>    def kappa(self, dl: float, tl: float, x: float, z: float) -&gt; tuple[float, float, float]:
+<span class="ln">117</span>        &quot;&quot;&quot;Conductive kappa and its log-derivatives.&quot;&quot;&quot;
+<span class="ln">118</span>        ...</pre></details>
+</section>
+<section class='def' id='def-OpacityBlend'><h3><span class='kind'>class</span>OpacityBlend</h3>
+<p class='muted'>lines 121–143</p>
+<pre>class OpacityBlend:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Chooses low-T and interior tables, ramps between them, adds conduction harmonically.
+
+Attributes
+----------
+interior : list[OpacityTable]
+lowt : OpacityTable
+cond : ConductiveOpacity or None
+
+Replaces: getopac.f#GETOPAC, setupopac.f#SETUPOPAC, surfopac.f#SURFOPAC</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span></li><li><a href='../../../../files/setupopac.f.html#def-SETUPOPAC'>SETUPOPAC</a> <span class='muted'>(setupopac.f)</span></li><li><a href='../../../../files/surfopac.f.html#def-SURFOPAC'>SURFOPAC</a> <span class='muted'>(surfopac.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">121</span>class OpacityBlend:
+<span class="ln">122</span>    &quot;&quot;&quot;Chooses low-T and interior tables, ramps between them, adds conduction harmonically.
+<span class="ln">123</span>
+<span class="ln">124</span>    Attributes
+<span class="ln">125</span>    ----------
+<span class="ln">126</span>    interior : list[OpacityTable]
+<span class="ln">127</span>    lowt : OpacityTable
+<span class="ln">128</span>    cond : ConductiveOpacity or None
+<span class="ln">129</span>
+<span class="ln">130</span>    Replaces: getopac.f#GETOPAC, setupopac.f#SETUPOPAC, surfopac.f#SURFOPAC
+<span class="ln">131</span>    &quot;&quot;&quot;
+<span class="ln">132</span>
+<span class="ln">133</span>    TMOLMIN = None  # [log K] Start of the ramp; from Config.opac, default today&#x27;s value.
+<span class="ln">134</span>    TMOLMAX = None  # [log K] End of the ramp; from Config.opac.
+<span class="ln">135</span>
+<span class="ln">136</span>    def kappa(self, dl: float, tl: float, x: float, z: float) -&gt; tuple[float, float, float]:
+<span class="ln">137</span>        &quot;&quot;&quot;The blended opacity at a point.&quot;&quot;&quot;
+<span class="ln">138</span>        ...
+<span class="ln">139</span>
+<span class="ln">140</span>    def kappa_shells(self, dl: np.ndarray, tl: np.ndarray, x: np.ndarray, z: np.ndarray,
+<span class="ln">141</span>                     out: np.ndarray) -&gt; None:
+<span class="ln">142</span>        &quot;&quot;&quot;The blended opacity over shells (each `(m,)`), into ``out`` (`(3, m)`), through Numba kernels.&quot;&quot;&quot;
+<span class="ln">143</span>        ...</pre></details>
+</section>
+<section class='def' id='def-OpacityBlend.kappa'><h3><span class='kind'>method</span>OpacityBlend.kappa</h3>
+<p class='muted'>lines 136–138</p>
+<pre>def kappa(self, dl: float, tl: float, x: float, z: float) -&gt; tuple[float, float, float]:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>The blended opacity at a point.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">136</span>    def kappa(self, dl: float, tl: float, x: float, z: float) -&gt; tuple[float, float, float]:
+<span class="ln">137</span>        &quot;&quot;&quot;The blended opacity at a point.&quot;&quot;&quot;
+<span class="ln">138</span>        ...</pre></details>
+</section>
+<section class='def' id='def-OpacityBlend.kappa_shells'><h3><span class='kind'>method</span>OpacityBlend.kappa_shells</h3>
+<p class='muted'>lines 140–143</p>
+<pre>def kappa_shells(self, dl: np.ndarray, tl: np.ndarray, x: np.ndarray, z: np.ndarray,
+                     out: np.ndarray) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>The blended opacity over shells (each `(m,)`), into ``out`` (`(3, m)`), through Numba kernels.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">140</span>    def kappa_shells(self, dl: np.ndarray, tl: np.ndarray, x: np.ndarray, z: np.ndarray,
+<span class="ln">141</span>                     out: np.ndarray) -&gt; None:
+<span class="ln">142</span>        &quot;&quot;&quot;The blended opacity over shells (each `(m,)`), into ``out`` (`(3, m)`), through Numba kernels.&quot;&quot;&quot;
+<span class="ln">143</span>        ...</pre></details>
+</section>
+</main></body></html>

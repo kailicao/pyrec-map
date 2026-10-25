@@ -1,0 +1,193 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>chkscal.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ chkscal.f</span></header><main>
+<h1>chkscal.f</h1>
+<p class='muted'>134 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/chkscal.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file calibrates a track of another star (not the Sun) to a given radius and luminosity: it watches the track for the moment it crosses the target radius $R_*$, compares the luminosity there with the target $L_*$, and adjusts the hydrogen abundance $X$ (thus $Y$) for the next run until the track passes through $(R_*, L_*)$. Then it sets up a final run that stops at the age where the track reaches $R_*$.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>BL</code> ($\log L/L_\odot$), <code>TEFFL</code> ($\log T_\mathrm{eff}$), <code>DAGE</code> (age, Gyr) and <code>NK</code> (kind card); in <code>/CALSTAR/</code> (set by <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a> and <a href="../files/setscal.f.html#def-SETSCAL">SETSCAL</a>), the targets <code>SR</code> ($R_*/R_\odot$), <code>XLS</code> ($L_*/L_\odot$) and the tolerance <code>XLSTOL</code>, and the previous model's values <code>ALRI</code>, <code>BLI</code>, <code>AGEI</code>.</li>
+<li><strong>Who calls it:</strong> the main program (<a href="../files/main.f.html#def-_file_level_">main.f</a>), for even kind cards, when the option <code>LCALST</code> is on and the star has not yet been found (<code>LSTAR</code> false), from the second model on.</li>
+<li><strong>Outputs:</strong> in <code>/CALSTAR/</code>, <code>LPASSR</code> (main.f then ends the run), <code>LSTAR</code>, <code>BLR</code>, <code>AGER</code>, <code>BLRP</code>; for the next kind cards, the new $X$ (<code>RESCAL(2,·)</code>, <code>XENV0A</code>), or the stopping age (<code>LENDAG</code>, <code>ENDAGE</code> in <code>/SETT/</code>). Lines to the screen and to <code>ITRACK</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>
+<p>The radius from $L$ and $T_\mathrm{eff}$, in solar units:
+$$\frac{R}{R_\odot} = \frac{\sqrt{L/(4\pi\sigma)}}{T_\mathrm{eff}^2\,R_\odot}.$$
+If the track has not crossed $R_*$ since the previous model, store $L$, the age and $R$, and return.</p>
+</li>
+<li>
+<p>At the crossing, interpolate linearly in $R$ between the two models for $\log L$ and the age at $R_*$.</p>
+</li>
+<li>If $|L/L_\odot - L_*/L_\odot| \le$ <code>XLSTOL</code>, the star is found: the next two kind cards run with the same $X$ and stop at that age (in years, $10^9 \times$ Gyr).</li>
+<li>Otherwise, at the first pass (<code>NK = 2</code>) lower $X$ by 0.01 ("Y=Y+0.01"); afterwards take a secant step in $X$ against $\log L$:
+$$X_\mathrm{new} = X + \frac{X - X_\mathrm{prev}}{\log L_R - \log L_{R,\mathrm{prev}}}\,\left(\log L_* - \log L_R\right).$$</li>
+</ol></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Linear or log radius.</strong> The comments call <code>ALR</code> and <code>ALRI</code> "log(R/Rsun)", but the code computes $R/R_\odot$ itself; <code>SR</code> is described as $R/R_\odot$, so the comparison is consistent, and only the comments are wrong. The interpolation is thus linear in $R$.</li>
+<li><strong><code>LTEFF</code> unused.</strong> The comments describe an option <code>LTEFF</code> to give the star's $T_\mathrm{eff}$ instead of its radius; this routine ignores it and always uses <code>SR</code>. Is it handled elsewhere (in SETSCAL, perhaps)?</li>
+<li><strong>Two tolerances.</strong> The test on $L$ is in linear units ($|L - L_*| \le$ <code>XLSTOL</code>), the secant step in $\log L$. Fine, but <code>XLSTOL</code> must be given in $L_\odot$.</li>
+<li><strong>The first crossing only.</strong> The comment "Check if track has passed through Teff the right number of times" has no code behind it: the first crossing of $R_*$ (in either direction) is used. For tracks that cross $R_*$ more than once (pre-main sequence, then main sequence), is the first crossing the right one?</li>
+<li><strong>The previous model across runs.</strong> <code>ALRI</code>, <code>BLI</code>, <code>AGEI</code> get start values only once, in <a href="../files/setscal.f.html#def-SETSCAL">SETSCAL</a> (<code>ALRI = 0</code>, called once before the kind cards), and are not updated at the crossing. The first comparison of each later run (at its second model: main.f skips the first, only setting <code>TEFFI</code>, which nothing reads) is thus made against the model just before $R_*$ in the previous run. If the runs start above $R_*$ (pre-main sequence) and the previous run crossed $R_*$ on the way up, a false crossing is found at once, and $L$ and the age are interpolated between two runs. Should <code>ALRI</code> be reset at the start of each run?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+CHKSCAL
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-CHKSCAL'>CHKSCAL</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-CHKSCAL'><h3><span class='kind'>subroutine</span>CHKSCAL</h3>
+<p class='muted'>lines 6–134 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/chkscal.f#L6-L134'>GitHub</a></p>
+<pre>SUBROUTINE CHKSCAL(BL, TEFFL, DAGE, NK)</pre>
+<div class='notes'><p>Calibrates $X$ (thus $Y$) so that a track passes through a target $(R_*, L_*)$: detects the crossing of $R_*$, interpolates $L$ and the age there, and sets $X$ by a secant step, or sets the final run's stopping age.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+CHKSCAL
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CALSTAR'>/CALSTAR/</a>, <a href='../commons.html#c-CKIND'>/CKIND/</a>, <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-NEWXYM'>/NEWXYM/</a>, <a href='../commons.html#c-SETT'>/SETT/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE CHKSCAL(BL, TEFFL, DAGE, NK)
+<span class="ln">7</span>C     ONLY CALLED FOR EVEN NK, ASSUMES RESCALING ON ODD NK AND EVOLVING
+<span class="ln">8</span>C     ON EVEN NK
+<span class="ln">9</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">10</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">11</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">12</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">13</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">14</span>      COMMON /CKIND/RESCAL(4,50),NMODLS(50),IRESCA(50),LFIRST(50),
+<span class="ln">15</span>     1        NUMRUN
+<span class="ln">16</span>C MHP 10/24 ADDED STOP CRITERIA FOR CENTRAL H,D,AND HE4
+<span class="ln">17</span>      COMMON/SETT/ENDAGE(50),SETDT(50),LENDAG(50),LSETDT(50),
+<span class="ln">18</span>     * END_DCEN(50),END_XCEN(50),END_YCEN(50)
+<span class="ln">19</span>C      COMMON/SETT/ENDAGE(50),SETDT(50),LENDAG(50),LSETDT(50)
+<span class="ln">20</span>      COMMON /NEWXYM/XENV0A(50),ZENV0A(50),CMIXLA(50),LSENV0A(50),
+<span class="ln">21</span>     1 SENV0A(50)
+<span class="ln">22</span>      COMMON/CALSTAR/XLS, XLSTOL,  STEFF, SR,
+<span class="ln">23</span>     1      BLI, ALRI, AGER, BLR, BLRP, AGEI,
+<span class="ln">24</span>     2      LSTAR, LTEFF, LPASSR,LCALST
+<span class="ln">25</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">26</span>      SAVE
+<span class="ln">27</span>C     LSTAR     T - have got a star at Teff and L
+<span class="ln">28</span>C     LPASSR    T - on run have just passed Teff
+<span class="ln">29</span>C     XLS       Luminosity (L/Lsun) wanted by adjusting Y
+<span class="ln">30</span>C     XLSTOL    tolerance wanted for luminosity
+<span class="ln">31</span>C     LTEFF     T - specify Teff for star
+<span class="ln">32</span>C               F - specify R/Rsun for star
+<span class="ln">33</span>C     STEFF     Effective temperature of star (K) or...
+<span class="ln">34</span>C     SR        Radius of star (R/Rsun)
+<span class="ln">35</span>C     TEFF      Teff of current model
+<span class="ln">36</span>C     ALR       log(R/Rsun) of current model
+<span class="ln">37</span>C     ALRI      log(R/Rsun) of previous model
+<span class="ln">38</span>C     DAGE      age of current model (Gyr)
+<span class="ln">39</span>C     AGEI      age of previous model (Gyr)
+<span class="ln">40</span>C     AGER      age of model at R*
+<span class="ln">41</span>C     BL        luminosity of current model log(L/Lsun)
+<span class="ln">42</span>C     BLI       luminosity of previous model
+<span class="ln">43</span>C     BLR       luminosity of model at R
+<span class="ln">44</span>C     BLRP      luminosity of model at R* of previous run
+<span class="ln">45</span>C     XP        X of previous run = RESCAL(2, NK-1)
+<span class="ln">46</span>C
+<span class="ln">47</span>C     Check if star has passed R*.
+<span class="ln">48</span>C     If not store L and age and return.
+<span class="ln">49</span>      LPASSR=.FALSE.
+<span class="ln">50</span>      TEFF = 10.0D0**TEFFL
+<span class="ln">51</span>      ALR = SQRT((10.0D0**BL)*CLSUN/(C4PI*CSIG))/(TEFF*TEFF*CRSUN)
+<span class="ln">52</span>      IF(ALR.GT.ALRI) THEN
+<span class="ln">53</span>         IF(.NOT.(ALR.GT.SR.AND.ALRI.LE.SR)) THEN
+<span class="ln">54</span>              BLI = BL
+<span class="ln">55</span>              AGEI = DAGE
+<span class="ln">56</span>              ALRI = ALR
+<span class="ln">57</span>              RETURN
+<span class="ln">58</span>          END IF
+<span class="ln">59</span>      ELSE
+<span class="ln">60</span>          IF (.NOT.(ALR.LT.SR.AND. ALRI.GE.SR)) THEN
+<span class="ln">61</span>              BLI = BL
+<span class="ln">62</span>              AGEI = DAGE
+<span class="ln">63</span>              ALRI = ALR
+<span class="ln">64</span>              RETURN
+<span class="ln">65</span>           END IF
+<span class="ln">66</span>      ENDIF
+<span class="ln">67</span>C
+<span class="ln">68</span>C     Check if track has passed through Teff the right number of
+<span class="ln">69</span>C     times. If not store L and age and return.
+<span class="ln">70</span>C ZZZ
+<span class="ln">71</span>      WRITE(*,*) &#x27; Just passed R*&#x27;
+<span class="ln">72</span>      WRITE(ITRACK,*) &#x27;#Just passed R*&#x27;
+<span class="ln">73</span>      LPASSR = .TRUE.
+<span class="ln">74</span>C
+<span class="ln">75</span>C     Have previous L,Age and current L,Age (one before R* and
+<span class="ln">76</span>C     one after R*).  Interpolate to get L,Age at R*
+<span class="ln">77</span>      DLDR = (BL-BLI)/(ALR-ALRI)
+<span class="ln">78</span>      BLR = BL + DLDR*(SR-ALR)
+<span class="ln">79</span>      DADR = (DAGE-AGEI)/(ALR-ALRI)
+<span class="ln">80</span>      AGER = DAGE + DADR*(SR-ALR)
+<span class="ln">81</span>      WRITE(*,*) &#x27; X, LogL/Lsun at R* =&#x27;, RESCAL(2,NK-1), BLR
+<span class="ln">82</span>      WRITE(ITRACK,*) &#x27;#X, LogL/Lsun at R* =&#x27;, RESCAL(2,NK-1), BLR
+<span class="ln">83</span>      IF (ABS(10.0D0**BLR-XLS) .LE. XLSTOL) THEN
+<span class="ln">84</span>C        Get here then have track that passes through specified
+<span class="ln">85</span>C        L and R. Use age at R for final
+<span class="ln">86</span>C        run to stop at that age. Do one more run
+<span class="ln">87</span>C        stopping at interpolated age.
+<span class="ln">88</span>         LSTAR=.TRUE.
+<span class="ln">89</span>       LENDAG(NK+1) = .TRUE.
+<span class="ln">90</span>       ENDAGE(NK+1) = AGER*1.0D9
+<span class="ln">91</span>       LENDAG(NK+2) = .TRUE.
+<span class="ln">92</span>       ENDAGE(NK+2) = AGER*1.0D9
+<span class="ln">93</span>       RESCAL(2,NK+1) = RESCAL(2,NK-1)
+<span class="ln">94</span>       XENV0A(NK+1) = RESCAL(2,NK+1)
+<span class="ln">95</span>       XENV0A(NK+2) = XENV0A(NK+1)
+<span class="ln">96</span>C
+<span class="ln">97</span>      WRITE(*,*) &#x27; Have hit R* &amp; L*, prepare final run to age:&#x27;,
+<span class="ln">98</span>     1  AGER
+<span class="ln">99</span>      WRITE(ITRACK,*)&#x27;#Have hit R* &amp; L*, prepare final run to age:&#x27;,
+<span class="ln">100</span>     1  AGER
+<span class="ln">101</span>         RETURN
+<span class="ln">102</span>      ELSE
+<span class="ln">103</span>         IF (NK .EQ. 2) THEN
+<span class="ln">104</span>C           First time through. Save L and X at R*.
+<span class="ln">105</span>C           Add 0.01 to Y. Start next run.
+<span class="ln">106</span>            BLRP = BLR
+<span class="ln">107</span>          XP = RESCAL(2,NK-1)
+<span class="ln">108</span>          X = XP - 0.01D0
+<span class="ln">109</span>          RESCAL(2,NK+1) = X
+<span class="ln">110</span>          XENV0A(NK+1) = X
+<span class="ln">111</span>          XENV0A(NK+2) = X
+<span class="ln">112</span>C
+<span class="ln">113</span>      WRITE(*,*) &#x27; NK=2, Y=Y+0.01, Setup next run, X=&#x27;, X
+<span class="ln">114</span>      WRITE(ITRACK,*) &#x27;#NK=2, Y=Y+0.01, Setup next run, X=&#x27;, X
+<span class="ln">115</span>            RETURN
+<span class="ln">116</span>       ELSE
+<span class="ln">117</span>C           If NK=4,6,8,... (second and more times through) then
+<span class="ln">118</span>C           Use current and previous values of L at R and X to calculate
+<span class="ln">119</span>C           dX/dlogL. Save L.  Start next run.
+<span class="ln">120</span>            X = RESCAL(2, NK-1)
+<span class="ln">121</span>          XP = RESCAL(2, NK-3)
+<span class="ln">122</span>            DXDL = (X-XP)/(BLR-BLRP)
+<span class="ln">123</span>          X = DXDL*(LOG10(XLS)-BLR)+X
+<span class="ln">124</span>C
+<span class="ln">125</span>      WRITE(*,*) &#x27; Setup next run, NK, X =&#x27;, NK, X
+<span class="ln">126</span>      WRITE(ITRACK, *) &#x27; Setup next run, NK, X =&#x27;, NK, X
+<span class="ln">127</span>          BLRP = BLR
+<span class="ln">128</span>          RESCAL(2,NK+1) = X
+<span class="ln">129</span>          XENV0A(NK+1) = X
+<span class="ln">130</span>          XENV0A(NK+2) = X
+<span class="ln">131</span>       END IF
+<span class="ln">132</span>      ENDIF
+<span class="ln">133</span>      RETURN
+<span class="ln">134</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Missing question. <code>ALRI</code>, <code>BLI</code>, <code>AGEI</code> (the previous model) are set to start values only once, by <a href="../files/setscal.f.html#def-SETSCAL">SETSCAL</a> (<code>ALRI = 0</code>, called once before the kind cards), and are not updated at the crossing. The first comparison of each later run (its second model; main.f skips the first, only setting <code>TEFFI</code>, which nothing reads) is thus made against the model just before $R_*$ in the previous run. If the runs start with a radius above $R_*$ (pre-main sequence) and the earlier run crossed $R_*$ on the way up, a false crossing is found at once, and $L$ and the age are interpolated between two runs. Fix: add the question.</li>
+</ol>
+<p>Otherwise checked: the radius formula, the crossing test, the interpolation, the found case, the first step and the secant step hold.</p>
+<p>Revised: question 5 (the previous model carried across runs) added.</p></div></details>
+</main></body></html>

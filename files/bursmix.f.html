@@ -1,0 +1,177 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>bursmix.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ bursmix.f</span></header><main>
+<h1>bursmix.f</h1>
+<p class='muted'>116 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/bursmix.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file evolves the abundances over one time step when rotational mixing and nuclear burning act together. In its own words, it alternates "between nuclear burning plus gravitational settling and mixing in a series of progressively smaller timesteps, extrapolating to the answer for zero timestep". The diffusion coefficients, structure and reaction rates are held fixed during the step.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments, the model (<code>HD</code>, <code>HL</code>, <code>HP</code>, <code>HR</code>, <code>HS</code>, <code>HS1</code>, <code>HS2</code>, <code>HT</code>, <code>HV</code>), the mixing coefficients <code>COD2</code>, the time step <code>DELTS</code>, the zones (<code>MRZONE</code>, <code>MXZONE</code>, <code>NRZONE</code>, <code>NZONE</code>, <code>LCZ</code>); <code>LEXCOM</code> from <code>/FLAG/</code> (whether the extended set of 15 species, with the light elements, is followed); <code>HCOMPP</code> in <code>/OLDMOD/</code>, the composition at the start of the step.</li>
+<li><strong>Who calls it:</strong> <a href="../files/getw.f.html#def-GETW">GETW</a>, the rotation step, only when <code>LINSTB</code> is true, <code>LALLCZ</code> false and <code>LBURS</code> true.</li>
+<li><strong>What it calls:</strong> <a href="../files/rotmix.f.html#def-ROTMIX">ROTMIX</a> (burning, by its header with <a href="../files/kemcom.f.html#def-KEMCOM">KEMCOM</a> in radiative regions), <a href="../files/ndifcom.f.html#def-NDIFCOM">NDIFCOM</a> (mixing by angular-momentum transport), <a href="../files/liburn2.f.html#def-LIBURN2">LIBURN2</a> (light-element burning, if <code>LEXCOM</code>), and <a href="../files/bsrotmix.f.html#def-BSROTMIX">BSROTMIX</a> (the extrapolation).</li>
+<li><strong>Outputs:</strong> <code>HCOMP</code>, the abundances at the end of the step. If <code>LEXCOM</code>, it copies the new lithium and beryllium rates (<code>/NEWRAT/</code>) into the old ones (<code>/OLDRAT/</code>), and sets <code>JENV0 = JENV1</code>, <code>PSCAL0 = PSCAL1</code> (<code>/LIOV/</code>).</li>
+<li><strong>COMMON blocks:</strong> <code>/OLDMOD/</code> (18 units, among them <a href="../files/crrect.f.html#def-CRRECT">CRRECT</a>, <a href="../files/kemcom.f.html#def-KEMCOM">KEMCOM</a>, <a href="../files/liburn.f.html#def-LIBURN">LIBURN</a>); <code>/NEWRAT/</code>, <code>/OLDRAT/</code>, <code>/LIOV/</code> (GETW, LIBURN, LIBURN2, LIRATE88); <code>/FLAG/</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Save the composition at the start of the step (<code>HCOMPP</code>), and $X$, $Y$, $Z$ of the input <code>HCOMP</code>, which the caller's full step has already produced.</li>
+<li>Pass the composition of the full step, already computed by the caller, to BSROTMIX as sequence 1.</li>
+<li>For sequences $k = 2, \dots, 11$, with $n_k$ = 2, 4, 6, …, 20 substeps of $\Delta t/n_k$: reset the composition, then for each substep burn and, if <code>LDIFY</code>, settle (ROTMIX, which calls MICRODIFF or GRSETT), mix (NDIFCOM) and, if <code>LEXCOM</code>, burn the light elements (LIBURN2); the end of each substep becomes the start of the next (<code>HCOMPP</code>, which KEMCOM reads as the start-of-step state). Then call BSROTMIX; stop when it reports convergence.</li>
+<li>If no sequence converges, print a warning and keep the composition of the last (finest) sequence.</li>
+<li>Restore $X$ and $Z$ to their input values (those of the caller's full step, not those at the start of the time step), and set $Y = 1 - X - Z - X_3$.</li>
+</ol>
+<p>Only species 4 onward (from $^3$He) are extrapolated (<code>JBEG = 4</code>).</p>
+<p><strong>KC's changes.</strong> 2025-05-31: unused arguments dropped from the calls to ROTMIX (<code>ITLVL</code>, passed as 5), NDIFCOM (<code>NTOT</code>) and LIBURN2 (<code>HD</code>); the old calls kept as comments.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>$X$ and $Z$ restored.</strong> After the extrapolation, $X$ and $Z$ are reset to their values on entry (<code>HKEEP</code>), that is, to the caller's full step, so the burning and mixing of hydrogen computed in the substeps are discarded, and $Y$ absorbs the difference. Is this reset meant?</li>
+<li><strong>Uninitialized arrays.</strong> <code>ECOD2</code>, <code>EM</code>, <code>IBEG</code> and <code>IEND</code> are local (listed under "INPUT VARIABLES" but not arguments) and never set here. NDIFCOM sets them (through MIXGRID) when <code>LOK</code> is true, and reads them as they are when <code>LOK</code> is false; <code>LOK</code> is passed from GETW, which gets it from SECULR. When <code>LOK</code> is false, are these arrays undefined?</li>
+<li><strong><code>HCOMPP</code> left at the end of the step.</strong> The substeps overwrite <code>HCOMPP</code>, the start-of-step composition in <code>/OLDMOD/</code> that CRRECT, KEMCOM and others read, and leave it at the end-of-step composition for all species, although the comment says it is overwritten "temporarily". GETW also overwrites <code>HCOMPP</code> for species 12–15 elsewhere. Is the end state intended?</li>
+<li><strong>Two <code>NSEQ</code> sequences.</strong> <code>NSEQ</code> here starts 1, 2, 4, 6, … (step by 2), while <a href="../files/bsstep.f.html#def-BSSTEP">BSSTEP</a> uses 2, 4, 6, 8, 12, … Is the choice deliberate?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-BURSMIX'>BURSMIX</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-BURSMIX'><h3><span class='kind'>subroutine</span>BURSMIX</h3>
+<p class='muted'>lines 2–116 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/bursmix.f#L2-L116'>GitHub</a></p>
+<pre>SUBROUTINE BURSMIX(COD2,DELTS,HCOMP,HD,HL,HP,HR,HS,HS1,HS2,HSTOT,</pre>
+<div class='notes'><p>Burn–mix substepping over one time step for increasing numbers of substeps, extrapolated to zero substep by <a href="../files/bsrotmix.f.html#def-BSROTMIX">BSROTMIX</a>; resets $X$, $Z$ and updates $Y$.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-FLAG'>/FLAG/</a>, <a href='../commons.html#c-LIOV'>/LIOV/</a>, <a href='../commons.html#c-NEWRAT'>/NEWRAT/</a>, <a href='../commons.html#c-OLDMOD'>/OLDMOD/</a>, <a href='../commons.html#c-OLDRAT'>/OLDRAT/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/bsrotmix.f.html#def-BSROTMIX'>BSROTMIX</a> <span class='muted'>(bsrotmix.f)</span> ×2</li>
+<li><a href='../files/liburn2.f.html#def-LIBURN2'>LIBURN2</a> <span class='muted'>(liburn2.f)</span></li>
+<li><a href='../files/ndifcom.f.html#def-NDIFCOM'>NDIFCOM</a> <span class='muted'>(ndifcom.f)</span></li>
+<li><a href='../files/rotmix.f.html#def-ROTMIX'>ROTMIX</a> <span class='muted'>(rotmix.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/getw.f.html#def-GETW'>GETW</a> <span class='muted'>(getw.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE BURSMIX(COD2,DELTS,HCOMP,HD,HL,HP,HR,HS,HS1,HS2,HSTOT,
+<span class="ln">3</span>     *                   HT,HV,IMAX,IMIN,JENV0,JENV1,LOK,LCZ,M,MRZONE,
+<span class="ln">4</span>     *                   MXZONE,NRZONE,NZONE)
+<span class="ln">5</span>      PARAMETER (JSON=5000)
+<span class="ln">6</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">7</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">8</span>      COMMON/FLAG/LEXCOM
+<span class="ln">9</span>      COMMON/LIOV/PSCAL0,PSCAL1
+<span class="ln">10</span>      COMMON/NEWRAT/RLI6(JSON),RLI7(JSON),RBE9(JSON)
+<span class="ln">11</span>      COMMON/OLDRAT/RLI60(JSON),RLI70(JSON),RBE90(JSON)
+<span class="ln">12</span>      COMMON/OLDMOD/HPO(JSON),HTO(JSON),HRO(JSON),HLO(JSON),HDO(JSON),
+<span class="ln">13</span>     *     HCOMPP(15,JSON),HSS(JSON),LCO(JSON),LCZO(JSON),TEFFLO,MO
+<span class="ln">14</span>C INPUT VARIABLES
+<span class="ln">15</span>      DIMENSION COD2(JSON),HCOMP(15,JSON),HD(JSON),HL(JSON),
+<span class="ln">16</span>     *     HP(JSON),HR(JSON),HS(JSON),HS1(JSON),HS2(JSON),HT(JSON),
+<span class="ln">17</span>     *     HV(JSON),LCZ(JSON),MRZONE(13,2),MXZONE(12,2),
+<span class="ln">18</span>     *     ECOD2(JSON),EM(JSON)
+<span class="ln">19</span>C LOCAL VARIABLES
+<span class="ln">20</span>      DIMENSION HCSAV(15,JSON),NSEQ(11),HKEEP(3,JSON)
+<span class="ln">21</span>      DATA NSEQ/1,2,4,6,8,10,12,14,16,18,20/
+<span class="ln">22</span>      SAVE
+<span class="ln">23</span>C THIS SUBROUTINE IS DESIGNED TO ALTERNATE BETWEEN NUCLEAR BURNING
+<span class="ln">24</span>C PLUS GRAVITATIONAL SETTLING AND MIXING IN A SERIES OF PROGRESSIVELY
+<span class="ln">25</span>C SMALLER TIMESTEPS, EXTRAPOLATING TO THE ANSWER FOR ZERO TIMESTEP.
+<span class="ln">26</span>C IT ASSUMES THAT THE DIFFUSION COEFFICIENTS, STRUCTURE, AND NUCLEAR REACTION
+<span class="ln">27</span>C RATES ARE HELD CONSTANT DURING THE TIME STEP.  THE PROCEDURE IS AS
+<span class="ln">28</span>C FOLLOWS:
+<span class="ln">29</span>C STORE THE RESULTS FOR THE WHOLE TIMESTEP IN ENTRY ONE.
+<span class="ln">30</span>C THEN CALL THE NUCLEAR BURNING ROUTINES TO BURN AND THE ROTATIONAL
+<span class="ln">31</span>C MIXING ROUTINE TO MIX FOR A SERIES OF SMALLER TIME STEPS, STORING THE
+<span class="ln">32</span>C ANSWER AS A FUNCTION OF TIME STEP.
+<span class="ln">33</span>      IF(LEXCOM)THEN
+<span class="ln">34</span>         NSPEC = 15
+<span class="ln">35</span>      ELSE
+<span class="ln">36</span>         NSPEC = 11
+<span class="ln">37</span>      ENDIF
+<span class="ln">38</span>      JBEG = 4
+<span class="ln">39</span>      JEND = NSPEC
+<span class="ln">40</span>      NBURS = 11
+<span class="ln">41</span>C STORE ALL ELEMENTS HERE - HCOMPP IS USED AS THE START OF
+<span class="ln">42</span>C TIMESTEP VARIABLE IN KEMCOM, SO IT NEEDS TO BE TEMPORARILY
+<span class="ln">43</span>C OVERWRITTEN IN THE SOLUTION PROCESS
+<span class="ln">44</span>      DO I = 1,M
+<span class="ln">45</span>         DO J = 1,NSPEC
+<span class="ln">46</span>            HCSAV(J,I) = HCOMPP(J,I)
+<span class="ln">47</span>         END DO
+<span class="ln">48</span>         DO J = 1,3
+<span class="ln">49</span>            HKEEP(J,I) = HCOMP(J,I)
+<span class="ln">50</span>         END DO
+<span class="ln">51</span>      END DO
+<span class="ln">52</span>C STORE RESULTS OF INITIAL CALCULATION AS FIRST ENTRY IN BS
+<span class="ln">53</span>C ROUTINE
+<span class="ln">54</span>      III = 1
+<span class="ln">55</span>      CALL <a href="../files/bsrotmix.f.html#def-BSROTMIX" title="BSROTMIX in bsrotmix.f">BSROTMIX</a>(DELTS,HCOMP,III,M,JBEG,NSPEC,NSEQ,LCONV)
+<span class="ln">56</span>      DO III = 2, NBURS
+<span class="ln">57</span>C RESET COMPOSITION TO INITIAL VALUE.
+<span class="ln">58</span>         DO I = 1,M
+<span class="ln">59</span>            DO J = 1,NSPEC
+<span class="ln">60</span>               HCOMP(J,I) = HCSAV(J,I)
+<span class="ln">61</span>               HCOMPP(J,I) = HCSAV(J,I)
+<span class="ln">62</span>            END DO
+<span class="ln">63</span>         END DO
+<span class="ln">64</span>         NSTEP = NSEQ(III)
+<span class="ln">65</span>         DT = DELTS/DFLOAT(NSTEP)
+<span class="ln">66</span>         DO JJJ = 1,NSTEP
+<span class="ln">67</span>C PERFORM NUCLEAR BURNING
+<span class="ln">68</span>C             CALL ROTMIX(DT,HCOMP,HS2,HT,5,M,MRZONE,MXZONE,  ! KC 2025-05-31
+<span class="ln">69</span>            CALL <a href="../files/rotmix.f.html#def-ROTMIX" title="ROTMIX in rotmix.f">ROTMIX</a>(DT,HCOMP,HS2,HT,M,MRZONE,MXZONE,
+<span class="ln">70</span>     *               NRZONE,NZONE,HSTOT,HD,HS,HR,HP,LCZ,HS1)
+<span class="ln">71</span>C PERFORM MIXING
+<span class="ln">72</span>            CALL <a href="../files/ndifcom.f.html#def-NDIFCOM" title="NDIFCOM in ndifcom.f">NDIFCOM</a>(DT,COD2,ECOD2,EM,HD,HL,HP,HR,HS,HS1,HS2,
+<span class="ln">73</span>C      *                   HSTOT,HV,IBEG,IEND,IMAX,IMIN,LCZ,LOK,M,NTOT,  ! KC 2025-05-31
+<span class="ln">74</span>     *                   HSTOT,HV,IBEG,IEND,IMAX,IMIN,LCZ,LOK,M,
+<span class="ln">75</span>     *                   HCOMP,JBEG,JEND)
+<span class="ln">76</span>            IF(LEXCOM)THEN
+<span class="ln">77</span>C                CALL LIBURN2(DT,HCOMP,HD,HR,HS1,HS2,HT,JENV1,JENV0,M)  ! KC 2025-05-31
+<span class="ln">78</span>               CALL <a href="../files/liburn2.f.html#def-LIBURN2" title="LIBURN2 in liburn2.f">LIBURN2</a>(DT,HCOMP,HR,HS1,HS2,HT,JENV1,JENV0,M)
+<span class="ln">79</span>            ENDIF
+<span class="ln">80</span>            DO I = 1,M
+<span class="ln">81</span>               DO J = 1,NSPEC
+<span class="ln">82</span>                  HCOMPP(J,I) = HCOMP(J,I)
+<span class="ln">83</span>               END DO
+<span class="ln">84</span>            END DO
+<span class="ln">85</span>         END DO
+<span class="ln">86</span>         CALL <a href="../files/bsrotmix.f.html#def-BSROTMIX" title="BSROTMIX in bsrotmix.f">BSROTMIX</a>(DELTS,HCOMP,III,M,JBEG,NSPEC,NSEQ,LCONV)
+<span class="ln">87</span>         IF(LCONV)THEN
+<span class="ln">88</span>            DO I = 1,M
+<span class="ln">89</span>               DO J = 1,NSPEC
+<span class="ln">90</span>                  HCOMPP(J,I) = HCOMP(J,I)
+<span class="ln">91</span>               END DO
+<span class="ln">92</span>            END DO
+<span class="ln">93</span>            GOTO 10
+<span class="ln">94</span>         ENDIF
+<span class="ln">95</span>      END DO
+<span class="ln">96</span>C FAILED TO CONVERGE; PRINT WARNING
+<span class="ln">97</span>C IN THIS CASE THE UNEXTRAPOLATED FINAL COMPOSITION IS USED.
+<span class="ln">98</span>      WRITE(*,5)
+<span class="ln">99</span> 5    FORMAT(&#x27; WARNING - EXTRAPOLATION IN BSBURN DID NOT CONVERGE&#x27;)
+<span class="ln">100</span> 10   CONTINUE
+<span class="ln">101</span>      DO I = 1,M
+<span class="ln">102</span>         HCOMP(1,I) = HKEEP(1,I)
+<span class="ln">103</span>         HCOMP(3,I) = HKEEP(3,I)
+<span class="ln">104</span>         HCOMP(2,I) = 1.0D0 - HCOMP(1,I) - HCOMP(3,I) - HCOMP(4,I)
+<span class="ln">105</span>      END DO
+<span class="ln">106</span>      IF(LEXCOM)THEN
+<span class="ln">107</span>         DO I = 1,M
+<span class="ln">108</span>            RLI60(I) = RLI6(I)
+<span class="ln">109</span>            RLI70(I) = RLI7(I)
+<span class="ln">110</span>            RBE90(I) = RBE9(I)
+<span class="ln">111</span>         END DO
+<span class="ln">112</span>         JENV0 = JENV1
+<span class="ln">113</span>         PSCAL0 = PSCAL1
+<span class="ln">114</span>      ENDIF
+<span class="ln">115</span>      RETURN
+<span class="ln">116</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Wrong. Steps 1 and 5 say $X$ and $Z$ are restored to "their values from the start of the routine"; these are the values the caller's full step already produced (the input <code>HCOMP</code>), not those at the start of the time step. Fix: reword; question 1 likewise.</li>
+<li>Missing question. <code>HCOMPP</code> (the start-of-step composition in <code>/OLDMOD/</code>, read by CRRECT, KEMCOM and others) is overwritten during the substeps and left at the end-of-step composition, for all species, although the comment says it is overwritten "temporarily". GETW also overwrites <code>HCOMPP</code> for species 12–15 elsewhere. Is the end state intended?</li>
+<li>Settled. Question 2 (<code>ECOD2</code>, <code>EM</code>, <code>IBEG</code>, <code>IEND</code>): NDIFCOM sets them (through MIXGRID) when <code>LOK</code> is true, and reads them as they are when <code>LOK</code> is false. Fix: make the question concrete on <code>LOK</code> (passed from GETW, set by SECULR).</li>
+<li>Settled. Question 3: ROTMIX does gravitational settling (MICRODIFF or GRSETT, if <code>LDIFY</code>). Fix: state it; drop the question.</li>
+<li>Missing. GETW calls BURSMIX only when <code>LINSTB</code>, not <code>LALLCZ</code> and <code>LBURS</code>. Fix: add.</li>
+</ol>
+<p>Revised: the restored values reworded (steps 1 and 5, question 1); the <code>HCOMPP</code> question added; question 2 made concrete on <code>LOK</code>; settling in ROTMIX stated and question 3 dropped; the call conditions added.</p></div></details>
+</main></body></html>

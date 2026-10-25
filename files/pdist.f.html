@@ -1,0 +1,135 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>pdist.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ pdist.f</span></header><main>
+<h1>pdist.f</h1>
+<p class='muted'>89 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/pdist.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Decides when to write a model for pulsation calculations: it "calculates the distance the star has travelled in the HR diagram; if far enough, output pulsation model". When the accumulated distance passes a threshold, it opens three new output files named after the run and the model number, and sets <code>LPULSE</code> so that the output routines write the model to them.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the previous point (<code>POL1</code> $=\log L$, <code>POT1</code> $=\log T_\mathrm{eff}$, <code>POA1</code> = age) and the running total <code>POLEN</code>; the current <code>BL</code> ($\log L/L_\odot$), <code>TEFFL</code>, <code>MODELN</code>; the age <code>DAGE</code> in <code>/THEAGE/</code>; the weights <code>POA</code>, <code>POB</code>, <code>POC</code> and the threshold <code>POMAX</code> in <code>/PO/</code> (namelist <code>CONTROL</code>, read by <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a>); the base file names <code>FPMOD</code>, <code>FPENV</code>, <code>FPATM</code> (arguments, since MHP 8/25).</li>
+<li><strong>Who calls it:</strong> the main program in <a href="../files/main.f.html">main.f</a>, after each model when <code>LPOUT</code> is set.</li>
+<li><strong>Outputs:</strong> <code>POLEN</code> and the previous point updated; <code>LPULSE</code> in <code>/PULSE/</code>; the units <code>IOPMOD</code>, <code>IOPENV</code>, <code>IOPATM</code> (from <code>/LUNUM/</code>) opened as <code>&lt;FPMOD&gt;NN_MMMM</code> and so on, with <code>NN</code> = <code>NK</code> (from <code>/ZRAMP/</code>; the main program's loop over runs, <code>DO 200 NK = 1, NUMRUN</code>) and <code>MMMM</code> the model number; a line to <code>IOWR</code> and <code>ISHORT</code>. While <code>LPULSE</code> is true, <a href="../files/wrtmod.f.html#def-WRTMOD">WRTMOD</a> writes the model to <code>IOPMOD</code> and passes <code>LPULPT</code> on to <a href="../files/envint.f.html#def-ENVINT">ENVINT</a>, which writes the atmosphere and envelope to <code>IOPATM</code> and <code>IOPENV</code> from the points <a href="../files/qatm.f.html#def-QATM">QATM</a> and <a href="../files/qenv.f.html#def-QENV">QENV</a> store.</li>
+</ul>
+<p><strong>The method.</strong> The squared step in the HR diagram and in age, with weights $a, b, c$, is accumulated:
+$$\ell^2 \mathrel{+}= (a\,\Delta\log L)^2 + (b\,\Delta\log T_\mathrm{eff})^2 + (c\,\Delta t)^2 .$$
+When $\ell^2 \ge$ <code>POMAX</code>, the files are opened and $\ell^2$ is reset to zero; otherwise the three units are closed and <code>LPULSE</code> is set false.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>POMAX</code> is a squared distance.</strong> The sum is of squares (printed as "LEN SQ"), so <code>POMAX</code> = 0.1 means a distance of about 0.32. Is the namelist documentation clear about this?</li>
+<li><strong>Two different lines.</strong> The same format writes the step's differences (<code>TM1</code>–<code>TM3</code>) to <code>IOWR</code> but their weighted squares (<code>TMP1</code>–<code>TMP3</code>) to <code>ISHORT</code>, under the same labels "D L", "D Te", "D AGE".</li>
+<li><strong><code>STATUS='NEW'</code>.</strong> The files are opened as new, so rerunning a model sequence in the same directory stops at the first existing pulsation file.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+PDIST
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+calculates the distance the star has travelled in the HR diagram
+if far enough, output pulsation model
+MHP 8/25 passed file names directly and removed common block with file names</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-PDIST'>PDIST</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-PDIST'><h3><span class='kind'>subroutine</span>PDIST</h3>
+<p class='muted'>lines 9–89 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/pdist.f#L9-L89'>GitHub</a></p>
+<pre>SUBROUTINE PDIST(POL1,POT1,POA1,POLEN,BL,TEFFL,MODELN,FPATM,FPENV,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+PDIST
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+calculates the distance the star has travelled in the HR diagram
+if far enough, output pulsation model
+MHP 8/25 passed file names directly and removed common block with file names</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-LUNUM'>/LUNUM/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-PO'>/PO/</a>, <a href='../commons.html#c-PULSE'>/PULSE/</a>, <a href='../commons.html#c-THEAGE'>/THEAGE/</a>, <a href='../commons.html#c-ZRAMP'>/ZRAMP/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">9</span>      SUBROUTINE PDIST(POL1,POT1,POA1,POLEN,BL,TEFFL,MODELN,FPATM,FPENV,
+<span class="ln">10</span>     * FPMOD)
+<span class="ln">11</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">12</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">13</span>
+<span class="ln">14</span>      CHARACTER*256 COUT,CTEMP
+<span class="ln">15</span>C Removed variables not used in the routine
+<span class="ln">16</span>      CHARACTER*256 FPMOD, FPENV, FPATM
+<span class="ln">17</span>C MHP 10/02 added proper dimensions to last 2 variables
+<span class="ln">18</span>      COMMON/THEAGE/DAGE
+<span class="ln">19</span>      COMMON /PO/POA,POB,POC,POMAX,LPOUT
+<span class="ln">20</span>      COMMON/PULSE/XMSOL,LPULSE,IPVER
+<span class="ln">21</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">22</span>      COMMON/ZRAMP/RSCLZC(50), RSCLZM1(50), RSCLZM2(50),
+<span class="ln">23</span>     *             IOLAOL2, IOOPAL2, NK,
+<span class="ln">24</span>     *             LZRAMP
+<span class="ln">25</span>      COMMON/LUNUM/IFIRST, IRUN, ISTAND, IFERMI,
+<span class="ln">26</span>     1    IOPMOD, IOPENV, IOPATM, IDYN,
+<span class="ln">27</span>     2    ILLDAT, ISNU, ISCOMP, IKUR
+<span class="ln">28</span>C MHP 8/25 Removed common block with file names
+<span class="ln">29</span>C      COMMON/LUFNM/ FLAST, FFIRST, FRUN, FSTAND, FFERMI,
+<span class="ln">30</span>C     1    FDEBUG, FTRACK, FSHORT, FMILNE, FMODPT,
+<span class="ln">31</span>C     2    FSTOR, FPMOD, FPENV, FPATM, FDYN,
+<span class="ln">32</span>C     3    FLLDAT, FSNU, FSCOMP, FKUR,
+<span class="ln">33</span>C     4    FMHD1, FMHD2, FMHD3, FMHD4, FMHD5, FMHD6, FMHD7, FMHD8
+<span class="ln">34</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">35</span>      SAVE
+<span class="ln">36</span>
+<span class="ln">37</span>      TM1 = BL-POL1
+<span class="ln">38</span>      TM2 = TEFFL-POT1
+<span class="ln">39</span>      TM3 = DAGE-POA1
+<span class="ln">40</span>      TMP1 = POA*TM1*POA*TM1
+<span class="ln">41</span>      TMP2 = POB*TM2*POB*TM2
+<span class="ln">42</span>      TMP3 = POC*TM3*POC*TM3
+<span class="ln">43</span>      POLEN = POLEN+TMP1+TMP2+TMP3
+<span class="ln">44</span>      POL1 = BL
+<span class="ln">45</span>      POT1 = TEFFL
+<span class="ln">46</span>      POA1 = DAGE
+<span class="ln">47</span>      IF (POLEN .GE. POMAX) THEN
+<span class="ln">48</span>          LPULSE = .TRUE.
+<span class="ln">49</span>          POLEN = 0.0D0
+<span class="ln">50</span>          IOCCOL = INDEX(FPMOD,&#x27; &#x27;)-1
+<span class="ln">51</span>          IF (MODELN.LT.10000)THEN
+<span class="ln">52</span>             WRITE(CTEMP,&#x27;(I2.2,&#x27;&#x27;_&#x27;&#x27;,I4.4)&#x27;)NK, MODELN
+<span class="ln">53</span>             COUT = FPMOD(1:IOCCOL) // CTEMP(1:7)
+<span class="ln">54</span>          ELSE
+<span class="ln">55</span>             WRITE(CTEMP,&#x27;(I2.2,&#x27;&#x27;_&#x27;&#x27;,I5.5)&#x27;)NK, MODELN
+<span class="ln">56</span>             COUT = FPMOD(1:IOCCOL) // CTEMP(1:8)
+<span class="ln">57</span>          ENDIF
+<span class="ln">58</span>          OPEN(IOPMOD,FILE=COUT,STATUS=&#x27;NEW&#x27;,FORM=&#x27;FORMATTED&#x27;)
+<span class="ln">59</span>          IOCCOL = INDEX(FPENV,&#x27; &#x27;)-1
+<span class="ln">60</span>          IF (MODELN.LT.10000)THEN
+<span class="ln">61</span>             WRITE(CTEMP,&#x27;(I2.2,&#x27;&#x27;_&#x27;&#x27;,I4.4)&#x27;)NK, MODELN
+<span class="ln">62</span>             COUT = FPENV(1:IOCCOL) // CTEMP(1:7)
+<span class="ln">63</span>          ELSE
+<span class="ln">64</span>             WRITE(CTEMP,&#x27;(I2.2,&#x27;&#x27;_&#x27;&#x27;,I5.5)&#x27;)NK, MODELN
+<span class="ln">65</span>             COUT = FPENV(1:IOCCOL) // CTEMP(1:8)
+<span class="ln">66</span>          ENDIF
+<span class="ln">67</span>          OPEN(IOPENV,FILE=COUT,STATUS=&#x27;NEW&#x27;,FORM=&#x27;FORMATTED&#x27;)
+<span class="ln">68</span>          IOCCOL = INDEX(FPATM,&#x27; &#x27;)-1
+<span class="ln">69</span>          IF (MODELN.LT.10000)THEN
+<span class="ln">70</span>             WRITE(CTEMP,&#x27;(I2.2,&#x27;&#x27;_&#x27;&#x27;,I4.4)&#x27;)NK, MODELN
+<span class="ln">71</span>             COUT = FPATM(1:IOCCOL) // CTEMP(1:7)
+<span class="ln">72</span>          ELSE
+<span class="ln">73</span>             WRITE(CTEMP,&#x27;(I2.2,&#x27;&#x27;_&#x27;&#x27;,I5.5)&#x27;)NK, MODELN
+<span class="ln">74</span>             COUT = FPATM(1:IOCCOL) // CTEMP(1:8)
+<span class="ln">75</span>          ENDIF
+<span class="ln">76</span>          OPEN(IOPATM,FILE=COUT,STATUS=&#x27;NEW&#x27;,FORM=&#x27;FORMATTED&#x27;)
+<span class="ln">77</span>       ELSE
+<span class="ln">78</span>          CLOSE(IOPMOD)
+<span class="ln">79</span>          CLOSE(IOPENV)
+<span class="ln">80</span>          CLOSE(IOPATM)
+<span class="ln">81</span>          LPULSE = .FALSE.
+<span class="ln">82</span>       END IF
+<span class="ln">83</span>       WRITE(IOWR,276)POLEN,TM1,TM2,TM3
+<span class="ln">84</span>       WRITE(ISHORT,276)POLEN,TMP1,TMP2,TMP3
+<span class="ln">85</span> 276   FORMAT(5X,&#x27; LEN SQ=&#x27;,1PE10.3, &#x27;  D L=&#x27;,1PE10.3,
+<span class="ln">86</span>     *        &#x27;  D Te=&#x27;,1PE10.3,&#x27;  D AGE=&#x27;,1PE10.3)
+<span class="ln">87</span>
+<span class="ln">88</span>       RETURN
+<span class="ln">89</span>       END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "The pulsation files are written by WRTMOD, QATM and QENV": QATM and QENV only declare <code>/PULSE/</code>; WRTMOD writes <code>IOPMOD</code> and passes <code>LPULPT</code> to ENVINT, which writes <code>IOPATM</code> and <code>IOPENV</code>. Fix: say so.</li>
+<li><strong>Unclear.</strong> <code>NK</code> "probably the run number": it is the main program's loop index over runs (<code>DO 200 NK = 1, NUMRUN</code>). Fix: say so.</li>
+</ol>
+<p>Revised: both applied.</p></div></details>
+</main></body></html>

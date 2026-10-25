@@ -1,0 +1,196 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>The COMMON-block map · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ New version (Fortran) / The COMMON-block map</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='fortran.html'>Language and style</a></li><li><a href='kernels.html'>Kernels and settings</a></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><a href='timestep.html'>Time stepping</a></li><li><a href='composition.html'>Composition and settling</a></li><li><a href='rotation.html'>Rotation and mass loss</a></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><strong>The COMMON-block map</strong></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>The COMMON-block map</h1>
+<p><em>In Python: <a href="../files/new/pyrec/__init__.py.html"><code>pyrec</code></a>.</em></p>
+<h2>6.4 What replaces the COMMON blocks</h2>
+<p>Each block's contents go to the type that owns them, grouped by physics. Settings go into <code>Config</code>'s parts, state into the objects of <a href="overview.html">Section 3</a>, and the work arrays of one method become private components of its type. Mutable settings change owner: a switch that a routine turns off in the middle of a run (<code>LDIFY</code>, <code>LPTIME</code>, <code>KTTAU</code>) becomes state of the object that turns it off, so <code>Config</code> stays as read. Every one of rp_1's 243 blocks appears once below.</p>
+<table>
+<thead>
+<tr>
+<th>What it holds</th>
+<th>Blocks today</th>
+<th>New home</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Physical constants</td>
+<td><code>/CONST/</code>, <code>/CONST1/</code>, <code>/CONST2/</code>, <code>/CONST3/</code>, <code>/CONFAC/</code></td>
+<td><code>constants</code> (named parameters); <code>CMIXL</code> of <code>/CONST3/</code> goes to <code>Config%conv</code></td>
+</tr>
+<tr>
+<td>I/O units and output switches</td>
+<td><code>/LUNUM/</code>, <code>/LUOUT/</code>, <code>/CCOUT/</code>, <code>/CCOUT1/</code>, <code>/CCOUT2/</code>, <code>/CHRONE/</code>, <code>/TRACK/</code>, <code>/DESC/</code>, <code>/PO/</code>, <code>/PULSE/</code>, <code>/ROTPRT/</code>, <code>/IOMONTE/</code></td>
+<td><code>Config%io</code>; units from <code>newunit=</code> held by the writers</td>
+</tr>
+<tr>
+<td>Numerical controls</td>
+<td><code>/CTOL/</code>, <code>/CTLIM/</code>, <code>/INTPAR/</code>, <code>/INTATM/</code>, <code>/INTENV/</code>, <code>/BURTOL/</code>, <code>/CT2/</code>, <code>/CT3/</code>, <code>/NEWENG/</code>, <code>/GOVS/</code>, <code>/ERRMOM/</code>, <code>/DIFUS/</code>, <code>/DWMAX/</code>, <code>/NEWPARAM/</code></td>
+<td><code>Config%num</code>; <code>LPTIME</code> of <code>/CT3/</code> as <code>TimeStepper%use_structure</code> (<code>NEWPARAM</code>'s newer names are read by <code>read_namelists</code> and mapped, as <code>REMAP</code> does)</td>
+</tr>
+<tr>
+<td>Composition settings</td>
+<td><code>/NEWCMP/</code>, <code>/NEWMX/</code>, <code>/VNEWCB/</code>, <code>/I2O/</code>, <code>/FLAG/</code>, <code>/COMP2/</code></td>
+<td><code>Config%comp</code>; the surface $Y$, ³He of <code>/COMP2/</code> go to <code>Star%surf</code></td>
+</tr>
+<tr>
+<td>Run cards and per-run values</td>
+<td><code>/CKIND/</code>, <code>/SETT/</code>, <code>/NEWXYM/</code>, <code>/CORE/</code>, <code>/HEFLSH/</code>, <code>/LABEL/</code>, <code>/ZRAMP/</code>, <code>/CENV/</code></td>
+<td><code>KindCard</code> (<code>Config%cards</code>), and <code>Track</code> for the current card (<code>NK</code>); the triangle sizes of <code>/CENV/</code> go to <code>SurfaceBC</code>, the opacity units of <code>/ZRAMP/</code> to <code>Config%opac</code></td>
+</tr>
+<tr>
+<td>Convection settings</td>
+<td><code>/DPMIX/</code></td>
+<td><code>Config%conv</code>; <code>IOVIM</code> becomes an argument</td>
+</tr>
+<tr>
+<td>EOS settings</td>
+<td><code>/OPALEOS/</code>, <code>/SCV2/</code>, <code>/MHD/</code>, <code>/DEBHU/</code>, <code>/CCR/</code>, <code>/LREADCO/</code></td>
+<td><code>Config%eos</code>; the Debye–Hückel and relativistic values to <code>YaleEos</code>; <code>LREADCO</code>'s flag to <code>OpalEos</code></td>
+</tr>
+<tr>
+<td>Opacity settings</td>
+<td><code>/NEWOPAC/</code>, <code>/MISCOPAC/</code>, <code>/LOPAL95/</code>, <code>/ALEXO/</code>, <code>/ALEX06/</code>, <code>/ALEXMIX/</code>, <code>/OPTAB/</code></td>
+<td><code>Config%opac</code>; <code>OPTOL</code> and the table indices to <code>OpacityBlend</code></td>
+</tr>
+<tr>
+<td>Nuclear settings</td>
+<td><code>/CROSS/</code>, <code>/NEWCROSS/</code>, <code>/WEAK/</code>, <code>/NULOSS/</code>, <code>/BURNSCS/</code>, <code>/XSECT/</code></td>
+<td><code>Config%nuc</code>, copied once into <code>ReactionRates</code>, <code>LightElements</code>, <code>NeutrinoLosses</code></td>
+</tr>
+<tr>
+<td>Settling settings and state</td>
+<td><code>/GRAVST/</code>, <code>/GRAVS2/</code>, <code>/GRAVS3/</code>, <code>/GRAVS4/</code>, <code>/CMIXING/</code></td>
+<td><code>Config%sett</code>; <code>LDIFY</code> as <code>SettlingBase%active</code></td>
+</tr>
+<tr>
+<td>Settling work arrays</td>
+<td><code>/GRAVEZ/</code>, <code>/GRAVSZ/</code>, <code>/GSCOF/</code></td>
+<td><code>GrsettSettling</code> (private)</td>
+</tr>
+<tr>
+<td>Rotation settings</td>
+<td><code>/ROT/</code>, <code>/SBROT/</code>, <code>/CWIND/</code>, <code>/PMMWIND/</code>, <code>/NOTRAN/</code>, <code>/MAG/</code>, <code>/VMULT/</code>, <code>/VMULT2/</code>, <code>/VARFC/</code>, <code>/DIFAD/</code>, <code>/ADVEC/</code></td>
+<td><code>Config%rot</code>; the factors of <code>/DIFAD/</code> become constants of <code>RotationTransport</code> (<a href="tunables.html">Section 5</a>)</td>
+</tr>
+<tr>
+<td>Disk locking</td>
+<td><code>/DISK/</code></td>
+<td><code>Config%rot</code> (<code>TDISK</code>, <code>PDISK</code>, <code>LDISK</code>); <code>SAGE</code> to <code>Star</code></td>
+</tr>
+<tr>
+<td>Surface and atmosphere settings</td>
+<td><code>/ATMOS/</code>, <code>/ALATM03/</code>, <code>/ALATM04/</code>, <code>/SPOTS/</code>, <code>/ENVGEN/</code></td>
+<td><code>Config%surf</code>; <code>KTTAU</code>'s change on failure becomes <code>AtmosphereSwitch</code> state; <code>/ALATM04/</code> holds only dummies and is dropped</td>
+</tr>
+<tr>
+<td>Mass-loss settings and state</td>
+<td><code>/MASSCHG/</code>, <code>/MASSCHG2/</code>, <code>/MASSCHG3/</code></td>
+<td><code>Config%mloss</code>; <code>/MASSCHG2/</code> (entropies, <code>SMASS0</code>) becomes arguments of <code>MassLoss%apply</code> and a component read by <code>StructureSolver</code></td>
+</tr>
+<tr>
+<td>Calibration</td>
+<td><code>/CALSUN/</code>, <code>/CALS2/</code>, <code>/CALSTAR/</code>, <code>/MONTE/</code>, <code>/MONTE2/</code>, <code>/CENT/</code></td>
+<td><code>SolarCalibr</code>, <code>StarCalibr</code>, <code>MonteCarlo</code>; the central values of <code>/CENT/</code> are <code>Star</code> properties</td>
+</tr>
+<tr>
+<td>The model</td>
+<td><code>/COMP/</code>, <code>/THEAGE/</code>, <code>/ROTEN/</code>, <code>/QUADD/</code>, <code>/QUADRU/</code>, <code>/OVRTRN/</code></td>
+<td><code>Star</code> and <code>Star%surf</code>; the quadrupole to <code>Distortion</code>; <code>TAUCZ</code> to <code>OverturnAnal</code>, <code>FRACSTEP</code> to <code>RotationStep</code></td>
+</tr>
+<tr>
+<td>Start of the step</td>
+<td><code>/OLDMOD/</code>, <code>/OLDPHY/</code>, <code>/OLDROT/</code>, <code>/OLDROT2/</code>, <code>/OLDAB/</code>, <code>/OLDRAT/</code>, <code>/ORIGSTART/</code>, <code>/ENTROP/</code>, <code>/PREVCZ/</code>, <code>/PREVMID/</code>, <code>/PREVMU/</code>, <code>/LIOV/</code></td>
+<td><code>StepStart</code>, held by <code>Step</code>; <code>PSCAL0</code>, <code>PSCAL1</code> of <code>/LIOV/</code> to <code>LightElements</code></td>
+</tr>
+<tr>
+<td>Per-shell physics</td>
+<td><code>/TEMP/</code>, <code>/TEMP2/</code>, <code>/MDPHY/</code>, <code>/SCRTCH/</code>, <code>/ROTDER/</code>, <code>/NEWEPS/</code>, <code>/GRAB/</code>, <code>/FLUXES/</code>, <code>/BE7/</code>, <code>/PUALPHA/</code>, <code>/SOUND/</code></td>
+<td><code>ShellPhysics</code>; the mid-step copies (<code>/MDPHY/</code>) and velocities (<code>/TEMP2/</code>) to <code>RotationTransport</code>; <code>PUALPHA</code> to <code>PointState</code></td>
+</tr>
+<tr>
+<td>Burning results</td>
+<td><code>/BURN/</code>, <code>/BSBURN/</code>, <code>/NEWRAT/</code>, <code>/DEUTER/</code></td>
+<td>returned by <code>ReactionRates%eval</code>, <code>Deuterium</code>, <code>LightElements</code>; <code>/BSBURN/</code> serves only the dead <code>BURSMIX</code></td>
+</tr>
+<tr>
+<td>The outer layers</td>
+<td><code>/ENVSTRUCT/</code>, <code>/ATMSTRUCT/</code>, <code>/ENVPRT/</code>, <code>/ATMPRT/</code>, <code>/ENVCZ/</code>, <code>/PULSE1/</code>, <code>/PULSE2/</code>, <code>/STCH/</code>, <code>/JTEST/</code></td>
+<td><code>EnvelopeSolution</code>; <code>/STCH/</code> to <code>StoreFile</code>; <code>/JTEST/</code> to <code>OverturnAnal</code></td>
+</tr>
+<tr>
+<td>Outputs at chosen ages</td>
+<td><code>/ACDPTH/</code></td>
+<td><code>AGEOUT</code>, <code>LCLCD</code> to <code>Config%io</code>; the acoustic results to <code>AcousticAnal</code></td>
+</tr>
+<tr>
+<td>Rotation work arrays</td>
+<td><code>/INTVAR/</code>, <code>/INTVR2/</code>, <code>/INTFAC/</code>, <code>/VFACT/</code>, <code>/TAUKH/</code>, <code>/DIFAD2/</code>, <code>/DIFAD3/</code>, <code>/DIFAD4/</code>, <code>/DIFADDT/</code>, <code>/EGRIDCHI/</code>, <code>/EGRIDDER/</code></td>
+<td><code>RotationTransport</code> (private)</td>
+</tr>
+<tr>
+<td>Solver work arrays</td>
+<td><code>/TRIDI/</code>, <code>/SPLIN/</code>, <code>/EGRID/</code></td>
+<td>locals of <code>numerics</code> and <code>ChiGrid</code></td>
+</tr>
+<tr>
+<td>OPAL EOS 1995</td>
+<td><code>/A/</code>, <code>/AA/</code>, <code>/B/</code>, <code>/BB/</code>, <code>/E/</code>, <code>/EE/</code>, <code>/EEE/</code>, <code>/RMPOPEOS/</code></td>
+<td><code>OpalEos</code> with <code>release = '1995'</code> (its <code>OpalEosTable</code>)</td>
+</tr>
+<tr>
+<td>OPAL EOS 2001</td>
+<td><code>/AEOS/</code>, <code>/AAEOS/</code>, <code>/BEOS/</code>, <code>/BBEOS/</code>, <code>/EEOS/</code>, <code>/EEEOS/</code>, <code>/EEEEOS/</code>, <code>/RMPOPEOS01/</code></td>
+<td><code>OpalEos</code>, <code>'2001'</code></td>
+</tr>
+<tr>
+<td>OPAL EOS 2006</td>
+<td><code>/AEOS06/</code>, <code>/AAEOS06/</code>, <code>/BEOS06/</code>, <code>/BBEOS06/</code>, <code>/EEOS06/</code>, <code>/EEEOS06/</code>, <code>/EEEEOS06/</code></td>
+<td><code>OpalEos</code>, <code>'2006'</code></td>
+</tr>
+<tr>
+<td>MHD EOS</td>
+<td><code>/CHE1/</code>, <code>/CHE2/</code>, <code>/CHE3/</code>, <code>/CHE4/</code>, <code>/CHE5/</code>, <code>/CHEA/</code>, <code>/CHEB/</code>, <code>/CHEC/</code>, <code>/TAB1A/</code>, <code>/TAB1B/</code>, <code>/TAB1C/</code>, <code>/TAB2A/</code>, <code>/TAB2B/</code>, <code>/TAB2C/</code>, <code>/TABX1/</code>, <code>/TABX2/</code>, <code>/TABX3/</code>, <code>/TABX4/</code>, <code>/TABX5/</code>, <code>/TTTT/</code>, <code>/MHDOUT/</code></td>
+<td><code>MhdEos</code>: one array of tables</td>
+</tr>
+<tr>
+<td>SCV EOS</td>
+<td><code>/SCVEOS/</code></td>
+<td><code>ScvEos</code></td>
+</tr>
+<tr>
+<td>OPAL95 opacities</td>
+<td><code>/LLOT95/</code>, <code>/LLOT95A/</code>, <code>/LLOT95E/</code>, <code>/OP95EXT/</code>, <code>/OP95FACT/</code>, <code>/OP95INDX/</code></td>
+<td><code>Opal95Opacity</code></td>
+</tr>
+<tr>
+<td>OPAL92 opacities</td>
+<td><code>/GLLOT/</code>, <code>/LLOT/</code>, <code>/LLOT4/</code>, <code>/LINTPL/</code>, <code>/KIPMLL/</code>, <code>/GLLOT2/</code>, <code>/LLOT2/</code>, <code>/LLOT42/</code>, <code>/LINTPL2/</code>, <code>/KIPMLL2/</code></td>
+<td><code>Opal92Opacity</code>, two instances</td>
+</tr>
+<tr>
+<td>LAOL89 opacities</td>
+<td><code>/NWLAOL/</code>, <code>/SLAOL/</code>, <code>/NWLAOL2/</code>, <code>/SLAOL2/</code>, <code>/ZLAOL/</code>, <code>/ZSLAOL/</code></td>
+<td><code>Laol89Opacity</code> (the pure-Z table a third instance)</td>
+</tr>
+<tr>
+<td>Alexander opacities</td>
+<td><code>/ALOT/</code>, <code>/ALOTALL/</code>, <code>/GALOT/</code>, <code>/ALOT06/</code>, <code>/ALOT06ALL/</code>, <code>/GALOT06/</code></td>
+<td><code>Alex95Opacity</code>, <code>Alex06Opacity</code></td>
+</tr>
+<tr>
+<td>Kurucz 1990 opacities</td>
+<td><code>/KRZ/</code>, <code>/GKRZ/</code>, <code>/INTPL2/</code>, <code>/KIPM/</code>, <code>/KRZ2/</code>, <code>/GKRZ2/</code>, <code>/INTPL22/</code>, <code>/KIPM2/</code></td>
+<td><code>Kurucz90Opacity</code>, two instances</td>
+</tr>
+<tr>
+<td>Atmosphere tables</td>
+<td><code>/ATMOS2/</code>, <code>/ATMOS2C/</code>, <code>/FAC/</code>, <code>/ALATM01/</code>, <code>/ALATM02/</code>, <code>/ALATM05/</code></td>
+<td><code>KuruczAtmosphere</code>, <code>CastelliAtmosphere</code>, <code>AllardAtmosphere</code></td>
+</tr>
+</tbody>
+</table>
+<p>The development branch has already removed the blocks of the options it dropped, consolidated others, and made each remaining block a module (87 <code>…_MOD</code> modules; no <code>COMMON</code> statement is left, its issue 37; <a href="overview.html">Section 7.3</a>). That is the first half of this map: a module per block makes the data explicit but still global. The second half, done type by type in <a href="overview.html">Section 7.2</a>, moves each module's variables into the derived type above and deletes the module.</p>
+
+</main></body></html>

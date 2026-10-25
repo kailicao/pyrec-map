@@ -1,0 +1,144 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>meqos.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ meqos.f</span></header><main>
+<h1>meqos.f</h1>
+<p class='muted'>78 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/meqos.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>MEQOS</code> is the interface to the Mihalas–Hummer–Däppen (MHD) equation of state ("implemented by YC March 7, 1990"): given $\log T$, $\log P$ and the composition, it returns the density and the thermodynamic quantities in the same form as the code's other EOS routines (<a href="../files/eqstat.f.html#def-EQSTAT"><code>EQSTAT</code></a>).</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/coefft.f.html#def-COEFFT"><code>COEFFT</code></a>, <a href="../files/envint.f.html#def-ENVINT"><code>ENVINT</code></a>, <a href="../files/physic.f.html#def-PHYSIC"><code>PHYSIC</code></a>, <a href="../files/qatm.f.html#def-QATM"><code>QATM</code></a>, <a href="../files/qenv.f.html#def-QENV"><code>QENV</code></a>, <a href="../files/starin.f.html#def-STARIN"><code>STARIN</code></a> and <a href="../files/wrtout.f.html#def-WRTOUT"><code>WRTOUT</code></a>, whenever the run uses the MHD tables (the switch <code>LMHD</code>, a namelist parameter of <a href="../files/parmin.f.html#def-PARMIN"><code>PARMIN</code></a>, default false). The callers do not check that the point lies inside the tables (see <a href="../files/mhdpx.f.html"><code>mhdpx.f</code></a>, question 1).</li>
+<li><strong>Inputs:</strong> <code>T10</code> = $\log T$, <code>P10</code> = $\log P$, <code>XC</code> = $X$, <code>Z</code>.</li>
+<li><strong>Outputs (arguments):</strong> $T$, $P$, $\log\rho$ and $\rho$, $\beta$ (<code>BETA</code>, <code>BETAI</code> = $1/\beta$, <code>BETA14</code> = $1-\beta$), the ionization fractions <code>FXION(3)</code>, <code>RMU</code>, <code>AMU</code>, <code>EMU</code>, the degeneracy <code>ETA</code>, the derivatives <code>QDT</code>, <code>QDP</code>, <code>QCP</code>, <code>DELA</code> and their second derivatives <code>QDTT</code>, <code>QDPT</code>, <code>QAT</code>, <code>QAP</code>, <code>QCPT</code>, <code>QCPP</code>.</li>
+<li><strong>Calls:</strong> <a href="../files/mhdpx.f.html#def-MHDPX"><code>MHDPX</code></a> (table interpolation, results in COMMON <code>MHDOUT</code>) and <a href="../files/mu.f.html#def-MU"><code>MU</code></a> (mean molecular weights).</li>
+<li><strong>COMMON blocks:</strong> <code>MHDOUT</code> (<code>VARMHD(25)</code>, the interpolated table variables, with <code>MHDPX</code>, <code>MHDPX1</code>), <code>LUOUT</code>, and declared but unused <code>COMP</code>, <code>CTLIM</code>, <code>CONST1</code>, <code>CONST2</code>, <code>CCOUT2</code>.</li>
+</ul>
+<p><strong>The method.</strong> With $v_k$ = <code>VARMHD(k)</code> (the table's variables; the meaning of each index comes from the MHD tables, not from this file), and $c$ = <code>CNVS</code> $= \log_{10}e$:</p>
+<p>$$\log\rho = v_1,\quad \chi_\rho = v_4,\quad \chi_T = v_5,\quad Q_P = \frac{\partial\ln\rho}{\partial\ln P}\Big|_T = \frac{1}{\chi_\rho},\quad Q_T = \frac{\partial\ln\rho}{\partial\ln T}\Big|_P = -\frac{\chi_T}{\chi_\rho},$$</p>
+<p>$$c_P = 10^{v_9},\quad \nabla_\mathrm{ad} = v_8,\quad \beta = 10^{v_{20} - v_2},\quad \eta = v_{18},\quad x_\mathrm{ion} = v_{14..16},\quad \frac{\mathcal{R}}{\mu} = \frac{10^{v_{20}}}{\rho T},$$</p>
+<p>and the derivatives of $\log c_P$ and $\ln\nabla_\mathrm{ad}$ by the chain rule from $v_{10}$–$v_{13}$, e.g. $Q_{AP} = Q_P\,v_{10}\,c/\nabla_\mathrm{ad}$. Then it calls <code>MU</code> for $\mu$ and stops the run if the two values of $\mathcal{R}/\mu$ differ by more than $5\times10^{-7}$ relatively.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused arguments <code>LDERIV</code>, <code>LATMO</code>, <code>KSAHA</code> and the unused array <code>ATOMWT</code> removed (the callers were changed to match).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Which variables.</strong> The meaning of each <code>VARMHD</code> index (e.g. whether $v_2$ is $\log P_\mathrm{tot}$ and $v_{20}$ $\log P_\mathrm{gas}$, so that $\beta = P_\mathrm{gas}/P$) is not documented in the code; a table of the 25 variables would help. Is <code>P10</code> the total or the gas pressure? <code>MHDPX</code>'s header says its argument is the gas pressure.</li>
+<li><strong>Unreachable error code.</strong> The lines after <code>RETURN</code> ("MHD TABLE FAIL") can never run (their label 999 is commented out). How are table failures reported now? (See <code>MHDPX1</code>, which returns silently.)</li>
+<li><strong>A strict consistency stop.</strong> The run stops if the table's $\mu$ and <code>MU</code>'s differ by $5\times10^{-7}$ relatively; could interpolation alone exceed that near table edges?</li>
+<li><strong>Unused.</strong> <code>IER</code> and five COMMON blocks.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+MIHALAS, HUMMER, DAPPEN EQUATION OF STATE
+
+IMPLIMENTED BY YC MARCH 7, 1990
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+MEQOS
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MEQOS'>MEQOS</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MEQOS'><h3><span class='kind'>subroutine</span>MEQOS</h3>
+<p class='muted'>lines 11–78 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/meqos.f#L11-L78'>GitHub</a></p>
+<pre>SUBROUTINE MEQOS(T10,T,P10,P,D10,D,XC,Z,BETA,BETAI,</pre>
+<div class='notes'><p>MHD EOS interface: table variables to the code's EOS outputs (above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+MIHALAS, HUMMER, DAPPEN EQUATION OF STATE
+
+IMPLIMENTED BY YC MARCH 7, 1990
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+MEQOS
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CCOUT2'>/CCOUT2/</a>, <a href='../commons.html#c-COMP'>/COMP/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-CTLIM'>/CTLIM/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-MHDOUT'>/MHDOUT/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/mhdpx.f.html#def-MHDPX'>MHDPX</a> <span class='muted'>(mhdpx.f)</span></li>
+<li><a href='../files/mu.f.html#def-MU'>MU</a> <span class='muted'>(mu.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/coefft.f.html#def-COEFFT'>COEFFT</a> <span class='muted'>(coefft.f)</span></li>
+<li><a href='../files/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+<li><a href='../files/physic.f.html#def-PHYSIC'>PHYSIC</a> <span class='muted'>(physic.f)</span></li>
+<li><a href='../files/qatm.f.html#def-QATM'>QATM</a> <span class='muted'>(qatm.f)</span></li>
+<li><a href='../files/qenv.f.html#def-QENV'>QENV</a> <span class='muted'>(qenv.f)</span></li>
+<li><a href='../files/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span></li>
+<li><a href='../files/wrtout.f.html#def-WRTOUT'>WRTOUT</a> <span class='muted'>(wrtout.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">11</span>      SUBROUTINE MEQOS(T10,T,P10,P,D10,D,XC,Z,BETA,BETAI,
+<span class="ln">12</span>     1 BETA14,FXION,RMU,AMU,EMU,ETA,QDT,QDP,QCP,DELA,
+<span class="ln">13</span>C      2 QDTT,QDPT,QAT,QAP,QCPT,QCPP,LDERIV,LATMO,KSAHA)  ! KC 2025-05-31
+<span class="ln">14</span>     2 QDTT,QDPT,QAT,QAP,QCPT,QCPP)
+<span class="ln">15</span>
+<span class="ln">16</span>C     LATMO,KSAHA NEEDED FOR EQSAHA
+<span class="ln">17</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">18</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">19</span>
+<span class="ln">20</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">21</span>      PARAMETER ( IVARX = 25 )
+<span class="ln">22</span>      PARAMETER (CNVS = 0.434294481D0 )
+<span class="ln">23</span>      PARAMETER (ZERO = 0.0D0)
+<span class="ln">24</span>C       DIMENSION ATOMWT(4),FXION(3)  ! KC 2025-05-31
+<span class="ln">25</span>      DIMENSION FXION(3)
+<span class="ln">26</span>      COMMON/COMP/XENV,ZENV,ZENVM,AMUENV,FXENV(12),XNEW,ZNEW,STOTAL,
+<span class="ln">27</span>     *     SENV
+<span class="ln">28</span>      COMMON/CTLIM/ATIME(14),TCUT(5),TSCUT,TENV0,TENV1,TENV,TGCUT
+<span class="ln">29</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">30</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">31</span>      COMMON/CCOUT2/LDEBUG,LCORR,LMILNE,LTRACK,LSTPCH
+<span class="ln">32</span>      COMMON/MHDOUT/VARMHD(IVARX)
+<span class="ln">33</span>C       DATA NZP1/12/
+<span class="ln">34</span>C       DATA ATOMWT/0.9921D0,0.24975D0,0.08322D0,0.4995D0/
+<span class="ln">35</span>      SAVE
+<span class="ln">36</span>
+<span class="ln">37</span>      IER     = 0
+<span class="ln">38</span>      T=10.0D0**T10
+<span class="ln">39</span>      P=10.0D0**P10
+<span class="ln">40</span>      CALL <a href="../files/mhdpx.f.html#def-MHDPX" title="MHDPX in mhdpx.f">MHDPX</a>(P10,T10,XC,R10)
+<span class="ln">41</span>      D10=VARMHD(1)
+<span class="ln">42</span>      D=10.0D0**D10
+<span class="ln">43</span>      QDP=1.0D0/VARMHD(4)
+<span class="ln">44</span>      CHIRA = VARMHD(4)
+<span class="ln">45</span>      CHITA = VARMHD(5)
+<span class="ln">46</span>      QDT= -CHITA/CHIRA
+<span class="ln">47</span>      CP=VARMHD(9)
+<span class="ln">48</span>      QCP=10.0D0**CP
+<span class="ln">49</span>      QCPP=QDP*VARMHD(12)
+<span class="ln">50</span>      QCPT=VARMHD(13)+VARMHD(12)*QDT
+<span class="ln">51</span>      DELA=VARMHD(8)
+<span class="ln">52</span>      QAP=QDP*VARMHD(10)*CNVS/DELA
+<span class="ln">53</span>      QAT=(VARMHD(11)+VARMHD(10)*QDT)*CNVS/DELA
+<span class="ln">54</span>      QDPT=QDT*(QAP-1.0D0+QDP+QCPP)
+<span class="ln">55</span>      QDTT=QDT*(QAT+1.0D0+QDT+QCPT)
+<span class="ln">56</span>      BETA=10.0D0**(VARMHD(20)-VARMHD(2))
+<span class="ln">57</span>      BETAI=1.0D0/BETA
+<span class="ln">58</span>      BETA14=1.0D0-BETA
+<span class="ln">59</span>      DO ION=1,3
+<span class="ln">60</span>      FXION(ION)=VARMHD(ION+13)
+<span class="ln">61</span>      ENDDO
+<span class="ln">62</span>      ETA=VARMHD(18)
+<span class="ln">63</span>      RMU=10.0D0**VARMHD(20)/(D*T)
+<span class="ln">64</span>      CALL <a href="../files/mu.f.html#def-MU" title="MU in mu.f">MU</a>(T,P,D,XC,Z,RMU2,AMU,EMU,BETA)
+<span class="ln">65</span>      IF(ABS((RMU-RMU2)/RMU).GT.5.0D-7)THEN
+<span class="ln">66</span>          WRITE(IOWR,*)&#x27; ERROR(MHD) IN MEAN WEIGHTS ... &#x27;
+<span class="ln">67</span>          WRITE(IOWR,*)RMU,RMU2
+<span class="ln">68</span>        WRITE(IOWR,*) &#x27;ERROR (MHD): CHECK MU&#x27;
+<span class="ln">69</span>          WRITE(ISHORT,*)&#x27; ERROR(MHD): IN MEAN WEIGHTS ... &#x27;
+<span class="ln">70</span>          WRITE(ISHORT,*)RMU,RMU2
+<span class="ln">71</span>        WRITE(ISHORT,*) &#x27;ERROR (MHD): CHECK MU&#x27;
+<span class="ln">72</span>          STOP
+<span class="ln">73</span>      ENDIF
+<span class="ln">74</span>      RETURN
+<span class="ln">75</span>C   999 CONTINUE
+<span class="ln">76</span>      WRITE(ISHORT,*) &#x27;ERROR(MHD):... MHD TABLE FAIL&#x27;
+<span class="ln">77</span>      STOP
+<span class="ln">78</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked: the conversions from <code>VARMHD</code> (the equations), $\beta$, <code>RMU</code> and the stop on $\mu$, the unused COMMON blocks, KC's changes, the questions.</p>
+<ol>
+<li><strong>Wrong.</strong> "where the run uses the MHD tables and the point is inside them". All seven callers test only <code>LMHD</code> (a namelist switch of <code>PARMIN</code>, default false), never the range. Fix: say so, and point to <code>mhdpx.f</code>'s question 1.</li>
+</ol>
+<p>Revised: the callers' condition corrected.</p></div></details>
+</main></body></html>

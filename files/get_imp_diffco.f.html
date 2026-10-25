@@ -1,0 +1,71 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>get_imp_diffco.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ get_imp_diffco.f</span></header><main>
+<h1>get_imp_diffco.f</h1>
+<p class='muted'>29 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/get_imp_diffco.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>GET_IMP_DIFFCO</code> rebuilds the tridiagonal matrix of an implicit diffusion step for hydrogen, after correcting the diffusion coefficients for the change in $X$ found in the previous iteration.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/grsett.f.html#def-GRSETT">GRSETT</a> (gravitational settling) and <a href="../files/microdiff_run.f.html#def-MICRODIFF_RUN">MICRODIFF_RUN</a> (the newer microscopic diffusion), inside their iterations.</li>
+<li><strong>Inputs:</strong> <code>ALPHA</code> (the step's coefficients per point), <code>ECOD2_H</code> (diffusion coefficients at the half points), <code>EQCOD2X_H</code> (their derivatives with respect to $X$), <code>EX_H</code> (the change in $X$), <code>NPT</code>.</li>
+<li><strong>Outputs:</strong> the matrix diagonals <code>A</code>, <code>B</code>, <code>C</code>, and <code>ECOD2_H</code> updated in place.</li>
+<li><strong>The change passed in</strong> is that of the last iteration only: GRSETT sets <code>EX_H</code> from <code>EX - EX_P</code> and then <code>EX_P = EX</code>, and MICRODIFF_RUN does the same with <code>ED_H</code>. So the corrections to <code>ECOD2_H</code> add up correctly. MICRODIFF_RUN also sets <code>EQCOD2X_H</code> to zero before each call (its comment: only used by the old settling routine), so there the coefficients stay fixed and only the matrix is rebuilt.</li>
+</ul>
+<p><strong>The method.</strong> First $D_{i+1/2} \leftarrow D_{i+1/2} + (\partial D/\partial X)_{i+1/2}\,\Delta X_{i+1/2}$. Then, for the interior points,
+$$a_i = -\alpha_i D_{i-1/2},\qquad b_i = 1 + \alpha_i(D_{i-1/2} + D_{i+1/2}),\qquad c_i = -\alpha_i D_{i+1/2},$$
+with zero-flux ends: $a_1 = 0$, $b_1 = 1 + \alpha_1 D_{3/2}$, and $c_N = 0$, $b_N = 1 + \alpha_N D_{N-1/2}$. This is the backward-Euler matrix for $\partial X/\partial t = \partial_x(D\,\partial_x X)$ on the solver's grid, as far as can be told from the code alone.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Midpoint indices.</strong> Here <code>ECOD2_H(I)</code> is the coefficient between points <code>I</code> and <code>I+1</code> (<code>B(1)</code> uses <code>ECOD2_H(1)</code>), the convention of <a href="../files/model_to_equal.f.html#def-MODEL_TO_EQUAL">MODEL_TO_EQUAL</a> and <a href="../files/lax_wendrof1.f.html#def-LAX_WENDROF1">LAX_WENDROF1</a> for <code>EX_H(1..NPT-1)</code> too. But GRSETT's loop sets <code>EX_H(I)</code>, for <code>I = 2..NPT</code>, from points <code>I-1</code> and <code>I</code>, the midpoint one lower, and leaves <code>EX_H(1)</code> as LAX_WENDROF1 set it. So <code>ECOD2_H(I)</code> is probably corrected with the change at the neighbouring midpoint. Is this an off-by-one error in GRSETT?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-GET_IMP_DIFFCO'>GET_IMP_DIFFCO</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-GET_IMP_DIFFCO'><h3><span class='kind'>subroutine</span>GET_IMP_DIFFCO</h3>
+<p class='muted'>lines 2–29 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/get_imp_diffco.f#L2-L29'>GitHub</a></p>
+<pre>SUBROUTINE GET_IMP_DIFFCO(ALPHA,ECOD2_H,EX_H,EQCOD2X_H,A,B,C,NPT)</pre>
+<div class='notes'><p>Updates the diffusion coefficients for the last change in $X$ and rebuilds the implicit tridiagonal matrix (equations above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/grsett.f.html#def-GRSETT'>GRSETT</a> <span class='muted'>(grsett.f)</span></li>
+<li><a href='../files/microdiff_run.f.html#def-MICRODIFF_RUN'>MICRODIFF_RUN</a> <span class='muted'>(microdiff_run.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE GET_IMP_DIFFCO(ALPHA,ECOD2_H,EX_H,EQCOD2X_H,A,B,C,NPT)
+<span class="ln">3</span>
+<span class="ln">4</span>      PARAMETER (JSON=5000)
+<span class="ln">5</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">6</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">7</span>      DIMENSION ALPHA(JSON),ECOD2_H(JSON),EX_H(JSON),EQCOD2X_H(JSON),
+<span class="ln">8</span>     *   A(JSON),B(JSON),C(JSON)
+<span class="ln">9</span>      SAVE
+<span class="ln">10</span>
+<span class="ln">11</span>C CORRECT DIFFUSION COEFFICEINTS FOR CHANGE IN X IN THE PREVIOUS ITERATION.
+<span class="ln">12</span>      DO 10 I=1,NPT-1
+<span class="ln">13</span>         ECOD2_H(I)=ECOD2_H(I)+EQCOD2X_H(I)*EX_H(I)
+<span class="ln">14</span>   10 CONTINUE
+<span class="ln">15</span>C NOW RECOMPUTE ELEMENTS OF THE TRIDIAGONAL MATRIX SYSTEM.
+<span class="ln">16</span>      A(1) = 0.0D0
+<span class="ln">17</span>      B(1) = 1.0D0 + ALPHA(1)*ECOD2_H(1)
+<span class="ln">18</span>      C(1) = -ALPHA(1)*ECOD2_H(1)
+<span class="ln">19</span>C   911 FORMAT(5X,I5,1P3E10.2)
+<span class="ln">20</span>      DO 20 I=2,NPT-1
+<span class="ln">21</span>         A(I) = -ALPHA(I)*ECOD2_H(I-1)
+<span class="ln">22</span>         B(I) = 1.0D0 + ALPHA(I)*(ECOD2_H(I-1)+ECOD2_H(I))
+<span class="ln">23</span>         C(I) = -ALPHA(I)*ECOD2_H(I)
+<span class="ln">24</span>   20 CONTINUE
+<span class="ln">25</span>      A(NPT) = -ALPHA(NPT)*ECOD2_H(NPT-1)
+<span class="ln">26</span>      B(NPT) = 1.0D0 + ALPHA(NPT)*ECOD2_H(NPT-1)
+<span class="ln">27</span>      C(NPT) = 0.0D0
+<span class="ln">28</span>      RETURN
+<span class="ln">29</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Question 1 answerable.</strong> Both callers pass the change of one iteration: GRSETT sets <code>EX_H(I) = 0.5*(EX(I)+EX(I-1)-EX_P(I)-EX_P(I-1))</code> and then <code>EX_P = EX</code>; MICRODIFF_RUN does the same for <code>ED_H</code>. So the corrections add up correctly. Fix: state it and drop the question.</li>
+<li><strong>Missing.</strong> MICRODIFF_RUN sets <code>EQCOD2X_H</code> to zero before each call ("only used in GRSETT … retained for legacy"), so there the coefficients do not change and only the matrix is rebuilt. Fix: add.</li>
+<li><strong>Missing (an apparent bug, new question).</strong> Here <code>ECOD2_H(I)</code> is the coefficient between points <code>I</code> and <code>I+1</code> (<code>B(1)</code> uses <code>ECOD2_H(1)</code>), and MODEL_TO_EQUAL and LAX_WENDROF1 use the same convention for <code>EX_H(1..NPT-1)</code>. But GRSETT's loop sets <code>EX_H(I)</code> for <code>I = 2..NPT</code> from points <code>I-1</code> and <code>I</code>, which is the midpoint one lower; <code>EX_H(1)</code> keeps the value LAX_WENDROF1 left in it. So <code>ECOD2_H(I)</code> is probably corrected with the change at the neighbouring midpoint. Fix: add the question; report to the group that has grsett.f.</li>
+</ol>
+<p>Revised: question 1 replaced by the answer; MICRODIFF_RUN's zeroing added; new question on the index.</p></div></details>
+</main></body></html>

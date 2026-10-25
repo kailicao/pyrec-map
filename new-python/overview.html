@@ -1,0 +1,41 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>pyrec: the Python version · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ New version (Python): the plan / pyrec: the Python version</span></header><main>
+<nav class='pages'><ul class='toc'><li><strong>pyrec: the Python version</strong></li></ul></nav>
+<h1>pyrec: the Python version</h1>
+<p><em>Stage 2 of the overhaul, drafted by Claude (Oct 25, 2026) for Kaili Cao from his plan; nothing is translated yet. The stub tree, <a href="../files/new/pyrec/__init__.py.html"><code>pyrec</code></a>, is the target framework: the same classes and the same split as the <a href="../new-fortran/overview.html">modern-Fortran design</a>, as Python packages, with shells held as NumPy arrays and the hot loops marked for Numba. Each stub names the routines it replaces and links its Fortran counterpart page.</em></p>
+<h2>Why Python first</h2>
+<p>Compiled code is hard to debug: a wrong value in YREC today is found with print statements and a rebuild. KC's plan therefore goes through Python, where every array can be inspected between two lines, and keeps the Fortran frozen meanwhile, as the reference that every Python result is checked against. The route, in KC's words:</p>
+<ol>
+<li>Fortran 77, old structure → Python (with Numba), old structure;</li>
+<li>→ Python, new structure (the framework of these stubs);</li>
+<li>→ modern Fortran, new structure (the <a href="../new-fortran/overview.html">Fortran design</a>).</li>
+</ol>
+<p><strong>Move 1: the translation.</strong> The current code is translated routine by routine, keeping its structure, so that each Python routine has one Fortran original. Each routine is translated in one of two ways:</p>
+<ul>
+<li><strong>Plain Python,</strong> for most routines (input, output, set-up, the driver, the run's logic). The COMMON blocks become state objects, one per block or group of blocks, held as attributes and passed along, close to the old structure.</li>
+<li><strong>A plain-Python wrapper and a Numba kernel,</strong> for the numerics-heavy routines: the structure solver, the equation-of-state and opacity interpolation, nuclear burning, diffusion. The wrapper takes the arrays it needs from the state and passes them to an <code>@njit</code> kernel; kernels take and return arrays only, and never touch global state. Debugging still works with <code>NUMBA_DISABLE_JIT=1</code>, which runs the kernels as plain Python.</li>
+</ul>
+<p>The reason for the split: Numba treats module globals as compile-time constants, so a COMMON block cannot become a mutable module global in Numba code; the kernels see the state only through their arguments.</p>
+<p><strong>Move 2: the new structure.</strong> The translated code is restructured step by step toward the framework of the stubs (one owner for each piece of state, one base class for each family of alternatives), each step checked against the step before it. The state objects of move 1 are the first draft of the classes: a block's variables move into the class that owns them, as the <a href="../new-fortran/common-map.html">COMMON-block map</a> lays out.</p>
+<p><strong>Move 3: modern Fortran.</strong> Once pyrec is mature, its modules move to modern Fortran one by one, called from Python through F2PY, so that the code runs whole after each move. In KC's experience Numba is not even as fast as C, so this stage is expected to be needed for speed, not left optional.</p>
+<h2>Conventions decided once</h2>
+<p>The translation meets the same Fortran idioms in every routine; each gets one convention, decided before the first routine and written down:</p>
+<ul>
+<li><strong>Indexing:</strong> Fortran counts from 1, Python from 0. Either shift every index (and every loop bound and stored index, such as zone edges) at translation, or keep a dummy element 0 during move 1; shifting once is cleaner, keeping is safer for differential tests.</li>
+<li><strong>GOTO flow,</strong> above all in <code>main.f</code>'s loops: into <code>while</code> loops, <code>break</code>, <code>continue</code> and early returns, with each label's role in a comment.</li>
+<li><strong>Column-major arrays:</strong> <code>HCOMP(NSP, M)</code> keeps one shell contiguous in Fortran; in NumPy's row-major order, <code>(NSP, m)</code> keeps one species contiguous. Keep YREC's index order and accept the other memory layout, or transpose; the kernels' loops follow the choice.</li>
+<li><strong>Implicit typing:</strong> every variable's type made explicit (names starting I–N are integers in Fortran 77), and single against double precision decided per variable.</li>
+<li><strong>COMMON blocks:</strong> into state objects, passed explicitly; never module globals in Numba code (above).</li>
+</ul>
+<h2>Testing</h2>
+<p><strong>Differential tests, routine by routine.</strong> A structure-preserving translation lets each Python routine be checked against its Fortran original on the same inputs, by calling the frozen Fortran through F2PY. A routine is done when it agrees on its inputs from real runs and on edge cases.</p>
+<p><strong>Bug for bug first.</strong> Move 1 reproduces the Fortran, apparent bugs included, and marks each one found in Stage 1 (the questions on each file's page) with a comment. Each is fixed later, in its own commit, with its own benchmark change.</p>
+<h2>Open questions</h2>
+<ol>
+<li><em>[KC]</em> <strong>Speed.</strong> Python loops over shells would be perhaps 100–1000 times slower than Fortran; NumPy over shells and the Numba kernels close much of the gap while keeping debugging possible. How slow may pyrec be while it is developed (a model a minute? a track an hour?), and which kernels are profiled first?</li>
+<li><em>[KC]</em> <strong>The benchmarks need a tolerance per quantity,</strong> not identical output: Python and Numba change the order of floating-point operations, so results agree to round-off, not bit for bit. Each output quantity (log L, log Teff, the central values, the surface abundances, the ages) needs its own tolerance. The development branch's 298-case suite could serve, if that branch is the frozen version.</li>
+<li><em>[KC]</em> <strong>Which version is frozen:</strong> rp_1, as the notes describe it, or the development branch, which has removed nine obsolete options and turned each COMMON block into a module (whose modules F2PY wraps more easily)?</li>
+<li><em>[KC]</em> <strong>Telling YREC's developers early,</strong> before move 1 starts: the plan takes a frozen copy of the code they maintain as its reference, and move 3 would hand them a new code.</li>
+</ol>
+
+</main></body></html>

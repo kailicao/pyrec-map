@@ -1,0 +1,182 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>microdiff_setup.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ microdiff_setup.f</span></header><main>
+<h1>microdiff_setup.f</h1>
+<p class='muted'>131 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/microdiff_setup.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> The first step of <a href="../files/microdiff.f.html#def-MICRODIFF">MICRODIFF</a>: it decides which part of the star takes part in settling, and converts the model's variables to the units of Bahcall and Loeb (1989), as its comments call them.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments of <code>MICRODIFF</code> (see there); <code>XMIN</code> and <code>YMIN</code> from <code>/GRAVS2/</code> (set by <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a>); the solar constants in <code>/CONST/</code> and <code>/CONST3/</code> (not used: the routine has its own constants).</li>
+<li><strong>Who calls it:</strong> only <a href="../files/microdiff.f.html#def-MICRODIFF">MICRODIFF</a>.</li>
+<li><strong>Outputs:</strong> <code>IBEGIN</code>, <code>IEND</code>, <code>LALLCZ</code>; the unlogged radius <code>HRU</code> and temperature <code>HTU</code> in the new units; the unlogged density <code>ODEN</code> and temperature <code>OTEM</code> in cgs units; and, <strong>in place</strong>, <code>HS1</code>, <code>HQPR</code>, <code>DT</code> and <code>STOT</code>, converted to the new units. <a href="../files/microdiff_etm.f.html#def-MICRODIFF_ETM">MICRODIFF_ETM</a> converts them back at the end.</li>
+<li><strong>COMMON blocks:</strong> it writes the conversion factors to <code>/CONFAC/</code>, which <code>MICRODIFF_ETM</code> reads (as do <a href="../files/setup_grsett.f.html#def-SETUP_GRSETT">SETUP_GRSETT</a> and <a href="../files/equal_to_model.f.html#def-EQUAL_TO_MODEL">EQUAL_TO_MODEL</a> in the older settling path). It reads <code>/GRAVS2/</code> (<code>XMIN</code>, <code>YMIN</code>) and <code>/CONST1/</code> (<code>CLN</code>). <code>/GRAVST/</code>, <code>/GRAVS3/</code>, <code>/SCRTCH/</code> (used only in a commented-out line), <code>/GSCOF/</code>, <code>/CMIXING/</code>, <code>/CONST/</code> and <code>/CONST3/</code> are declared but not used here.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>The diffusion region.</strong> If the centre is convective (<code>LC(1)</code>), <code>IBEGIN</code> is the last point of the convective core; if every point is convective, settling is skipped (<code>LALLCZ = .TRUE.</code>). <code>IBEGIN</code> then moves out to the first point with $X &gt;$ <code>XMIN</code>. If the surface is convective, <code>IEND</code> is the innermost point of the surface convection zone, otherwise the last point <code>M</code>; it then moves inward to the outermost point with $Y &gt;$ <code>YMIN</code>. A model with $X \le$ <code>XMIN</code> or $Y \le$ <code>YMIN</code> everywhere is skipped.</li>
+<li><strong>Units.</strong> With $R_\odot = 6.9598\times10^{10}$ cm (<code>CRSUN_BAH</code>) and the year $3.1558\times10^{7}$ s (<code>CSECYR_BAH</code>):
+$$r&#x27; = \frac{r}{R_\odot},\quad T&#x27; = \frac{T}{10^7\ \mathrm{K}},\quad m&#x27; = \frac{10^{-2}\,m}{R_\odot^{3}},\quad \left(\frac{d\ln P}{dr}\right)&#x27; = R_\odot\,\frac{d\ln P}{dr},\quad \Delta t&#x27; = \frac{\Delta t}{2.7\times10^{13}\ \mathrm{yr}}.$$
+That is, the mass unit is $100\ \mathrm{g\,cm^{-3}}\times R_\odot^3$. The comment says the time unit "includes factor of 2.2 from ln Lambda", the Coulomb logarithm that <a href="../files/microdiff_cod.f.html#def-MICRODIFF_COD">MICRODIFF_COD</a> divides by.</li>
+</ol>
+<p><strong>Design.</strong> <code>HS1</code>, <code>HQPR</code>, <code>DT</code> and <code>STOT</code> belong to the caller and are converted in place; <code>MICRODIFF_ETM</code> converts them back. When settling is skipped, the routine returns before converting, so the two stay consistent.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A copied comment.</strong> The second exit (no helium above <code>YMIN</code>) is commented "HYDROGEN-FREE MODEL", copied from the first.</li>
+<li><strong>Overshoot.</strong> Two comments say "COMPUTE OVERSHOOT (TO BE ADDED)". Settling ignores overshoot at the convective boundaries. Is this still planned?</li>
+<li><strong>Constants of its own.</strong> The routine uses its own $R_\odot$ and year rather than <code>CRSUN</code> and <code>CSECYR</code> from <code>/CONST/</code> and <code>/CONST3/</code>, which it declares. Intended, to keep Bahcall and Loeb's values?</li>
+<li><strong>No check that <code>IEND &gt; IBEGIN</code>.</strong> After the two searches, nothing checks that the region between <code>IBEGIN</code> and <code>IEND</code> is not empty. If it is, <a href="../files/microdiff_mte.f.html#def-MICRODIFF_MTE">MICRODIFF_MTE</a> divides the total width (zero or negative) by the minimum spacing, which is the same number, and builds a grid with $\Delta r \le 0$ (or 0/0 when the width is zero). Should settling be skipped then, as for a fully convective model?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+MICRODIFF_SETUP
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MICRODIFF_SETUP'>MICRODIFF_SETUP</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MICRODIFF_SETUP'><h3><span class='kind'>subroutine</span>MICRODIFF_SETUP</h3>
+<p class='muted'>lines 4–131 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/microdiff_setup.f#L4-L131'>GitHub</a></p>
+<pre>SUBROUTINE MICRODIFF_SETUP(DT,HQPR,HR,HD,HS1,HT,LC,M,STOT,HCOMP,HR</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+MICRODIFF_SETUP
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CMIXING'>/CMIXING/</a>, <a href='../commons.html#c-CONFAC'>/CONFAC/</a>, <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST3'>/CONST3/</a>, <a href='../commons.html#c-GRAVS2'>/GRAVS2/</a>, <a href='../commons.html#c-GRAVS3'>/GRAVS3/</a>, <a href='../commons.html#c-GRAVST'>/GRAVST/</a>, <a href='../commons.html#c-GSCOF'>/GSCOF/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-SCRTCH'>/SCRTCH/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/microdiff.f.html#def-MICRODIFF'>MICRODIFF</a> <span class='muted'>(microdiff.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE MICRODIFF_SETUP(DT,HQPR,HR,HD,HS1,HT,LC,M,STOT,HCOMP,HRU,HTU,
+<span class="ln">5</span>     *            IBEGIN,IEND,LALLCZ,ODEN,OTEM)
+<span class="ln">6</span>
+<span class="ln">7</span>      PARAMETER (JSON=5000)
+<span class="ln">8</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">9</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">10</span>
+<span class="ln">11</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">12</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">13</span>      COMMON/CONST1/CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">14</span>      COMMON/CONST3/CDELRL,CMIXL,CMIXL2,CMIXL3,CLNDP,CSECYR
+<span class="ln">15</span>      COMMON/CONFAC/CON_RAD,CON_MASS,CON_TEMP,CON_TIME
+<span class="ln">16</span>      COMMON/GRAVS2/DT_GS,XMIN,YMIN,LTHOULFIT
+<span class="ln">17</span>      COMMON/SCRTCH/SESUM(JSON),SEG(7,JSON),SBETA(JSON),SETA(JSON),
+<span class="ln">18</span>     *LOCONS(JSON),SO(JSON),SDEL(3,JSON),SFXION(3,JSON),SVEL(JSON),SCP(JSON)
+<span class="ln">19</span>      COMMON/GRAVST/GRTOL,ILAMBDA,NITER_GS,LDIFY
+<span class="ln">20</span>      COMMON/GRAVS3/FGRY,FGRZ,LTHOUL,LDIFZ
+<span class="ln">21</span>C MHP 8/94 ADDED I/O FOR DIFFUSION
+<span class="ln">22</span>      COMMON/GSCOF/APP(JSON),ATP(JSON),APZP(JSON),ATZP(JSON)
+<span class="ln">23</span>C      COMMON/GSCOF2/TAPP(JSON),TATP(JSON),TCLP(JSON),TAPZP(JSON),
+<span class="ln">24</span>C     *              TATZP(JSON)
+<span class="ln">25</span>CFD 10/09 ADDED COMMON BLOCK FOR EXTRA MIXING. IT MIMIC SOME MIXING BY AFFECTING
+<span class="ln">26</span>C        THE SETTLING COEFFICIENT DIRECTLY (in setup_grsett.f)
+<span class="ln">27</span>      COMMON/CMIXING/CSTMIXING, CSTDIFFMIX
+<span class="ln">28</span>C
+<span class="ln">29</span>      DIMENSION HQPR(JSON),HR(JSON),HT(JSON),HS1(JSON),HD(JSON),
+<span class="ln">30</span>     *          LC(JSON),HCOMP(15,JSON),HRU(JSON),HTU(JSON),
+<span class="ln">31</span>     *          ODEN(JSON),OTEM(JSON)
+<span class="ln">32</span>      SAVE
+<span class="ln">33</span>C
+<span class="ln">34</span>C     OUTPUT VARIABLES :
+<span class="ln">35</span>C
+<span class="ln">36</span>C     HRU - VECTOR OF UNLOGGED RADII IN BAHCALL AND LOEB UNITS.
+<span class="ln">37</span>C     HTU - VECTOR OF UNLOGGED TEMPERATURES IN BAHCALL AND LOEB UNITS.
+<span class="ln">38</span>C     IBEGIN - FIRST ZONE FOR DIFFUSION PURPOSES (EITHER THE FIRST MODEL POINT
+<span class="ln">39</span>C          OR THE OUTERMOST POINT OF A CENTRAL CONVECTION ZONE).
+<span class="ln">40</span>C     IEND - LAST ZONE FOR DIFFUSION PURPOSES (EITHER THE LAST MODEL POINT OR
+<span class="ln">41</span>C        THE INNERMOST POINT OF A SURFACE CONVECTION ZONE).
+<span class="ln">42</span>C     THE VECTORS HQPR AND HS1, AND THE SCALARS DT AND STOT, ARE ALSO CONVERTED
+<span class="ln">43</span>C     TO BAHCALL AND LOEB UNITS.
+<span class="ln">44</span>C     CONSTANTS DEFINED :
+<span class="ln">45</span>C     CLN = CONVERSION FACTOR FROM LN TO LOG10
+<span class="ln">46</span>C     CRSUN = SOLAR RADIUS (CM)
+<span class="ln">47</span>C     CSECYR = NUMBER OF SECONDS IN A YEAR.
+<span class="ln">48</span>      CRSUN_BAH=6.9598D10
+<span class="ln">49</span>      CSECYR_BAH=3.1558D7
+<span class="ln">50</span>C     LALLCZ=T FOR FULLY CONVECTIVE MODEL(AND IF TRUE, DIFFUSION IS SKIPPED).
+<span class="ln">51</span>      LALLCZ=.FALSE.
+<span class="ln">52</span>C     CHECK FOR CONVECTIVE CORE.
+<span class="ln">53</span>      IF(LC(1))THEN
+<span class="ln">54</span>         DO 10 I=2,M
+<span class="ln">55</span>            IF(.NOT.LC(I))GOTO 20
+<span class="ln">56</span>   10    CONTINUE
+<span class="ln">57</span>C        DIFFUSION NOT COMPUTED FOR FULLY CONVECTIVE MODELS.
+<span class="ln">58</span>         LALLCZ=.TRUE.
+<span class="ln">59</span>         WRITE(ISHORT,15)
+<span class="ln">60</span>   15    FORMAT(1X,&#x27; FULLY CONVECTIVE MODEL - NO SETTLING&#x27;)
+<span class="ln">61</span>         GOTO 9999
+<span class="ln">62</span>   20    CONTINUE
+<span class="ln">63</span>C        COMPUTE OVERSHOOT (TO BE ADDED).
+<span class="ln">64</span>         IBEGIN = I-1
+<span class="ln">65</span>      ELSE
+<span class="ln">66</span>         IBEGIN = 1
+<span class="ln">67</span>      ENDIF
+<span class="ln">68</span>C MHP 6/90 CHECK FOR HYDROGEN-EXHAUSTED CORE.
+<span class="ln">69</span>      DO 23 I = IBEGIN,M
+<span class="ln">70</span>         IF(HCOMP(1,I).GT.XMIN)GOTO 25
+<span class="ln">71</span>   23 CONTINUE
+<span class="ln">72</span>C     HYDROGEN-FREE MODEL - EXIT.
+<span class="ln">73</span>      WRITE(ISHORT,16)XMIN
+<span class="ln">74</span>   16 FORMAT(1X,&#x27;X BELOW &#x27;,F9.6,&#x27; IN WHOLE MODEL-NO SETTLING&#x27;)
+<span class="ln">75</span>      LALLCZ = .TRUE.
+<span class="ln">76</span>      GOTO 9999
+<span class="ln">77</span>   25 CONTINUE
+<span class="ln">78</span>      IBEGIN = I
+<span class="ln">79</span>C     CHECK FOR CONVECTIVE ENVELOPE.
+<span class="ln">80</span>      IF(LC(M))THEN
+<span class="ln">81</span>         DO 30 I=M-1,2,-1
+<span class="ln">82</span>            IF(.NOT.LC(I))GOTO 40
+<span class="ln">83</span>   30    CONTINUE
+<span class="ln">84</span>   40    CONTINUE
+<span class="ln">85</span>C        COMPUTE OVERSHOOT (TO BE ADDED).
+<span class="ln">86</span>         IEND = I+1
+<span class="ln">87</span>      ELSE
+<span class="ln">88</span>         IEND = M
+<span class="ln">89</span>      ENDIF
+<span class="ln">90</span>C     CHECK FOR HELIUM-EXHAUSTED SURFACE.
+<span class="ln">91</span>C     OUTER POINT IS SET WHEREVER Y&gt;YMIN.
+<span class="ln">92</span>      DO 45 I=IEND,1,-1
+<span class="ln">93</span>         IF(HCOMP(2,I).GT.YMIN) GOTO 47
+<span class="ln">94</span>   45 CONTINUE
+<span class="ln">95</span>C     HYDROGEN-FREE MODEL - EXIT.
+<span class="ln">96</span>      WRITE(ISHORT,17)YMIN
+<span class="ln">97</span>   17 FORMAT(1X,&#x27;Y BELOW &#x27;,F9.6,&#x27; IN WHOLE MODEL-NO SETTLING&#x27;)
+<span class="ln">98</span>      LALLCZ = .TRUE.
+<span class="ln">99</span>      GOTO 9999
+<span class="ln">100</span>   47 CONTINUE
+<span class="ln">101</span>      IEND = I
+<span class="ln">102</span>C     CON_MASS=CONVERSION FACTOR FOR MASS.
+<span class="ln">103</span>C     CON_RADIUS=CONVERSION FACTOR FOR RADIUS.
+<span class="ln">104</span>C     CON_TEMP=CONVERSION FACOTR FOR TEMPERATURE.
+<span class="ln">105</span>C     CON_TIME=CONVERSION FACTOR FOR TIME.
+<span class="ln">106</span>      CON_RAD=1.0D0/CRSUN_BAH
+<span class="ln">107</span>      CON_MASS=1.0D-2*CON_RAD**3
+<span class="ln">108</span>      CON_TEMP=1.0D-7
+<span class="ln">109</span>C     INCLUDES FACTOR OF 2.2 FROM LN LAMBDA
+<span class="ln">110</span>      CON_TIME=2.7D13*CSECYR_BAH
+<span class="ln">111</span>C     CONVERT LOG(RADIUS) AND LOG(TEMPERATURE) TO NATURAL UNITS.
+<span class="ln">112</span>C     ALSO CONVERT NATURAL UNITS TO BAHCALL AND LOEB UNITS.
+<span class="ln">113</span>      DO 50 I=1,M
+<span class="ln">114</span>         HRU(I)=EXP(CLN*HR(I))*CON_RAD
+<span class="ln">115</span>         HTU(I)=EXP(CLN*HT(I))*CON_TEMP
+<span class="ln">116</span>         HS1(I)=HS1(I)*CON_MASS
+<span class="ln">117</span>         HQPR(I)=HQPR(I)/CON_RAD
+<span class="ln">118</span>C        SDEL(2,I)=0.4D0   !COMMENT OUT IN REAL CODE
+<span class="ln">119</span>   50 CONTINUE
+<span class="ln">120</span>      DT=DT/CON_TIME
+<span class="ln">121</span>      STOT=STOT*CON_MASS
+<span class="ln">122</span>C
+<span class="ln">123</span>C COLLECT THE NECESSARY QUANTITIES (NAMELY RHO AND T) FOR LATER
+<span class="ln">124</span>C TRANSFORMATION TO THE EQUALLY SPACED GRID.
+<span class="ln">125</span>      DO I = 1,M
+<span class="ln">126</span>         ODEN(I) = EXP(CLN*HD(I))
+<span class="ln">127</span>         OTEM(I) = EXP(CLN*HT(I))
+<span class="ln">128</span>      ENDDO
+<span class="ln">129</span> 9999 CONTINUE
+<span class="ln">130</span>      RETURN
+<span class="ln">131</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "It reads <code>/GRAVS2/</code>, <code>/GRAVST/</code>, <code>/GRAVS3/</code> and <code>/SCRTCH/</code>": only <code>/GRAVS2/</code> (<code>XMIN</code>, <code>YMIN</code>) and <code>/CONST1/</code> (<code>CLN</code>) are used; <code>/GRAVST/</code>, <code>/GRAVS3/</code>, <code>/SCRTCH/</code> (only a commented-out line uses <code>SDEL</code>), <code>/GSCOF/</code>, <code>/CMIXING/</code>, <code>/CONST/</code> and <code>/CONST3/</code> are declared and unused. Fix: list them so.</li>
+<li><strong>Unclear.</strong> "<code>IEND</code> is the first convective point of the envelope; it then moves in to the last point with $Y &gt;$ <code>YMIN</code>": the code sets <code>IEND</code> to the innermost point of the surface convection zone, then searches inward for the outermost point with $Y &gt;$ <code>YMIN</code>. Fix: say "innermost" and "outermost".</li>
+<li><strong>Missing question.</strong> Nothing checks that <code>IEND &gt; IBEGIN</code> after the two searches. If the radiative region shrinks to nothing, <code>MICRODIFF_MTE</code> divides <code>DRTOT</code> (zero or negative) by itself and builds a grid with $\Delta r \le 0$. Fix: add a question.</li>
+</ol>
+<p>Revised: COMMON blocks corrected; <code>IEND</code> wording fixed; question 4 added.</p></div></details>
+</main></body></html>

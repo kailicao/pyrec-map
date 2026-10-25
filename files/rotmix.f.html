@@ -1,0 +1,254 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>rotmix.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ rotmix.f</span></header><main>
+<h1>rotmix.f</h1>
+<p class='muted'>193 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/rotmix.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Nuclear burning and gravitational settling for one step of the rotational-mixing loop. Its header comment lists the steps: (1) use <a href="../files/kemcom.f.html#def-KEMCOM"><code>KEMCOM</code></a> to solve implicitly for the abundances in radiative regions, shell by shell; (2) solve for the burning in each convection zone as a whole. It then applies the settling of helium and renormalizes the composition.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/midmod.f.html#def-MIDMOD"><code>MIDMOD</code></a> (with the temperatures at the current time, <code>HTM</code>, "for thermodynamic consistency", MHP 6/00) and <a href="../files/bursmix.f.html#def-BURSMIX"><code>BURSMIX</code></a>, in their loops of substeps.</li>
+<li><strong>Inputs:</strong> the step <code>DELTS</code> (s), the composition <code>HCOMP(15, ·)</code>, shell masses <code>HS2</code>, temperatures <code>HT</code> ($\log T$), and the zone lists <code>MRZONE</code> (radiative) and <code>MXZONE</code> (convective); for the settling, <code>HD</code>, <code>HS</code>, <code>HR</code>, <code>HP</code>, <code>HS1</code>, <code>HSTOT</code> and the convection flags <code>LC</code>.</li>
+<li><strong>The rates:</strong> read from <code>/BURN/</code> (<code>HCOMPM(1..15, ·)</code>), where <a href="../files/mix.f.html#def-MIX"><code>MIX</code></a> stored the output of <a href="../files/rates.f.html#def-RATES"><code>RATES</code></a>: <code>HCOMPM(1..13)</code> are the rates <code>HR1</code>…<code>HR13</code>, <code>HCOMPM(14)</code> and <code>(15)</code> the branchings <code>HF1</code>, <code>HF2</code>.</li>
+<li><strong>What it calls:</strong> <code>KEMCOM</code>, then either <a href="../files/microdiff.f.html#def-MICRODIFF"><code>MICRODIFF</code></a> (when <code>LNEWDIF</code> is true, <code>/GRAVS4/</code>) or <a href="../files/grsett.f.html#def-GRSETT"><code>GRSETT</code></a> (the older Bahcall–Loeb settling).</li>
+<li><strong>Output:</strong> <code>HCOMP</code>, updated in place.</li>
+<li><strong>COMMON, other:</strong> <code>/GRAVST/</code> (<code>LDIFY</code>, which this routine may switch off), <code>/GRAVS2/</code> (<code>DT_GS</code>, <code>XMIN</code>, <code>YMIN</code>), <code>/CTLIM/</code> (<code>TCUT(1)</code>), <code>/FLAG/</code> (<code>LEXCOM</code>: 15 species or 11), <code>/MDPHY/</code> (<code>DELM</code>), <code>/SCRTCH/</code> (<code>SDEL</code>, temporarily overwritten), <code>/CONST*/</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Burning.</strong> For each radiative shell above the cut $\log T &gt;$ <code>TCUT(1)</code> (the loop stops at the first shell below it, assuming $T$ falls outward), <code>KEMCOM</code> is called for the shell alone; for each convection zone, for the whole zone at once, which also homogenizes it. The step is passed in years, <code>DDAGE = DELTS/CSECYR</code>.</li>
+<li><strong>Settling</strong> (if <code>LDIFY</code>). It is skipped once the central hydrogen is below <code>XMIN</code> (and <code>LDIFY</code> is then switched off for good), if the star is fully convective, or if $Y &lt;$ <code>YMIN</code> everywhere. It stops the run if there is no surface convection zone. The outer point <code>JMAX</code> is the top of the last radiative zone, moved down to the first shell with $Y &gt;$ <code>YMIN</code>. The settling time there is taken from Michaud et al. (1984):
+   $$t_\mathrm{settle} = 4.348\times10^{21}\;\frac{f_M}{T^{3/2}}\ \text{yr},\qquad f_M = \frac{M_* - m(\texttt{JMAX})}{M_*},$$
+   with $T$ in K at <code>JMAX</code> (the code multiplies by <code>CSECYR</code> to get <code>TSCALE</code> in seconds, the unit of <code>DELTS</code>), and the step is divided into <code>NSTEP</code> substeps of at most <code>DT_GS</code> $\times\,t_\mathrm{settle}$. The pressure gradient passed to the settling routine is
+   $$\frac{d\ln P}{dr} = -\frac{G m \rho}{P r^2}\quad(\texttt{HQPR}).$$
+   During the settling, <code>SDEL(2,·)</code> holds <code>DELM</code> and is restored afterwards.</li>
+<li><strong>Renormalization.</strong> Every abundance is clipped to $[0, 1]$; $Z$ (<code>HCOMP(3)</code>) is capped at $1 - X - X_4$, and $Y$ is set to $1 - X - Z - X_4$, where $X_4$ is the fourth species, He3 (as <a href="../files/starin.f.html#def-STARIN"><code>STARIN</code></a> fills it).</li>
+</ol>
+<p><strong>KC's changes.</strong> The unused argument <code>ITLVL</code> was removed (KC 2025-05-31), with the calls in <code>MIDMOD</code> and <code>BURSMIX</code>; the calls to <code>KEMCOM</code> drop <code>HR9</code>, <code>HR13</code> and <code>ITLVL</code> to match its new signature (KC 2025-05-31).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Unconditional debug output.</strong> Two <code>write(69,*)</code> statements print <code>JMAX</code>, <code>FM</code>, <code>TSCALE</code>, <code>DTMAX</code>, <code>DELTS</code> and <code>NSTEP</code> to unit 69 at every call with settling. No routine opens unit 69, so this writes a file named by the compiler's default (for example <code>fort.69</code>). Leftover debugging?</li>
+<li><strong><code>MOD</code> with its arguments reversed.</strong> <code>NSTEP = INT(DELTS/DTMAX)</code>, then one more substep <code>IF(MOD(DTMAX,DELTS).NE.0)</code>. To test whether <code>DELTS</code> is a multiple of <code>DTMAX</code>, it would be <code>MOD(DELTS,DTMAX)</code>. As written, whenever <code>DTMAX &lt; DELTS</code> the test is always true, so one extra substep is always added. The same line is in <a href="../files/mix.f.html#def-MIX"><code>MIX</code></a>. Intended?</li>
+<li><strong>Message names the wrong routine.</strong> The stop for "NO SURFACE CZ" says "STOPPED IN SUBROUTINE MIX" (copied from <code>MIX</code>).</li>
+<li><strong><code>HR9</code>, <code>HR13</code>, <code>HF2</code> are copied but not used.</strong> The copies from <code>HCOMPM</code> remain after KC's change to the <code>KEMCOM</code> call. They could go.</li>
+<li><strong>The burning loop exits at the first cool shell.</strong> <code>GOTO 45</code> leaves both the shell loop and the zone loop, so any radiative zone listed after the first cool shell is skipped, even if it were hot (for example in a shell-burning star, if the zones were not ordered outward). Are <code>MRZONE</code> entries always ordered from the center out?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>1) USE KEMCOM TO IMPLICITLY SOLVE FOR ABUNDANCES IN RADIATIVE REGIONS.
+2) SOLVE FOR BURNING IN EACH CONVECTION ZONE.
+SUBROUTINE ROTMIX(DELTS,HCOMP,HS2,HT,ITLVL,M,MRZONE,MXZONE,  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-ROTMIX'>ROTMIX</a> <span class='muted'>subroutine · 1) USE KEMCOM TO IMPLICITLY SOLVE FOR ABUNDANCES IN RADIATIVE REGIONS.</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-ROTMIX'><h3><span class='kind'>subroutine</span>ROTMIX</h3>
+<p class='muted'>lines 5–193 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/rotmix.f#L5-L193'>GitHub</a></p>
+<pre>SUBROUTINE ROTMIX(DELTS,HCOMP,HS2,HT,M,MRZONE,MXZONE,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>1) USE KEMCOM TO IMPLICITLY SOLVE FOR ABUNDANCES IN RADIATIVE REGIONS.
+2) SOLVE FOR BURNING IN EACH CONVECTION ZONE.
+SUBROUTINE ROTMIX(DELTS,HCOMP,HS2,HT,ITLVL,M,MRZONE,MXZONE,  ! KC 2025-05-31</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-BURN'>/BURN/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-CONST3'>/CONST3/</a>, <a href='../commons.html#c-CTLIM'>/CTLIM/</a>, <a href='../commons.html#c-FLAG'>/FLAG/</a>, <a href='../commons.html#c-GRAVS2'>/GRAVS2/</a>, <a href='../commons.html#c-GRAVS4'>/GRAVS4/</a>, <a href='../commons.html#c-GRAVST'>/GRAVST/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-MDPHY'>/MDPHY/</a>, <a href='../commons.html#c-SCRTCH'>/SCRTCH/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/grsett.f.html#def-GRSETT'>GRSETT</a> <span class='muted'>(grsett.f)</span></li>
+<li><a href='../files/kemcom.f.html#def-KEMCOM'>KEMCOM</a> <span class='muted'>(kemcom.f)</span> ×2</li>
+<li><a href='../files/microdiff.f.html#def-MICRODIFF'>MICRODIFF</a> <span class='muted'>(microdiff.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/bursmix.f.html#def-BURSMIX'>BURSMIX</a> <span class='muted'>(bursmix.f)</span></li>
+<li><a href='../files/midmod.f.html#def-MIDMOD'>MIDMOD</a> <span class='muted'>(midmod.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">5</span>      SUBROUTINE ROTMIX(DELTS,HCOMP,HS2,HT,M,MRZONE,MXZONE,
+<span class="ln">6</span>     *                  NRZONE,NZONE
+<span class="ln">7</span>     *                  ,HSTOT,HD,HS,HR,HP,LC,HS1)
+<span class="ln">8</span>
+<span class="ln">9</span>      PARAMETER (JSON=5000)
+<span class="ln">10</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">11</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">12</span>      COMMON/BURN/HCOMPM(15,JSON)
+<span class="ln">13</span>      COMMON/CONST3/CDELRL,CMIXL,CMIXL2,CMIXL3,CLNDP,CSECYR
+<span class="ln">14</span>      COMMON/CTLIM/ATIME(14),TCUT(5),TSCUT,TENV0,TENV1,TENV,TGCUT
+<span class="ln">15</span>      COMMON/FLAG/LEXCOM
+<span class="ln">16</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">17</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">18</span>      COMMON/GRAVST/GRTOL,ILAMBDA,NITER_GS,LDIFY
+<span class="ln">19</span>      COMMON/GRAVS2/DT_GS,XMIN,YMIN,LTHOULFIT
+<span class="ln">20</span>c GES 6/15 INCLUDED COMMON BLOCK FOR NEW DIFFUSION ROUTINES.
+<span class="ln">21</span>      COMMON/GRAVS4/LNEWDIF,LDIFLI
+<span class="ln">22</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">23</span>      COMMON/MDPHY/AMUM(JSON),CPM(JSON),DELM(JSON),DELAM(JSON),
+<span class="ln">24</span>     *             DELRM(JSON),ESUMM(JSON),OM(JSON),QDTM(JSON),
+<span class="ln">25</span>     *             THDIFM(JSON),VELM(JSON),VISCM(JSON),EPSM(JSON)
+<span class="ln">26</span>      COMMON/SCRTCH/SESUM(JSON),SEG(7,JSON),SBETA(JSON),SETA(JSON),
+<span class="ln">27</span>     * LOCONS(JSON),SO(JSON),SDEL(3,JSON),SFXION(3,JSON),SVEL(JSON),SCP(JSON)
+<span class="ln">28</span>      DIMENSION HS2(JSON),HT(JSON),HCOMP(15,JSON)
+<span class="ln">29</span>      DIMENSION HR1(JSON),HR2(JSON),HR3(JSON),HR4(JSON),
+<span class="ln">30</span>     * HR5(JSON),HR6(JSON),HR7(JSON),HR8(JSON),HR9(JSON),HR10(JSON),
+<span class="ln">31</span>     * HR11(JSON),HR12(JSON),HR13(JSON),HF1(JSON),HF2(JSON)
+<span class="ln">32</span>      DIMENSION MRZONE(13,2),MXZONE(12,2),
+<span class="ln">33</span>     * HD(JSON),HS(JSON),HR(JSON),HP(JSON),HS1(JSON),HQPR(JSON),
+<span class="ln">34</span>     * LC(JSON),TEMP(JSON),LCZ(JSON)
+<span class="ln">35</span>      SAVE
+<span class="ln">36</span>C NSPEC IS THE NUMBER OF SPECIES BEING TRACKED.
+<span class="ln">37</span>      IF(LEXCOM)THEN
+<span class="ln">38</span>         NSPEC = 15
+<span class="ln">39</span>      ELSE
+<span class="ln">40</span>         NSPEC = 11
+<span class="ln">41</span>      ENDIF
+<span class="ln">42</span>C  DDAGE IS THE TIMESTEP IN YEARS.
+<span class="ln">43</span>      DDAGE=DELTS/CSECYR
+<span class="ln">44</span>      DO II = 1,M
+<span class="ln">45</span>         HR1(II) = HCOMPM(1,II)
+<span class="ln">46</span>         HR2(II) = HCOMPM(2,II)
+<span class="ln">47</span>         HR3(II) = HCOMPM(3,II)
+<span class="ln">48</span>         HR4(II) = HCOMPM(4,II)
+<span class="ln">49</span>         HR5(II) = HCOMPM(5,II)
+<span class="ln">50</span>         HR6(II) = HCOMPM(6,II)
+<span class="ln">51</span>         HR7(II) = HCOMPM(7,II)
+<span class="ln">52</span>         HR8(II) = HCOMPM(8,II)
+<span class="ln">53</span>         HR9(II) = HCOMPM(9,II)
+<span class="ln">54</span>         HR10(II) = HCOMPM(10,II)
+<span class="ln">55</span>         HR11(II) = HCOMPM(11,II)
+<span class="ln">56</span>         HR12(II) = HCOMPM(12,II)
+<span class="ln">57</span>         HR13(II) = HCOMPM(13,II)
+<span class="ln">58</span>         HF1(II) = HCOMPM(14,II)
+<span class="ln">59</span>         HF2(II) = HCOMPM(15,II)
+<span class="ln">60</span>      END DO
+<span class="ln">61</span>C
+<span class="ln">62</span>C  NOW IMPLICITLY SOLVE FOR THE NEW ABUNDANCES AT THE END OF THE
+<span class="ln">63</span>C  TIMESTEP.  THIS IS DONE SHELL BY SHELL FOR RADIATIVE REGIONS,
+<span class="ln">64</span>C  AND FOR EACH CONVECTION ZONE AS A UNIT.
+<span class="ln">65</span>C
+<span class="ln">66</span>C RADIATIVE ZONES.
+<span class="ln">67</span>C
+<span class="ln">68</span>      DO 40 K = 1,NRZONE
+<span class="ln">69</span>         DO 30 J = MRZONE(K,1),MRZONE(K,2)
+<span class="ln">70</span>C EXIT LOOP ONCE T DROPS BELOW NUCLEAR REACTION T CUTOFF
+<span class="ln">71</span>            IF(HT(J).LE.TCUT(1)) GOTO 45
+<span class="ln">72</span>            IBEGIN = J
+<span class="ln">73</span>            IEND = J
+<span class="ln">74</span>            CALL <a href="../files/kemcom.f.html#def-KEMCOM" title="KEMCOM in kemcom.f">KEMCOM</a>(HT,IBEGIN,IEND,HR1,HR2,HR3,HR4,HR5,HR6,HR7,
+<span class="ln">75</span>C      *                   HR8,HR9,HR10,HR11,HR12,HR13,HF1,HS2,HCOMP,
+<span class="ln">76</span>C      *                   DDAGE,ITLVL)  ! KC 2025-05-31
+<span class="ln">77</span>     *                   HR8,HR10,HR11,HR12,HF1,HS2,HCOMP,DDAGE)
+<span class="ln">78</span>   30    CONTINUE
+<span class="ln">79</span>   40 CONTINUE
+<span class="ln">80</span>   45 CONTINUE
+<span class="ln">81</span>C
+<span class="ln">82</span>C CONVECTION ZONES.
+<span class="ln">83</span>C NOTE KEMCOM ALSO AUTOMATICALLY HOMOGENIZE CONVECTION ZONES.
+<span class="ln">84</span>C
+<span class="ln">85</span>      DO 50 K = 1,NZONE
+<span class="ln">86</span>         IBEGIN = MXZONE(K,1)
+<span class="ln">87</span>         IEND = MXZONE(K,2)
+<span class="ln">88</span>         CALL <a href="../files/kemcom.f.html#def-KEMCOM" title="KEMCOM in kemcom.f">KEMCOM</a>(HT,IBEGIN,IEND,HR1,HR2,HR3,HR4,HR5,HR6,HR7,
+<span class="ln">89</span>C      *                HR8,HR9,HR10,HR11,HR12,HR13,HF1,HS2,HCOMP,
+<span class="ln">90</span>C      *                DDAGE,ITLVL)  ! KC 2025-05-31
+<span class="ln">91</span>     *                HR8,HR10,HR11,HR12,HF1,HS2,HCOMP,DDAGE)
+<span class="ln">92</span>   50 CONTINUE
+<span class="ln">93</span>C
+<span class="ln">94</span>C MICROSCOPIC DIFFUSION OF HELIUM.
+<span class="ln">95</span>C
+<span class="ln">96</span>C***BC 5/92 ROTMIX MODIFIED TO INCLUDE CALL TO GRAVITATIONAL SETTLING
+<span class="ln">97</span>C      ROUTINE USING THE BAHCALL AND LOEB METHOD.
+<span class="ln">98</span>C FIRST DEFINE VARIABLES NEEDED FOR SETTLING -
+<span class="ln">99</span>C HQPR=VECTOR OF D LN P/DR.
+<span class="ln">100</span>C STOT=TOTAL STELLAR MASS(UNLOGGED).
+<span class="ln">101</span>      IF(LDIFY)THEN
+<span class="ln">102</span>         IF(HCOMP(1,1).LT.XMIN)THEN
+<span class="ln">103</span>            LDIFY=.FALSE.
+<span class="ln">104</span>            GOTO 170
+<span class="ln">105</span>         ENDIF
+<span class="ln">106</span>C MHP 6/90 CHANGE ADDED : THE TIMESTEP FOR SETTLING IS RESTRICTED TO
+<span class="ln">107</span>C   A FRACTION OF THE TIMESCALE FOR SETTLING AT THE OUTER BOUNDARY.
+<span class="ln">108</span>C   THE OUTER BOUNDARY IS EITHER THE SURFACE CONVECTION ZONE OR THE
+<span class="ln">109</span>C   FIRST POINT WHERE THE HELIUM ABUNDANCE RISES ABOVE A USER-SPECIFIED
+<span class="ln">110</span>C   MINIMUM VALUE (YMIN).
+<span class="ln">111</span>C
+<span class="ln">112</span>C   LOCATE OUTER BOUNDARY.
+<span class="ln">113</span>         IF(.NOT.LC(M))THEN
+<span class="ln">114</span>            WRITE(*,911)
+<span class="ln">115</span>            WRITE(ISHORT,911)
+<span class="ln">116</span>  911       FORMAT(1X,&#x27;NO SURFACE CZ - DIFFUSION NOT MEANINGFUL&#x27;/
+<span class="ln">117</span>     *             &#x27;STOPPED IN SUBROUTINE MIX&#x27;)
+<span class="ln">118</span>            STOP
+<span class="ln">119</span>         ENDIF
+<span class="ln">120</span>C 7/92 MHP STATEMENT ADDED FOR EXIT IF OVERSHOOT CAUSES A FULLY CONVECTIVE
+<span class="ln">121</span>C CASE.  AVOIDS OCCASIONAL PRE-MS CRASH IN FIRST RADIATIVE MODEL.
+<span class="ln">122</span>         IF(MXZONE(NZONE,1).LE.2 .AND. MXZONE(NZONE,2).EQ.M)GOTO 170
+<span class="ln">123</span>         JMAX = MRZONE(NRZONE,2)
+<span class="ln">124</span>         DO 140 J = JMAX,1,-1
+<span class="ln">125</span>            IF(HCOMP(2,J).GT.YMIN)GOTO 150
+<span class="ln">126</span>  140    CONTINUE
+<span class="ln">127</span>C   Y&lt;YMIN FOR THE WHOLE STAR IF THE CODE GETS HERE.
+<span class="ln">128</span>         GOTO 170
+<span class="ln">129</span>  150    CONTINUE
+<span class="ln">130</span>         STOT=EXP(CLN*HSTOT)
+<span class="ln">131</span>         DO 130 I = 1,M
+<span class="ln">132</span>            TEMP(I) = SDEL(2,I)
+<span class="ln">133</span>            SDEL(2,I) = DELM(I)
+<span class="ln">134</span>            HQPR(I)=-EXP(CLN*(HD(I)+CGL+HS(I)-2.0D0*HR(I)-HP(I)))
+<span class="ln">135</span>  130    CONTINUE
+<span class="ln">136</span>C ***BC 6/92 only check for timestep cutting if JMAX is large
+<span class="ln">137</span>C
+<span class="ln">138</span>         IF(JMAX.GE.2) THEN
+<span class="ln">139</span>C  FM IS THE MASS FRACTION ABOVE THE OUTER POINT.
+<span class="ln">140</span>            FM = (STOT-HS1(JMAX))/STOT
+<span class="ln">141</span>C  TSCALE IS THE TIMESCALE FOR SETTLING OF HELIUM AT THE OUTER
+<span class="ln">142</span>C  BOUNDARY (MICHAUD ET AL 1984, APJ V.282,P.206)
+<span class="ln">143</span>            TSCALE = 4.348D21*CSECYR*FM/EXP(CLN*1.5D0*HT(JMAX))
+<span class="ln">144</span>C  RESTRICT TIMESTEP TO THE MINIMUM OF THE MODEL TIMESTEP AND
+<span class="ln">145</span>C  A USER SPECIFIED FRACTION (DT_GS) OF THE SETTLING TIMESCALE.
+<span class="ln">146</span>            write(69,*) &#x27;JMAX=&#x27;,JMAX,&#x27; FM= &#x27;,fm,&#x27; TSCALE=&#x27;,TSCALE
+<span class="ln">147</span>            DTMAX = DT_GS*TSCALE
+<span class="ln">148</span>            NSTEP = INT(DELTS/DTMAX)
+<span class="ln">149</span>            IF(MOD(DTMAX,DELTS).NE.0.0D0.OR.NSTEP.EQ.0)NSTEP=NSTEP+1
+<span class="ln">150</span>            write(69,*)&#x27;DTMAX=&#x27;,dtmax,&#x27; DELTS=&#x27;,delts,&#x27; NSTEP=&#x27;,nstep
+<span class="ln">151</span>            DT = DELTS/DFLOAT(NSTEP)
+<span class="ln">152</span>         ELSE
+<span class="ln">153</span>            NSTEP=1
+<span class="ln">154</span>            DT = DELTS
+<span class="ln">155</span>         ENDIF
+<span class="ln">156</span>         DO J = 1,NRZONE
+<span class="ln">157</span>            DO I = MRZONE(J,1),MRZONE(J,2)
+<span class="ln">158</span>               LCZ(I) = .FALSE.
+<span class="ln">159</span>            END DO
+<span class="ln">160</span>         END DO
+<span class="ln">161</span>         DO J = 1,NZONE
+<span class="ln">162</span>            DO I = MXZONE(J,1),MXZONE(J,2)
+<span class="ln">163</span>               LCZ(I) = .TRUE.
+<span class="ln">164</span>            END DO
+<span class="ln">165</span>         END DO
+<span class="ln">166</span>         DO 160 NS = 1,NSTEP
+<span class="ln">167</span>C PERFORM GRAVITATIONAL SETTLING. IF LNEWDIF = TRUE, USE THE NEW ROUTINES
+<span class="ln">168</span>C IN MICRODIFF. ELSE, USE THE OLD ROUTINES IN GRSETT.
+<span class="ln">169</span>            IF(LNEWDIF)THEN
+<span class="ln">170</span>               CALL <a href="../files/microdiff.f.html#def-MICRODIFF" title="MICRODIFF in microdiff.f">MICRODIFF</a>(DT,HCOMP,HQPR,HR,HD,HS1,HT,LCZ,M,STOT)
+<span class="ln">171</span>            ELSE
+<span class="ln">172</span>               CALL <a href="../files/grsett.f.html#def-GRSETT" title="GRSETT in grsett.f">GRSETT</a>(DT,HCOMP,HQPR,HR,HD,HS1,HT,LCZ,M,STOT)
+<span class="ln">173</span>            ENDIF
+<span class="ln">174</span>  160    CONTINUE
+<span class="ln">175</span>         DO I = 1,M
+<span class="ln">176</span>            SDEL(2,I) = TEMP(I)
+<span class="ln">177</span>         END DO
+<span class="ln">178</span>  170    CONTINUE
+<span class="ln">179</span>      ENDIF
+<span class="ln">180</span>C END OF GRAVITATIONAL SETTLING
+<span class="ln">181</span>C
+<span class="ln">182</span>C RENORMALIZE COMPOSITION TO GUARD AGAINST ANOMALIES (I.E. SMALL NEGATIVE
+<span class="ln">183</span>C ABUNDANCES...).
+<span class="ln">184</span>      DO 180 I = 1,M
+<span class="ln">185</span>         DO 175 J = 1,NSPEC
+<span class="ln">186</span>            HCOMP(J,I) = MAX(HCOMP(J,I),0.0D0)
+<span class="ln">187</span>            HCOMP(J,I) = MIN(HCOMP(J,I),1.0D0)
+<span class="ln">188</span>  175    CONTINUE
+<span class="ln">189</span>         HCOMP(3,I) = MIN(HCOMP(3,I),1.0D0-HCOMP(1,I)-HCOMP(4,I))
+<span class="ln">190</span>         HCOMP(2,I) = 1.0D0 - HCOMP(1,I) - HCOMP(3,I) - HCOMP(4,I)
+<span class="ln">191</span>  180 CONTINUE
+<span class="ln">192</span>      RETURN
+<span class="ln">193</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ul>
+<li><strong>Unclear (units).</strong> The settling time is written in years, but the code's <code>TSCALE</code> includes <code>CSECYR</code> and is in seconds, the unit of <code>DELTS</code>. Fix: say so.</li>
+<li>Checked and confirmed: the <code>MOD(DTMAX,DELTS)</code> question (one extra substep is always added), the unit-69 output, the stale message.</li>
+</ul>
+<p>Revised: the units sentence added.</p></div></details>
+</main></body></html>

@@ -1,0 +1,132 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>solid.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ solid.f</span></header><main>
+<h1>solid.f</h1>
+<p class='muted'>73 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/solid.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>SOLID</code> makes a range of shells, <code>JSTART</code> to <code>JEND</code>, rotate as a solid body while conserving their total angular momentum. Given each shell's angular momentum per unit mass, it returns the common rotation rate $\Omega$ and the shells' moments of inertia. Its comment adds that it also gives $r_0$ and $\eta_2$ (<code>R0</code>, <code>ETA2</code>), which <a href="../files/fpft.f.html#def-FPFT">FPFT</a> needs.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> arguments only: the shells' masses (<code>HS2</code>, probably in grams, since the angular momentum is the sum of <code>HS2*HJM</code>), specific angular momenta <code>HJM</code>, the previous rates <code>OMEGA</code>, and the structure (<code>HD</code>, <code>HR</code>, <code>HS</code>), passed on to the shape routines.</li>
+<li><strong>Who calls it:</strong> the rotation routines that impose solid-body rotation on a zone: <a href="../files/checkj.f.html#def-CHECKJ">CHECKJ</a>, <a href="../files/getrot.f.html#def-GETROT">GETROT</a>, <a href="../files/midmod.f.html#def-MIDMOD">MIDMOD</a>, <a href="../files/seculr.f.html#def-SECULR">SECULR</a>, <a href="../files/wcz.f.html#def-WCZ">WCZ</a> and <a href="../files/wczimp.f.html#def-WCZIMP">WCZIMP</a> (for convection zones, by their names).</li>
+<li><strong>What it calls:</strong> <a href="../files/shape.f.html#def-SHAPE">SHAPE</a> (the distortion of the shells, <code>ETA2</code> and <code>R0</code>) and <a href="../files/momi.f.html#def-MOMI">MOMI</a> (each shell's moment of inertia <code>HI</code> and $dI/d\Omega$, <code>QIW</code>).</li>
+<li><strong>Outputs:</strong> <code>OMEGA</code>, <code>HI</code>, <code>QIW</code>, <code>ETA2</code>, <code>R0</code> and an updated <code>HJM</code>, all through the arguments.</li>
+<li><strong>COMMON blocks:</strong> <code>ERRMOM</code> (the tolerance <code>TOLERI</code>, shared only with <a href="../files/checkj.f.html#def-CHECKJ">CHECKJ</a>; no routine, <code>DATA</code> or <code>BLOCK DATA</code> gives it a value: CHECKJ saves it (<code>TOLER0 = TOLERI</code>), relaxes it to <code>MAX(DJOK*1.0D-2,TOLER0)</code> around its call to GETROT, and restores it); <code>DISK</code> (disk locking: the age <code>SAGE</code>, the locking time <code>TDISK</code>, the locked rate <code>PDISK</code> and the switch <code>LDISK</code>, shared with <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a>, <a href="../files/getw.f.html#def-GETW">GETW</a>, <a href="../files/seculr.f.html#def-SECULR">SECULR</a> and others); <code>LUOUT</code> (the output units, shared by most of the code).</li>
+</ul>
+<p><strong>The method.</strong> Let $m_j$ be <code>HS2(J)</code> and $j_j$ be <code>HJM(J)</code>. The target is the zone's total angular momentum,</p>
+<p>$$J = \sum_{j=J_\mathrm{start}}^{J_\mathrm{end}} m_j\, j_j .$$</p>
+<p>The first guess for $\Omega$ is the mean of the previous rates. With every shell at $\Omega$, <code>SHAPE</code> and <code>MOMI</code> give the moments of inertia $I_j(\Omega)$ and $I&#x27;_j = dI_j/d\Omega$. With $I = \sum I_j$ (<code>CZI</code>) and $I&#x27; = \sum I&#x27;_j$ (<code>CZQIW</code>), a Newton step solves $\Omega\, I(\Omega) = J$:</p>
+<p>$$\Delta\Omega = \frac{J - \Omega I}{I + \Omega I&#x27;} ,$$</p>
+<p>repeated until $|J - \Omega I|/J \le$ <code>TOLERI</code>, or 20 times. Finally each shell's specific angular momentum is reset to $j_j = I_j\,\Omega / m_j$.</p>
+<p><strong>Disk locking.</strong> For the surface convection zone (<code>JEND = M</code>, more than one shell), when <code>LDISK</code> is set and the age <code>SAGE</code> is at most <code>TDISK</code>, $\Omega$ is fixed to <code>PDISK</code> with no iteration, and the angular momentum follows from it ("MHP 9/94").</p>
+<p><strong>KC's changes.</strong> The call to <code>MOMI</code> drops the arguments <code>HD</code> and <code>M</code> (2025-05-31), matching <code>MOMI</code>'s new argument list.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The tolerance <code>TOLERI</code>.</strong> Nothing initializes it: <a href="../files/checkj.f.html#def-CHECKJ">CHECKJ</a> only relaxes it around its call to GETROT and then restores the old value. Outside those calls <code>TOLERI</code> is zero (where the compiler zero-initializes COMMON), so the test <code>DABS(DELJ/CZJ).GT.TOLERI</code> always holds and the Newton loop always runs its 20 steps. Is a tolerance missing from the setup?</li>
+<li><strong>No warning after 20 steps.</strong> When the Newton iteration has not converged after 20 steps, <code>SOLID</code> keeps the last guess silently. Should it report this?</li>
+<li><strong><code>PDISK</code> as a rate.</strong> Under disk locking, <code>WGUESS = PDISK</code>, which is used as $\Omega$. PARMIN's <code>DATA</code> gives <code>PDISK = 7.2722D-6</code>, which is $2\pi/(10\ \mathrm{d})$ in rad/s: an angular rate, for a period of 10 days. The comment calls it the "period at which locking is set". Should the comment say "rate", and do users who set it in the namelist know it is a rate?</li>
+<li><strong>A zone of zero angular momentum.</strong> The test <code>DABS(DELJ/CZJ)</code> divides by the total angular momentum, which is zero for a non-rotating zone.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+SOLID</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-SOLID'>SOLID</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-SOLID'><h3><span class='kind'>subroutine</span>SOLID</h3>
+<p class='muted'>lines 3–73 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/solid.f#L3-L73'>GitHub</a></p>
+<pre>SUBROUTINE SOLID(HD,HJM,HR,HS,HS2,JSTART,JEND,ETA2,HI,OMEGA,</pre>
+<div class='notes'><p>Solid-body rotation of shells <code>JSTART</code>–<code>JEND</code> at fixed total angular momentum, by Newton iteration on $\Omega I(\Omega) = J$; or, under disk locking, at the fixed rate <code>PDISK</code>.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+SOLID</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-DISK'>/DISK/</a>, <a href='../commons.html#c-ERRMOM'>/ERRMOM/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/momi.f.html#def-MOMI'>MOMI</a> <span class='muted'>(momi.f)</span></li>
+<li><a href='../files/shape.f.html#def-SHAPE'>SHAPE</a> <span class='muted'>(shape.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/checkj.f.html#def-CHECKJ'>CHECKJ</a> <span class='muted'>(checkj.f)</span> ×2</li>
+<li><a href='../files/getrot.f.html#def-GETROT'>GETROT</a> <span class='muted'>(getrot.f)</span> ×2</li>
+<li><a href='../files/midmod.f.html#def-MIDMOD'>MIDMOD</a> <span class='muted'>(midmod.f)</span></li>
+<li><a href='../files/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span></li>
+<li><a href='../files/wcz.f.html#def-WCZ'>WCZ</a> <span class='muted'>(wcz.f)</span> ×3</li>
+<li><a href='../files/wczimp.f.html#def-WCZIMP'>WCZIMP</a> <span class='muted'>(wczimp.f)</span> ×7</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE SOLID(HD,HJM,HR,HS,HS2,JSTART,JEND,ETA2,HI,OMEGA,
+<span class="ln">4</span>     *                 QIW,R0,M)
+<span class="ln">5</span>
+<span class="ln">6</span>      PARAMETER (JSON=5000)
+<span class="ln">7</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">8</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">9</span>      COMMON/ERRMOM/TOLERI
+<span class="ln">10</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">11</span>C MHP 9/94 ADDED DISK LOCKING OPTION - FLAG, TIME OVER WHICH LOCKING
+<span class="ln">12</span>C IS ENFORCED, AND PERIOD AT WHICH LOCKING IS SET ARE OPTIONS.
+<span class="ln">13</span>      COMMON/DISK/SAGE,TDISK,PDISK,LDISK
+<span class="ln">14</span>      DIMENSION HJM(JSON),HI(JSON),QIW(JSON),OMEGA(JSON),ETA2(JSON),
+<span class="ln">15</span>     * R0(JSON),HD(JSON),HS2(JSON),HR(JSON),HS(JSON)
+<span class="ln">16</span>      SAVE
+<span class="ln">17</span>C  GIVEN THE ANGULAR MOMENTUM PER UNIT MASS, SOLID RETURNS THE ROTATION
+<span class="ln">18</span>C  RATE OMEGA.  IT ALSO CALLS MOMI, WHICH CALCULATES THE MOMENT OF INERT
+<span class="ln">19</span>C  AND R0 AND ETA2; R0 AND ETA2 ARE NEEDED BY FPFT.
+<span class="ln">20</span>      CZJ = 0.0D0
+<span class="ln">21</span>      WSUM = 0.0D0
+<span class="ln">22</span>      ICOUNT = 0
+<span class="ln">23</span>C  FIND THE TOTAL ANGULAR MOMENTUM OF SHELLS JSTART TO JEND.
+<span class="ln">24</span>C  ALSO MAKE A FIRST GUESS AT OMEGA BY AVERAGING THE PREVIOUS VALUES.
+<span class="ln">25</span>      DO 10 J = JSTART,JEND
+<span class="ln">26</span>         CZJ = CZJ + HS2(J)*HJM(J)
+<span class="ln">27</span>         WSUM = WSUM + OMEGA(J)
+<span class="ln">28</span>   10 CONTINUE
+<span class="ln">29</span>C MHP 9/94 OPTION ADDED TO ENFORCE DISK LOCKING UP TO A GIVEN AGE IN
+<span class="ln">30</span>C THE SURFACE C.Z. ONLY.
+<span class="ln">31</span>      LOCK = .FALSE.
+<span class="ln">32</span>      IF(JEND.EQ.M .AND. JSTART.NE.JEND .AND. LDISK .AND.
+<span class="ln">33</span>     *   SAGE.LE.TDISK)LOCK = .TRUE.
+<span class="ln">34</span>      IF(.NOT.LOCK)THEN
+<span class="ln">35</span>         WGUESS = WSUM/DFLOAT(JEND - JSTART + 1)
+<span class="ln">36</span>      ELSE
+<span class="ln">37</span>         WGUESS = PDISK
+<span class="ln">38</span>      ENDIF
+<span class="ln">39</span>   20 DO 30 J = JSTART,JEND
+<span class="ln">40</span>         OMEGA(J) = WGUESS
+<span class="ln">41</span>   30 CONTINUE
+<span class="ln">42</span>C  DETERMINE THE MOMENTS OF INERTIA OF SHELLS JSTART TO JEND WITH OMEGA
+<span class="ln">43</span>C  EQUAL TO WGUESS.
+<span class="ln">44</span>      CALL <a href="../files/shape.f.html#def-SHAPE" title="SHAPE in shape.f">SHAPE</a>(HD,HR,HS,JSTART,JEND,OMEGA,ETA2,R0)
+<span class="ln">45</span>C       CALL MOMI(ETA2,HD,HR,HS,HS2,JSTART,JEND,OMEGA,R0,HI,QIW,M)  ! KC 2025-05-31
+<span class="ln">46</span>      CALL <a href="../files/momi.f.html#def-MOMI" title="MOMI in momi.f">MOMI</a>(ETA2,HR,HS,HS2,JSTART,JEND,OMEGA,R0,HI,QIW)
+<span class="ln">47</span>      CZI = 0.0D0
+<span class="ln">48</span>      CZQIW = 0.0D0
+<span class="ln">49</span>C  FIND TOTAL MOMENT OF INERTIA(CZI) AND TOTAL DI/DOMEGA (CZQIW)
+<span class="ln">50</span>      DO 40 J = JSTART,JEND
+<span class="ln">51</span>         CZI = CZI + HI(J)
+<span class="ln">52</span>         CZQIW = CZQIW + QIW(J)
+<span class="ln">53</span>   40 CONTINUE
+<span class="ln">54</span>      CZJNEW = WGUESS*CZI
+<span class="ln">55</span>C  CHECK IF THE TOTAL ANGULAR MOMENTUM FOUND WITH OMEGA = WGUESS IS CLOS
+<span class="ln">56</span>C  ENOUGH.  IF NOT, CALCULATE DELTA OMEGA AND TRY AGAIN WITH A NEW WGUES
+<span class="ln">57</span>      DELJ = CZJ - CZJNEW
+<span class="ln">58</span>      IF(LOCK)GOTO 45
+<span class="ln">59</span>      IF(DABS(DELJ/CZJ).GT.TOLERI) THEN
+<span class="ln">60</span>         IF(ICOUNT.LT.20) THEN
+<span class="ln">61</span>            ICOUNT = ICOUNT + 1
+<span class="ln">62</span>            DELW = DELJ/(CZI + WGUESS*CZQIW)
+<span class="ln">63</span>            WGUESS = WGUESS + DELW
+<span class="ln">64</span>            GOTO 20
+<span class="ln">65</span>         ENDIF
+<span class="ln">66</span>      ENDIF
+<span class="ln">67</span> 45   CONTINUE
+<span class="ln">68</span>      DO 50 J = JSTART,JEND
+<span class="ln">69</span>         HJM(J) = HI(J)*OMEGA(J)/HS2(J)
+<span class="ln">70</span>   50 CONTINUE
+<span class="ln">71</span>
+<span class="ln">72</span>      RETURN
+<span class="ln">73</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "<code>ERRMOM</code> (the tolerance <code>TOLERI</code>, shared only with CHECKJ, which sets it)". CHECKJ never gives <code>TOLERI</code> a value of its own: it saves it (<code>TOLER0 = TOLERI</code>), relaxes it to <code>MAX(DJOK*1.0D-2,TOLER0)</code> around its call to GETROT, and restores it. No routine, <code>DATA</code> or <code>BLOCK DATA</code> initializes it. <strong>Fix:</strong> say so, and rewrite question 1: outside CHECKJ's relaxed calls <code>TOLERI</code> is zero (where the compiler zero-initializes COMMON), so the Newton loop always runs its 20 steps.</li>
+<li><strong>Missing.</strong> Question 3 (<code>PDISK</code> as a rate): PARMIN's <code>DATA</code> gives <code>PDISK = 7.2722D-6</code>, which is $2\pi/(10\ \mathrm{d})$ in rad/s, so it is an angular rate, and the comment's "period" is the misleading part. <strong>Fix:</strong> reword the question with this fact.</li>
+</ol>
+<p>Revised: <code>TOLERI</code> never initialized (CHECKJ only relaxes and restores it), question 1 rewritten; question 3 gives <code>PDISK</code> = 2π/(10 d) in rad/s.</p></div></details>
+</main></body></html>

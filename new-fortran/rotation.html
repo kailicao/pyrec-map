@@ -1,0 +1,77 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Rotation and mass loss · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ New version (Fortran) / Rotation and mass loss</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='fortran.html'>Language and style</a></li><li><a href='kernels.html'>Kernels and settings</a></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><a href='timestep.html'>Time stepping</a></li><li><a href='composition.html'>Composition and settling</a></li><li><strong>Rotation and mass loss</strong></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><a href='common-map.html'>The COMMON-block map</a></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>Rotation and mass loss</h1>
+<p><em>In Python: <a href="../files/new/pyrec/rotation/__init__.py.html"><code>pyrec.rotation</code></a>.</em></p>
+<h2>3.10 Rotation: <code>Distortion</code>, <code>RotationLaw</code>, <code>RotationTransport</code>, <code>WindLaw</code>, <code>RotationStep</code></h2>
+<p><strong><code>RotationStep</code>. Responsibility:</strong> evolve the internal rotation over one model step, as <a href="../files/getw.f.html#def-GETW"><code>GETW</code></a> does: without instabilities, $\Omega$ from $j$ and the wind; with them, $N$ diffusion substeps, each with the structure interpolated in time, the wind, mixing of convection zones, and transport of angular momentum and composition.</p>
+<pre><code class="language-fortran">type :: RotationStep
+    type(Distortion) :: dist
+    type(RotationLaw) :: law
+    type(RotationTransport) :: transport
+    class(WindLaw), allocatable :: wind        !! Absent: no wind.
+contains
+    procedure :: run
+        !! (star, start, zones, dt, ierr) GETW. Substeps
+        !! N = min(ceil(DWMAX/DTDIF), ceil(DTWIND/DTDIF)).
+    procedure, private :: midstep   !! (star, start, f) MIDMOD at fraction f.
+    procedure, private :: check_j   !! CHECKJ: j &gt; 0, convergence, Omega.
+    procedure, private :: check_comp !! CHECKC: 0 &lt;= X &lt;= 1, cut substep.
+end type
+
+type :: Distortion
+contains
+    procedure :: factors   !! (star) FPFT with SHAPE, FUNC: f_P, f_T, &lt;g&gt;.
+    procedure :: inertia   !! (star) MOMI, INTMOM: I and dI/dOmega.
+    procedure :: quadrupole !! (star) GETQUA: the P2 potential (Zahn 1992).
+end type
+
+type :: RotationLaw
+contains
+    procedure :: omega_from_j  !! (star, lcz) GETROT; zones by WCZIMP.
+    procedure :: solid_body    !! (star, jstart, jend) SOLID.
+end type
+
+type :: RotationTransport
+    !! Diffusion coefficients and velocities on the interfaces (VCIRC);
+    !! factors FW, FC, FES, FGSF, FMU, FSS (/VMULT/), Config%rot.
+contains
+    procedure :: secular
+        !! (star, zones, dt, redo, ierr) SECULR: transport of j and of the
+        !! composition by meridional circulation, GSF, secular and dynamical
+        !! shear; redo : the substep must be shortened (LREDO).
+end type
+
+type, abstract :: WindLaw
+contains
+    procedure(dj_if), deferred :: domega
+        !! (star, dt, dw) Change of the surface zone's Omega [rad s-1].
+end type
+type, extends(WindLaw) :: KawalerWind     !! WIND, COWIND
+type, extends(WindLaw) :: MattWind        !! MWIND, MCOWIND, AMCALC
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../files/getw.f.html#def-GETW"><code>GETW</code></a>, <a href="../files/midmod.f.html#def-MIDMOD"><code>MIDMOD</code></a>, <a href="../files/checkj.f.html#def-CHECKJ"><code>CHECKJ</code></a>, <a href="../files/checkc.f.html#def-CHECKC"><code>CHECKC</code></a>, <a href="../files/rotmix.f.html#def-ROTMIX"><code>ROTMIX</code></a>, <a href="../files/bursmix.f.html#def-BURSMIX"><code>BURSMIX</code></a> and <a href="../files/bsrotmix.f.html#def-BSROTMIX"><code>BSROTMIX</code></a> (never run: <code>LBURS</code> is false; kept only if KC wants them, <a href="overview.html">Section 8</a>); <a href="../files/fpft.f.html#def-FPFT"><code>FPFT</code></a>, <a href="../files/shape.f.html#def-SHAPE"><code>SHAPE</code></a>, <a href="../files/func.f.html#def-FUNC"><code>FUNC</code></a>, <a href="../files/momi.f.html#def-MOMI"><code>MOMI</code></a>, <a href="../files/intmom.f.html#def-INTMOM"><code>INTMOM</code></a>, <a href="../files/getqua.f.html#def-GETQUA"><code>GETQUA</code></a>; <a href="../files/getrot.f.html#def-GETROT"><code>GETROT</code></a>, <a href="../files/wczimp.f.html#def-WCZIMP"><code>WCZIMP</code></a>, <a href="../files/solid.f.html#def-SOLID"><code>SOLID</code></a> (and the uncalled <a href="../files/wcz.f.html"><code>WCZ</code></a>); <a href="../files/seculr.f.html#def-SECULR"><code>SECULR</code></a>, <a href="../files/vcirc.f.html#def-VCIRC"><code>VCIRC</code></a>, <a href="../files/setupv.f.html#def-SETUPV"><code>SETUPV</code></a>, <a href="../files/codiff.f.html#def-CODIFF"><code>CODIFF</code></a>, <a href="../files/getfc.f.html#def-GETFC"><code>GETFC</code></a>, <a href="../files/dadcoeft.f.html#def-DADCOEFT"><code>DADCOEFT</code></a>, <a href="../files/dcoeft.f.html#def-DCOEFT"><code>DCOEFT</code></a>, <a href="../files/ccoeft.f.html#def-CCOEFT"><code>CCOEFT</code></a>, <a href="../files/rotgrid.f.html#def-ROTGRID"><code>ROTGRID</code></a>, <a href="../files/eq2mod.f.html#def-EQ2MOD"><code>EQ2MOD</code></a>, <a href="../files/ndifcom.f.html#def-NDIFCOM"><code>NDIFCOM</code></a>; <a href="../files/wind.f.html#def-WIND"><code>WIND</code></a>, <a href="../files/cowind.f.html#def-COWIND"><code>COWIND</code></a>, <a href="../files/mwind.f.html#def-MWIND"><code>MWIND</code></a>, <a href="../files/mcowind.f.html#def-MCOWIND"><code>MCOWIND</code></a>, <a href="../files/amcalc.f.html#def-AMCALC"><code>AMCALC</code></a>. Angular momentum and composition are transported by diffusion equations of the form
+$$\rho r^2\,\frac{\partial j}{\partial t} = \frac{1}{r^2}\frac{\partial}{\partial r}\Bigl(\rho r^4 D_J\,\frac{\partial\Omega}{\partial r}\Bigr),$$
+with $D_J$ from the instabilities' velocities, solved on the <code>ChiGrid</code>. The many work blocks that <code>SETUPV</code> and <code>VCIRC</code> share (<code>/INTVAR/</code>, <code>/VFACT/</code>, <code>/TAUKH/</code>, <code>/DIFAD2/</code>–<code>/DIFAD4/</code>) become components of <code>RotationTransport</code>, private to it.</p>
+<h2>3.11 Mass loss: <code>MassLossLaw</code>, <code>MassLoss</code></h2>
+<p><strong>Responsibility:</strong> set the rate $\dot M$ by a law, and apply the change of mass to the model, its convection zone and its angular momentum.</p>
+<pre><code class="language-fortran">type, abstract :: MassLossLaw
+contains
+    procedure(mdot_if), deferred :: rate
+        !! (star) -&gt; real(dp) dM/dt [Msun yr-1], &lt; 0 for loss.
+end type
+type, extends(MassLossLaw) :: ConstantMassLoss   !! DMDT0
+type, extends(MassLossLaw) :: ReimersMassLoss    !! CREIM, LREIMER
+
+type :: MassLoss
+    class(MassLossLaw), allocatable :: law
+    real(dp) :: comp_acc(NSP)          !! Accreted composition (COMPACC).
+contains
+    procedure :: apply
+        !! (star, dt, ierr) MASSLOSS, MDOT: limit the mass removed, rescale
+        !! the mass coordinates, remove J, mix accreted matter in the CZ.
+end type
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../files/massloss.f.html#def-MASSLOSS"><code>MASSLOSS</code></a>, <a href="../files/mdot.f.html#def-MDOT"><code>MDOT</code></a>. The argument mismatch between them (MAIN question 2) cannot survive a checked interface; the development branch has already fixed it ("fix a CALL MDOT mismatch", <a href="overview.html">Section 7.3</a>). <code>MASSLOSS</code>'s header calls it "experimental code and valid for Allard atmospheres only"; the design keeps it as it is and says so in the type's docstring.</p>
+
+</main></body></html>

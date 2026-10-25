@@ -1,0 +1,319 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>microdiff_mte.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ microdiff_mte.f</span></header><main>
+<h1>microdiff_mte.f</h1>
+<p class='muted'>259 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/microdiff_mte.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> "Model to equal": interpolates the model's variables onto an equally spaced grid in radius, at the grid points and at the midpoints between them, for <a href="../files/microdiff.f.html#def-MICRODIFF">MICRODIFF</a>.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> from <a href="../files/microdiff_setup.f.html#def-MICRODIFF_SETUP">MICRODIFF_SETUP</a>: the radii <code>HRU</code> (units of $R_\odot$), <code>IBEGIN</code>, <code>IEND</code>, and the density <code>ODEN</code> and temperature <code>OTEM</code>; and the composition <code>HCOMP</code>, <code>HQPR</code>, <code>HS1</code> and $\nabla$ (<code>SDEL(2,·)</code> in <code>/SCRTCH/</code>).</li>
+<li><strong>Who calls it:</strong> only <code>MICRODIFF</code>.</li>
+<li><strong>What it calls:</strong> <a href="../files/interp.f.html#def-INTERP">INTERP</a>, for the four-point Lagrange weights.</li>
+<li><strong>Outputs:</strong> <code>NPT</code>, <code>DR</code>, and on the grid points (<code>E…</code>) and midpoints (<code>E…_H</code>): the mass $m$, $\rho$, $T$, $d\ln P/dr$, $\nabla$, $X$, $Y$, $Z$ and the light elements; these go to <a href="../files/microdiff_run.f.html#def-MICRODIFF_RUN">MICRODIFF_RUN</a>. The radius, mass and $d\ln P/dr$ are in the Bahcall–Loeb units of <code>MICRODIFF_SETUP</code>; $\rho$ and $T$ are in cgs units (g cm⁻³, K).</li>
+<li><strong>COMMON blocks:</strong> <code>/SCRTCH/</code> (read: <code>SDEL</code>), <code>/GRAVS4/</code> (<code>LDIFLI</code>); <code>/GRAVS3/</code> is declared but not used.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>
+<p><strong>Spacing.</strong> $\Delta r_\mathrm{min}$ is the smallest model spacing among the 20 points below <code>IEND</code> (the base of the surface convection zone). The number of points is
+$$N = \left\lceil \frac{r_\mathrm{end} - r_\mathrm{begin}}{\Delta r_\mathrm{min}} \right\rceil,\quad N \ge 2,\quad N \le 5000,\qquad \Delta r = \frac{r_\mathrm{end} - r_\mathrm{begin}}{N-1}.$$</p>
+</li>
+<li>
+<p><strong>Midpoints.</strong> $r_{i+1/2} = r_\mathrm{begin} + (i - \tfrac12)\Delta r$ for $i = 1,\dots,N-1$. The first is found by linear interpolation; the others by four-point Lagrange interpolation over the four model points around them, $f(r) = \sum_{k=1}^{4} w_k(r)\, f_{k_0+k-1}$.</p>
+</li>
+<li><strong>Grid points.</strong> $r_i = r_\mathrm{begin} + (i-1)\Delta r$. The first and last take the model's values at <code>IBEGIN</code> and <code>IEND</code>; the others use the same four-point interpolation.</li>
+</ol>
+<p><strong>KC's changes.</strong> 2025-05-30: <code>CSLIGHT</code> declared <code>INTEGER</code> (fixing <code>-Wconversion</code>); 2025-05-31: unused arguments <code>HTU</code> and <code>LC</code> removed.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The first midpoint's search.</strong> The search for the model point above the first midpoint runs over <code>IU = 2..NPT</code>: model indices from 2, bounded by the number of <em>equal-grid</em> points, rather than <code>IBEGIN+1..IEND</code>. When <code>NPT</code> is smaller than the model index needed (a coarse equal grid, or a large <code>IBEGIN</code>), <code>IU</code> falls back to <code>NPT</code>, and the "interpolation" extrapolates from the wrong pair of points. A bug?</li>
+<li><strong>Where the spacing is measured.</strong> $\Delta r_\mathrm{min}$ is measured only over the 20 points below the surface convection zone ("ID THE MINIMUM SPACING IN THE 20 LAYERS BELOW THE SURFACE CZ"). Deeper regions with finer model spacing are then under-resolved. Intended?</li>
+<li><strong><code>HALFJSON</code>.</strong> The name suggests half of <code>JSON</code>, but it is set to 5000, which equals <code>JSON</code>. Was it once <code>JSON/2</code>?</li>
+<li><strong>A debugging line.</strong> <code>IF(I-1 .EQ. 0) PRINT*, 'mte line 47'</code> can never fire inside <code>DO 10 I = 2,NPT-1</code>.</li>
+<li><strong>Interpolated composition.</strong> Four-point Lagrange interpolation of $X$, $Y$, $Z$ near steep gradients can overshoot (negative or above one). Is that guarded anywhere? (Only changes are mapped back, which limits the harm.)</li>
+<li><strong>The grid is coarser than the comment says.</strong> The comment asks for "the minimum number of equally spaced grid points such that DR &lt;= DRMIN", but <code>NPT</code> $=\lceil \Delta r_\mathrm{tot}/\Delta r_\mathrm{min}\rceil$ points make <code>NPT-1</code> intervals, so <code>DR</code> $= \Delta r_\mathrm{tot}/(N-1)$ is larger than $\Delta r_\mathrm{min}$ (up to twice as large when $N = 2$). Should <code>NPT</code> be one more?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+SUBROUTINE MICRODIFF_MTE(NLIGHT,CSLIGHT,HCOMP,HQPR,HRU,HS1,HTU,IBEGIN,
+*               IEND,M,DR,NPT,LC,ODEN,OTEM,EM,ER,EDEN,ETEM,EHQPR,EDELR,  # KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MICRODIFF_MTE'>MICRODIFF_MTE</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MICRODIFF_MTE'><h3><span class='kind'>subroutine</span>MICRODIFF_MTE</h3>
+<p class='muted'>lines 4–259 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/microdiff_mte.f#L4-L259'>GitHub</a></p>
+<pre>SUBROUTINE MICRODIFF_MTE(NLIGHT,CSLIGHT,HCOMP,HQPR,HRU,HS1,IBEGIN,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+SUBROUTINE MICRODIFF_MTE(NLIGHT,CSLIGHT,HCOMP,HQPR,HRU,HS1,HTU,IBEGIN,
+*               IEND,M,DR,NPT,LC,ODEN,OTEM,EM,ER,EDEN,ETEM,EHQPR,EDELR,  # KC 2025-05-31</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-GRAVS3'>/GRAVS3/</a>, <a href='../commons.html#c-GRAVS4'>/GRAVS4/</a>, <a href='../commons.html#c-SCRTCH'>/SCRTCH/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/interp.f.html#def-INTERP'>INTERP</a> <span class='muted'>(interp.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/microdiff.f.html#def-MICRODIFF'>MICRODIFF</a> <span class='muted'>(microdiff.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE MICRODIFF_MTE(NLIGHT,CSLIGHT,HCOMP,HQPR,HRU,HS1,IBEGIN,
+<span class="ln">5</span>     *               IEND,M,DR,NPT,ODEN,OTEM,EM,ER,EDEN,ETEM,EHQPR,EDELR,
+<span class="ln">6</span>     *               EX,EY,EZ,ELI,EM_H,ER_H,EDEN_H,ETEM_H,EHQPR_H,EDELR_H,
+<span class="ln">7</span>     *               EX_H,EY_H,EZ_H,ELI_H)
+<span class="ln">8</span>
+<span class="ln">9</span>      PARAMETER (JSON=5000)
+<span class="ln">10</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">11</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">12</span>C MHP 3/94 ADDED METAL DIFFUSION.
+<span class="ln">13</span>      COMMON/GRAVS3/FGRY,FGRZ,LTHOUL,LDIFZ
+<span class="ln">14</span>      COMMON/GRAVS4/LNEWDIF,LDIFLI
+<span class="ln">15</span>      COMMON/SCRTCH/SESUM(JSON),SEG(7,JSON),SBETA(JSON),SETA(JSON),
+<span class="ln">16</span>     *       LOCONS(JSON),SO(JSON),SDEL(3,JSON),SFXION(3,JSON),SVEL(JSON),SCP(JSON)
+<span class="ln">17</span>C       DIMENSION HCOMP(15,JSON),HQPR(JSON),HRU(JSON),HS1(JSON),HTU(JSON),  ! KC 2025-05-31
+<span class="ln">18</span>      DIMENSION HCOMP(15,JSON),HQPR(JSON),HRU(JSON),HS1(JSON),
+<span class="ln">19</span>     *          ODEN(JSON),OTEM(JSON),EM(JSON),ER(JSON),EDEN(JSON),ETEM(JSON),
+<span class="ln">20</span>     *          EHQPR(JSON),EDELR(JSON),EX(JSON),EY(JSON),EZ(JSON),
+<span class="ln">21</span>     *          ELI(NLIGHT,JSON),EM_H(JSON),ER_H(JSON),EDEN_H(JSON),
+<span class="ln">22</span>     *          ETEM_H(JSON),EHQPR_H(JSON),EDELR_H(JSON),EX_H(JSON),
+<span class="ln">23</span>C KC 2025-05-30 fixed -Wconversion
+<span class="ln">24</span>C      *          EY_H(JSON),EZ_H(JSON),ELI_H(NLIGHT,JSON),CSLIGHT(NLIGHT),
+<span class="ln">25</span>     *          EY_H(JSON),EZ_H(JSON),ELI_H(NLIGHT,JSON),
+<span class="ln">26</span>     *          FACINTERP(4),FACDERIV(4),TABLER(4)
+<span class="ln">27</span>      INTEGER CSLIGHT(NLIGHT)
+<span class="ln">28</span>      INTEGER HALFJSON
+<span class="ln">29</span>      SAVE
+<span class="ln">30</span>C  FIND MINIMUM MODEL POINT SPACING IN RADIUS.
+<span class="ln">31</span>      DRTOT = HRU(IEND)-HRU(IBEGIN)
+<span class="ln">32</span>      DRMIN = DRTOT
+<span class="ln">33</span>c  ID THE MINIMUM SPACING IN THE 20 LAYERS BELOW THE SURFACE CZ.
+<span class="ln">34</span>      ISTART = MAX(IEND-20,IBEGIN+1)
+<span class="ln">35</span>      DO 7 I = ISTART,IEND
+<span class="ln">36</span>         DRMIN=MIN(DRMIN,HRU(I)-HRU(I-1))
+<span class="ln">37</span>    7 CONTINUE
+<span class="ln">38</span>C  ASSIGN THE MINIMUM NUMBER OF EQUALLY SPACED GRID POINTS SUCH THAT
+<span class="ln">39</span>C  DR &lt;= DRMIN.
+<span class="ln">40</span>      NPT=INT(DRTOT/DRMIN)
+<span class="ln">41</span>      IF(MOD(DRTOT,DRMIN).NE.0.0D0)NPT=NPT+1
+<span class="ln">42</span>C JVS add additional trap to deal with models with NPT=1
+<span class="ln">43</span>      IF (NPT .EQ. 1) NPT=NPT+1
+<span class="ln">44</span>C  ENSURE THAT NUMBER OF POINTS DOES NOT EXCEED JSON.
+<span class="ln">45</span>
+<span class="ln">46</span>      HALFJSON = 5000
+<span class="ln">47</span>      NPT=MIN(NPT,HALFJSON)
+<span class="ln">48</span>      DR = DRTOT/DFLOAT(NPT-1)
+<span class="ln">49</span>C  SET UP VECTOR OF EQUALLY SPACED RADII AT ZONE MIDPOINTS.
+<span class="ln">50</span>      ER_H(1)=HRU(IBEGIN)+0.5D0*DR
+<span class="ln">51</span>C JVS added logic trap (IF statement)
+<span class="ln">52</span>      IF (NPT .EQ. 2) THEN
+<span class="ln">53</span>         ER_H(2)=ER_H(1)+DR
+<span class="ln">54</span>      ELSE
+<span class="ln">55</span>         DO 10 I = 2,NPT-1 ! old piece
+<span class="ln">56</span>            IF(I-1 .EQ. 0) PRINT*, &#x27;mte line 47&#x27;
+<span class="ln">57</span>            ER_H(I)=ER_H(I-1)+DR  ! old piece
+<span class="ln">58</span>  10     CONTINUE          ! old piece
+<span class="ln">59</span>      ENDIF
+<span class="ln">60</span>
+<span class="ln">61</span>C  NOW USE 4-POINT LAGRANGIAN INTERPOLATION TO FIND RUN OF VARIABLES
+<span class="ln">62</span>C  AT EQUALLY SPACED ZONE MIDPOINTS.
+<span class="ln">63</span>C
+<span class="ln">64</span>C  FIRST POINT : LINEAR INTERPOLATION BETWEEN STARTING POINT AND 2ND PT.
+<span class="ln">65</span>      DO 15 IU=2,NPT
+<span class="ln">66</span>         IF(HRU(IU).GE.ER_H(1))GOTO 17
+<span class="ln">67</span>   15 CONTINUE
+<span class="ln">68</span>      IU=NPT
+<span class="ln">69</span>   17 CONTINUE
+<span class="ln">70</span>      FX=(ER_H(1)-HRU(IU-1))/(HRU(IU)-HRU(IU-1))
+<span class="ln">71</span>      EM_H(1) = HS1(IU-1)+FX*(HS1(IU)-HS1(IU-1))
+<span class="ln">72</span>      EDEN_H(1) = ODEN(IU-1)+FX*(ODEN(IU)-ODEN(IU-1))
+<span class="ln">73</span>      ETEM_H(1) = OTEM(IU-1)+FX*(OTEM(IU)-OTEM(IU-1))
+<span class="ln">74</span>      EHQPR_H(1) = HQPR(IU-1)+FX*(HQPR(IU)-HQPR(IU-1))
+<span class="ln">75</span>      EDELR_H(1) = SDEL(2,IU-1)+FX*(SDEL(2,IU)-SDEL(2,IU-1))
+<span class="ln">76</span>      EX_H(1) = HCOMP(1,IU-1)+FX*(HCOMP(1,IU)-HCOMP(1,IU-1))
+<span class="ln">77</span>      EY_H(1) = HCOMP(2,IU-1)+FX*(HCOMP(2,IU)-HCOMP(2,IU-1))
+<span class="ln">78</span>      EZ_H(1) = HCOMP(3,IU-1)+FX*(HCOMP(3,IU)-HCOMP(3,IU-1))
+<span class="ln">79</span>      IF(LDIFLI)THEN
+<span class="ln">80</span>         DO KK=1,NLIGHT
+<span class="ln">81</span>            II = CSLIGHT(KK)
+<span class="ln">82</span>            ELI_H(KK,1) = HCOMP(II,IU-1)+FX*(HCOMP(II,IU)-HCOMP(II,IU-1))
+<span class="ln">83</span>         END DO
+<span class="ln">84</span>      ENDIF
+<span class="ln">85</span>
+<span class="ln">86</span>C  FOR OTHER POINTS: FIRST FIND 4 NEAREST (IN RADIUS) MODEL POINTS
+<span class="ln">87</span>C  AND THEN FIND LAGRANGIAN INTERPOLATION FACTORS. APPLY THEM TO FIND
+<span class="ln">88</span>C  MODEL QUANTITIES AT THE EQUALLY SPACED GRID POINTS.
+<span class="ln">89</span>C  JMIN IS THE UPPERMOST MODEL POINT ABOVE THE PREVIOUS EQUALLY SPACED
+<span class="ln">90</span>C  GRID POINT (IN RADIUS).
+<span class="ln">91</span>      JMIN=IBEGIN+1
+<span class="ln">92</span>      DO 50 I=2,NPT-1
+<span class="ln">93</span>         DO 20 J = JMIN,IEND
+<span class="ln">94</span>C  FIND 4 MODEL POINTS CLOSEST TO THE EQUALLY SPACED GRID POINT.
+<span class="ln">95</span>            IF(HRU(J).GE.ER_H(I))THEN
+<span class="ln">96</span>C  ENSURE THAT FIRST INTERPOLATION POINT NO LESS THAN FIRST MODEL POINT.
+<span class="ln">97</span>               K0 = MAX(J-2,1)
+<span class="ln">98</span>C  ENSURE THAT LAST INTERPOLATION POINT NO GREATER THAN LAST MODEL POINT.
+<span class="ln">99</span>               K0 = MIN(K0,M-3)
+<span class="ln">100</span>               JMIN=J
+<span class="ln">101</span>               GOTO 30
+<span class="ln">102</span>            ENDIF
+<span class="ln">103</span>   20    CONTINUE
+<span class="ln">104</span>         K0 = M-3
+<span class="ln">105</span>         JMIN=M
+<span class="ln">106</span>   30    CONTINUE
+<span class="ln">107</span>         DO 40 K=1,4
+<span class="ln">108</span>            TABLER(K)=HRU(K0+K-1)
+<span class="ln">109</span>   40    CONTINUE
+<span class="ln">110</span>         GRIDRAD=ER_H(I)
+<span class="ln">111</span>C  FIND 4 POINT LAGRANGIAN INTERPOLATION FACTORS.
+<span class="ln">112</span>C  FACINTERP=INTERPOLATION FACTORS FOR POINT GRIDRAD GIVEN THE 4 TABLE
+<span class="ln">113</span>C  RADII IN TABLER; FACDERIV=SAME FOR DERIVATIVES AT POINT GRIDRAD.
+<span class="ln">114</span>         CALL <a href="../files/interp.f.html#def-INTERP" title="INTERP in interp.f">INTERP</a>(TABLER,FACINTERP,FACDERIV,GRIDRAD)
+<span class="ln">115</span>C  PERFORM 4 POINT LAGRANGIAN INTERPOLATION FOR DESIRED QUANTITIES:
+<span class="ln">116</span>C  MASS WITHIN THE RADIUS ER
+<span class="ln">117</span>         EM_H(I) = FACINTERP(1)*HS1(K0)+FACINTERP(2)*HS1(K0+1)+
+<span class="ln">118</span>     *             FACINTERP(3)*HS1(K0+2)+FACINTERP(4)*HS1(K0+3)
+<span class="ln">119</span>C  RELAVENT PHYSICAL VARIABLES
+<span class="ln">120</span>         EDEN_H(I) = FACINTERP(1)*ODEN(K0)+FACINTERP(2)*ODEN(K0+1)+
+<span class="ln">121</span>     *             FACINTERP(3)*ODEN(K0+2)+FACINTERP(4)*ODEN(K0+3)
+<span class="ln">122</span>         ETEM_H(I) = FACINTERP(1)*OTEM(K0)+FACINTERP(2)*OTEM(K0+1)+
+<span class="ln">123</span>     *             FACINTERP(3)*OTEM(K0+2)+FACINTERP(4)*OTEM(K0+3)
+<span class="ln">124</span>         EHQPR_H(I) = FACINTERP(1)*HQPR(K0)+FACINTERP(2)*HQPR(K0+1)+
+<span class="ln">125</span>     *             FACINTERP(3)*HQPR(K0+2)+FACINTERP(4)*HQPR(K0+3)
+<span class="ln">126</span>         EDELR_H(I) = FACINTERP(1)*SDEL(2,K0)+FACINTERP(2)*SDEL(2,K0+1)+
+<span class="ln">127</span>     *             FACINTERP(3)*SDEL(2,K0+2)+FACINTERP(4)*SDEL(2,K0+3)
+<span class="ln">128</span>C  MASS FRACTION OF HYDROGEN
+<span class="ln">129</span>         EX_H(I)=FACINTERP(1)*HCOMP(1,K0)
+<span class="ln">130</span>     *        +FACINTERP(2)*HCOMP(1,K0+1)
+<span class="ln">131</span>     *        +FACINTERP(3)*HCOMP(1,K0+2)
+<span class="ln">132</span>     *        +FACINTERP(4)*HCOMP(1,K0+3)
+<span class="ln">133</span>C  MASS FRACTION OF HELIUM
+<span class="ln">134</span>         EY_H(I)=FACINTERP(1)*HCOMP(2,K0)
+<span class="ln">135</span>     *        +FACINTERP(2)*HCOMP(2,K0+1)
+<span class="ln">136</span>     *        +FACINTERP(3)*HCOMP(2,K0+2)
+<span class="ln">137</span>     *        +FACINTERP(4)*HCOMP(2,K0+3)
+<span class="ln">138</span>C  MASS FRACTION OF METALS
+<span class="ln">139</span>         EZ_H(I)=FACINTERP(1)*HCOMP(3,K0)
+<span class="ln">140</span>     *        +FACINTERP(2)*HCOMP(3,K0+1)
+<span class="ln">141</span>     *        +FACINTERP(3)*HCOMP(3,K0+2)
+<span class="ln">142</span>     *        +FACINTERP(4)*HCOMP(3,K0+3)
+<span class="ln">143</span>C  MASS FRACTION OF LIGHT ELEMENTS
+<span class="ln">144</span>         IF(LDIFLI)THEN
+<span class="ln">145</span>            DO KK=1,NLIGHT
+<span class="ln">146</span>               II = CSLIGHT(KK)
+<span class="ln">147</span>               ELI_H(KK,I)=FACINTERP(1)*HCOMP(II,K0)
+<span class="ln">148</span>     *                 +FACINTERP(2)*HCOMP(II,K0+1)
+<span class="ln">149</span>     *                 +FACINTERP(3)*HCOMP(II,K0+2)
+<span class="ln">150</span>     *                 +FACINTERP(4)*HCOMP(II,K0+3)
+<span class="ln">151</span>            END DO
+<span class="ln">152</span>         ENDIF
+<span class="ln">153</span>   50 CONTINUE
+<span class="ln">154</span>
+<span class="ln">155</span>C  SET UP VECTOR OF EQUALLY SPACED RADII AT ZONE CENTERS.
+<span class="ln">156</span>      ER(1)=HRU(IBEGIN)
+<span class="ln">157</span>      DO 60 I = 2,NPT
+<span class="ln">158</span>         ER(I)=ER(I-1)+DR
+<span class="ln">159</span>   60 CONTINUE
+<span class="ln">160</span>
+<span class="ln">161</span>C  NOW USE 4-POINT LAGRANGIAN INTERPOLATION TO FIND RUN OF VARIABLES
+<span class="ln">162</span>C  AT EQUALLY SPACED ZONE CENTERS.
+<span class="ln">163</span>C
+<span class="ln">164</span>C  FIRST POINT : BY DEFINITION, AT STARTING POINT.
+<span class="ln">165</span>C G Somers; added interpolation for Xfrac, Rho, T, and HQPR.
+<span class="ln">166</span>      EM(1) = HS1(IBEGIN)
+<span class="ln">167</span>      EDEN(1) = ODEN(IBEGIN)
+<span class="ln">168</span>      ETEM(1) = OTEM(IBEGIN)
+<span class="ln">169</span>      EHQPR(1) = HQPR(IBEGIN)
+<span class="ln">170</span>      EDELR(1) = SDEL(2,IBEGIN)
+<span class="ln">171</span>      EX(1) = HCOMP(1,IBEGIN)
+<span class="ln">172</span>      EY(1) = HCOMP(2,IBEGIN)
+<span class="ln">173</span>      EZ(1) = HCOMP(3,IBEGIN)
+<span class="ln">174</span>      IF(LDIFLI)THEN
+<span class="ln">175</span>         DO KK=1,NLIGHT
+<span class="ln">176</span>            II = CSLIGHT(KK)
+<span class="ln">177</span>            ELI(KK,1) = HCOMP(II,IBEGIN)
+<span class="ln">178</span>         END DO
+<span class="ln">179</span>      ENDIF
+<span class="ln">180</span>C  FOR OTHER POINTS: FIRST FIND 4 NEAREST (IN RADIUS) MODEL POINTS
+<span class="ln">181</span>C  AND THEN FIND LAGRANGIAN INTERPOLATION FACTORS. APPLY THEM TO FIND
+<span class="ln">182</span>C  MODEL QUANTITIES AT THE EQUALLY SPACED GRID POINTS.
+<span class="ln">183</span>C  JMIN IS THE UPPERMOST MODEL POINT ABOVE THE PREVIOUS EQUALLY SPACED
+<span class="ln">184</span>C  GRID POINT (IN RADIUS).
+<span class="ln">185</span>      JMIN=IBEGIN+1
+<span class="ln">186</span>      DO 70 I=2,NPT-1
+<span class="ln">187</span>         DO 80 J = JMIN,IEND
+<span class="ln">188</span>C  FIND 4 MODEL POINTS CLOSEST TO THE EQUALLY SPACED GRID POINT.
+<span class="ln">189</span>            IF(HRU(J).GE.ER(I))THEN
+<span class="ln">190</span>C  ENSURE THAT FIRST INTERPOLATION POINT NO LESS THAN FIRST MODEL POINT.
+<span class="ln">191</span>               K0 = MAX(J-2,1)
+<span class="ln">192</span>C  ENSURE THAT LAST INTERPOLATION POINT NO GREATER THAN LAST MODEL POINT.
+<span class="ln">193</span>               K0 = MIN(K0,M-3)
+<span class="ln">194</span>               JMIN=J
+<span class="ln">195</span>               GOTO 90
+<span class="ln">196</span>            ENDIF
+<span class="ln">197</span>   80    CONTINUE
+<span class="ln">198</span>         K0 = M-3
+<span class="ln">199</span>         JMIN=M
+<span class="ln">200</span>   90    CONTINUE
+<span class="ln">201</span>         DO 100 K=1,4
+<span class="ln">202</span>            TABLER(K)=HRU(K0+K-1)
+<span class="ln">203</span>  100    CONTINUE
+<span class="ln">204</span>         GRIDRAD=ER(I)
+<span class="ln">205</span>C  FIND 4 POINT LAGRANGIAN INTERPOLATION FACTORS.
+<span class="ln">206</span>C  FACINTERP=INTERPOLATION FACTORS FOR POINT GRIDRAD GIVEN THE 4 TABLE
+<span class="ln">207</span>C  RADII IN TABLER; FACDERIV=SAME FOR DERIVATIVES AT POINT GRIDRAD.
+<span class="ln">208</span>         CALL <a href="../files/interp.f.html#def-INTERP" title="INTERP in interp.f">INTERP</a>(TABLER,FACINTERP,FACDERIV,GRIDRAD)
+<span class="ln">209</span>C  PERFORM 4 POINT LAGRANGIAN INTERPOLATION FOR DESIRED QUANTITIES:
+<span class="ln">210</span>C  MASS WITHIN THE RADIUS ER
+<span class="ln">211</span>         EM(I) = FACINTERP(1)*HS1(K0)+FACINTERP(2)*HS1(K0+1)+
+<span class="ln">212</span>     *             FACINTERP(3)*HS1(K0+2)+FACINTERP(4)*HS1(K0+3)
+<span class="ln">213</span>         EDEN(I) = FACINTERP(1)*ODEN(K0)+FACINTERP(2)*ODEN(K0+1)+
+<span class="ln">214</span>     *             FACINTERP(3)*ODEN(K0+2)+FACINTERP(4)*ODEN(K0+3)
+<span class="ln">215</span>         ETEM(I) = FACINTERP(1)*OTEM(K0)+FACINTERP(2)*OTEM(K0+1)+
+<span class="ln">216</span>     *             FACINTERP(3)*OTEM(K0+2)+FACINTERP(4)*OTEM(K0+3)
+<span class="ln">217</span>         EHQPR(I) = FACINTERP(1)*HQPR(K0)+FACINTERP(2)*HQPR(K0+1)+
+<span class="ln">218</span>     *             FACINTERP(3)*HQPR(K0+2)+FACINTERP(4)*HQPR(K0+3)
+<span class="ln">219</span>         EDELR(I) = FACINTERP(1)*SDEL(2,K0)+FACINTERP(2)*SDEL(2,K0+1)+
+<span class="ln">220</span>     *             FACINTERP(3)*SDEL(2,K0+2)+FACINTERP(4)*SDEL(2,K0+3)
+<span class="ln">221</span>         EX(I)=FACINTERP(1)*HCOMP(1,K0)
+<span class="ln">222</span>     *        +FACINTERP(2)*HCOMP(1,K0+1)
+<span class="ln">223</span>     *        +FACINTERP(3)*HCOMP(1,K0+2)
+<span class="ln">224</span>     *        +FACINTERP(4)*HCOMP(1,K0+3)
+<span class="ln">225</span>         EY(I)=FACINTERP(1)*HCOMP(2,K0)
+<span class="ln">226</span>     *        +FACINTERP(2)*HCOMP(2,K0+1)
+<span class="ln">227</span>     *        +FACINTERP(3)*HCOMP(2,K0+2)
+<span class="ln">228</span>     *        +FACINTERP(4)*HCOMP(2,K0+3)
+<span class="ln">229</span>         EZ(I)=FACINTERP(1)*HCOMP(3,K0)
+<span class="ln">230</span>     *        +FACINTERP(2)*HCOMP(3,K0+1)
+<span class="ln">231</span>     *        +FACINTERP(3)*HCOMP(3,K0+2)
+<span class="ln">232</span>     *        +FACINTERP(4)*HCOMP(3,K0+3)
+<span class="ln">233</span>         IF(LDIFLI)THEN
+<span class="ln">234</span>            DO KK=1,NLIGHT
+<span class="ln">235</span>               II = CSLIGHT(KK)
+<span class="ln">236</span>               ELI(KK,I)=FACINTERP(1)*HCOMP(II,K0)
+<span class="ln">237</span>     *              +FACINTERP(2)*HCOMP(II,K0+1)
+<span class="ln">238</span>     *              +FACINTERP(3)*HCOMP(II,K0+2)
+<span class="ln">239</span>     *              +FACINTERP(4)*HCOMP(II,K0+3)
+<span class="ln">240</span>            END DO
+<span class="ln">241</span>         ENDIF
+<span class="ln">242</span>   70 CONTINUE
+<span class="ln">243</span>C  LAST POINT : BY DEFINITION, AT ENDING POINT.
+<span class="ln">244</span>      EM(NPT) = HS1(IEND)
+<span class="ln">245</span>      EDEN(NPT) = ODEN(IEND)
+<span class="ln">246</span>      ETEM(NPT) = OTEM(IEND)
+<span class="ln">247</span>      EHQPR(NPT) = HQPR(IEND)
+<span class="ln">248</span>      EDELR(NPT) = SDEL(2,IEND)
+<span class="ln">249</span>      EX(NPT) = HCOMP(1,IEND)
+<span class="ln">250</span>      EY(NPT) = HCOMP(2,IEND)
+<span class="ln">251</span>      EZ(NPT) = HCOMP(3,IEND)
+<span class="ln">252</span>      IF(LDIFLI)THEN
+<span class="ln">253</span>         DO KK=1,NLIGHT
+<span class="ln">254</span>            II = CSLIGHT(KK)
+<span class="ln">255</span>            ELI(KK,NPT) = HCOMP(II,IEND)
+<span class="ln">256</span>         END DO
+<span class="ln">257</span>      ENDIF
+<span class="ln">258</span>      RETURN
+<span class="ln">259</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing question.</strong> The comment says <code>NPT</code> is chosen "such that DR &lt;= DRMIN", but with $N = \lceil \Delta r_\mathrm{tot}/\Delta r_\mathrm{min}\rceil$ points there are $N-1$ intervals, so $\Delta r = \Delta r_\mathrm{tot}/(N-1) &gt; \Delta r_\mathrm{min}$. An off-by-one? Fix: add a question.</li>
+<li><strong>Missing.</strong> The grid values of $\rho$ and $T$ (<code>EDEN</code>, <code>ETEM</code>) are in cgs units (from <code>ODEN</code>, <code>OTEM</code>), while $r$, $m$ and $d\ln P/dr$ are in Bahcall–Loeb units. Fix: say so in Outputs.</li>
+</ol>
+<p>Revised: units added to Outputs; question 6 added.</p></div></details>
+</main></body></html>

@@ -1,0 +1,112 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>getgrid.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ getgrid.f</span></header><main>
+<h1>getgrid.f</h1>
+<p class='muted'>65 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/getgrid.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>GETGRID</code> builds the equally spaced grid on which the diffusion equations for rotational mixing and angular momentum transport are solved. The grid variable is the combination of $\log m$, $L$ and $\log P$ that <a href="../files/hpoint.f.html#def-HPOINT">HPOINT</a> uses to place the model's points, with one difference: HPOINT scales $\Delta_L$ by the largest $L$ in the model, GETGRID by the surface $L$.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/mixgrid.f.html#def-MIXGRID">MIXGRID</a> and <a href="../files/rotgrid.f.html#def-ROTGRID">ROTGRID</a>, for one region (<code>IBEG..IEND</code>).</li>
+<li><strong>Inputs:</strong> <code>HL</code> ($L$ in solar units), <code>HP</code> ($\log P$), <code>HS</code> ($\log m$).</li>
+<li><strong>What it calls:</strong> <a href="../files/osplin.f.html#def-OSPLIN">OSPLIN</a>, a shape-preserving osculatory quadratic spline.</li>
+<li><strong>Outputs:</strong> in <code>/EGRID/</code>: <code>CHI</code> (the grid variable at the model points), <code>ECHI</code> (equally spaced values), <code>ES1</code> (their masses, in g), <code>DCHI</code>, <code>NTOT</code>. <a href="../files/eq2mod.f.html#def-EQ2MOD">EQ2MOD</a>, <a href="../files/seculr.f.html#def-SECULR">SECULR</a>, <a href="../files/mixcom.f.html#def-MIXCOM">MIXCOM</a> and <a href="../files/checkj.f.html#def-CHECKJ">CHECKJ</a> read them.</li>
+<li><strong>COMMON blocks:</strong> <code>/CTOL/</code> gives the point-spacing tolerances <code>HPTTOL</code> (set in <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a>); <code>/EGRID/</code> (output).</li>
+</ul>
+<p><strong>The method.</strong> With the model's spacing criteria $\Delta_m$ = <code>HPTTOL(2)</code>, $\Delta_L$ = <code>HPTTOL(9)</code>$\cdot L_\mathrm{surf}$ (with $L_\mathrm{surf}$ = <code>HL(M)</code>), $\Delta_P$ = <code>HPTTOL(11)</code>,
+$$\chi_i = \frac{\log m_i}{\Delta_m} + \frac{L_i}{\Delta_L} - \frac{\log P_i}{\Delta_P}.$$
+The equally spaced grid runs from $\chi_1$ to $\chi_N$ with $N$ = <code>NTOT</code> points, $\Delta\chi = (\chi_N - \chi_1)/(N-1)$, and $\log m$ is interpolated onto it with <code>OSPLIN</code>, then unlogged.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Number of points.</strong> <code>NTOT</code> is set to the number of model points in the region (at least 3); the formula that set it from the range of $\chi$ ("modulus of final chi plus one") is commented out. So the grid is equally spaced in $\chi$ but has as many points as the model. Is that the intended resolution?</li>
+<li><strong>Monotonic $\chi$.</strong> <code>OSPLIN</code> needs increasing abscissae. $\chi$ increases outward when $\log P$ decreases and $L$ does not drop sharply; can $L$ decrease enough (for example in a region with neutrino losses) to break this?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-GETGRID'>GETGRID</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-GETGRID'><h3><span class='kind'>subroutine</span>GETGRID</h3>
+<p class='muted'>lines 2–65 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/getgrid.f#L2-L65'>GitHub</a></p>
+<pre>SUBROUTINE GETGRID(HL,HP,HS,IBEG,IEND,M)</pre>
+<div class='notes'><p>Equally spaced grid in $\chi = \log m/\Delta_m + L/\Delta_L - \log P/\Delta_P$, with the mass of each grid point by spline interpolation.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CTOL'>/CTOL/</a>, <a href='../commons.html#c-EGRID'>/EGRID/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/osplin.f.html#def-OSPLIN'>OSPLIN</a> <span class='muted'>(osplin.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/mixgrid.f.html#def-MIXGRID'>MIXGRID</a> <span class='muted'>(mixgrid.f)</span></li>
+<li><a href='../files/rotgrid.f.html#def-ROTGRID'>ROTGRID</a> <span class='muted'>(rotgrid.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE GETGRID(HL,HP,HS,IBEG,IEND,M)
+<span class="ln">3</span>      PARAMETER (JSON=5000)
+<span class="ln">4</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">5</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">6</span>      COMMON/CONST1/CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">7</span>      COMMON/CTOL/HTOLER(5,2),FCORR0,FCORRI,FCORR,HPTTOL(12),NITER1,
+<span class="ln">8</span>     *     NITER2,NITER3
+<span class="ln">9</span>C OUTPUT VARIABLES
+<span class="ln">10</span>      COMMON/EGRID/CHI(JSON),ECHI(JSON),ES1(JSON),DCHI,NTOT
+<span class="ln">11</span>C INPUT VARIABLES
+<span class="ln">12</span>      DIMENSION HL(JSON),HP(JSON),HS(JSON)
+<span class="ln">13</span>C LOCAL VARIABLES
+<span class="ln">14</span>      DIMENSION YTAB(JSON)
+<span class="ln">15</span>      SAVE
+<span class="ln">16</span>C THIS ROUTINE FORMS THE SUM OF CHI, DEFINED AS
+<span class="ln">17</span>C CHI = LOG(M)/DM + L/(LTOT*DL) - LOG(P)/DP, WHERE DM, DP, AND DL ARE
+<span class="ln">18</span>C THE POINT SPACINGS FOR LOG MASS, LUMINOSITY, AND PRESSURE RESPECTIVELY.
+<span class="ln">19</span>C THIS ROUTINE TRANSFORMS THESE VARIABLES TO AN EQUALLY SPACED GRID FROM
+<span class="ln">20</span>C THE FIRST POINT TO THE LAST POINT.  IT RETURNS A SET OF EQUALLY SPACED
+<span class="ln">21</span>C CHI VALUES AND THEIR LOCATION IN MASS.
+<span class="ln">22</span>C
+<span class="ln">23</span>C USE THE MODEL CRITERIA FOR ASSIGNING THE SPACING BETWEEN GRID POINTS.
+<span class="ln">24</span>      DM = HPTTOL(2)
+<span class="ln">25</span>      DL = HPTTOL(9)*HL(M)
+<span class="ln">26</span>      DP = HPTTOL(11)
+<span class="ln">27</span>      NTAB = IEND - IBEG + 1
+<span class="ln">28</span>      DO II = 1, NTAB
+<span class="ln">29</span>         I = IBEG + II - 1
+<span class="ln">30</span>         CHI(II) = HS(I)/DM+HL(I)/DL-HP(I)/DP
+<span class="ln">31</span>      END DO
+<span class="ln">32</span>C DEFINE NTOT EQUAL TO NTAB
+<span class="ln">33</span>      NTOT = NTAB
+<span class="ln">34</span>C TOTAL NUMBER OF ZONES IS MODULUS OF FINAL CHI PLUS ONE.
+<span class="ln">35</span>C      NTOT = INT(CHI(NTAB)-CHI(1))+1
+<span class="ln">36</span>C FOR ROTATION PURPOSES, DEFINE THE MINIMUM NUMBER OF
+<span class="ln">37</span>C EQUALLY SPACED SHELLS AS 3.
+<span class="ln">38</span>      NTOT = MAX(NTOT,3)
+<span class="ln">39</span>C EQUALLY SPACED INCREMENT IN CHI
+<span class="ln">40</span>C      CHT = 0.5D0*(CHI(NTAB)+CHI(NTAB-1))
+<span class="ln">41</span>C      CHB = 0.5D0*(CHI(2)+CHI(1))
+<span class="ln">42</span>C      DCHI = (CHT-CHB)/FLOAT(NTOT-2)
+<span class="ln">43</span>      DCHI = (CHI(NTAB)-CHI(1))/DFLOAT(NTOT-1)
+<span class="ln">44</span>C ASSIGN VECTOR OF EQUALLY SPACED CHI
+<span class="ln">45</span>C       ECHI(1) = CHB - 0.5D0*DCHI
+<span class="ln">46</span>C       DO I = 2,NTOT
+<span class="ln">47</span>C          ECHI(I) = ECHI(I-1)+DCHI
+<span class="ln">48</span>C       END DO
+<span class="ln">49</span>      ECHI(1) = CHI(1)
+<span class="ln">50</span>      DO I = 2,NTOT
+<span class="ln">51</span>         ECHI(I) = ECHI(I-1)+DCHI
+<span class="ln">52</span>      END DO
+<span class="ln">53</span>C NOW ASSIGN MASSES TO THE NEW EQUALLY SPACED GRID POINTS.
+<span class="ln">54</span>C PERFORM INTERPOLATION IN LOG MASS - CONSISTENT WITH CHI DEFINED
+<span class="ln">55</span>C IN LOG M, LOG P, ETC.
+<span class="ln">56</span>      DO I = 1,NTAB
+<span class="ln">57</span>         YTAB(I) = HS(IBEG+I-1)
+<span class="ln">58</span>      END DO
+<span class="ln">59</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(ECHI,ES1,CHI,YTAB,NTAB,NTOT)
+<span class="ln">60</span>C TRANSFORM TO PHYSICAL MASS (GM)
+<span class="ln">61</span>      DO I = 1,NTOT
+<span class="ln">62</span>         ES1(I) = EXP(CLN*ES1(I))
+<span class="ln">63</span>      END DO
+<span class="ln">64</span>      RETURN
+<span class="ln">65</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Unclear.</strong> "the same combination of $\log m$, $L$ and $\log P$ that the model uses to place its points." HPOINT scales $\Delta_L$ by the largest $L$ in the model (<code>HPMAX(2) = HPTTOL(9)*HLMAX</code>, hpoint.f line 285); GETGRID by the surface value <code>HL(M)</code>. Fix: name HPOINT and the difference.</li>
+</ol>
+<p>Otherwise checked: $\chi$, <code>NTOT</code>, <code>DCHI</code>, <code>ECHI</code>, the OSPLIN call in $\log m$, the callers and the readers of <code>/EGRID/</code>; both questions are real.</p>
+<p>Revised: HPOINT named, with the difference in $\Delta_L$; $L_\mathrm{surf}$ = <code>HL(M)</code> stated.</p></div></details>
+</main></body></html>

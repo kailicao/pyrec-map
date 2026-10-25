@@ -1,0 +1,685 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>vcirc.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ vcirc.f</span></header><main>
+<h1>vcirc.f</h1>
+<p class='muted'>618 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/vcirc.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>VCIRC</code> estimates the velocities of the rotational mixing processes at each interface between shells of a radiative region: meridional (Eddington–Sweet) circulation, the Goldreich–Schubert–Fricke (GSF) instability, and the secular and dynamical shear instabilities. Its header comment: "skipping convective regions, check for instability against each secular mechanism; if unstable, compute a circulation velocity". The sum of the velocities, <code>HV</code>, sets the diffusion coefficient for angular momentum and mixing.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> arguments from <a href="../files/seculr.f.html#def-SECULR">SECULR</a>: $\log r$ and $r$ (<code>HR</code>, <code>HRU</code>), the range <code>IMIN</code>–<code>IMAX</code>, the iteration <code>IT</code>, <code>LCZ</code>, <code>OMEGA</code>, the shear <code>QWLNR</code> (in <code>SECULR</code>, $\tfrac14(\Omega_i - \Omega_{i-1})$ times a radial factor), its limit for dynamical shear <code>QWRMAX</code> (from <a href="../files/setupv.f.html#def-SETUPV">SETUPV</a>), the total luminosity <code>CLTOT</code>, the time step <code>DT</code> and $\log P$. Through COMMON blocks, mostly filled by <code>SETUPV</code>: the interpolation weights <code>FACI</code> (<code>INTFAC</code>), the velocity factors <code>FES1</code>–<code>FES3</code>, <code>FGSFK</code> (<code>TAUKH</code>), <code>FACT1</code>–<code>FACT8</code> (<code>VFACT</code>), the shell-midpoint quantities (<code>INTVAR</code>: <code>RM</code>, <code>HGM</code>, <code>ALM</code>, …), the physics at each shell (<code>MDPHY</code>: $\mu$ <code>AMUM</code>, the viscosity <code>VISCM</code>, the thermal diffusivity <code>THDIFM</code>, …), the quadrupole moment and gravity (<code>QUADRU</code>: <code>QUAD</code>, <code>GG</code>), the $\theta$ terms (<code>OLDROT2</code>), the scale factors <code>FES</code>, <code>FGSF</code>, <code>FSS</code>, <code>RCRIT</code> (<code>VMULT</code>) and the switches <code>IGSF</code> (<code>VMULT2</code>), <code>LNOJ</code> (<code>NOTRAN</code>), <code>LDIFAD</code> (<code>VARFC</code>).</li>
+<li><strong>Who calls it:</strong> only <a href="../files/seculr.f.html#def-SECULR">SECULR</a>, before and inside its iterations; <code>SECULR</code> may then call <a href="../files/getfc.f.html#def-GETFC">GETFC</a> with <code>HV</code>.</li>
+<li><strong>Outputs:</strong> <code>HV</code> (total velocity per interface) and <code>LDO</code> (true if any is positive); in COMMON <code>TEMP2</code>, <code>VES</code>, <code>VGSF</code>, <code>VSS</code> and their previous values, read by <a href="../files/checkj.f.html#def-CHECKJ">CHECKJ</a>, <a href="../files/codiff.f.html#def-CODIFF">CODIFF</a>, <a href="../files/getw.f.html#def-GETW">GETW</a>, <a href="../files/stitch.f.html#def-STITCH">STITCH</a>, <a href="../files/wrtout.f.html#def-WRTOUT">WRTOUT</a> and <a href="../files/wrtmod.f.html#def-WRTMOD">WRTMOD</a>; with <code>LDIFAD</code>, the advective and diffusive parts <code>VESA</code>, <code>VESD</code> (<code>DIFAD2</code>, shared with <a href="../files/checkj.f.html#def-CHECKJ">CHECKJ</a> and <a href="../files/rotgrid.f.html#def-ROTGRID">ROTGRID</a>) and <code>VESD2</code>, <code>VESD3</code>, <code>DSS</code>, <code>DGSF</code>, <code>FV0</code> (<code>DIFAD3</code>, shared with <a href="../files/dadcoeft.f.html#def-DADCOEFT">DADCOEFT</a> and <a href="../files/setupv.f.html#def-SETUPV">SETUPV</a>); <code>RAT</code> (<code>QUADD</code>), read by <a href="../files/checkj.f.html#def-CHECKJ">CHECKJ</a>, <a href="../files/fpft.f.html#def-FPFT">FPFT</a> and <a href="../files/wrtmod.f.html#def-WRTMOD">WRTMOD</a>; and <code>FESTIME</code>, <code>FV0</code> rescaled in place.</li>
+</ul>
+<p><strong>The method.</strong> At the interface between shells $i-1$ and $i$:</p>
+<ol>
+<li><strong>Midpoint values.</strong> The viscosity $\nu$ and thermal diffusivity $K$ by 4-point interpolation in their logarithms (weights <code>FACI</code>); $\mu$ and $\bar\Omega$ (<code>WM</code>) as the means of the two shells.</li>
+<li><strong>Meridional circulation</strong> (Zahn 1991, by the comments): $v_\mathrm{ES} = \bar\Omega^2 (F_1 + \bar\Omega^2 F_2)$, multiplied by the quadrupole correction of Zahn (1992),
+   $$R = \frac{\Phi_s + \Phi_2}{\Phi_\mathrm{std}},\quad \Phi_\mathrm{std} = \frac{4}{3}\,\frac{\bar\Omega^2 r}{\bar g},\quad \Phi_s = \frac13\,\bar\Omega^2\,\frac{d}{dr}\!\left(\frac{r^2}{g}\right),\quad \Phi_2 = -\frac{d}{dr}\!\left(\frac{Q}{g}\right),$$
+   with a warning printed if $R &lt; 0$. Without <code>LDIFAD</code>, $v_\mathrm{ES} = |R\,v_\mathrm{ES} - F_3\,\bar\Omega\,d\Omega/dr|$. With <code>LDIFAD</code> (MHP 05/02, 06/02), it is split into an advective part, $v_A = \tfrac15(R\,v_\mathrm{ES} + \dot\theta)$ with $\dot\theta$ = <code>THN</code>, and diffusive parts of first to third order.</li>
+<li><strong>Inhibition by $\mu$ gradients</strong> (Zahn &amp; Maeder 1998): every velocity is multiplied by
+   $$f_\mu = \frac{\max(\Delta\nabla, 10^{-3})}{\max(\Delta\nabla + \nabla_\mu, 10^{-3})},\qquad \nabla_\mu = \frac{\Delta\ln\mu}{\Delta\ln P},$$
+   with $\Delta\nabla$ = <code>DDELM</code> (in <code>SETUPV</code>, $\nabla_\mathrm{ad} - \nabla + \nabla_\mu$, at least a minimum).</li>
+<li><strong>GSF</strong> (Kippenhahn 1980): if specific angular momentum decreases outward ($\Omega_i r_i^2 &lt; \Omega_{i-1} r_{i-1}^2$),
+   $$v_\mathrm{GSF} = F_K\,K\,\frac{\bar\Omega^2}{r}\,\max\!\left(2\left|\frac{d\ln j}{dr}\right|, \tfrac14\left|\frac{d\ln\Omega}{dr}\right|\right),$$
+   otherwise $v_\mathrm{GSF} = \tfrac14 F_K K\,\bar\Omega^2\,|d\ln\Omega/dr|/r$. With <code>IGSF</code> = 0 or 2 it is damped by viscosity: zero if $|q| &lt; q_\nu = 2\sqrt{\nu/K}\,q_\mathrm{max}$, else multiplied by $\sqrt{(|q| - q_\nu)/q_\nu}$; with <code>IGSF</code> = 0 also by the $\mu$ gradient, likewise.</li>
+<li><strong>Shear</strong> (Endal &amp; Sofia, paper II; Zahn 1991). If $|q| &gt; q_\mathrm{max}$ (dynamical shear), $v_\mathrm{SS} = \tfrac{8}{45} K (|q|/q_\mathrm{max})^2/r$, and $v_\mathrm{GSF}$ is rescaled to the gradient at the limit (a message is written to unit 6). Otherwise the secular shear is unstable if
+   $$|q| &gt; q_\mathrm{crit} = \sqrt{\frac{\nu}{K}\,\frac{R_\mathrm{crit}}{8}}\;q_\mathrm{max},$$
+   and then $v_\mathrm{SS} = \tfrac{8}{45} K\,\left[(|q| - q_\mathrm{crit})/q_\mathrm{max}\right]^2/r$, with $q_\mathrm{crit}$ raised by a $\mu$ gradient if that gives the larger limit.</li>
+<li><strong>Scale and average.</strong> The velocities are multiplied by the user's factors <code>FES</code>, <code>FGSF</code>, <code>FSS</code>; with <code>LDIFAD</code>, the GSF and shear velocities times $r$ join the diffusive part. After the first iteration (<code>IT &gt; 1</code>) each is averaged with the previous one. <code>HV</code> = $v_\mathrm{ES} + v_\mathrm{GSF} + v_\mathrm{SS}$ (zero below $10^{-20}$).</li>
+<li><strong>No transport in the core</strong> (<code>LNOJ</code>, 9/93): from <code>IMIN</code> outward, the velocities are zeroed while $L(r)/L_\mathrm{tot} &lt; 0.99$, "to avoid numerical problems in the H-burning shell".</li>
+</ol>
+<p><strong>Design.</strong> Many older prescriptions are kept as comments (Kippenhahn &amp; Möllenhoff 1974 circulation, James &amp; Kahn 1971 GSF, older $\mu$ treatments); the flags <code>IES</code> and <code>IMU</code> no longer select anything.</p>
+<p><strong>KC's changes.</strong> The unused argument <code>HJM</code> was removed (2025-05-31).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The $\mu$ loop does not skip convective interfaces.</strong> The meridional, GSF and shear loops skip interfaces inside convection zones; the Zahn &amp; Maeder loop (step 3) does not, and rescales <code>FESTIME</code> and <code>FV0</code> there too. Harmless, or should it skip them?</li>
+<li><strong>Possible division by zero.</strong> In the dynamical-shear branch, $v_\mathrm{GSF}$ is rescaled by <code>DLNWDR/DLNWDR0</code> or <code>FX/FX2</code>, where <code>DLNWDR0</code> is zero if $\Omega_i = \Omega_{i-1}$; and $\ln\Omega$ requires $\Omega &gt; 0$ everywhere.</li>
+<li><strong>Sign of the meridional velocity.</strong> With <code>LDIFAD</code>, the circulation is signed, but <code>VES</code> is made positive by <code>ABS(FES*VES)</code> for every interface before <code>HV</code> is formed, so <code>HV</code> never sees a negative <code>VES</code>; only <code>VESA</code> (the advective part) keeps its sign. So <code>HV</code> takes $|v_\mathrm{ES}|$ of a signed circulation: intended?</li>
+<li><strong>Unused values.</strong> <code>V2</code> and <code>WMID</code> are computed but never used; <code>VMU</code> is zeroed and copied to <code>VMUP</code> (COMMON <code>PREVMU</code>, used by no other routine) but no longer computed, since the old $\mu$ treatments are commented out. Can they go?</li>
+<li><strong>Output to unit 6.</strong> The dynamical-shear message goes to unit 6 (the screen) for every unstable interface, at every iteration.</li>
+<li><strong><code>LNOJ</code>'s threshold.</strong> The core is defined as $L(r)/L_\mathrm{tot} &lt; 0.99$, hard-coded. Should it be a parameter?</li>
+<li><strong>The $\mu$ factor compounds.</strong> The $\mu$ loop multiplies <code>FESTIME</code> and <code>FV0</code> (COMMON, set once by <code>SETUPV</code> before SECULR's iterations) by $f_\mu$ at every call of <code>VCIRC</code>, so the factor compounds over SECULR's iterations ($f_\mu^{\,n}$ after $n$ calls). Should it be applied to a copy?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+SUBROUTINE VCIRC(HJM,HR,HRU,IMIN,IMAX,IT,LCZ,M,OMEGA,LDO,  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-VCIRC'>VCIRC</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-VCIRC'><h3><span class='kind'>subroutine</span>VCIRC</h3>
+<p class='muted'>lines 3–618 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/vcirc.f#L3-L618'>GitHub</a></p>
+<pre>SUBROUTINE VCIRC(HR,HRU,IMIN,IMAX,IT,LCZ,M,OMEGA,LDO,</pre>
+<div class='notes'><p>Velocities of meridional circulation (Zahn 1991, with Zahn 1992's quadrupole term), the GSF instability (Kippenhahn 1980) and secular and dynamical shear at each radiative interface, with $\mu$-gradient inhibition (Zahn &amp; Maeder 1998), the user's scale factors and averaging between iterations.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+SUBROUTINE VCIRC(HJM,HR,HRU,IMIN,IMAX,IT,LCZ,M,OMEGA,LDO,  ! KC 2025-05-31</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CCOUT'>/CCOUT/</a>, <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-DIFAD2'>/DIFAD2/</a>, <a href='../commons.html#c-DIFAD3'>/DIFAD3/</a>, <a href='../commons.html#c-EGRIDDER'>/EGRIDDER/</a>, <a href='../commons.html#c-INTFAC'>/INTFAC/</a>, <a href='../commons.html#c-INTVAR'>/INTVAR/</a>, <a href='../commons.html#c-INTVR2'>/INTVR2/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-MDPHY'>/MDPHY/</a>, <a href='../commons.html#c-NOTRAN'>/NOTRAN/</a>, <a href='../commons.html#c-OLDROT2'>/OLDROT2/</a>, <a href='../commons.html#c-PREVMU'>/PREVMU/</a>, <a href='../commons.html#c-QUADD'>/QUADD/</a>, <a href='../commons.html#c-QUADRU'>/QUADRU/</a>, <a href='../commons.html#c-TAUKH'>/TAUKH/</a>, <a href='../commons.html#c-TEMP2'>/TEMP2/</a>, <a href='../commons.html#c-VARFC'>/VARFC/</a>, <a href='../commons.html#c-VFACT'>/VFACT/</a>, <a href='../commons.html#c-VMULT'>/VMULT/</a>, <a href='../commons.html#c-VMULT2'>/VMULT2/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span> ×2</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE VCIRC(HR,HRU,IMIN,IMAX,IT,LCZ,M,OMEGA,LDO,
+<span class="ln">4</span>     *                 QWLNR,QWRMAX,HV,CLTOT,DT,HP)
+<span class="ln">5</span>
+<span class="ln">6</span>      PARAMETER (JSON=5000)
+<span class="ln">7</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">8</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">9</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">10</span>      COMMON/CONST1/CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">11</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">12</span>      COMMON/CCOUT/LSTORE,LSTATM,LSTENV,LSTMOD,LSTPHYS,LSTROT,LSCRIB,LSTCH,LPHHD
+<span class="ln">13</span>      COMMON/INTFAC/FACI(4,JSON)
+<span class="ln">14</span>C MHP 3/92 COMMON BLOCKS ADDED FOR SHEAR VELOCITY AND MU INHIBITION.
+<span class="ln">15</span>      COMMON/TAUKH/FACT6(JSON),FES1(JSON),FES2(JSON),FGSFJ(JSON),
+<span class="ln">16</span>     *     FGSFK(JSON),FES3(JSON)
+<span class="ln">17</span>      COMMON/INTVAR/ALM(JSON),DELAMI(JSON),DELMI(JSON),DM(JSON),
+<span class="ln">18</span>     *     EPSILM(JSON),HGM(JSON),HS3(JSON),PM(JSON),
+<span class="ln">19</span>     *     QDTMI(JSON),RM(JSON),TM(JSON)
+<span class="ln">20</span>C      JvS 09/25 RENAMED ARRAYS IN INTVR2 TO PLAY NICELY WITH MDPHY     
+<span class="ln">21</span>C      COMMON/INTVR2/AMUM(JSON),THDIFM(JSON),VISCM(JSON),WM(JSON)
+<span class="ln">22</span>      COMMON/INTVR2/AMUMI(JSON),THDIFMI(JSON),VISCMI(JSON),WM(JSON)
+<span class="ln">23</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">24</span>C      JvS 09/25 CHANGED VARIABLE NAMES TO BE CONSISTENT ACROSS ALL SUBROUTINES
+<span class="ln">25</span>C      COMMON/MDPHY/HAMU(JSON),CP(JSON),DELM(JSON),DELAM(JSON),
+<span class="ln">26</span>C     *     DELRM(JSON),SESUM(JSON),OM(JSON),SQDT(JSON),
+<span class="ln">27</span>C     *     THDIF(JSON),SVEL(JSON),VISC(JSON),EPSM(JSON)
+<span class="ln">28</span>      COMMON/MDPHY/AMUM(JSON),CPM(JSON),DELM(JSON),DELAM(JSON),
+<span class="ln">29</span>     *             DELRM(JSON),ESUMM(JSON),OM(JSON),QDTM(JSON),
+<span class="ln">30</span>     *             THDIFM(JSON),VELM(JSON),VISCM(JSON),EPSM(JSON)
+<span class="ln">31</span>      COMMON/TEMP2/VES(JSON),VES0(JSON),VSS(JSON),VSS0(JSON),
+<span class="ln">32</span>     *     HLE(JSON),VGSF(JSON),VGSF0(JSON),VMU(JSON)
+<span class="ln">33</span>C MHP 06/02 ADDED FACT7 AND FACT8 FOR DIF/AD TREATMENT
+<span class="ln">34</span>      COMMON/VFACT/FACT1(JSON),FACT2(JSON),FACT3(JSON),FACT4(JSON),
+<span class="ln">35</span>     *     FACT5(JSON),FACT7(JSON),FACT8(JSON)
+<span class="ln">36</span>      COMMON/VMULT/FW,FC,FO,FES,FGSF,FMU,FSS,RCRIT
+<span class="ln">37</span>      COMMON/VMULT2/FESC,FSSC,FGSFC,IES,IGSF,IMU
+<span class="ln">38</span>      COMMON/PREVMU/VMUP(JSON)
+<span class="ln">39</span>C 3/93 QUADRUPOLE DRIVING TERM ADDED.
+<span class="ln">40</span>      COMMON/QUADD/PHISP(JSON),PHIROT(JSON),PHIDIS(JSON),RAT(JSON)
+<span class="ln">41</span>      COMMON/QUADRU/QUAD(JSON),GG(JSON)
+<span class="ln">42</span>C MHP 9/93
+<span class="ln">43</span>      COMMON/NOTRAN/LNOJ
+<span class="ln">44</span>      COMMON/VARFC/VFC(JSON),LVFC,LDIFAD
+<span class="ln">45</span>C MHP 11/94 ADVECTIVE VELOCITY AND DIFFUSIVE COMPONENT.
+<span class="ln">46</span>      COMMON/DIFAD2/VESA(JSON),VESA0(JSON),VESD(JSON),VESD0(JSON)
+<span class="ln">47</span>C MHP 06/02
+<span class="ln">48</span>C HIGHER ORDER TERMS IN M.C. VELOCITY
+<span class="ln">49</span>      COMMON/DIFAD3/FACD2(JSON),FACD3(JSON),VESD2(JSON),VESD3(JSON),
+<span class="ln">50</span>     *              ECOD5(JSON),ECOD6(JSON),FGEOM(JSON),FV0(JSON),
+<span class="ln">51</span>     *              FV1A(JSON),FV1B(JSON),FV2A(JSON),FV2B(JSON),
+<span class="ln">52</span>     *              EV0(JSON),EV1A(JSON),EV1B(JSON),EV2A(JSON),
+<span class="ln">53</span>     *              EV2B(JSON),DSS(JSON),DGSF(JSON),ESS(JSON),EGSF(JSON)
+<span class="ln">54</span>C Time change of theta
+<span class="ln">55</span>      COMMON/OLDROT2/THO(JSON),THN(JSON),THM(JSON),
+<span class="ln">56</span>     *               DDELM(JSON),FESTIME(JSON),THP(JSON),
+<span class="ln">57</span>     *               QWRST(JSON),WMST(JSON),QWRMST(JSON)
+<span class="ln">58</span>C DEFINITION TERMS FOR THE SECOND AND THIRD DERIVATIVE
+<span class="ln">59</span>C TERMS
+<span class="ln">60</span>      COMMON/EGRIDDER/EQQCOD(JSON),EQQQCOD(JSON),QQCOD(JSON),
+<span class="ln">61</span>     *                QQQCOD(JSON)
+<span class="ln">62</span>C       DIMENSION HJM(JSON),HR(JSON),HRU(JSON),LCZ(JSON),OMEGA(JSON),  ! KC 2025-05-31
+<span class="ln">63</span>      DIMENSION HR(JSON),HRU(JSON),LCZ(JSON),OMEGA(JSON),
+<span class="ln">64</span>     *          QWLNR(JSON),QWRMAX(JSON),HV(JSON),  ! VMU2(JSON)
+<span class="ln">65</span>     *          HP(JSON)
+<span class="ln">66</span>C SPEED OF LIGHT.
+<span class="ln">67</span>C       DATA CC/2.99792458D10/
+<span class="ln">68</span>      SAVE
+<span class="ln">69</span>
+<span class="ln">70</span>C   SKIPPING CONVECTIVE REGIONS, CHECK FOR INSTABILITY AGAINST EACH
+<span class="ln">71</span>C   SECULAR MECHANISM.IF UNSTABLE,COMPUTE A CIRCULATION VELOCITY.
+<span class="ln">72</span>C   THE PROCEDURE FOR CALCULATING STABILITY IS AS FOLLOWS:
+<span class="ln">73</span>C      STABILITY IS CALCULATED FOR THE I/I-1 INTERFACE.
+<span class="ln">74</span>C      EACH STABILITY CRITERION IS EXPRESSED AS FOLLOWS:
+<span class="ln">75</span>C       A COMBINATION OF VARIABLES(RHO,P,ETC.)STORED AT EACH SHELL
+<span class="ln">76</span>C       MULTIPLIED BY A GRADIENT BETWEEN THE SHELLS MUST BE LESS THAN
+<span class="ln">77</span>C       SOME CRITICAL NUMBER.
+<span class="ln">78</span>
+<span class="ln">79</span>      LDO = .FALSE.
+<span class="ln">80</span>C  STORE THE OLD VELOCITY ESTIMATES FOR LATER USE.
+<span class="ln">81</span>      IF(IT.GT.1)THEN
+<span class="ln">82</span>         DO 5 I = IMIN,IMAX
+<span class="ln">83</span>            VMUP(I) = VMU(I)
+<span class="ln">84</span>            VGSF0(I) = VGSF(I)
+<span class="ln">85</span>            VES0(I) = VES(I)
+<span class="ln">86</span>            VSS0(I) = VSS(I)
+<span class="ln">87</span>    5    CONTINUE
+<span class="ln">88</span>         IF(LDIFAD)THEN
+<span class="ln">89</span>            DO I = IMIN,IMAX
+<span class="ln">90</span>               VESA0(I) = VESA(I)
+<span class="ln">91</span>               VESD0(I) = VESD(I)
+<span class="ln">92</span>            END DO
+<span class="ln">93</span>         ENDIF
+<span class="ln">94</span>      ENDIF
+<span class="ln">95</span>      DO 10 I = 1,M
+<span class="ln">96</span>         HV(I) = 0.0D0
+<span class="ln">97</span>         VES(I) = 0.0D0
+<span class="ln">98</span>         VGSF(I) = 0.0D0
+<span class="ln">99</span>         VSS(I) = 0.0D0
+<span class="ln">100</span>         VMU(I) = 0.0D0
+<span class="ln">101</span>   10 CONTINUE
+<span class="ln">102</span>C  MEAN MOLECULAR WEIGHT (AS WELL AS QUANTITIES WHICH DEPEND ON IT) AND
+<span class="ln">103</span>C  THE ANGULAR VELOCITY DISTRIBUTION CHANGE DURING A DIFFUSION TIMESTEP.
+<span class="ln">104</span>C  FIND THE NEW VALUES AT THE MIDPOINT IN RADIUS BETWEEN MASS SHELLS
+<span class="ln">105</span>C  WHERE STABILITY IS EVALUATED.  4 POINT LAGRANGIAN INTERPOLATION IS USED
+<span class="ln">106</span>C  FOR THE KINEMATIC VISCOSITY AND THERMAL DIFFUSIVITY.
+<span class="ln">107</span>C  TREATMENT OF FIRST INTERFACE.
+<span class="ln">108</span>      IF(IMIN.LT.3)THEN
+<span class="ln">109</span>         VISCMI(2)=EXP(LOG(VISCM(1))*FACI(1,2)+LOG(VISCM(2))*FACI(2,2)+
+<span class="ln">110</span>     *            LOG(VISCM(3))*FACI(3,2)+LOG(VISCM(4))*FACI(4,2))
+<span class="ln">111</span>         THDIFMI(2)=EXP(LOG(THDIFM(1))*FACI(1,2)+LOG(THDIFM(2))*FACI(2,2)
+<span class="ln">112</span>     *            +LOG(THDIFM(3))*FACI(3,2)+LOG(THDIFM(4))*FACI(4,2))
+<span class="ln">113</span>         I0=3
+<span class="ln">114</span>      ELSE
+<span class="ln">115</span>         I0=IMIN
+<span class="ln">116</span>      ENDIF
+<span class="ln">117</span>C  TREATMENT OF LAST INTERFACE.
+<span class="ln">118</span>      IF(IMAX.EQ.M)THEN
+<span class="ln">119</span>         VISCMI(M)=EXP(LOG(VISCM(M-3))*FACI(1,M)+LOG(VISCM(M-2))*FACI(2,M)
+<span class="ln">120</span>     *            +LOG(VISCM(M-1))*FACI(3,M)+LOG(VISCM(M))*FACI(4,M))
+<span class="ln">121</span>         THDIFMI(M)=EXP(LOG(THDIFM(M-3))*FACI(1,M)+LOG(THDIFM(M-2))*
+<span class="ln">122</span>     *            FACI(2,M)+LOG(THDIFM(M-1))*FACI(3,M)+
+<span class="ln">123</span>     *            LOG(THDIFM(M))*FACI(4,M))
+<span class="ln">124</span>         I1=M-1
+<span class="ln">125</span>      ELSE
+<span class="ln">126</span>         I1=IMAX
+<span class="ln">127</span>      ENDIF
+<span class="ln">128</span>C  GENERAL CASE.
+<span class="ln">129</span>      DO 20 I = I0,I1
+<span class="ln">130</span>         VISCMI(I)=EXP(LOG(VISCM(I-2))*FACI(1,I)+LOG(VISCM(I-1))
+<span class="ln">131</span>     *            *FACI(2,I)+LOG(VISCM(I))*FACI(3,I)+LOG(VISCM(I+1))
+<span class="ln">132</span>     *            *FACI(4,I))
+<span class="ln">133</span>         THDIFMI(I)=EXP(LOG(THDIFM(I-2))*FACI(1,I)+LOG(THDIFM(I-1))
+<span class="ln">134</span>     *            *FACI(2,I)+LOG(THDIFM(I))*FACI(3,I)+LOG(THDIFM(I+1))
+<span class="ln">135</span>     *            *FACI(4,I))
+<span class="ln">136</span>   20 CONTINUE
+<span class="ln">137</span>C USE LINEAR INTERPOLATION FOR OMEGA AND MU.
+<span class="ln">138</span>      DO I = 2,M
+<span class="ln">139</span>         AMUMI(I) = 0.5D0*(AMUM(I)+AMUM(I-1))
+<span class="ln">140</span>         WM(I) = 0.5D0*(OMEGA(I)+OMEGA(I-1))
+<span class="ln">141</span>      END DO
+<span class="ln">142</span>C MHP 8/03 OMITTED OLD KM1974 MERIDIONAL CIRCULATION VELOCITY ESTIMATE.
+<span class="ln">143</span>C THE IES FLAG IS THEREFORE NO LONGER IN USE.
+<span class="ln">144</span>C
+<span class="ln">145</span>C KIPPENHAHN AND MOLLENHOF(1974) MERIDIONAL CIRCULATION VELOCITY.
+<span class="ln">146</span>C      IF(IES.EQ.2)THEN
+<span class="ln">147</span>C         DO 30 I = IMIN,IMAX
+<span class="ln">148</span>C  SKIP CONVECTIVE INTERFACES.
+<span class="ln">149</span>C            IF(LCZ(I).AND.LCZ(I-1))GOTO 30
+<span class="ln">150</span>C  EDDINGTON CIRCULATION.  VELOCITY DEFINED IN SR SETUPV.
+<span class="ln">151</span>C            DR = HRU(I)-HRU(I-1)
+<span class="ln">152</span>C            DV = ((OMEGA(I)*HRU(I))**2-(OMEGA(I-1)*HRU(I-1))**2)/DR
+<span class="ln">153</span>C QUADRUPOLE TERM, AS PER ZAHN (1992), ADDED.
+<span class="ln">154</span>C            GMID = 0.5D0*(GG(I)+GG(I-1))
+<span class="ln">155</span>C THE VARIATION IN GRAVITY ON A LEVEL SURFACE CAN BE EXPRESSED IN
+<span class="ln">156</span>C GENERAL AS 1/3 OMEGA**2 *D/DR((R**2 - PHI)/G), WHERE G IS THE
+<span class="ln">157</span>C LOCAL AVERAGE GRAVITY (~GM/R**2) AND PHI IS THE QUADRUPOLE MOMENT.
+<span class="ln">158</span>C THE CLASSICAL EXPRESSION NEGLECTS THE QUADRUPOLE AND THE SPATIAL
+<span class="ln">159</span>C DERIVATIVE OF THE MASS (PHISTD).  THE VELOCITY ESTIMATE FOR
+<span class="ln">160</span>C MERIDIONAL CIRCULATION IS THEREFORE MULTIPLED BY THE RATIO OF
+<span class="ln">161</span>C THE CORRECTED EXPRESSION TO THE CLASSICAL ONE (RAT).
+<span class="ln">162</span>C            PHISTD = 2.0D0*CC23*WM(I)**2*RM(I)/GMID
+<span class="ln">163</span>C            PHIS2 = CC13*WM(I)**2*(HRU(I)**2/GG(I)-
+<span class="ln">164</span>C     *              HRU(I-1)**2/GG(I-1))/DR
+<span class="ln">165</span>C            PHI2 = (QUAD(I-1)/GG(I-1)-QUAD(I)/GG(I))/DR
+<span class="ln">166</span>C            RAT(I) = (PHIS2+PHI2)/PHISTD
+<span class="ln">167</span>C            RAT(I) = PHIS2/PHISTD
+<span class="ln">168</span>C            VES(I) = ABS(FACT1(I)*(FACT2(I)*RAT(I)*WM(I)**2
+<span class="ln">169</span>C     *               +FACT6(I)*DV))
+<span class="ln">170</span>C   30    CONTINUE
+<span class="ln">171</span>C      ELSE
+<span class="ln">172</span>C ZAHN (1991) VELOCITY ESTIMATE.
+<span class="ln">173</span>      DO 31 I = IMIN,IMAX
+<span class="ln">174</span>         IF(LCZ(I).AND.LCZ(I-1))GOTO 31
+<span class="ln">175</span>C ORIGINAL ESTIMATE,USING DG/G = W**2 R**3 / GM.
+<span class="ln">176</span>         VES(I) = WM(I)**2*(FES1(I)+WM(I)**2*FES2(I))
+<span class="ln">177</span>C QUADRUPOLE TERM ADDED, DG/G COMPUTED AS PER ZAHN 1992.
+<span class="ln">178</span>         DR = HRU(I) - HRU(I-1)
+<span class="ln">179</span>         GMID = 0.5D0*(GG(I)+GG(I-1))
+<span class="ln">180</span>         PHISTD = 2.0D0*CC23*WM(I)**2*RM(I)/GMID
+<span class="ln">181</span>         PHIS2 = CC13*WM(I)**2*(HRU(I)**2/GG(I)-
+<span class="ln">182</span>     *           HRU(I-1)**2/GG(I-1))/DR
+<span class="ln">183</span>         PHI2 = (QUAD(I-1)/GG(I-1)-QUAD(I)/GG(I))/DR
+<span class="ln">184</span>         QW = WM(I)*(OMEGA(I)-OMEGA(I-1))/DR
+<span class="ln">185</span>         RAT(I) = (PHIS2+PHI2)/PHISTD
+<span class="ln">186</span>         IF(RAT(I).LT.0.0D0)THEN
+<span class="ln">187</span>            WRITE(*,303)I,RAT(I),PHISTD,PHIS2,PHI2,
+<span class="ln">188</span>     *      QUAD(I),QUAD(I-1),GG(I),GG(I-1),HRU(I),
+<span class="ln">189</span>     *      HRU(I-1)
+<span class="ln">190</span> 303        FORMAT(I5,&#x27; RAT &#x27;,1PE10.3,&#x27; POT SPH,CYL,QUA&#x27;,
+<span class="ln">191</span>     *             3E10.3/&#x27; QUA,G,R &#x27;,6E12.3)
+<span class="ln">192</span>         ENDIF
+<span class="ln">193</span>         IF(.NOT.LDIFAD)THEN
+<span class="ln">194</span>            VES(I) = ABS(RAT(I)*VES(I)-FES3(I)*QW)
+<span class="ln">195</span>         ELSE
+<span class="ln">196</span>C MHP 05/02 ADD FACTOR OF 1/5 HERE
+<span class="ln">197</span>C               VESA(I) = RAT(I)*VES(I)
+<span class="ln">198</span>C               VESD(I) = ABS(FES3(I)*WM(I)**2)
+<span class="ln">199</span>C MHP 06/02 ADDED D THETA/DT TERM
+<span class="ln">200</span>            THN(I) = FESTIME(I)*(THM(I)*QW-THP(I))/DT
+<span class="ln">201</span>            VESA(I) = 0.2D0*(RAT(I)*VES(I)+THN(I))
+<span class="ln">202</span>            Q1 = FACT7(I)*WM(I)**2
+<span class="ln">203</span>            Q2 = FACT8(I)*QW
+<span class="ln">204</span>            Q0 = FES3(I)*WM(I)**2
+<span class="ln">205</span>C               VESD(I) = 0.2D0*ABS(FES3(I)*WM(I)**2)
+<span class="ln">206</span>C               VESD(I) = 0.2D0*ABS(Q0+Q1+Q2)
+<span class="ln">207</span>            VESD(I) = 0.2D0*(Q0+Q1+Q2)
+<span class="ln">208</span>C SECOND ORDER TERM
+<span class="ln">209</span>            VESD2(I) = 0.2D0*FACD2(I)*WM(I)
+<span class="ln">210</span>C THIRD ORDER TERM
+<span class="ln">211</span>            VESD3(I) = 0.2D0*FACD3(I)*WM(I)
+<span class="ln">212</span>C               VES(I) = ABS(RAT(I)*VES(I)+THN(I)-FES3(I)*QW)
+<span class="ln">213</span>            VES(I) = RAT(I)*VES(I)+THN(I)+
+<span class="ln">214</span>     *               (FES3(I)+FACT7(I))*QW+
+<span class="ln">215</span>     *               FACT8(I)*((OMEGA(I)-OMEGA(I-1))/DR)**2
+<span class="ln">216</span>            EQQCOD(I) = QQCOD(I)*WM(I)
+<span class="ln">217</span>         ENDIF
+<span class="ln">218</span>   31 CONTINUE
+<span class="ln">219</span>C      ENDIF
+<span class="ln">220</span>C INHIBITION CAUSED BY GRADIENTS IN MEAN MOLECULAR WEIGHT.
+<span class="ln">221</span>C INCLUDE ONLY THE ZAHN &amp; MAEDER 1998 TREATMENT, WHERE (DEL - DEL AD) IS
+<span class="ln">222</span>C REPLACED BY (DEL + DEL MU - DEL AD).  RETAIN IMU FLAG FOR LATER USE.
+<span class="ln">223</span>C      IF(IMU.EQ.3)THEN
+<span class="ln">224</span>C  FICTITIOUS MU CURRENTS THAT OPPOSE ES CIRCULATION CALCULATED HERE.
+<span class="ln">225</span>C         DO 32 I = IMIN,IMAX
+<span class="ln">226</span>C            IF(LCZ(I).AND.LCZ(I-1))GOTO 32
+<span class="ln">227</span>C SQUARE ROOT OF TKH*,KIPPENHAHN,IAU#66,P.23,USING EQ.(12)FOR D ON P.25.
+<span class="ln">228</span>C NOTE FACTOR OF G IS SUBSUMED IN FACT4.
+<span class="ln">229</span>C            TKHS = SQRT(VISCMI(I)*CC/THDIFMI(I))
+<span class="ln">230</span>C            QMU = (AMUM(I)-AMUM(I-1))/(HRU(I)-HRU(I-1))
+<span class="ln">231</span>C            VMU(I) = ABS(FMU*FACT1(I)*FACT4(I)*AMUMI(I)*QMU/TKHS)
+<span class="ln">232</span>C            VMU2(I)=FMU*HGM(I)*ABS(QMU)/AMUMI(I)/WM(I)**2
+<span class="ln">233</span>C   32    CONTINUE
+<span class="ln">234</span>C LOCAL TIMESCALE ESTIMATE FOR MU INHIBITION.
+<span class="ln">235</span>C ASSUMES V/L = OMEGA.
+<span class="ln">236</span>C      ELSE IF(IMU.EQ.2)THEN
+<span class="ln">237</span>C MHP 06/02 REPLACE WITH THE ZAHN&amp;MAEDER 1998 PRESCRIPTION
+<span class="ln">238</span>       DO I = IMIN,IMAX
+<span class="ln">239</span>          QMU = LOG(AMUM(I))-LOG(AMUM(I-1))
+<span class="ln">240</span>          QP = CLN*(HP(I)-HP(I-1))
+<span class="ln">241</span>          DDEL=DDELM(I)+ QMU/QP
+<span class="ln">242</span>          DDTEST = MAX(DDELM(I),1.0D-3)
+<span class="ln">243</span>          DDTEST2 = MAX(DDEL,1.0D-3)
+<span class="ln">244</span>          QQQ = DDTEST/DDTEST2
+<span class="ln">245</span>          VES(I) = VES(I)*QQQ
+<span class="ln">246</span>          IF(LDIFAD)THEN
+<span class="ln">247</span>             VESA(I) = VESA(I)*QQQ
+<span class="ln">248</span>             VESD(I) = VESD(I)*QQQ
+<span class="ln">249</span>             VESD2(I) = VESD2(I)*QQQ
+<span class="ln">250</span>             VESD3(I) = VESD3(I)*QQQ
+<span class="ln">251</span>          ENDIF
+<span class="ln">252</span>          Q1 = FACT7(I)*WM(I)**2*QQQ
+<span class="ln">253</span>          Q0 = FES3(I)*WM(I)**2*QQQ
+<span class="ln">254</span>          DR = HRU(I) - HRU(I-1)
+<span class="ln">255</span>          V2 = 0.2D0*(Q0+Q1)*(OMEGA(I)-OMEGA(I-1))/DR/WM(I)
+<span class="ln">256</span>C ADD MU GRADIENTS TO VELOCITY ESTIMATES
+<span class="ln">257</span>          FESTIME(I) = FESTIME(I)*QQQ
+<span class="ln">258</span>          FV0(I) = FV0(I)*QQQ
+<span class="ln">259</span>C         WRITE(*,911)I,WM(I),VESA(I),V2,Q0,Q1,THN(I),VES(I),QQQ
+<span class="ln">260</span>C 911           FORMAT(I5,1P8E12.3)
+<span class="ln">261</span>       END DO
+<span class="ln">262</span>C         DO 33 I = IMIN,IMAX
+<span class="ln">263</span>C            IF(LCZ(I).AND.LCZ(I-1))GOTO 33
+<span class="ln">264</span>C            DR = HRU(I) - HRU(I-1)
+<span class="ln">265</span>C            VMU(I)=FMU*HGM(I)*ABS(AMUM(I)-AMUM(I-1))/DR/AMUMI(I)
+<span class="ln">266</span>C     *             /WM(I)**2
+<span class="ln">267</span>C   33    CONTINUE
+<span class="ln">268</span>C ALTERNATE EXPRESSION : D = D0/(1+R*DEL MU/MU)
+<span class="ln">269</span>C THIS IS ACTUALLY SIMILAR TO THE ZM98 FORMULA, THEREFORE OBSOLETE.
+<span class="ln">270</span>C SHOULD HAVE PUBLISHED IT - OH WELL.
+<span class="ln">271</span>C      ELSE
+<span class="ln">272</span>C         DO 34 I = IMIN,IMAX
+<span class="ln">273</span>C            IF(LCZ(I).AND.LCZ(I-1))GOTO 34
+<span class="ln">274</span>C            DR = HRU(I) - HRU(I-1)
+<span class="ln">275</span>C            DDEL = DELAMI(I)/MAX(1.0D-6,DELAMI(I)-DELMI(I))
+<span class="ln">276</span>C            VMU(I)=FMU*RM(I)*DDEL*ABS(AMUM(I)-AMUM(I-1))/DR/AMUMI(I)
+<span class="ln">277</span>C 34         CONTINUE
+<span class="ln">278</span>C      ENDIF
+<span class="ln">279</span>C  GSF INSTABILITY.  VELOCITY DEFINED IN SR SETUPV.
+<span class="ln">280</span>C OMIT ALL BUT THE KIPPENHAHN 1980 ESTIMATE.
+<span class="ln">281</span>C IGSF IS RETAINED, AND THE VALUE DETERMINES WHAT IS PERMITTED TO
+<span class="ln">282</span>C INHIBIT IT.
+<span class="ln">283</span>C IGSF = 0: INHIBITED BY VISCOSITY AND MU GRADIENTS
+<span class="ln">284</span>C IGSF = 1: NEITHER VISCOSITY NOR MU GRADIENTS INHIBIT
+<span class="ln">285</span>C IGSF = 2: INHIBITED BY VISCOSITY ONLY
+<span class="ln">286</span>C NOTE THAT THE ABCD INSTABILITY - RELATED TO THE GSF INSTABILITY -
+<span class="ln">287</span>C WOULD NOT BE INHIBITED BY VISCOSITY/MU GRADIENTS, SO INCLUDING IT
+<span class="ln">288</span>C IS EQUIVALENT TO SETTING IGSF=1 (THE ORIGINAL K1980 ESTIMATE).
+<span class="ln">289</span>C THE INHIBITION FACTORS COME FROM SUBSEQUENT WORK BY SPRUIT.
+<span class="ln">290</span>C      IF(IGSF.EQ.0 .OR. IGSF.EQ.2 .OR. IGSF.EQ.1)THEN
+<span class="ln">291</span>c KIPPENHAHN (1980) ESTIMATE
+<span class="ln">292</span>      DO 40 I = IMIN,IMAX
+<span class="ln">293</span>         IF(LCZ(I).AND.LCZ(I-1))GOTO 40
+<span class="ln">294</span>C MHP 8/93 STABILITY CONDITION ADDED, NEGLECTING THE EFFECTS OF
+<span class="ln">295</span>C MU GRADIENTS.
+<span class="ln">296</span>         IF(IGSF.EQ.2 .OR. IGSF.EQ.0)THEN
+<span class="ln">297</span>            QWRMX = 2.0D0*SQRT(VISCMI(I)/THDIFMI(I))*QWRMAX(I)
+<span class="ln">298</span>            IF(ABS(QWLNR(I)).LT.QWRMX)THEN
+<span class="ln">299</span>               VGSF(I) = 0.0D0
+<span class="ln">300</span>               GOTO 40
+<span class="ln">301</span>            ELSE
+<span class="ln">302</span>              FXX = SQRT((ABS(QWLNR(I))-QWRMX)/QWRMX)
+<span class="ln">303</span>            ENDIF
+<span class="ln">304</span>         ELSE
+<span class="ln">305</span>            FXX = 1.0D0
+<span class="ln">306</span>         ENDIF
+<span class="ln">307</span>         DR = HRU(I)-HRU(I-1)
+<span class="ln">308</span>         IF(IGSF.EQ.0)THEN
+<span class="ln">309</span>            QWRMX=2.0D0*SQRT(HGM(I)*ABS(AMUM(I)-AMUM(I-1))
+<span class="ln">310</span>     *            /DR/AMUMI(I))
+<span class="ln">311</span>            IF(ABS(QWLNR(I)).LT.QWRMX)THEN
+<span class="ln">312</span>               VGSF(I) = 0.0D0
+<span class="ln">313</span>               GOTO 40
+<span class="ln">314</span>            ELSE
+<span class="ln">315</span>C MHP 05/02 ADDED TESTS TO AVOID DIVIDE BY ZERO
+<span class="ln">316</span>C                  FXX2 = SQRT((ABS(QWLNR(I))-QWRMX)/QWRMX)
+<span class="ln">317</span>               QQ = 1.0D-2*QWLNR(I)
+<span class="ln">318</span>               IF(ABS(QWRMX).LT.ABS(QQ))THEN
+<span class="ln">319</span>                  FXX2 = 1.0D0
+<span class="ln">320</span>               ELSE
+<span class="ln">321</span>                  IF(ABS(QWRMX).LT.1.0D-20)THEN
+<span class="ln">322</span>                     FXX2 = 1.0D0
+<span class="ln">323</span>                  ELSE
+<span class="ln">324</span>                     FXX2 = SQRT((ABS(QWLNR(I))-QWRMX)/QWRMX)
+<span class="ln">325</span>                  ENDIF
+<span class="ln">326</span>               ENDIF
+<span class="ln">327</span>               FXX = MIN(FXX,FXX2)
+<span class="ln">328</span>            ENDIF
+<span class="ln">329</span>         ENDIF
+<span class="ln">330</span>         RMID = 0.5D0*(HRU(I)+HRU(I-1))
+<span class="ln">331</span>         DLNWDR = ABS(LOG(OMEGA(I))-LOG(OMEGA(I-1)))/DR
+<span class="ln">332</span>C GSF IS TRIGGERED BY D OMEGA/DZ NONZERO (I.E. ROTATION NOT
+<span class="ln">333</span>C ON CYLINDERS,WHICH IS TRUE IN GENERAL IN OUR MODELS), OR
+<span class="ln">334</span>C BY D LN(J/M)/DR &lt; 0, WHICH SOMETIMES OCCURS.
+<span class="ln">335</span>C IF D LN(J/M)/DR &lt; 0, CHECK SECOND CRITERIA AND USE THE LARGEST
+<span class="ln">336</span>C VELOCITY; OTHERWISE,USE ONLY D OMEGA/DZ NON-ZERO CRITERION.
+<span class="ln">337</span>         IF(OMEGA(I)*HRU(I)**2.LT.OMEGA(I-1)*HRU(I-1)**2)THEN
+<span class="ln">338</span>            DLNJMDR = ABS(2.0D0/RMID+(LOG(OMEGA(I))-
+<span class="ln">339</span>     *                LOG(OMEGA(I-1)))/DR)
+<span class="ln">340</span>            FX = MAX(2.0D0*DLNJMDR,0.25D0*DLNWDR)
+<span class="ln">341</span>C FACTOR OF R IN THE DENOMINATOR OCCURS BECAUSE ALL THE CIRCULATION
+<span class="ln">342</span>C VELOCITIES ARE LATER MULTIPLIED BY R (THE &quot;LENGTH SCALE&quot;).
+<span class="ln">343</span>            VGSF(I) = FGSFK(I)*FX*THDIFMI(I)*WM(I)**2/RMID
+<span class="ln">344</span>         ELSE
+<span class="ln">345</span>            VGSF(I)=0.25D0*FGSFK(I)*THDIFMI(I)*DLNWDR*WM(I)**2/RMID
+<span class="ln">346</span>         ENDIF
+<span class="ln">347</span>         VGSF(I) = ABS(FXX*VGSF(I))
+<span class="ln">348</span>   40 CONTINUE
+<span class="ln">349</span>C OMIT JAMES AND KAHN ESTIMATE
+<span class="ln">350</span>C      ELSE
+<span class="ln">351</span>C JAMES AND KAHN (1971) ESTIMATE.
+<span class="ln">352</span>C NOTE FACTOR OF OMEGA**4, WHICH IS PART OF THE MERIDIONAL
+<span class="ln">353</span>C CIRCULATION VELOCITY ESTIMATE.
+<span class="ln">354</span>C         DO 41 I = IMIN,IMAX
+<span class="ln">355</span>C            IF(LCZ(I).AND.LCZ(I-1))GOTO 41
+<span class="ln">356</span>C MHP 8/93 STABILITY CONDITION ADDED, NEGLECTING THE EFFECTS OF
+<span class="ln">357</span>C MU GRADIENTS.
+<span class="ln">358</span>C            QWRMX = 2.0D0*SQRT(VISCMI(I)/THDIFMI(I))*QWRMAX(I)
+<span class="ln">359</span>C            IF(ABS(QWLNR(I)).LT.QWRMX)THEN
+<span class="ln">360</span>C               VGSF(I) = 0.0D0
+<span class="ln">361</span>C               GOTO 41
+<span class="ln">362</span>C            ELSE
+<span class="ln">363</span>C               FXX = SQRT((ABS(QWLNR(I))-QWRMX)/QWRMX)
+<span class="ln">364</span>C            ENDIF
+<span class="ln">365</span>C            DR = HRU(I)-HRU(I-1)
+<span class="ln">366</span>C            RMID = 0.5D0*(HRU(I)+HRU(I-1))
+<span class="ln">367</span>C            DLNJMDR = ABS(2.0D0/RMID+(LOG(OMEGA(I))-
+<span class="ln">368</span>C     *                LOG(OMEGA(I-1)))/DR)
+<span class="ln">369</span>C            IF(IGSF.EQ.3)THEN
+<span class="ln">370</span>C               DWDR = abs(OMEGA(I)-OMEGA(I-1))/DR
+<span class="ln">371</span>C               VGSF(I) = 2.0D0*FGSFJ(I)*DWDR**2
+<span class="ln">372</span>C               VGSF(I) = ABS(VGSF(I))
+<span class="ln">373</span>C            ELSE IF(IES.EQ.2)THEN
+<span class="ln">374</span>C               VGSF(I) = 2.0D0*VES(I)*FACT3(I)*DLNJMDR**2
+<span class="ln">375</span>C            ELSE
+<span class="ln">376</span>C               VGSF(I) = 2.0D0*FGSFJ(I)*(DLNJMDR*WM(I))**2
+<span class="ln">377</span>C               VGSF(I) = ABS(FXX*VGSF(I))
+<span class="ln">378</span>C            ENDIF
+<span class="ln">379</span>C   41    CONTINUE
+<span class="ln">380</span>C      ENDIF
+<span class="ln">381</span>C  DIFFUSIVE AND DYNAMICAL SHEAR INSTABILITIES - REF. ENDAL&amp;SOFIA PAPER II.
+<span class="ln">382</span>      DO 60 I = IMIN,IMAX
+<span class="ln">383</span>C  CHECK FOR OPERATION OF DYNAMICAL SHEAR.
+<span class="ln">384</span>C  IF DYNAMICAL SHEAR IS OPERATING,SET SECULAR SHEAR VELOCITY TO MAXIMUM
+<span class="ln">385</span>C  VALUE AND COMPUTE (LARGE) DYNAMICAL SHEAR VELOCITY.
+<span class="ln">386</span>         IF(ABS(QWLNR(I)).GT.QWRMAX(I))THEN
+<span class="ln">387</span>            QWR = ABS(QWLNR(I))
+<span class="ln">388</span>            VSS(I)=8.0D0/4.5D1*THDIFMI(I)*(QWR/QWRMAX(I))**2/RM(I)
+<span class="ln">389</span>C  CORRECT GSF VELOCITY AS WELL.
+<span class="ln">390</span>            DR = HRU(I)-HRU(I-1)
+<span class="ln">391</span>            RMID = 0.5D0*(HRU(I)+HRU(I-1))
+<span class="ln">392</span>            IF(OMEGA(I).LT.OMEGA(I-1))THEN
+<span class="ln">393</span>               WMIN = OMEGA(I) + QWRMAX(I)*CLN*(HR(I)-HR(I-1))
+<span class="ln">394</span>               WMID = OMEGA(I) + QWRMAX(I)*CLN*(HR(I)-LOG10(RMID))
+<span class="ln">395</span>            ELSE
+<span class="ln">396</span>               WMIN = OMEGA(I) - QWRMAX(I)*CLN*(HR(I)-HR(I-1))
+<span class="ln">397</span>               WMID = OMEGA(I) - QWRMAX(I)*CLN*(HR(I)-LOG10(RMID))
+<span class="ln">398</span>            ENDIF
+<span class="ln">399</span>            DLNWDR0 = abs(LOG(OMEGA(I))-LOG(OMEGA(I-1)))/DR
+<span class="ln">400</span>            DLNJMDR0 = ABS(2.0D0/RMID+(LOG(OMEGA(I))-
+<span class="ln">401</span>     *                   LOG(OMEGA(I-1)))/DR)
+<span class="ln">402</span>            DLNJMDR = abs(2.0D0/RMID+(LOG(OMEGA(I))-log(wmin))/DR)
+<span class="ln">403</span>            DLNWDR = abs(LOG(OMEGA(I))-LOG(WMIN))/DR
+<span class="ln">404</span>C MHP 05/02 ADDED FIRST BRANCH FOR IGSF=0 - SOMEHOW
+<span class="ln">405</span>C MISSED IN CODE CHANGES EARLIER!
+<span class="ln">406</span>c kippenhahn (1980) estimate
+<span class="ln">407</span>C OMIT BRANCH FOR JAMES AND KAHN.
+<span class="ln">408</span>C            IF(IGSF.EQ.2 .OR. IGSF.EQ.1 .OR. IGSF.EQ.0)THEN
+<span class="ln">409</span>            IF(OMEGA(I)*HRU(I)**2.LT.WMIN*HRU(I-1)**2)THEN
+<span class="ln">410</span>               FX = MAX(2.0D0*DLNJMDR,0.25D0*DLNWDR)
+<span class="ln">411</span>               FX2 = MAX(2.0D0*DLNJMDR0,0.25D0*DLNWDR0)
+<span class="ln">412</span>               VGSF(I) = VGSF(I)*FX/FX2
+<span class="ln">413</span>            ELSE
+<span class="ln">414</span>               VGSF(I)=VGSF(I)*DLNWDR/DLNWDR0
+<span class="ln">415</span>            ENDIF
+<span class="ln">416</span>C            ELSE IF(IGSF.EQ.3)THEN
+<span class="ln">417</span>C               DWDR = abs(OMEGA(I)-WMIN)/DR
+<span class="ln">418</span>C               DWDR0 = ABS(OMEGA(I)-OMEGA(I-1))/DR
+<span class="ln">419</span>C               VGSF(I) = VGSF(I)*(DWDR/DWDR0)**2
+<span class="ln">420</span>C            ELSE IF(IES.EQ.2)THEN
+<span class="ln">421</span>C               VGSF(I) = VGSF(I)*(DLNJMDR/DLNJMDR0)**2
+<span class="ln">422</span>C            ELSE
+<span class="ln">423</span>C               WMID0 = 0.5D0*(OMEGA(I)+OMEGA(I-1))
+<span class="ln">424</span>C               VGSF(I) = VGSF(I)*(DLNJMDR*WMID/DLNJMDR0/WMID0)**2
+<span class="ln">425</span>C            ENDIF
+<span class="ln">426</span>            WRITE(6,9911)I,OMEGA(I),OMEGA(I-1),WMIN
+<span class="ln">427</span> 9911       FORMAT(1X,&#x27;DYNAMICAL SHEAR-SHELL&#x27;,I5,1P,&#x27; WTOP&#x27;,E11.3,
+<span class="ln">428</span>     *             &#x27; WBOT&#x27;,E11.3,&#x27; LIMIT&#x27;,E11.3)
+<span class="ln">429</span>            GOTO 60
+<span class="ln">430</span>C *** END OF CHANGED SECTION
+<span class="ln">431</span>         ENDIF
+<span class="ln">432</span>C   FIND MAXIMUM GRADIENT IN OMEGA ALLOWED BY SECULAR SHEAR.
+<span class="ln">433</span>C   THE RUN OF QWRMAX INPUT IS THAT ALLOWED BY THE DYNAMICAL SHEAR;
+<span class="ln">434</span>C   THE SECULAR SHEAR RICHARDSON # IS RELATED BY
+<span class="ln">435</span>C   RICHNO(SECULAR) = PRANDTL# * CRITICAL REYNOLDS#/8 * RICHNO(DYNAMICAL)
+<span class="ln">436</span>C   PRANDTL # = KINEMATIC VISCOSITY/THERMOMETRIC DIFFUSIVITY.
+<span class="ln">437</span>C MHP 3/92 SQUARE ROOT OF PR# NEEDED, NOT PR # - ERROR CORRECTED!
+<span class="ln">438</span>C THE VELOCITY ESTIMATE HERE IS FROM ZAHN 1991.
+<span class="ln">439</span>         QWRMX = SQRT(VISCMI(I)/THDIFMI(I)*1.25D-1*RCRIT)*QWRMAX(I)
+<span class="ln">440</span>         IF(ABS(QWLNR(I)).GT.QWRMX) THEN
+<span class="ln">441</span>C  UNSTABLE; CHECK FOR MU GRADIENTS.
+<span class="ln">442</span>            IF(ABS((AMUM(I)-AMUM(I-1))/AMUMI(I)).LT.1.0D-10) THEN
+<span class="ln">443</span>               QWRMX2 = 0.0D0
+<span class="ln">444</span>               QWR = ABS(QWLNR(I)) - QWRMX
+<span class="ln">445</span>               VSS(I)=8.0D0/4.5D1*THDIFMI(I)*(QWR/QWRMAX(I))**2/RM(I)
+<span class="ln">446</span>            ELSE
+<span class="ln">447</span>C  CHECK FOR EFFECTS OF MU GRADIENT.
+<span class="ln">448</span>C  RICHNO = RHO/P*(-d lnT/d lnMU)*(del MU)/(del P)*(G/QWLNR)**2
+<span class="ln">449</span>C  WHERE -d lnT/d lnMU = (CON-1)/(1+3CON),CON=(a/3)T**4/P
+<span class="ln">450</span>C  GIVEN (1 - CON)P = CGAS*RHO*T/MU
+<span class="ln">451</span>C      FACT = (RHOM/PM)*QTMU*DMU/AMUMI/DP*HGM**2
+<span class="ln">452</span>               QWRMX2 = 2.0D0*SQRT(MAX(1.0D-20,FACT5(I)*
+<span class="ln">453</span>     *                  ABS((AMUM(I)-AMUM(I-1))/AMUMI(I))))
+<span class="ln">454</span>               IF(ABS(QWLNR(I)).GT.QWRMX2) THEN
+<span class="ln">455</span>C  INTERFACE UNSTABLE WITH RESPECT TO BOTH CONDITIONS; CHOOSE THE
+<span class="ln">456</span>C  MAXIMUM GRADIENT IMPLIED BY THE SECOND CONDITION IF IT&#x27;S LARGER
+<span class="ln">457</span>C  THAN THE FIRST(I.E. IF A MU GRADIENT IS SLOWING J TRANSPORT).
+<span class="ln">458</span>                  QWRMX = MAX(QWRMX2,QWRMX)
+<span class="ln">459</span>                  QWR = ABS(QWLNR(I)) - QWRMX
+<span class="ln">460</span>            VSS(I)=8.0D0/4.5D1*THDIFMI(I)*(QWR/QWRMAX(I))**2/RM(I)
+<span class="ln">461</span>               ENDIF
+<span class="ln">462</span>            ENDIF
+<span class="ln">463</span>         ENDIF
+<span class="ln">464</span>   60 CONTINUE
+<span class="ln">465</span>C  NOW DETERMINE WHETHER OR NOT MU GRADIENTS ARE STEEP ENOUGH TO
+<span class="ln">466</span>C  INHIBIT TRANSPORT.  MULTIPLY THE RESULTING VELOCITY ESTIMATES
+<span class="ln">467</span>C  BY THE USER DEFINED PARAMETERS FES AND FGSF.
+<span class="ln">468</span>C  IMU=3 KIPPENHAHN AND MOLLENHOF(1974)METHOD;IMU=2 LOCAL DAMPING
+<span class="ln">469</span>C  FACTOR METHOD.
+<span class="ln">470</span>C AGAIN, OMIT OBSOLETE MU GRADIENT TREATMENTS.
+<span class="ln">471</span>C      IF(IMU.EQ.3)THEN
+<span class="ln">472</span>C         IF(IT.GT.1)THEN
+<span class="ln">473</span>C            DO I = 1,M
+<span class="ln">474</span>C               VMU(I) = 0.5D0*(VMU(I)+VMUP(I))
+<span class="ln">475</span>C            END DO
+<span class="ln">476</span>C         ENDIF
+<span class="ln">477</span>C         DO I = IMIN,IMAX
+<span class="ln">478</span>C            FM = 1.0D0+VMU2(I)
+<span class="ln">479</span>C            RMID = 0.5D0*(HRU(I)+HRU(I-1))
+<span class="ln">480</span>C            FCC = SQRT(FC*FESC)
+<span class="ln">481</span>C            VEST=MAX(0.0D0,FES*VES(I)-SQRT(FES*VES(I)*RMID)
+<span class="ln">482</span>C     *               *FCC*VMU(I))
+<span class="ln">483</span>C            IF(VEST.LE.0.0D0)THEN
+<span class="ln">484</span>C               VES(I) = ABS(FES*VES(I)/FM)
+<span class="ln">485</span>C            ELSE
+<span class="ln">486</span>C               VES(I) = VEST
+<span class="ln">487</span>C            ENDIF
+<span class="ln">488</span>C            FCC = SQRT(FC*FGSFC)
+<span class="ln">489</span>C            IF(VGSF(I).GT.0.0D0)THEN
+<span class="ln">490</span>C               VGSFT=MAX(0.0D0,FGSF*VGSF(I)-SQRT(FGSF*VGSF(I)*RMID)
+<span class="ln">491</span>C     *               *FCC*VMU(I))
+<span class="ln">492</span>C            ELSE
+<span class="ln">493</span>C               VGSFT = 0.0D0
+<span class="ln">494</span>C            ENDIF
+<span class="ln">495</span>C            IF(VGSFT.LE.0.0D0)THEN
+<span class="ln">496</span>C               VGSF(I) = ABS(FES*VGSF(I)/FM)
+<span class="ln">497</span>C            ELSE
+<span class="ln">498</span>C               VGSF(I) = VGSFT
+<span class="ln">499</span>C            ENDIF
+<span class="ln">500</span>C            VSS(I)=MAX(0.0D0,FSS*VSS(I))
+<span class="ln">501</span>C         END DO
+<span class="ln">502</span>C      ELSE
+<span class="ln">503</span>C            IF(IMU.NE.2)THEN
+<span class="ln">504</span>C               FM = 1.0D0+VMU(I)
+<span class="ln">505</span>C            ELSE
+<span class="ln">506</span>C               FM = 1.0D0
+<span class="ln">507</span>C            ENDIF
+<span class="ln">508</span>C            VES(I)=ABS(FES*VES(I)/FM)
+<span class="ln">509</span>C MHP 05/02 ONLY DO THIS IF MU GRADIENTS NOT
+<span class="ln">510</span>C ALREADY ACCOUNTED FOR
+<span class="ln">511</span>C            VGSF(I)=ABS(FGSF*VGSF(I)/FM)
+<span class="ln">512</span>C            IF(IGSF.NE.0)THEN
+<span class="ln">513</span>C               VGSF(I)=ABS(FGSF*VGSF(I)/FM)
+<span class="ln">514</span>C            ELSE
+<span class="ln">515</span>C               VGSF(I) = FGSF*VGSF(I)
+<span class="ln">516</span>C            ENDIF
+<span class="ln">517</span>C ALREADY INCLUDED - ONLY USE SCALE FACTOR
+<span class="ln">518</span>C            VSS(I)=ABS(FSS*VSS(I)/FM)
+<span class="ln">519</span>C            VSS(I)= FSS*VSS(I)
+<span class="ln">520</span>C         END DO
+<span class="ln">521</span>C MHP 8/03 MULTIPLY VELOCITY ESTIMATES BY USER PARAMETER
+<span class="ln">522</span>C SCALE FACTORS
+<span class="ln">523</span>      DO I = IMIN,IMAX
+<span class="ln">524</span>         VES(I)=ABS(FES*VES(I))
+<span class="ln">525</span>         VGSF(I) = FGSF*VGSF(I)
+<span class="ln">526</span>         VSS(I)= FSS*VSS(I)
+<span class="ln">527</span>      END DO
+<span class="ln">528</span>C MHP 11/94
+<span class="ln">529</span>C REPEAT FOR DIF+AD
+<span class="ln">530</span>      IF(LDIFAD)THEN
+<span class="ln">531</span>         DO I = IMIN,IMAX
+<span class="ln">532</span>               VESD(I)=ABS(FES*VESD(I))
+<span class="ln">533</span>               VESA(I)=FES*VESA(I)
+<span class="ln">534</span>         END DO
+<span class="ln">535</span>      ENDIF
+<span class="ln">536</span>C               IF(IMU.NE.2)THEN
+<span class="ln">537</span>C                  FM = 1.0D0+VMU(I)
+<span class="ln">538</span>C               ELSE
+<span class="ln">539</span>C                  FM = 1.0D0
+<span class="ln">540</span>C               ENDIF
+<span class="ln">541</span>C               FM = 1.0D0+VMU(I)
+<span class="ln">542</span>C               VESD(I)=ABS(FES*VESD(I)/FM)
+<span class="ln">543</span>C               VESA(I)=FES*VESA(I)/FM
+<span class="ln">544</span>C            END DO
+<span class="ln">545</span>C         ENDIF
+<span class="ln">546</span>C      ENDIF
+<span class="ln">547</span>      IF(LDIFAD)THEN
+<span class="ln">548</span>C MHP 05/02
+<span class="ln">549</span>C CHANGED TO REFLECT THE DIFFERENT TREATMENT OF THE GSF INSTABILITY.
+<span class="ln">550</span>C THE ENDAL AND SOFIA VARIANT HAD V=THDIF*DLNWDR*W**2/R WHICH WAS
+<span class="ln">551</span>C THEN ADDED TO A DIFFUSION EQUATION D/DR(CON*V*R*DW/DR).
+<span class="ln">552</span>C IN THE ZAHN FORMULISM, WE ARE SOLVING AN EQUATION OF THE FORM
+<span class="ln">553</span>C D/DR(CON*V*W).  BECAUSE THE VELOCITY ESTIMATE ITSELF INCLUDES
+<span class="ln">554</span>C DW/DR THIS IS IN EFFECT A DIFFUSION TERM.  SO...WE NEED TO
+<span class="ln">555</span>C MULTIPLY THE ORIGINAL VELOCITY BY W AND DIVIDE BY DW/DR TO CAST
+<span class="ln">556</span>C IT AS AN ENTRY IN THE DIFFUSION EQUATION.
+<span class="ln">557</span>         DO I = IMIN,IMAX
+<span class="ln">558</span>            VESD(I) = VESD(I)+RM(I)*(ABS(VGSF(I))+ABS(VSS(I)))
+<span class="ln">559</span>            DSS(I) = RM(I)*ABS(VSS(I))
+<span class="ln">560</span>            DGSF(I) = RM(I)*ABS(VGSF(I))
+<span class="ln">561</span>C            IF(VGSF(I).GT.0.0D0)THEN
+<span class="ln">562</span>C D LN W/DR
+<span class="ln">563</span>C               DR = HRU(I) - HRU(I-1)
+<span class="ln">564</span>C               QLNWR = ABS(LOG(OMEGA(I))-LOG(OMEGA(I-1))/DR)
+<span class="ln">565</span>C CEILING SET BY DYNAMICAL SHEAR
+<span class="ln">566</span>C               QLNWRMAX = ABS(QWRMAX(I)/(WM(I)*RM(I)))
+<span class="ln">567</span>C TAKE THE SMALLER OF THE TWO
+<span class="ln">568</span>C               QLNWR = MIN(QLNWR,QLNWRMAX)
+<span class="ln">569</span>C               IF(QLNWR.GT.1.0D-32)VESD(I) = VESD(I)+ABS(VGSF(I)/QLNWR)
+<span class="ln">570</span>C            ENDIF
+<span class="ln">571</span>C            IF(VSS(I).GT.0.0D0)THEN
+<span class="ln">572</span>C               VESD(I) = VESD(I)+ABS(VSS(I)*RM(I))
+<span class="ln">573</span>C            ENDIF
+<span class="ln">574</span>         END DO
+<span class="ln">575</span>      ENDIF
+<span class="ln">576</span>C  AVERAGE PREVIOUS AND NEW VELOCITY ESTIMATES AFTER THE FIRST ITERATION.
+<span class="ln">577</span>      IF(IT.GT.1) THEN
+<span class="ln">578</span>         DO 70 I = IMIN,IMAX
+<span class="ln">579</span>            VGSF(I) = 0.5D0*(VGSF(I) + VGSF0(I))
+<span class="ln">580</span>            VES(I) = 0.5D0*(VES(I) + VES0(I))
+<span class="ln">581</span>            VSS(I) = 0.5D0*(VSS(I) + VSS0(I))
+<span class="ln">582</span>   70    CONTINUE
+<span class="ln">583</span>C MHP 11/94
+<span class="ln">584</span>         IF(LDIFAD)THEN
+<span class="ln">585</span>            DO I = IMIN,IMAX
+<span class="ln">586</span>               VESA(I) = 0.5D0*(VESA(I) + VESA0(I))
+<span class="ln">587</span>               VESD(I) = 0.5D0*(VESD(I) + VESD0(I))
+<span class="ln">588</span>            END DO
+<span class="ln">589</span>         ENDIF
+<span class="ln">590</span>      ENDIF
+<span class="ln">591</span>      DO 80 I =IMIN,IMAX
+<span class="ln">592</span>         HV(I) = VGSF(I) + VES(I) + VSS(I)
+<span class="ln">593</span>         IF(HV(I).LT.1.0D-20)HV(I)=0.0D0
+<span class="ln">594</span>         IF(HV(I).GT.0.0D0)LDO=.TRUE.
+<span class="ln">595</span>   80 CONTINUE
+<span class="ln">596</span>C 9/93 MIXING WITHOUT TRANSPORT ADDED.
+<span class="ln">597</span>C ZERO OUT COEFFICIENTS IN CORE TO AVOID NUMERICAL PROBLEMS IN
+<span class="ln">598</span>C THE H-BURNING SHELL.
+<span class="ln">599</span>      IF(LNOJ) THEN
+<span class="ln">600</span>         DO I = IMIN,IMAX
+<span class="ln">601</span>            DELL = ALM(I)/CLTOT
+<span class="ln">602</span>            IF(DELL.LT.9.9D-1)THEN
+<span class="ln">603</span>               HV(I) = 0.0D0
+<span class="ln">604</span>               VGSF(I) = 0.0D0
+<span class="ln">605</span>               VES(I) = 0.0D0
+<span class="ln">606</span>               VSS(I) = 0.0D0
+<span class="ln">607</span>C MHP 11/94
+<span class="ln">608</span>               VESA(I) = 0.0D0
+<span class="ln">609</span>               VESD(I) = 0.0D0
+<span class="ln">610</span>            ELSE
+<span class="ln">611</span>               GOTO 81
+<span class="ln">612</span>            ENDIF
+<span class="ln">613</span>         END DO
+<span class="ln">614</span> 81      CONTINUE
+<span class="ln">615</span>      ENDIF
+<span class="ln">616</span>
+<span class="ln">617</span>      RETURN
+<span class="ln">618</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Format / settled.</strong> The paragraph "A note on the site's call graph" (the false <code>QUAD</code> link) is obsolete: <code>codemap.py</code> no longer makes the link (settled). <strong>Fix:</strong> drop it.</li>
+<li><strong>Wrong.</strong> "with <code>LDIFAD</code>, the advective and diffusive parts <code>VESA</code>, <code>VESD</code>, <code>VESD2</code>, <code>VESD3</code>, <code>DSS</code>, <code>DGSF</code> (<code>DIFAD2</code>, <code>DIFAD3</code>), read by DADCOEFT": <code>VESA</code>, <code>VESD</code> are in <code>DIFAD2</code>, shared with CHECKJ and ROTGRID; <code>VESD2</code>, <code>VESD3</code>, <code>DSS</code>, <code>DGSF</code>, <code>FV0</code> are in <code>DIFAD3</code>, shared with DADCOEFT and SETUPV. <code>RAT</code> (<code>QUADD</code>) is read by CHECKJ, FPFT and WRTMOD. <strong>Fix:</strong> correct.</li>
+<li><strong>Wrong.</strong> Question 3: <code>VES</code> is made positive by <code>ABS(FES*VES)</code> for every interface before <code>HV</code> is formed, so <code>HV</code> never sees a negative <code>VES</code>; only <code>VESA</code> (the advective part) keeps its sign. <strong>Fix:</strong> rewrite the question: with <code>LDIFAD</code>, <code>HV</code> takes $|v_\mathrm{ES}|$ of a signed circulation; intended?</li>
+<li><strong>Missing (apparent bug).</strong> The $\mu$ loop multiplies <code>FESTIME</code> and <code>FV0</code> (COMMON, set once by SETUPV before SECULR's iterations) by the factor at every call of VCIRC, so the factor compounds over SECULR's iterations. <strong>Fix:</strong> new question.</li>
+<li><strong>Unclear.</strong> Step 3 calls the $\mu$ factor $q$, while steps 4 and 5 use $q$ for the shear <code>QWLNR</code>. <strong>Fix:</strong> call the factor $f_\mu$.</li>
+</ol>
+<p>Revised: call-graph paragraph already gone; COMMON sharing corrected; question 3 rewritten; new question 7 (compounding); factor renamed $f_\mu$.</p></div></details>
+</main></body></html>

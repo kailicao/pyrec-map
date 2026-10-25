@@ -1,0 +1,135 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Language and style · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ New version (Fortran) / Language and style</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><strong>Language and style</strong></li><li><a href='kernels.html'>Kernels and settings</a></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><a href='timestep.html'>Time stepping</a></li><li><a href='composition.html'>Composition and settling</a></li><li><a href='rotation.html'>Rotation and mass loss</a></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><a href='common-map.html'>The COMMON-block map</a></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>Language and style</h1>
+<p><em>In Python: <a href="../files/new/pyrec/__init__.py.html"><code>pyrec</code></a>.</em></p>
+<h2>6.1 The language</h2>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>For</th>
+<th>Against</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Modern Fortran</strong> (2008, with <code>iso_c_binding</code> and <code>iso_fortran_env</code>): modules, derived types, type-bound procedures, <code>abstract</code> types, <code>allocatable</code> arrays</td>
+<td>Keeps the validated physics line by line; the compilers YREC already uses (<code>gfortran</code>, Intel <code>ifx</code>) support it; the refactoring can go one routine at a time, checked against the benchmarks at each step; YREC's users read Fortran</td>
+<td>No interactive use; a user who adds physics must compile</td>
+</tr>
+<tr>
+<td><strong>A Python interface</strong> over the compiled library</td>
+<td>Runs, grids and calibrations from Python and Jupyter; NumPy views of the model; user physics in Python at the step level</td>
+<td>Needs a library with no <code>STOP</code> and no global state first; per-point callbacks into Python would be slow</td>
+</tr>
+<tr>
+<td><strong>Rewrite in Python</strong> (NumPy and Numba)</td>
+<td>One language</td>
+<td>Some 44,000 lines of validated physics to rewrite and revalidate; not proposed</td>
+</tr>
+</tbody>
+</table>
+<p><strong>KC's decision (Oct 25, 2026), which may change with feedback:</strong> the route goes through Python after all, as <a href="../new-python/overview.html">the Python version's overview</a> describes: Fortran 77 to Python in the old structure, then Python in the new structure, then modern Fortran in the new structure, the last needed for speed. The table and the proposal below are the first sketch's reasoning, kept for the comparison.</p>
+<p><strong>Proposal (first sketch): both, in that order.</strong> The core becomes modern Fortran by refactoring, not rewriting (<a href="overview.html">Section 7</a>); the Python interface comes once the core has no <code>STOP</code> and no global state, since that is what lets a Python process hold a run (or two) in memory and survive an error. This matches the plan's "possibly a Python interface" on KC's Research Directions: the Fortran design is complete without it, and nothing in it has to change when it comes.</p>
+<h2>6.2 KC's style in Fortran</h2>
+<p>The guide is written for Python. Its conventions carry over as follows; where Fortran has no counterpart, the choice made is stated.</p>
+<table>
+<thead>
+<tr>
+<th>The guide (Python)</th>
+<th>In this design (Fortran)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>One package per method; modules layered by dependency</td>
+<td>One library, <code>yrec</code>; modules from <code>kinds</code> to <code>evolve</code> (<a href="overview.html">Section 2</a>). The compiler forbids circular <code>use</code>, so the layering is enforced</td>
+</tr>
+<tr>
+<td>A module docstring lists its contents</td>
+<td>A header comment of <code>!!</code> lines listing types and procedures, in the format FORD (a Fortran documentation generator) renders</td>
+</tr>
+<tr>
+<td>NumPy-style docstrings with shapes and dtypes</td>
+<td><code>!!</code> lines after each procedure's header: arguments with shape, kind and unit, e.g. <code>!! hcomp : (NSP, m), real(dp), mass fractions</code>. Shapes follow Fortran's column-major order</td>
+</tr>
+<tr>
+<td>Type hints everywhere</td>
+<td><code>implicit none</code> in every module; every argument declared with <code>intent</code></td>
+</tr>
+<tr>
+<td>UPPERCASE tunable numbers, as class attributes</td>
+<td>Module-level <code>parameter</code>s in UPPERCASE for fixed values; components with default initialization, in UPPERCASE, for values a driver may change. <strong>Fortran is case-insensitive</strong>: <code>CMIXL</code> and <code>cmixl</code> are the same name, so case is only a visual signal, and a constant cannot share its name with a variable; constants take a suffix where needed (<code>CMIXL_DEFAULT</code>)</td>
+</tr>
+<tr>
+<td><code>__init__</code> stores, <code>__call__</code> runs, <code>clear()</code> frees</td>
+<td><code>init</code> (or a structure constructor) stores, <code>run</code> runs, <code>clear</code> deallocates. Fortran has no <code>__call__</code>; <code>run</code> is the name throughout. Finalizers (<code>final</code>) are not relied on, because compilers have differed in when they call them</td>
+</tr>
+<tr>
+<td>A private base class (<code>_LAKernel</code>)</td>
+<td>An <code>abstract</code> type named <code>…Base</code> with <code>deferred</code> procedures (Fortran names cannot begin with an underscore); <code>private</code> components and procedures mark internals</td>
+</tr>
+<tr>
+<td>Children reach settings through their parent</td>
+<td>A <code>pointer</code> component to the parent (<code>track%job%cfg</code>); the parent is declared <code>target</code>. One <code>Config</code>, never copied, read-only after <code>derive</code></td>
+</tr>
+<tr>
+<td><code>setup()</code> classmethods for class-wide settings</td>
+<td><code>Physics%setup</code> and the <code>init</code> of each type; there is no class-wide state, so two runs can live in one process</td>
+</tr>
+<tr>
+<td>Hooks that do nothing in the base class</td>
+<td>Non-deferred type-bound procedures whose body is empty, documented "a hook for extended types; the base type does nothing" (<a href="hooks.html">Section 6.5</a>)</td>
+</tr>
+<tr>
+<td>Errors name the setting that failed; <code>ValueError</code>, not <code>assert</code></td>
+<td>Every procedure that can fail returns <code>ierr</code> (0 for success) and sets a message naming the setting (<code>"KTTAU: 6 is not an atmosphere"</code>); no <code>STOP</code> in the library; internal invariants checked under a debug build</td>
+</tr>
+<tr>
+<td><code>logging</code> instead of <code>print</code>, a fixed timing format</td>
+<td><code>Logger</code> with levels (<code>debug</code>, <code>info</code>, <code>warning</code>); <code>system_clock</code> timings in one fixed format; the routines that now write to the terminal at every call log at <code>debug</code></td>
+</tr>
+<tr>
+<td>Dispatch on formats with <code>match</code></td>
+<td><code>select case</code> on a setting in one factory function per family; <code>select type</code> only where a type must be recovered</td>
+</tr>
+<tr>
+<td>Named columns, not magic indices</td>
+<td>Named integer parameters: <code>I_H1</code>, <code>I_HE4</code>, ... (<a href="kernels.html">Section 3.1</a>)</td>
+</tr>
+<tr>
+<td>Derived quantities are properties</td>
+<td>Type-bound functions: <code>star%radius()</code>, <code>star%tc()</code></td>
+</tr>
+<tr>
+<td>Numba kernels fill preallocated arrays</td>
+<td><code>pure</code> or <code>elemental</code> procedures with <code>intent(inout)</code> arrays, in <code>numerics</code></td>
+</tr>
+<tr>
+<td><code>__slots__</code> against misspelled settings</td>
+<td>A namelist already rejects an unknown name</td>
+</tr>
+<tr>
+<td>The configuration written into the output</td>
+<td><code>Config%write_namelists</code> into the <code>.short</code> file and the model files' headers, defaults included</td>
+</tr>
+<tr>
+<td>Package data with the package</td>
+<td>Tables found through <code>YREC_INPUT</code> (already used by the development branch), never through paths relative to the working directory</td>
+</tr>
+<tr>
+<td>pytest regression and analytic checks</td>
+<td>The test suite of reference runs (<a href="overview.html">Section 7.1</a>), plus unit tests of the kernels on cases with exact answers (splines on cubics, the tridiagonal solver, Bulirsch–Stoer on $y&#x27; = y$)</td>
+</tr>
+<tr>
+<td>Personal style: short statements on one line</td>
+<td>Kept where it reads as one thought: <code>if (ierr /= 0) return</code>, <code>tr =&gt; self%track  ! Shortcut.</code></td>
+</tr>
+</tbody>
+</table>
+<h2>6.3 The Python interface</h2>
+<p>Two kinds exist, and YREC already has the first. The development branch documents a <code>yrec</code> Python package (<code>pip install yrec</code>; <code>yrec.model.Model(nml1, nml2).run()</code>, <code>yrec.run_parallel</code>) and keeps grid tools in <code>wrappers/</code>; both write namelists, run the executable and read its output files. That stays as it is and needs nothing from the overhaul, except that the namelists and output files stay compatible.</p>
+<p>The second kind runs YREC in the Python process. <code>capi.f90</code> exports a small set of <code>bind(C)</code> procedures on opaque handles: <code>yrec_run_new(nml1, nml2, ierr)</code>, <code>yrec_track_start</code>, <code>yrec_step(handle, ierr)</code>, <code>yrec_star_get(handle, name, array)</code>, <code>yrec_run_free</code>. <code>python/yrec/_capi.py</code> declares them with <code>ctypes</code>, and <code>star.py</code> wraps the model's arrays as NumPy views without copying. With it, a Python driver can step a track, inspect or change the model between steps, and run calibrations with SciPy's root finders, as KC's mesa_apokasc drivers do around MESA. This design chose <code>ctypes</code> over <code>f2py</code>, because <code>f2py</code> does not wrap derived types or type-bound procedures, which the design's interface is made of. The Python side follows the guide as written. <a href="overview.html">Section 8</a> asks whether the second kind is wanted, and by whom.</p>
+
+</main></body></html>

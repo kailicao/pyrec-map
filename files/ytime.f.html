@@ -1,0 +1,150 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>ytime.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ ytime.f</span></header><main>
+<h1>ytime.f</h1>
+<p class='muted'>97 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/ytime.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>YTIME</code> gives the time step allowed by helium burning. Its comment: stars with a helium luminosity have a time step limited by the time to burn <code>ATIME(4)</code> of $Y$ at the temperature maximum, or the fraction <code>ATIME(5)</code> of $Y$ there; a high central density is taken as the sign of a giant in the helium flash rather than a horizontal-branch star.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the model (arguments: $\log\rho$ <code>HD</code>, <code>HCOMP</code>, $L$, $m$, $\log T$, <code>JCORE</code>, <code>M</code>, <code>JXBEG</code>), work arrays for the rates, and through COMMON blocks the limits <code>ATIME</code> (<code>CTLIM</code>), the extended-composition switch <code>LEXCOM</code> (<code>FLAG</code>), and <code>ENU</code>, <code>EALPCA</code> (<code>NEWEPS</code>, set by <a href="../files/engeb.f.html#def-ENGEB">ENGEB</a>).</li>
+<li><strong>Who calls it:</strong> only <a href="../files/htimer.f.html#def-HTIMER">HTIMER</a>.</li>
+<li><strong>What it calls:</strong> <a href="../files/engeb.f.html#def-ENGEB">ENGEB</a>, for the energy rates at the temperature maximum.</li>
+<li><strong>Outputs:</strong> <code>DELTSY</code>, the step (in seconds, by its use in <code>HTIMER</code>), and <code>EG(1..6)</code>, the energy rates at the temperature maximum.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ul>
+<li><strong>Helium flash</strong> ($\log\rho_c \ge 5$): find the shell of maximum temperature, compute its energy rates with <code>ENGEB</code>, and take
+  $$\Delta t = \frac{10^{15}}{\varepsilon_5},$$
+  with $\varepsilon_5$ = <code>EG(5)</code> (probably the triple-α rate, by the order in <code>ENGEB</code>), at least $10^{-22}$.</li>
+<li><strong>Otherwise:</strong> with $Y_\mathrm{core}$ at <code>JCORE</code> and $q = 5.85\times10^{17}$ erg/g (the commented-out <code>Q3A</code>), if $Y_\mathrm{core} \ge$ <code>ATIME(1)</code>,
+  $$\Delta Y = \min(\texttt{ATIME(4)},\ \texttt{ATIME(5)}\,Y_\mathrm{core}),\qquad \Delta t = \frac{q}{L_\odot}\,\frac{m}{L/L_\odot}\,\Delta Y$$
+  at <code>JCORE</code>; otherwise the same with $m$ and $L$ just below the hydrogen shell (<code>JXBEG-1</code>).</li>
+</ul>
+<p><strong>KC's changes.</strong> Removed the unused arguments <code>QDP</code> and <code>QDT</code>, and shortened the call to <code>ENGEB</code> to its new argument list (2025-05-31).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>$Y$ or $1 - Z$?</strong> <code>YCORE = 1D0 - HCOMP(3,JCORE)</code> is $X + Y$, not $Y$ (<code>HCOMP(2,·)</code>). In a helium core $X \approx 0$ and the two agree, but during hydrogen burning they do not. Intended?</li>
+<li><strong>An undefined step.</strong> In the <code>ELSE</code> branch ($Y_\mathrm{core} &lt;$ <code>ATIME(1)</code>), <code>DELTSY</code> is used on the right-hand side before it is set in this call; it holds the value <code>SAVE</code>d from an earlier call. A line like <code>DELTSY = MIN(ATIME(4), ATIME(5)*Y)</code> seems to be missing.</li>
+<li><strong>The same threshold for $X$ and $Y$.</strong> <code>ATIME(1)</code> is the central-hydrogen threshold in <a href="../files/xtime.f.html#def-XTIME">XTIME</a>, and here the threshold for $Y_\mathrm{core}$. Two parameters?</li>
+<li><strong>Hard-coded values.</strong> The flash criterion $\log\rho_c \ge 5$, the constant $10^{15}$ (whose units are unclear) and the floor $10^{-22}$.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+YTIME
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-YTIME'>YTIME</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-YTIME'><h3><span class='kind'>subroutine</span>YTIME</h3>
+<p class='muted'>lines 4–97 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/ytime.f#L4-L97'>GitHub</a></p>
+<pre>SUBROUTINE YTIME(EG,HCOMP,HD,HL,HS1,HT,JCORE,M,DELTSY,</pre>
+<div class='notes'><p>The helium-burning time step: during the helium flash $10^{15}/\varepsilon_{3\alpha}$ at the temperature maximum; otherwise the time to burn a fraction of the core's helium.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+YTIME
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST3'>/CONST3/</a>, <a href='../commons.html#c-CT3'>/CT3/</a>, <a href='../commons.html#c-CTLIM'>/CTLIM/</a>, <a href='../commons.html#c-FLAG'>/FLAG/</a>, <a href='../commons.html#c-NEWEPS'>/NEWEPS/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/engeb.f.html#def-ENGEB'>ENGEB</a> <span class='muted'>(engeb.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/htimer.f.html#def-HTIMER'>HTIMER</a> <span class='muted'>(htimer.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE YTIME(EG,HCOMP,HD,HL,HS1,HT,JCORE,M,DELTSY,
+<span class="ln">5</span>     *   HR1,HR2,HR3,HR4,HR5,HR6,HR7,HR8,HR9,HR10,HR11,HR12,HR13,
+<span class="ln">6</span>C      *   HF1,HF2,QDP,QDT,JXBEG)  ! KC 2025-05-31
+<span class="ln">7</span>     *   HF1,HF2,JXBEG)
+<span class="ln">8</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">9</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">10</span>      PARAMETER(JSON=5000)
+<span class="ln">11</span>      COMMON/CTLIM/ATIME(14),TCUT(5),TSCUT,TENV0,TENV1,TENV,TGCUT
+<span class="ln">12</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">13</span>      COMMON/CONST3/CDELRL,CMIXL,CMIXL2,CMIXL3,CLNDP,CSECYR
+<span class="ln">14</span>      COMMON/CT3/LPTIME
+<span class="ln">15</span>C MHP 10/02 added missing common block
+<span class="ln">16</span>      COMMON/NEWEPS/EALPCA,ENU
+<span class="ln">17</span>      COMMON/FLAG/LEXCOM
+<span class="ln">18</span>      DIMENSION HCOMP(15,JSON),HD(JSON),HL(JSON),HS1(JSON),
+<span class="ln">19</span>     * HT(JSON),EG(6)
+<span class="ln">20</span>      DIMENSION HR1(JSON),HR2(JSON),HR3(JSON),HR4(JSON),HR5(JSON),
+<span class="ln">21</span>     *HR6(JSON),HR7(JSON),HR8(JSON),HR9(JSON),HR10(JSON),HR11(JSON),
+<span class="ln">22</span>     *HR12(JSON),HR13(JSON),HF1(JSON),HF2(JSON)
+<span class="ln">23</span>      SAVE
+<span class="ln">24</span>C  STARS WITH A HELIUM LUMINOSITY HAVE A TIMESTEP LIMIT
+<span class="ln">25</span>C       BASED ON THE TIME REQUIRED TO BURN ATIME(4) OF Y AT THE
+<span class="ln">26</span>C       MAXIMUM IN TEMPERATURE OR THE FRACTION ATIME(5) OF Y AT THIS POINT.
+<span class="ln">27</span>C TEST FOR HELIUM FLASH BURNING; HIGH CENTRAL DENSITY IS TAKEN AS
+<span class="ln">28</span>C A SIGN THAT THE MODEL IS A GIANT UNDERGOING A HE FLASH RATHER THAN
+<span class="ln">29</span>C A HORIZONTAL BRANCH STAR.
+<span class="ln">30</span>C       DATA Q3A,QCA/5.85D17,1.7276D18/
+<span class="ln">31</span>      IF (HD(1).GE.5.0D0) THEN
+<span class="ln">32</span>C     SEARCH FOR TEMPERATURE MAXIMUM
+<span class="ln">33</span>       HTMAX = 0.0D0
+<span class="ln">34</span>       ITMAX = 1
+<span class="ln">35</span>       DO 210 IT = 1,M
+<span class="ln">36</span>          IF (HT(IT).GT.HTMAX) THEN
+<span class="ln">37</span>             ITMAX = IT
+<span class="ln">38</span>             HTMAX = HT(IT)
+<span class="ln">39</span>          ENDIF
+<span class="ln">40</span>  210    CONTINUE
+<span class="ln">41</span>C     CALCULATE HELIUM BURNING RATE AT TMAX
+<span class="ln">42</span>       DL = HD(ITMAX)
+<span class="ln">43</span>       TL = HT(ITMAX)
+<span class="ln">44</span>       X = HCOMP(1,ITMAX)
+<span class="ln">45</span>       Y = HCOMP(2,ITMAX)
+<span class="ln">46</span>       Z = HCOMP(3,ITMAX)
+<span class="ln">47</span>       XHE3 = HCOMP(4,ITMAX)
+<span class="ln">48</span>       XC12 = HCOMP(5,ITMAX)
+<span class="ln">49</span>       XC13 = HCOMP(6,ITMAX)
+<span class="ln">50</span>       XN14 = HCOMP(7,ITMAX)
+<span class="ln">51</span>       XN15 = HCOMP(8,ITMAX)
+<span class="ln">52</span>       XO16 = HCOMP(9,ITMAX)
+<span class="ln">53</span>       XO17 = HCOMP(10,ITMAX)
+<span class="ln">54</span>       XO18 = HCOMP(11,ITMAX)
+<span class="ln">55</span>       IF(LEXCOM) THEN
+<span class="ln">56</span>          XH2 = HCOMP(12,ITMAX)
+<span class="ln">57</span>          XLI6 = HCOMP(13,ITMAX)
+<span class="ln">58</span>          XLI7 = HCOMP(14,ITMAX)
+<span class="ln">59</span>          XBE9 = HCOMP(15,ITMAX)
+<span class="ln">60</span>       ENDIF
+<span class="ln">61</span>       IU = ITMAX
+<span class="ln">62</span>         CALL <a href="../files/engeb.f.html#def-ENGEB" title="ENGEB in engeb.f">ENGEB</a>(EGG11,EGG22,EGG33,EGG44,EGG55,QED,QET,SUM1,DL,
+<span class="ln">63</span>C      *        TL,QDT,QDP,X,Y,Z,XHE3,XC12,XC13,XN14,XN15,XO16,XO17,
+<span class="ln">64</span>C      *        XO18,XH2,XLI6,XLI7,XBE9,IU,HR1,HR2,HR3,HR4,HR5,HR6,HR7,  ! KC 2025-05-31
+<span class="ln">65</span>     *        TL,X,Y,XHE3,XC12,XC13,XN14,XO16,
+<span class="ln">66</span>     *        XO18,XH2,IU,HR1,HR2,HR3,HR4,HR5,HR6,HR7,
+<span class="ln">67</span>     *        HR8,HR9,HR10,HR11,HR12,HR13,HF1,HF2)
+<span class="ln">68</span>         E = SUM1
+<span class="ln">69</span>         EG(1) = EGG11
+<span class="ln">70</span>         EG(2) = EGG22
+<span class="ln">71</span>         EG(3) = EGG33
+<span class="ln">72</span>         EG(4) = EGG44
+<span class="ln">73</span>         EG(5) = EGG55
+<span class="ln">74</span>         EG(6) = ENU
+<span class="ln">75</span>         ECA = EALPCA
+<span class="ln">76</span>       IF(EG(5).LT.1.D-22) EG(5) = 1.D-22
+<span class="ln">77</span>       DELTSY=1.0D15/EG(5)
+<span class="ln">78</span>      ELSE
+<span class="ln">79</span>C SET LIMITS ON HE BURNING FOR NON-HELIUM FLASH STARS
+<span class="ln">80</span>       YCORE = 1D0 - HCOMP(3,JCORE)
+<span class="ln">81</span>       IF(YCORE.GE.ATIME(1)) THEN
+<span class="ln">82</span>
+<span class="ln">83</span>            DELTSY = MIN(ATIME(4),ATIME(5)*YCORE)
+<span class="ln">84</span>C
+<span class="ln">85</span>          DELTSY = (5.85D17/CLSUN)*DELTSY*(HS1(JCORE)/HL(JCORE))
+<span class="ln">86</span>
+<span class="ln">87</span>            ELSE
+<span class="ln">88</span>
+<span class="ln">89</span>            DELTSY = (5.85D17/CLSUN)*DELTSY*(HS1(JXBEG-1)/HL(JXBEG-1))
+<span class="ln">90</span>
+<span class="ln">91</span>C
+<span class="ln">92</span>         ENDIF
+<span class="ln">93</span>C
+<span class="ln">94</span>      ENDIF
+<span class="ln">95</span>
+<span class="ln">96</span>      RETURN
+<span class="ln">97</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings.</p>
+<p>No change.</p></div></details>
+</main></body></html>

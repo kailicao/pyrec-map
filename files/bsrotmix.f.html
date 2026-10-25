@@ -1,0 +1,320 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>bsrotmix.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ bsrotmix.f</span></header><main>
+<h1>bsrotmix.f</h1>
+<p class='muted'>256 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/bsrotmix.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file does the extrapolation step of <a href="../files/bursmix.f.html#def-BURSMIX">BURSMIX</a>: burning and rotational mixing are done in turn over $n$ substeps of one time step, for increasing $n$, and this routine extrapolates the resulting abundances to zero substep size (the Bulirsch–Stoer idea, "MHP 6/00"). It also decides when the extrapolation has converged.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>DELTS</code> (the time step), <code>HCOMP</code> (the abundances after the latest sequence), <code>IEST</code> (which sequence: 1, 2, …), <code>M</code> (number of shells), <code>JBEG</code>, <code>NSPEC</code> (the range of species), <code>NSEQ</code> (the numbers of substeps).</li>
+<li><strong>Who calls it:</strong> only <a href="../files/bursmix.f.html#def-BURSMIX">BURSMIX</a>, once per sequence.</li>
+<li><strong>Outputs:</strong> <code>LCONV</code>; when converged, the extrapolated abundances in <code>HCOMP</code>. The tableau is kept in <code>/BSBURN/</code> (<code>HCOMPI</code>, <code>HCOMPA</code>, <code>HCOMPE</code>), used by no other routine.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>First call (<code>IEST = 1</code>):</strong> find which species are present anywhere (abundance $&gt; 10^{-14}$), and at which shells $^3$He and the four CNO species are present ($&gt; 10^{-24}$).</li>
+<li>
+<p><strong>Variables extrapolated.</strong> Most species directly; $^3$He as $\ln X_3$; and, where C, N, O are all present, the CNO species replaced by
+$$v_5 = \frac{X_{13}}{X_{12}}, \quad v_6 = \frac{X_{14}}{X_{12}}, \quad v_7 = \frac{X_{16}}{X_{14}}, \quad v_9 = \frac{X_{12}}{12} + \frac{X_{13}}{13} + \frac{X_{14}}{14} + \frac{X_{16}}{16},$$
+which the comment calls the "alternate method": ratios and the total number of CNO nuclei per gram (in units of the atomic mass unit).</p>
+</li>
+<li>
+<p><strong>Polynomial extrapolation</strong> in $h^2$, with $h_k = \Delta t / n_k$: the results $A(h_k^2)$ are extrapolated to $h^2 = 0$ by Neville's scheme, as in Numerical Recipes' <code>PZEXTR</code>. At each new sequence $k$, with $x_k = h_k^2$, for $j = 1, \dots, k-1$:
+$$\delta = \frac{d - c_j}{x_{k-j} - x_k}, \qquad e \leftarrow x_k\,\delta, \qquad d \leftarrow x_{k-j}\,\delta, \qquad A \leftarrow A + e,$$
+where $c_j$ are the stored differences (<code>HCOMPI</code>) and $e$ the last correction (<code>HCOMPE</code>). Before each update, $c_j$ is replaced by the previous correction (<code>HCOMPI(K1) = HCOMPE</code>), as in Neville's scheme.</p>
+</li>
+<li>
+<p><strong>Convergence:</strong> the largest relative correction $|e/A|$ over all variables with $A &gt; 10^{-12}$; converged if it is below $10^{-3}$. Each call prints the error and where it is.</p>
+</li>
+<li><strong>Back-transform:</strong> $X_3 = e^{A_4}$, and
+$$X_{12} = \frac{v_9}{\frac{1}{12} + \frac{v_5}{13} + \frac{v_6}{14} + \frac{v_6 v_7}{16}}, \quad X_{13} = v_5 X_{12}, \quad X_{14} = v_6 X_{12}, \quad X_{16} = v_7 X_{14};$$
+abundances below $10^{-24}$ are set to 0.</li>
+</ol>
+<p><strong>Design.</strong> The routine prints a line to the screen at every call after the first. The bookkeeping in step 1 is done only at <code>IEST = 1</code> and kept with <code>SAVE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>$^3$He left out of the test.</strong> $\ln X_3$ is negative, so the test <code>HCOMPA(J,I).GT.1.0D-12</code> excludes $^3$He from the convergence check. Likewise, the ratio variables are tested on their own size. Is that intended?</li>
+<li><strong>The tolerance.</strong> The relative tolerance $10^{-3}$ is hard-coded, while <a href="../files/bsstep.f.html#def-BSSTEP">BSSTEP</a> gets its own as the argument <code>EPS</code>, which ENVINT takes from <code>STOLR0</code> in <code>/INTPAR/</code>. Should BSROTMIX's be an input too?</li>
+<li><strong>Comment.</strong> The comment above the first loop speaks of an error vector <code>DCOMPA</code>; the code uses <code>HCOMPE</code>.</li>
+<li><strong><code>STOP999</code> on no species.</strong> If no species from <code>JBEG</code> to <code>NSPEC</code> is present, the run stops without a message.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+MHP 6/00 SUBROUTINE.  MIXING AND BURNING ARE PERFORMED SEQUENTIALLY
+FOR AN INCREASING NUMBER OF SUBSTEPS FOR A GIVEN TOTAL STEP.  THIS ROUTINE
+EXTRAPOLATES TO ZERO TIMESTEP,</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-BSROTMIX'>BSROTMIX</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-BSROTMIX'><h3><span class='kind'>subroutine</span>BSROTMIX</h3>
+<p class='muted'>lines 5–256 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/bsrotmix.f#L5-L256'>GitHub</a></p>
+<pre>SUBROUTINE BSROTMIX(DELTS,HCOMP,IEST,M,JBEG,NSPEC,NSEQ,LCONV)</pre>
+<div class='notes'><p>Polynomial (Richardson) extrapolation to zero substep of the abundances from successive burn–mix sequences, with $^3$He in logarithm and CNO as ratios plus a total; sets <code>LCONV</code> when the relative correction is below $10^{-3}$.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+MHP 6/00 SUBROUTINE.  MIXING AND BURNING ARE PERFORMED SEQUENTIALLY
+FOR AN INCREASING NUMBER OF SUBSTEPS FOR A GIVEN TOTAL STEP.  THIS ROUTINE
+EXTRAPOLATES TO ZERO TIMESTEP,</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-BSBURN'>/BSBURN/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/bursmix.f.html#def-BURSMIX'>BURSMIX</a> <span class='muted'>(bursmix.f)</span> ×2</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">5</span>      SUBROUTINE BSROTMIX(DELTS,HCOMP,IEST,M,JBEG,NSPEC,NSEQ,LCONV)
+<span class="ln">6</span>      PARAMETER (JSON=5000)
+<span class="ln">7</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">8</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">9</span>      DIMENSION HCOMP(15,JSON),NSEQ(11),X(11),D(15,JSON),JJ(15)
+<span class="ln">10</span>      COMMON/BSBURN/HCOMPI(11,15,JSON),HCOMPA(15,JSON),HCOMPE(15,JSON)
+<span class="ln">11</span>      LOGICAL*4 LDO(15), LCNO(JSON),LHE3(JSON)
+<span class="ln">12</span>      SAVE
+<span class="ln">13</span>C      SAVE X,D,JJ,LDO,NMAX,LCNO,LCNCHECK
+<span class="ln">14</span>C DETERMINE WHICH SPECIES REQUIRE CALCULATION
+<span class="ln">15</span>      IF(IEST.EQ.1)THEN
+<span class="ln">16</span>         DO J = JBEG,NSPEC
+<span class="ln">17</span>            LDO(J) = .FALSE.
+<span class="ln">18</span>            DO I = M,1,-1
+<span class="ln">19</span>               IF(HCOMP(J,I).GT.1.0D-14)THEN
+<span class="ln">20</span>                  LDO(J) = .TRUE.
+<span class="ln">21</span>                  GOTO 5
+<span class="ln">22</span>               ENDIF
+<span class="ln">23</span>            END DO
+<span class="ln">24</span> 5          CONTINUE
+<span class="ln">25</span>         END DO
+<span class="ln">26</span>         IF(LDO(4))THEN
+<span class="ln">27</span>            DO I = 1,M
+<span class="ln">28</span>               IF(HCOMP(4,I).GT.1.0D-24)THEN
+<span class="ln">29</span>                  LHE3(I) = .TRUE.
+<span class="ln">30</span>               ELSE
+<span class="ln">31</span>                  LHE3(I) = .FALSE.
+<span class="ln">32</span>               ENDIF
+<span class="ln">33</span>            END DO
+<span class="ln">34</span>         ENDIF
+<span class="ln">35</span>C CHECK FOR ALTERNATE METHOD FOR DOING CNO ABUNDANCES; SOLVE FOR
+<span class="ln">36</span>C C13/C12, N14/C12, O16/N14, SUM OF CNO NUCLEI RATHER THAN FOR
+<span class="ln">37</span>C THE INDIVIDUAL ABUNDANCES OF C12,C13,N14,O16.
+<span class="ln">38</span>         IF(LDO(5).AND.LDO(6).AND.LDO(7).AND.LDO(9))THEN
+<span class="ln">39</span>            LCNCHECK = .TRUE.
+<span class="ln">40</span>            DO I = 1,M
+<span class="ln">41</span>               IF(HCOMP(5,I).GT.1.0D-24 .AND. HCOMP(6,I).GT.1.0D-24
+<span class="ln">42</span>     *   .AND. HCOMP(7,I).GT.1.0D-24 .AND. HCOMP(9,I).GT.1.0D-24)THEN
+<span class="ln">43</span>                  LCNO(I) = .TRUE.
+<span class="ln">44</span>               ELSE
+<span class="ln">45</span>                  LCNO(I) = .FALSE.
+<span class="ln">46</span>               ENDIF
+<span class="ln">47</span>            END DO
+<span class="ln">48</span>         ELSE
+<span class="ln">49</span>            LCNCHECK = .FALSE.
+<span class="ln">50</span>            DO I = 1,M
+<span class="ln">51</span>               LCNO(I) = .FALSE.
+<span class="ln">52</span>            END DO
+<span class="ln">53</span>         ENDIF
+<span class="ln">54</span>         ICOUNT = 1
+<span class="ln">55</span>         DO I = JBEG,NSPEC
+<span class="ln">56</span>            IF(LDO(I))THEN
+<span class="ln">57</span>               JJ(ICOUNT) = I
+<span class="ln">58</span>               ICOUNT = ICOUNT+1
+<span class="ln">59</span>            ENDIF
+<span class="ln">60</span>         END DO
+<span class="ln">61</span>         NMAX = ICOUNT - 1
+<span class="ln">62</span>         IF(NMAX.LT.1)STOP999
+<span class="ln">63</span>      ENDIF
+<span class="ln">64</span>C STORE CURRENT RESULTS IN VECTOR OF COMPOSITION (HCOMPA) AND
+<span class="ln">65</span>C ERROR (DCOMPA)
+<span class="ln">66</span>      DO J1 = 1,NMAX
+<span class="ln">67</span>         J = JJ(J1)
+<span class="ln">68</span>         DO I = 1,M
+<span class="ln">69</span>            HCOMPA(J,I) = HCOMP(J,I)
+<span class="ln">70</span>            HCOMPE(J,I) = HCOMP(J,I)
+<span class="ln">71</span>         END DO
+<span class="ln">72</span>      END DO
+<span class="ln">73</span>C EXTRAPOLATE IN THE LOG OF HE3 RATHER THAN ABSOLUTE ABUNDANCE
+<span class="ln">74</span>      IF(LDO(4))THEN
+<span class="ln">75</span>         DO I = 1,M
+<span class="ln">76</span>            IF(LHE3(I))THEN
+<span class="ln">77</span>               HCOMPA(4,I) = LOG(HCOMP(4,I))
+<span class="ln">78</span>               HCOMPE(4,I) = HCOMPA(4,I)
+<span class="ln">79</span>            ENDIF
+<span class="ln">80</span>         END DO
+<span class="ln">81</span>      ENDIF
+<span class="ln">82</span>      IF(LCNCHECK)THEN
+<span class="ln">83</span>         DO I = 1,M
+<span class="ln">84</span>            IF(LCNO(I))THEN
+<span class="ln">85</span>               X12 = HCOMP(5,I)
+<span class="ln">86</span>               X13 = HCOMP(6,I)
+<span class="ln">87</span>               X14 = HCOMP(7,I)
+<span class="ln">88</span>               X16 = HCOMP(9,I)
+<span class="ln">89</span>C VECTOR 5: C13/C12
+<span class="ln">90</span>               HCOMPA(5,I) = X13/X12
+<span class="ln">91</span>               HCOMPE(5,I) = HCOMPA(5,I)
+<span class="ln">92</span>C VECTOR 6: N14/C12
+<span class="ln">93</span>               HCOMPA(6,I) = X14/X12
+<span class="ln">94</span>               HCOMPE(6,I) = HCOMPA(6,I)
+<span class="ln">95</span>C VECTOR 7: O16/N14
+<span class="ln">96</span>               HCOMPA(7,I) = X16/X14
+<span class="ln">97</span>               HCOMPE(7,I) = HCOMPA(7,I)
+<span class="ln">98</span>C VECTOR 9: C12/12 + C13/13 + N14/14 + O16/16
+<span class="ln">99</span>               HCOMPA(9,I) = X12/12.0D0 + X13/13.0D0 + X14/14.0D0
+<span class="ln">100</span>     *                     + X16/16.0D0
+<span class="ln">101</span>               HCOMPE(9,I) = HCOMPA(9,I)
+<span class="ln">102</span>            ENDIF
+<span class="ln">103</span>         END DO
+<span class="ln">104</span>      ENDIF
+<span class="ln">105</span>C SET CURRENT RESULTS AS THE INITIAL EXTRAPOLATION FOR THE FIRST SET OF
+<span class="ln">106</span>C TIME STEPS AND EXIT.
+<span class="ln">107</span>      X(IEST) = (DELTS/DFLOAT(NSEQ(IEST)))**2
+<span class="ln">108</span>      IF(IEST.EQ.1)THEN
+<span class="ln">109</span>         DO J1 = 1,NMAX
+<span class="ln">110</span>            J = JJ(J1)
+<span class="ln">111</span>            DO I = 1,M
+<span class="ln">112</span>               HCOMPI(IEST,J,I) = HCOMP(J,I)
+<span class="ln">113</span>            END DO
+<span class="ln">114</span>         END DO
+<span class="ln">115</span>         IF(LDO(4))THEN
+<span class="ln">116</span>            DO I = 1,M
+<span class="ln">117</span>               IF(LHE3(I))THEN
+<span class="ln">118</span>                  HCOMPI(IEST,4,I) = LOG(HCOMP(4,I))
+<span class="ln">119</span>               ENDIF
+<span class="ln">120</span>            END DO
+<span class="ln">121</span>         ENDIF
+<span class="ln">122</span>         IF(LCNCHECK)THEN
+<span class="ln">123</span>            DO I = 1,M
+<span class="ln">124</span>               IF(LCNO(I))THEN
+<span class="ln">125</span>                  HCOMPI(IEST,5,I) = HCOMPA(5,I)
+<span class="ln">126</span>                  HCOMPI(IEST,6,I) = HCOMPA(6,I)
+<span class="ln">127</span>                  HCOMPI(IEST,7,I) = HCOMPA(7,I)
+<span class="ln">128</span>                  HCOMPI(IEST,9,I) = HCOMPA(9,I)
+<span class="ln">129</span>               ENDIF
+<span class="ln">130</span>             END DO
+<span class="ln">131</span>          ENDIF
+<span class="ln">132</span>        LCONV = .FALSE.
+<span class="ln">133</span>      ELSE
+<span class="ln">134</span>C POLYNOMIAL FUNCTION EXTRAPOLATON
+<span class="ln">135</span>C CURRENT STEPSIZE
+<span class="ln">136</span>         XEST = X(IEST)
+<span class="ln">137</span>         DO J1 = 1,NMAX
+<span class="ln">138</span>            J = JJ(J1)
+<span class="ln">139</span>            DO I = 1,M
+<span class="ln">140</span>               D(J,I) = HCOMP(J,I)
+<span class="ln">141</span>            END DO
+<span class="ln">142</span>         END DO
+<span class="ln">143</span>         IF(LDO(4))THEN
+<span class="ln">144</span>            DO I = 1,M
+<span class="ln">145</span>               IF(LHE3(I))THEN
+<span class="ln">146</span>                  D(4,I) = LOG(HCOMP(4,I))
+<span class="ln">147</span>               ENDIF
+<span class="ln">148</span>            END DO
+<span class="ln">149</span>         ENDIF
+<span class="ln">150</span>         IF(LCNCHECK)THEN
+<span class="ln">151</span>            DO I = 1,M
+<span class="ln">152</span>               IF(LCNO(I))THEN
+<span class="ln">153</span>                  X12 = HCOMP(5,I)
+<span class="ln">154</span>                  X13 = HCOMP(6,I)
+<span class="ln">155</span>                  X14 = HCOMP(7,I)
+<span class="ln">156</span>                  X16 = HCOMP(9,I)
+<span class="ln">157</span>C VECTOR 5: C13/C12
+<span class="ln">158</span>                  D(5,I) = X13/X12
+<span class="ln">159</span>C VECTOR 6: N14/C12
+<span class="ln">160</span>                  D(6,I) = X14/X12
+<span class="ln">161</span>C VECTOR 7: O16/N14
+<span class="ln">162</span>                  D(7,I) = X16/X14
+<span class="ln">163</span>C VECTOR 9: C12/12 + C13/13 + N14/14 + O16/16
+<span class="ln">164</span>                  D(9,I) = X12/12.0D0 + X13/13.0D0 + X14/14.0D0
+<span class="ln">165</span>     *                   + X16/16.0D0
+<span class="ln">166</span>               ENDIF
+<span class="ln">167</span>            END DO
+<span class="ln">168</span>         ENDIF
+<span class="ln">169</span>         DO K1 = 1,IEST-1
+<span class="ln">170</span>            DELTA = 1.0D0/(X(IEST-K1)-XEST)
+<span class="ln">171</span>            F1 = XEST*DELTA
+<span class="ln">172</span>            F2 = X(IEST-K1)*DELTA
+<span class="ln">173</span>            DO J1 = 1,NMAX
+<span class="ln">174</span>               J = JJ(J1)
+<span class="ln">175</span>               DO I = 1,M
+<span class="ln">176</span>                  Q = HCOMPI(K1,J,I)
+<span class="ln">177</span>                  HCOMPI(K1,J,I) = HCOMPE(J,I)
+<span class="ln">178</span>                  DELTA = D(J,I) - Q
+<span class="ln">179</span>                  HCOMPE(J,I) = F1*DELTA
+<span class="ln">180</span>                  D(J,I) = F2*DELTA
+<span class="ln">181</span>                  HCOMPA(J,I) = HCOMPA(J,I)+HCOMPE(J,I)
+<span class="ln">182</span>               END DO
+<span class="ln">183</span>            END DO
+<span class="ln">184</span>         END DO
+<span class="ln">185</span>         DO J1 = 1,NMAX
+<span class="ln">186</span>            J = JJ(J1)
+<span class="ln">187</span>            DO I = 1,M
+<span class="ln">188</span>               HCOMPI(IEST,J,I) = HCOMPE(J,I)
+<span class="ln">189</span>            END DO
+<span class="ln">190</span>         END DO
+<span class="ln">191</span>C NOW CHECK IF ERROR IS WITHIN TOLERANCE
+<span class="ln">192</span>         ERRMAX = 1.0D-30
+<span class="ln">193</span>         IMAX = 1
+<span class="ln">194</span>         JMAX = 1
+<span class="ln">195</span>         DO J1 = 1,NMAX
+<span class="ln">196</span>            J = JJ(J1)
+<span class="ln">197</span>            DO I = 1,M
+<span class="ln">198</span>               IF(HCOMPA(J,I).GT.1.0D-12)THEN
+<span class="ln">199</span>                  Q = HCOMPE(J,I)/HCOMPA(J,I)
+<span class="ln">200</span>                  IF(ABS(Q).GT.ERRMAX)THEN
+<span class="ln">201</span>                     IMAX = I
+<span class="ln">202</span>                     JMAX = J
+<span class="ln">203</span>                     ERRMAX=ABS(Q)
+<span class="ln">204</span>                  ENDIF
+<span class="ln">205</span>               ENDIF
+<span class="ln">206</span>            END DO
+<span class="ln">207</span>         END DO
+<span class="ln">208</span>c         WRITE(*,*)HCOMP(JMAX,IMAX),HCOMPA(JMAX,IMAX)
+<span class="ln">209</span>         WRITE(*,10)IEST,ERRMAX,JMAX,IMAX,HCOMP(JMAX,IMAX),
+<span class="ln">210</span>     *              HCOMPA(JMAX,IMAX)
+<span class="ln">211</span>         IF(ERRMAX.LT.1.0D-3)LCONV=.TRUE.
+<span class="ln">212</span>         IF(LCONV)THEN
+<span class="ln">213</span> 10      FORMAT(5X,&#x27;ITER&#x27;,I3,&#x27; MAX ERR &#x27;,1PE10.2,&#x27; SPECIES &#x27;,I3,
+<span class="ln">214</span>     *          &#x27; SHELL &#x27;,I5,&#x27; ABUND&#x27;,2E12.4)
+<span class="ln">215</span>C NOW CONVERT BACK TO ABSOLUTE ABUNDANCES.
+<span class="ln">216</span>            IF(LDO(4))THEN
+<span class="ln">217</span>               DO I =1,M
+<span class="ln">218</span>                  IF(LHE3(I))THEN
+<span class="ln">219</span>                     HCOMPA(4,I)=EXP(HCOMPA(4,I))
+<span class="ln">220</span>                  ENDIF
+<span class="ln">221</span>               END DO
+<span class="ln">222</span>            ENDIF
+<span class="ln">223</span>            IF(LCNCHECK)THEN
+<span class="ln">224</span>               DO I = 1,M
+<span class="ln">225</span>                  IF(LCNO(I))THEN
+<span class="ln">226</span>C VECTOR NINE IS C12/12+ C13/13 + N14/14 + O16/16.
+<span class="ln">227</span>C THEREFORE, C12 = SUMCNO/(1/12 + C13/C12*1/13 + N14/C12*1/14 +
+<span class="ln">228</span>C O16/N14*N14/C12*1/16)
+<span class="ln">229</span>                     SUM = (1.0D0/12.0D0) + (HCOMPA(5,I)/13.0D0) +
+<span class="ln">230</span>     *                     (HCOMPA(6,I)/14.0D0)
+<span class="ln">231</span>     *                   + (HCOMPA(6,I)*HCOMPA(7,I)/16.0D0)
+<span class="ln">232</span>                     X12 = HCOMPA(9,I)/SUM
+<span class="ln">233</span>                     X13 = HCOMPA(5,I)*X12
+<span class="ln">234</span>                     X14 = HCOMPA(6,I)*X12
+<span class="ln">235</span>                     X16 = HCOMPA(7,I)*X14
+<span class="ln">236</span>c       WRITE(*,911)X12,X13,X14,X16,HCOMPA(5,I),HCOMPA(6,I),
+<span class="ln">237</span>c     *             HCOMPA(7,I),HCOMPA(9,I),SUM
+<span class="ln">238</span>c 911   FORMAT(1P9E10.2)
+<span class="ln">239</span>                     HCOMPA(5,I) = X12
+<span class="ln">240</span>                     HCOMPA(6,I) = X13
+<span class="ln">241</span>                     HCOMPA(7,I) = X14
+<span class="ln">242</span>                     HCOMPA(9,I) = X16
+<span class="ln">243</span>                  ENDIF
+<span class="ln">244</span>               END DO
+<span class="ln">245</span>            ENDIF
+<span class="ln">246</span>            DO J1 = 1,NMAX
+<span class="ln">247</span>               J = JJ(J1)
+<span class="ln">248</span>               DO I = 1,M
+<span class="ln">249</span>                  HCOMP(J,I) = HCOMPA(J,I)
+<span class="ln">250</span>                  IF(HCOMP(J,I).LT.1.0D-24)HCOMP(J,I)=0.0D0
+<span class="ln">251</span>               END DO
+<span class="ln">252</span>            END DO
+<span class="ln">253</span>         ENDIF
+<span class="ln">254</span>      ENDIF
+<span class="ln">255</span>      RETURN
+<span class="ln">256</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Missing. The update of the stored differences: in Neville's step $c_j$ is replaced by the previous correction (<code>HCOMPI(K1) = HCOMPE</code> before the update). Fix: add to step 3.</li>
+<li>Wrong. Question 2 says BSSTEP "reads its own [tolerance] from <code>/INTPAR/</code>"; BSSTEP gets <code>EPS</code> as an argument, from ENVINT, which takes it from <code>STOLR0</code> in <code>/INTPAR/</code>. Fix: reword.</li>
+</ol>
+<p>Revised: the update of $c_j$ added; question 2 reworded.</p></div></details>
+</main></body></html>

@@ -1,0 +1,65 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>quad.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ quad.f</span></header><main>
+<h1>quad.f</h1>
+<p class='muted'>29 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/quad.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Quadratic interpolation through three points, used by the original OPAL equation of state's table routines. <code>QUADEOS01</code> and <code>QUADEOS06</code> (in <a href="../files/quadeos01.f.html">quadeos01.f</a> and <a href="../files/quadeos06.f.html">quadeos06.f</a>) are copies for the 2001 and 2006 tables.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/esac.f.html#def-ESAC">ESAC</a> and <a href="../files/t6rinterp.f.html#def-T6RINTERP">T6RINTERP</a>. (GETW, GETQUA and VCIRC use an unrelated <em>array</em> <code>QUAD</code>, in the COMMON block <code>/QUADRU/</code>.)</li>
+</ul>
+<p><strong>The method.</strong> Through $(x_1, y_1)$, $(x_2, y_2)$, $(x_3, y_3)$, $y(x) = c_1 + c_2 x + c_3 x^2$ with
+$$c_3 = \frac{1}{x_1 - x_3}\left[\frac{y_1 - y_2}{x_1 - x_2} - \frac{y_2 - y_3}{x_2 - x_3}\right],\qquad c_2 = \frac{y_1 - y_2}{x_1 - x_2} - (x_1 + x_2)\,c_3,\qquad c_1 = y_1 - x_1 c_2 - x_1^2 c_3 .$$</p>
+<p><strong>Design.</strong> A cache: when <code>IC = 0</code>, the factors that depend only on the abscissas ($1/(x_1-x_2)$, $1/(x_1-x_3)$, $1/(x_2-x_3)$, $x_1^2$, $x_1+x_2$) are computed and stored in slot <code>I</code> (up to 30); when <code>IC</code> $\ne 0$, the stored factors of slot <code>I</code> are reused, so the caller must pass the same abscissas as when the slot was filled.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The cache is unchecked.</strong> Nothing verifies that the abscissas match the cached slot when <code>IC</code> $\ne 0$, nor that <code>I</code> $\le 30$. A comment at least, or a debug check?</li>
+<li><strong>The name clash.</strong> The function <code>QUAD</code> and the array <code>QUAD</code> in <code>/QUADRU/</code> share a name. Renaming the array would spare readers the confusion.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+***********************************************************************</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-QUAD'>QUAD</a> <span class='muted'>function · ***********************************************************************</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-QUAD'><h3><span class='kind'>function</span>QUAD</h3>
+<p class='muted'>lines 3–29 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/quad.f#L3-L29'>GitHub</a></p>
+<pre>REAL*8 FUNCTION QUAD(IC,I,X,Y1,Y2,Y3,X1,X2,X3)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+***********************************************************************</pre></details>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/esac.f.html#def-ESAC'>ESAC</a> <span class='muted'>(esac.f)</span> ×2</li>
+<li><a href='../files/t6rinterp.f.html#def-T6RINTERP'>T6RINTERP</a> <span class='muted'>(t6rinterp.f)</span> ×6</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">3</span>      REAL*8 FUNCTION QUAD(IC,I,X,Y1,Y2,Y3,X1,X2,X3)
+<span class="ln">4</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">5</span>C..... THIS FUNCTION PERFORMS A QUADRATIC INTERPOLATION.
+<span class="ln">6</span>      SAVE
+<span class="ln">7</span>      DIMENSION  XX(3),YY(3),XX12(30),XX13(30),XX23(30),XX1SQ(30)
+<span class="ln">8</span>     . ,XX1PXX2(30)
+<span class="ln">9</span>      XX(1)=X1
+<span class="ln">10</span>      XX(2)=X2
+<span class="ln">11</span>      XX(3)=X3
+<span class="ln">12</span>      YY(1)=Y1
+<span class="ln">13</span>      YY(2)=Y2
+<span class="ln">14</span>      YY(3)=Y3
+<span class="ln">15</span>        IF(IC .EQ. 0) THEN
+<span class="ln">16</span>          XX12(I)=1.D0/(XX(1)-XX(2))
+<span class="ln">17</span>          XX13(I)=1.D0/(XX(1)-XX(3))
+<span class="ln">18</span>          XX23(I)=1.D0/(XX(2)-XX(3))
+<span class="ln">19</span>          XX1SQ(I)=XX(1)*XX(1)
+<span class="ln">20</span>          XX1PXX2(I)=XX(1)+XX(2)
+<span class="ln">21</span>        ENDIF
+<span class="ln">22</span>      C3=(YY(1)-YY(2))*XX12(I)
+<span class="ln">23</span>      C3=C3-(YY(2)-YY(3))*XX23(I)
+<span class="ln">24</span>      C3=C3*XX13(I)
+<span class="ln">25</span>      C2=(YY(1)-YY(2))*XX12(I) - XX1PXX2(I)*C3
+<span class="ln">26</span>      C1=YY(1)-XX(1)*C2-XX1SQ(I)*C3
+<span class="ln">27</span>      QUAD=C1+X*(C2+X*C3)
+<span class="ln">28</span>      RETURN
+<span class="ln">29</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings (the coefficients checked; the remark on false links already removed, as settled).</p>
+<p>Revised: no change.</p></div></details>
+</main></body></html>

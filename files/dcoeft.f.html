@@ -1,0 +1,158 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>dcoeft.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ dcoeft.f</span></header><main>
+<h1>dcoeft.f</h1>
+<p class='muted'>114 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/dcoeft.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file sets up the tridiagonal system for one implicit step of angular-momentum transport by diffusion (and, with <code>LDIFAD</code>, a simple advective term), on the even grid in the coordinate $\chi$ (<code>DR</code> is <code>DCHI</code>, set by <a href="../files/rotgrid.f.html#def-ROTGRID">ROTGRID</a>). It is the solver setup used when the band solver of <a href="../files/dadcoeft.f.html#def-DADCOEFT">DADCOEFT</a> is not.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>ECOD</code> (the diffusion coefficients at the grid points), <code>DR</code>, <code>DT</code>, <code>EI</code> (moments of inertia), <code>EJ</code> (angular momenta), <code>EW</code> ($\Omega$), <code>NTOT</code>, <code>WIND1</code>, <code>WIND2</code> (the wind's change of $\Omega$, explicit and implicit), <code>LFIX</code> (fixed surface $\Omega$); with <code>LDIFAD</code> (<code>/VARFC/</code>), the advective and diffusive coefficients <code>ECOD3</code>, <code>ECOD4</code> from <code>/DIFAD/</code>. ROTGRID has already multiplied <code>ECOD</code> by $\rho r^2\,(d\chi/dr)$ and by the shell's $I/\Delta m$ ($4\pi$ is in CODIFF), and with <code>LDIFAD</code> added the composition coefficient <code>ECOD2</code> to <code>ECOD4</code>.</li>
+<li><strong>Who calls it:</strong> <a href="../files/seculr.f.html#def-SECULR">SECULR</a>.</li>
+<li><strong>Outputs:</strong> <code>A</code>, <code>B</code>, <code>C</code>, <code>D</code> in <code>/TRIDI/</code>, solved next by <a href="../files/tridia.f.html#def-TRIDIA">TRIDIA</a>; also <code>GAMA(NTOT)</code>, set to the wind's loss of angular momentum, $\Delta J = -\tfrac12(W_1 + W_2)\,I_N$, which TRIDIA reads before overwriting it.</li>
+</ul>
+<p><strong>The method.</strong> The header gives
+$$\frac{\partial\Omega}{\partial t} = \frac{1}{4\pi\rho r^2}\,\frac{1}{I/M}\,\frac{\partial}{\partial r}\left(D\frac{\partial\Omega}{\partial r}\right),$$
+differenced implicitly with $f_i = \Delta t/(\Delta r\,I_i)$:
+$$a_i = -f_i D_i, \qquad b_i = 1 + f_i(D_i + D_{i+1}), \qquad c_i = -f_i D_{i+1}, \qquad d_i = \Omega_i^n,$$
+with no flux at the centre and at the surface (or a fixed surface $\Omega$ if <code>LFIX</code>). The wind enters the surface: $d_N = \Omega_N(1 + \Delta J/J_N)$. With <code>LDIFAD</code>, $D$ is <code>ECOD4</code> and centred advective terms $\pm\tfrac12\Delta t\,\mathtt{ECOD3}/I_i$ are added, in conservative form: each interface's flux, $\tfrac12\mathtt{ECOD3}_i(\Omega_{i-1}+\Omega_i)$, enters both neighbouring rows, and none crosses the centre or the surface.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The advective factor.</strong> Here the advective factor is <code>FACTA = 0.5D0*DT/EI(I)</code>, with no $1/\Delta r$; in <a href="../files/dadcoeft.f.html#def-DADCOEFT">DADCOEFT</a> it is <code>0.5D0*DT/EI(I)/DR</code>. Does <code>ECOD3</code> mean the same in both, and is one of them missing (or adding) a $\Delta r$?</li>
+<li><strong><code>GAMA</code> as a message.</strong> The wind's $\Delta J$ is passed to TRIDIA through <code>GAMA(NTOT)</code> in <code>/TRIDI/</code>, a work array of the solver. Fragile; worth an explicit argument in the overhaul.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-DCOEFT'>DCOEFT</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-DCOEFT'><h3><span class='kind'>subroutine</span>DCOEFT</h3>
+<p class='muted'>lines 2–114 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/dcoeft.f#L2-L114'>GitHub</a></p>
+<pre>SUBROUTINE DCOEFT(ECOD,DR,DT,EI,EJ,EW,NTOT,WIND1,WIND2,LFIX)</pre>
+<div class='notes'><p>Builds the implicit tridiagonal system for $\Omega$ on the even grid (diffusion, optionally a centred advective term), with zero-flux or fixed-$\Omega$ boundaries and the wind's loss at the surface.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-DIFAD'>/DIFAD/</a>, <a href='../commons.html#c-TRIDI'>/TRIDI/</a>, <a href='../commons.html#c-VARFC'>/VARFC/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE DCOEFT(ECOD,DR,DT,EI,EJ,EW,NTOT,WIND1,WIND2,LFIX)
+<span class="ln">3</span>
+<span class="ln">4</span>      PARAMETER (JSON=5000)
+<span class="ln">5</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">6</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">7</span>      COMMON/TRIDI/A(JSON),B(JSON),C(JSON),D(JSON),U(JSON),GAMA(JSON)
+<span class="ln">8</span>      COMMON/DIFAD/ECOD3(JSON),ECOD4(JSON)
+<span class="ln">9</span>C MHP 7/93
+<span class="ln">10</span>      COMMON/VARFC/VFC(JSON),LVFC,LDIFAD
+<span class="ln">11</span>      DIMENSION ECOD(JSON),EI(JSON),EW(JSON),EJ(JSON)
+<span class="ln">12</span>      SAVE
+<span class="ln">13</span>C  DCOEFT SETS UP THE COEFFICIENTS FOR THE DIFFUSION DIFFERENCE EQUATION.
+<span class="ln">14</span>C
+<span class="ln">15</span>C  INPUT VARIABLES:
+<span class="ln">16</span>C  ECOD : DIFFUSION COEFFICIENTS AT THE EQUALLY SPACED GRID POINTS.
+<span class="ln">17</span>C  DR : GRID SPACING.
+<span class="ln">18</span>C  DT : TIMESTEP.
+<span class="ln">19</span>C  EI : RUN OF MOMENTS OF INERTIA OF EQUALLY SPACED GRID POINTS.
+<span class="ln">20</span>C  EW : RUN OF ANGULAR VELOCITY OF EQUALLY SPACED GRID POINTS.
+<span class="ln">21</span>C  NTOT : NUMBER OF EQUALLY SPACED GRID POINTS.
+<span class="ln">22</span>C  WIND1 : THE ANGULAR MOMENTUM LOSS FROM A SURFACE C.Z. COMPUTED
+<span class="ln">23</span>C     EXPLICITILY.
+<span class="ln">24</span>C  WIND2 : AS WIND1, BUT COMPUTED IMPLICITLY.
+<span class="ln">25</span>C  *NOTE: IF NOT APPLICABLE, WIND1 AND WIND2 ARE ZEROED OUT.
+<span class="ln">26</span>C
+<span class="ln">27</span>C  OUTPUT VARIABLES :
+<span class="ln">28</span>C  THE ANGULAR VELOCITY OF SHELL I AT TIME N+1 (W(I,N+1)) IS A FUNCTION OF
+<span class="ln">29</span>C  W(I-1),W(I),AND W(I+1) AS DISCUSSED BELOW.  THIS CAN BE EXPRESSED
+<span class="ln">30</span>C  AS A TRIDIAGONAL MATRIX.
+<span class="ln">31</span>C  A(I) : CONTAINS ALL TERMS INVOLVING OMEGA(I-1).
+<span class="ln">32</span>C  B(I) : CONTAINS ALL TERMS INVOLVING OMEGA(I).
+<span class="ln">33</span>C  C(I) : CONTAINS ALL TERMS INVOLVING OMEGA(I+1)
+<span class="ln">34</span>C  D(I) : THE ANGULAR VELOCITY TERMS AT THE BEGINNING OF THE TIMESTEP.
+<span class="ln">35</span>C  *NOTE: ANGULAR MOMENTUM LOSS FROM A SURFACE C.Z. IS SUBTRACTED FROM
+<span class="ln">36</span>C     THE LAST ELEMENT OF ARRAY D IF APPLICABLE.
+<span class="ln">37</span>C
+<span class="ln">38</span>C  THE DIFFUSION EQUATION WE ARE SOLVING IS
+<span class="ln">39</span>C  dW/dT = 1/(4pi*RHO*R**2) 1/(I/M) d/dR(D*dW/dR)
+<span class="ln">40</span>C  WHERE D IS OUR DIFFUSION COEFFICIENT,W IS THE ANGULAR VELOCITY,
+<span class="ln">41</span>C  I IS THE MOMENT OF INERTIA,M IS MASS,T IS TIME,R IS RADIUS,
+<span class="ln">42</span>C  AND RHO IS DENSITY.
+<span class="ln">43</span>C  USING M = 4pi*RHO*R**2*DR THIS IS DIFFERENCED FOR SHELL I AS
+<span class="ln">44</span>C  W(I,N+1)-W(I,N)=(DT/DR)*(1/I)*(D(I+1/2)*(W(I+1,N+1)-W(I,N+1)) -
+<span class="ln">45</span>C  D(I-1/2)*(W(I,N+1)-W(I-1,N+1)))
+<span class="ln">46</span>C  WHERE INDEX N+1 REFERS TO VALUES AT THE END OF THE TIMESTEP,AND
+<span class="ln">47</span>C  INDEX N REFERS TO VALUES AT THE BEGINNING OF THE TIMESTEP.
+<span class="ln">48</span>C  THIS SYSTEM IS SUPPLEMENTED WITH APPROPRIATE BOUNDARY CONDITIONS.
+<span class="ln">49</span>C
+<span class="ln">50</span>      FACT0 = DT/DR
+<span class="ln">51</span>      DO 10 I = 1,NTOT
+<span class="ln">52</span>         D(I) = EW(I)
+<span class="ln">53</span>   10 CONTINUE
+<span class="ln">54</span>      GAMA(NTOT) = -0.5D0*(WIND1+WIND2)*EI(NTOT)
+<span class="ln">55</span>      D(NTOT) = D(NTOT)*(1.0D0+GAMA(NTOT)/EJ(NTOT))
+<span class="ln">56</span>      IF(.NOT.LDIFAD)THEN
+<span class="ln">57</span>C  FIRST SHELL BOUNDARY CONDITIONS: NO FLOW BELOW THE BOUNDARY
+<span class="ln">58</span>C  I.E. THE ANGULAR MOMENTUM TRANSPORT AT THE FIRST SHELL DOES NOT
+<span class="ln">59</span>C  DEPEND ON THE SHELLS BELOW IT.
+<span class="ln">60</span>         FACT = FACT0/EI(1)
+<span class="ln">61</span>         A(1) = 0.0D0
+<span class="ln">62</span>         B(1) = 1.0D0 + FACT*ECOD(2)
+<span class="ln">63</span>         C(1) = -FACT*ECOD(2)
+<span class="ln">64</span>         DO 20 I = 2,NTOT-1
+<span class="ln">65</span>            FACT = FACT0/EI(I)
+<span class="ln">66</span>            A(I) = -FACT*ECOD(I)
+<span class="ln">67</span>            B(I) = 1.0D0 + FACT*(ECOD(I)+ECOD(I+1))
+<span class="ln">68</span>            C(I) = -FACT*ECOD(I+1)
+<span class="ln">69</span>   20    CONTINUE
+<span class="ln">70</span>C  LAST SHELL B.C. : SAME AS FIRST SHELL B.C.
+<span class="ln">71</span>         FACT = FACT0/EI(NTOT)
+<span class="ln">72</span>         IF(.NOT.LFIX)THEN
+<span class="ln">73</span>            A(NTOT) = -FACT*ECOD(NTOT)
+<span class="ln">74</span>            B(NTOT) = 1.0D0 + FACT*ECOD(NTOT)
+<span class="ln">75</span>         ELSE
+<span class="ln">76</span>            A(NTOT) = 0.0D0
+<span class="ln">77</span>            B(NTOT) = 1.0D0
+<span class="ln">78</span>         ENDIF
+<span class="ln">79</span>         C(NTOT) = 0.0D0
+<span class="ln">80</span>      ELSE
+<span class="ln">81</span>C IF LDIFAD=T, WE ARE SOLVING A COMBINED DIFFUSION/ADVECTION EQUATION.
+<span class="ln">82</span>C THIS ADDS A TERM D/DR(RHO*R**4*V*W) TO THE ORIGINAL D/DR(RHO*R**4*
+<span class="ln">83</span>C V*R*DW/DR) EQUATION.
+<span class="ln">84</span>C  FIRST SHELL BOUNDARY CONDITIONS: NO FLOW BELOW THE BOUNDARY
+<span class="ln">85</span>C  I.E. THE ANGULAR MOMENTUM TRANSPORT AT THE FIRST SHELL DOES NOT
+<span class="ln">86</span>C  DEPEND ON THE SHELLS BELOW IT.
+<span class="ln">87</span>         FACT = FACT0/EI(1)
+<span class="ln">88</span>         FACTA = 0.5D0*DT/EI(1)
+<span class="ln">89</span>         A(1) = 0.0D0
+<span class="ln">90</span>         B(1) = 1.0D0 + FACT*ECOD4(2) - FACTA*ECOD3(2)
+<span class="ln">91</span>         C(1) = -FACT*ECOD4(2) - FACTA*ECOD3(2)
+<span class="ln">92</span>         DO I = 2,NTOT-1
+<span class="ln">93</span>            FACT = FACT0/EI(I)
+<span class="ln">94</span>            FACTA = 0.5D0*DT/EI(I)
+<span class="ln">95</span>            A(I) = -FACT*ECOD4(I) + FACTA*ECOD3(I)
+<span class="ln">96</span>            B(I) = 1.0D0 + FACT*(ECOD4(I)+ECOD4(I+1)) +
+<span class="ln">97</span>     *             FACTA*(ECOD3(I)-ECOD3(I+1))
+<span class="ln">98</span>            C(I) = -FACT*ECOD4(I+1) - FACTA*ECOD3(I+1)
+<span class="ln">99</span>         END DO
+<span class="ln">100</span>C  LAST SHELL B.C. : SAME AS FIRST SHELL B.C.
+<span class="ln">101</span>         FACT = FACT0/EI(NTOT)
+<span class="ln">102</span>         FACTA = 0.5D0*DT/EI(NTOT)
+<span class="ln">103</span>         IF(.NOT.LFIX)THEN
+<span class="ln">104</span>            A(NTOT) = -FACT*ECOD4(NTOT) + FACTA*ECOD3(NTOT)
+<span class="ln">105</span>            B(NTOT) = 1.0D0 + FACT*ECOD4(NTOT) + FACTA*ECOD3(NTOT)
+<span class="ln">106</span>         ELSE
+<span class="ln">107</span>            A(NTOT) = 0.0D0
+<span class="ln">108</span>            B(NTOT) = 1.0D0
+<span class="ln">109</span>         ENDIF
+<span class="ln">110</span>         C(NTOT) = 0.0D0
+<span class="ln">111</span>      ENDIF
+<span class="ln">112</span>
+<span class="ln">113</span>      RETURN
+<span class="ln">114</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Wrong. "on the even grid in radius": <a href="../files/rotgrid.f.html#def-ROTGRID">ROTGRID</a> sets <code>DR = DCHI</code>, the spacing of the even grid in the coordinate $\chi$ (as for CCOEFT in round 1). Fix: say $\chi$.</li>
+<li>Settled. Question 3 (geometric factors in <code>ECOD</code>): ROTGRID multiplies <code>ECOD</code> by $\rho r^2\,(d\chi/dr)$ and by $I/\Delta m$ of the shell (its comment: "product of $\rho r^4$ by $d\chi/dr$ … factor of $I/MR^2$"), with $4\pi$ already in CODIFF; with <code>LDIFAD</code> it also adds the composition coefficient <code>ECOD2</code> to <code>ECOD4</code>. Fix: state it; drop the question.</li>
+<li>Missing. The advective terms are in conservative form (each interface's flux $\pm\tfrac12\Delta t\,\mathtt{ECOD3}_i(\Omega_{i-1}+\Omega_i)/I$ enters both neighbouring rows), with none beyond the centre and the surface. Fix: a clause.</li>
+</ol>
+<p>Revised: the grid in $\chi$ stated; question 3 settled (ROTGRID's factors) and dropped; the conservative form of the advective terms added.</p></div></details>
+</main></body></html>

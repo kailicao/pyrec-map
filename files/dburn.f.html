@@ -1,0 +1,182 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>dburn.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ dburn.f</span></header><main>
+<h1>dburn.f</h1>
+<p class='muted'>122 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/dburn.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file burns deuterium over a time step in one shell or one mixed region (a convection zone), with the rate varying linearly from its start-of-step to its end-of-step value, and updates hydrogen and $^3$He accordingly. With mass accretion, it also burns the accreted deuterium in the surface convection zone.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>IBEGIN</code>, <code>IEND</code> (the shell or zone), <code>M</code>, <code>HS2</code> (the mass of each shell), <code>HCOMP</code>, <code>DT</code> (the time step; <a href="../files/mix.f.html#def-MIX">MIX</a> passes $\Delta t$ in Gyr, <code>DDAGE*1.0D-9</code>); the start-of-step composition <code>HCOMPP</code> (<code>/OLDMOD/</code>); the rates <code>DRATE0</code>, <code>DRATE</code> (<code>/DEUTER/</code>, from <a href="../files/deutrate.f.html#def-DEUTRATE">DEUTRATE</a>) and <code>FMASSACC</code> (<code>/DEUTER/</code>, the mass accreted over the step in grams, set by <a href="../files/mdot.f.html#def-MDOT">MDOT</a> when mass is gained); <code>LMDOT</code>, <code>DMDT0</code>, <code>COMPACC</code> (<code>/MASSCHG/</code>).</li>
+<li><strong>Who calls it:</strong> <a href="../files/mix.f.html#def-MIX">MIX</a>, only with <code>LEXCOM</code> (the extended composition, 15 species): for each radiative shell, from the centre out until $T$ falls below <code>TCUT(1)</code>, and for every convection zone.</li>
+<li><strong>Output:</strong> <code>HCOMP</code> (species 1, 4 and 12: H, $^3$He, D) over the shell or zone.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>For a zone, mass-weighted means of $X$, $X_D$, $X_3$ and of the rates.</li>
+<li>If $X_D$ (with the accreted D, at the surface) is below $10^{-11}$, set it to zero and return (leaving $X$ and $^3$He as they are).</li>
+<li>
+<p>Burn in <code>ISTEP</code> = $\lfloor r\Delta t/0.1\rfloor + 1$ substeps, the rate rising linearly, with $r_k$ the rate at the substep's midpoint:
+$$X_D \leftarrow X_D\,e^{-2 r_k\,\Delta t/n}.$$</p>
+</li>
+<li>
+<p>Mass bookkeeping of D + p $\to$ $^3$He: with $\Delta X_D &lt; 0$ the change of deuterium,
+$$\Delta X = \tfrac12\,\Delta X_D, \qquad \Delta X_3 = -\tfrac32\,\Delta X_D.$$</p>
+</li>
+<li>
+<p><strong>Accretion</strong> (<code>LMDOT</code>, surface zone): matter accreted earlier in the step burns fully, new matter is exposed to half a substep's burning; then the zone's values are mass-weighted means of the old and the accreted matter.</p>
+</li>
+</ol></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>An outdated comment, and the weighting in DBURNM.</strong> The comment defines <code>FMASSACC</code> as "DMDT*DT/original CZ mass" (a fraction), but <a href="../files/mdot.f.html#def-MDOT">MDOT</a> sets it to <code>DELM</code> = <code>DMDT*CMSUN*DELTS/CSECYR</code>, the accreted mass in grams. DBURN's means, weighted by <code>SUMM</code> (grams) and <code>FMASSACC</code>, are therefore consistent; <a href="../files/dburnm.f.html#def-DBURNM">DBURNM</a>'s, <code>(XH2NO + XH2NA*FMASSA)/(1 + FMASSA)</code>, treat that mass in grams as a fraction. The comment should be updated, and DBURNM checked.</li>
+<li><strong><code>SUMM</code> for one shell.</strong> When <code>IBEGIN = IEND</code>, <code>SUMM</code> is never set, but the accretion branch uses it (if the surface zone is a single shell); it keeps a value from an earlier call (<code>SAVE</code>).</li>
+<li><strong>The substep size.</strong> The comment says the burning per substep is limited to 0.5 in the natural log; the code limits $r\,\Delta t/n$ to 0.1, that is $2r\Delta t/n \le 0.2$. Only the comment is off.</li>
+<li><strong>Accretion branch under mass loss.</strong> MDOT sets <code>FMASSACC</code> only when mass is gained. The zeroing test checks <code>DMDT0 &gt; 0</code>, but the accretion branch of the burning (<code>LMDOT .AND. IEND.EQ.M</code>) does not, so with mass loss it mixes in a stale <code>FMASSACC</code> from an earlier accreting step (or 0). Should it test <code>DMDT0 &gt; 0</code> too?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+DBURN - COMPUTE THE ABUNDANCE CHANGES RESULTING FROM DEUTERIUM BURNING
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-DBURN'>DBURN</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-DBURN'><h3><span class='kind'>subroutine</span>DBURN</h3>
+<p class='muted'>lines 4–122 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/dburn.f#L4-L122'>GitHub</a></p>
+<pre>SUBROUTINE DBURN(IBEGIN,IEND,M,HS2,HCOMP,DT)</pre>
+<div class='notes'><p>Deuterium burning over the step in a shell or zone, with a linearly varying rate in substeps, the H and $^3$He bookkeeping, and accreted deuterium at the surface.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+DBURN - COMPUTE THE ABUNDANCE CHANGES RESULTING FROM DEUTERIUM BURNING
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-DEUTER'>/DEUTER/</a>, <a href='../commons.html#c-MASSCHG'>/MASSCHG/</a>, <a href='../commons.html#c-OLDMOD'>/OLDMOD/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/mix.f.html#def-MIX'>MIX</a> <span class='muted'>(mix.f)</span> ×2</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE DBURN(IBEGIN,IEND,M,HS2,HCOMP,DT)
+<span class="ln">5</span>      PARAMETER(JSON=5000)
+<span class="ln">6</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">7</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">8</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">9</span>      COMMON/DEUTER/DRATE(JSON),DRATE0(JSON),FMASSACC,JCZ
+<span class="ln">10</span>      COMMON/MASSCHG/DMDT0,FCZDMDT,FTOTDMDT,COMPACC(15),CREIM,
+<span class="ln">11</span>     *               LREIMER,LMDOT
+<span class="ln">12</span>      COMMON/OLDMOD/HPO(JSON),HTO(JSON),HRO(JSON),HLO(JSON),
+<span class="ln">13</span>     *     HDO(JSON),HCOMPP(15,JSON),HSS(JSON),LCO(JSON),LCZO(JSON),TEFFLO,MO
+<span class="ln">14</span>C       DATA C21/5.240358E-8/
+<span class="ln">15</span>      DIMENSION HS2(JSON),HCOMP(15,JSON)
+<span class="ln">16</span>      SAVE
+<span class="ln">17</span>      IF(IBEGIN.EQ.IEND)THEN
+<span class="ln">18</span>         X = HCOMPP(1,IBEGIN)
+<span class="ln">19</span>         XH2 = HCOMPP(12,IBEGIN)
+<span class="ln">20</span>         XHE3 = HCOMPP(4,IBEGIN)
+<span class="ln">21</span>         RATE0 = DRATE0(IBEGIN)
+<span class="ln">22</span>         RATE1 = DRATE(IBEGIN)
+<span class="ln">23</span>      ELSE
+<span class="ln">24</span>         SUMM = 0.0D0
+<span class="ln">25</span>         SUMR0 = 0.0D0
+<span class="ln">26</span>         SUMR1 = 0.0D0
+<span class="ln">27</span>         X = 0.0D0
+<span class="ln">28</span>         XH2 = 0.0D0
+<span class="ln">29</span>         XHE3 = 0.0D0
+<span class="ln">30</span>         DO I = IBEGIN,IEND
+<span class="ln">31</span>            SUMM = SUMM + HS2(I)
+<span class="ln">32</span>            SUMR0 = SUMR0 + HS2(I)*DRATE0(I)
+<span class="ln">33</span>            SUMR1 = SUMR1 + HS2(I)*DRATE(I)
+<span class="ln">34</span>            X = X + HCOMPP(1,I)*HS2(I)
+<span class="ln">35</span>            XH2 = XH2 + HCOMPP(12,I)*HS2(I)
+<span class="ln">36</span>            XHE3 = XHE3 + HCOMPP(4,I)*HS2(I)
+<span class="ln">37</span>         END DO
+<span class="ln">38</span>         RATE0 = SUMR0/SUMM
+<span class="ln">39</span>         RATE1 = SUMR1/SUMM
+<span class="ln">40</span>         X = X/SUMM
+<span class="ln">41</span>         XH2 = XH2/SUMM
+<span class="ln">42</span>         XHE3 = XHE3/SUMM
+<span class="ln">43</span>      ENDIF
+<span class="ln">44</span>      IF(LMDOT .AND. IEND.EQ.M .AND. DMDT0.GT.0.0D0)THEN
+<span class="ln">45</span>         XH2TEST = (XH2*SUMM+COMPACC(12)*FMASSACC)/(SUMM+FMASSACC)
+<span class="ln">46</span>      ELSE
+<span class="ln">47</span>         XH2TEST = XH2
+<span class="ln">48</span>      ENDIF
+<span class="ln">49</span>      IF(XH2TEST.LT.1.0D-11)THEN
+<span class="ln">50</span>         DO I = IBEGIN,IEND
+<span class="ln">51</span>            HCOMP(12,I) = 0.0D0
+<span class="ln">52</span>         END DO
+<span class="ln">53</span>         GOTO 9999
+<span class="ln">54</span>      ENDIF
+<span class="ln">55</span>C BURN DEUTERIUM IN A SERIES OF SMALL STEPS,
+<span class="ln">56</span>C INCREMENTING THE BURNING RATE FROM THE STARTING
+<span class="ln">57</span>C TO ENDING VALUES.
+<span class="ln">58</span>C RESTRICT THE MAXIMUM BURNING TO 0.5 IN THE
+<span class="ln">59</span>C NATURAL LOG (&lt;1% ERROR FROM A SIMPLE SUM
+<span class="ln">60</span>C OF DISCRETE STEPS OF THIS SIZE).
+<span class="ln">61</span>C MHP 10/02 INITIALIZE RATE
+<span class="ln">62</span>      RATE = MAX(RATE0,RATE1)
+<span class="ln">63</span>      ISTEP = INT(RATE*DT/0.1D0)+1
+<span class="ln">64</span>      FSTEP = DFLOAT(ISTEP)
+<span class="ln">65</span>      TSTEP = DT/FSTEP
+<span class="ln">66</span>      R0 = RATE0
+<span class="ln">67</span>      DELRATE = (RATE1-RATE0)/FSTEP
+<span class="ln">68</span>      XH2NO = XH2
+<span class="ln">69</span>      DO I = 1,ISTEP
+<span class="ln">70</span>         RATE = R0 + 0.5D0*DELRATE
+<span class="ln">71</span>         XH2NO = XH2NO*EXP(-2.0D0*RATE*TSTEP)
+<span class="ln">72</span>         R0 = R0 + DELRATE
+<span class="ln">73</span>      END DO
+<span class="ln">74</span>C INCLUDE MASS ACCRETION FROM DEUTERIUM BURNING
+<span class="ln">75</span>      IF(LMDOT .AND. IEND.EQ.M)THEN
+<span class="ln">76</span>C ACCRETED MATTER IS EXPOSED TO BURNING FOR, ON
+<span class="ln">77</span>C AVERAGE. 1/2 OF THE TIMESTEP.  FMASSACC IS
+<span class="ln">78</span>C DEFINED AS DMDT*DT/ORIGINAL CZ MASS.
+<span class="ln">79</span>C BURN BOTH THE ACCRETED D AND THE ORIGINAL D
+<span class="ln">80</span>C SEPARATELY AND FIND THE NEW MASS-WEIGHTED
+<span class="ln">81</span>C AVERAGE D.  NOTE THAT ACCRETION OF ELEMENTS
+<span class="ln">82</span>C 1-11 HAS ALREADY BEEN TREATED.
+<span class="ln">83</span>         R0 = RATE0
+<span class="ln">84</span>         XH2NACC = COMPACC(12)
+<span class="ln">85</span>         XH2NA = 0.0D0
+<span class="ln">86</span>         DO I = 1,ISTEP
+<span class="ln">87</span>            RATE = R0 + 0.5D0*DELRATE
+<span class="ln">88</span>C FULLY BURN PRIOR ACCRETED MATTER
+<span class="ln">89</span>            XH2NA = XH2NA*EXP(-2.0D0*RATE*TSTEP)
+<span class="ln">90</span>C EXPOSE NEWLY ACCRETED MATTER TO 1/2 BURNING
+<span class="ln">91</span>            X2NEW = XH2NACC/FSTEP*EXP(-RATE*TSTEP)
+<span class="ln">92</span>            XH2NA = XH2NA + X2NEW
+<span class="ln">93</span>            R0 = R0 + DELRATE
+<span class="ln">94</span>         END DO
+<span class="ln">95</span>C NOW PERFORM A WEIGHTED SUM OF THE ORIGINAL
+<span class="ln">96</span>C AND NEWLY ACCRETED MATTER
+<span class="ln">97</span>         DXH2O = XH2NO - XH2
+<span class="ln">98</span>         DXH2A = XH2NA - COMPACC(12)
+<span class="ln">99</span>         XH2N = (XH2NO*SUMM+XH2NA*FMASSACC)/(SUMM+FMASSACC)
+<span class="ln">100</span>         XN = X + 0.5D0*(DXH2O*SUMM+DXH2A*FMASSACC)/(SUMM+FMASSACC)
+<span class="ln">101</span>         XHE3N = XHE3 -1.5D0*(DXH2O*SUMM+DXH2A*FMASSACC)/(SUMM+FMASSACC)
+<span class="ln">102</span>      ELSE
+<span class="ln">103</span>C INCREMENT H,D,HE3 WITHOUT MASS ACCRETION
+<span class="ln">104</span>         DXH2 = XH2NO - XH2
+<span class="ln">105</span>         XH2N = XH2NO
+<span class="ln">106</span>         XN = X + 0.5D0*DXH2
+<span class="ln">107</span>         XHE3N = XHE3 - 1.5D0*DXH2
+<span class="ln">108</span>      ENDIF
+<span class="ln">109</span>C      IF(IEND.EQ.M)THEN
+<span class="ln">110</span>C      WRITE(*,911)IBEGIN,IEND,DRATE(IBEGIN),RATE0,RATE1,
+<span class="ln">111</span>C     *            XH2,XH2N,XHE3,XHE3N
+<span class="ln">112</span>C      WRITE(*,*)DXH2O,DXH2A,FMASSACC
+<span class="ln">113</span>C      ENDIF
+<span class="ln">114</span>C 911  FORMAT(1X,&#x27;DBURN: MIX D BURNING&#x27;,2I5,1P7E12.3)
+<span class="ln">115</span>      DO I = IBEGIN,IEND
+<span class="ln">116</span>         HCOMP(1,I) = XN
+<span class="ln">117</span>         HCOMP(4,I) = XHE3N
+<span class="ln">118</span>         HCOMP(12,I) = XH2N
+<span class="ln">119</span>      END DO
+<span class="ln">120</span> 9999 CONTINUE
+<span class="ln">121</span>      RETURN
+<span class="ln">122</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Wrong. Question 1 says DBURN's accretion weighting mixes units because <code>FMASSACC</code> is a fraction. It is not: <a href="../files/mdot.f.html#def-MDOT">MDOT</a> sets <code>FMASSACC = DELM</code>, with <code>DELM = DMDT*CMSUN*DELTS/CSECYR</code>, the accreted mass in grams (and <code>SMASS + DELM/CMSUN</code>). So DBURN weights grams by grams, as it should; the comment ("DMDT*DT/original CZ mass") is out of date, and it is <a href="../files/dburnm.f.html#def-DBURNM">DBURNM</a>'s weighting, <code>(XH2NO + XH2NA*FMASSA)/(1 + FMASSA)</code>, that treats a mass in grams as a fraction. Fix: rewrite question 1 (the outdated comment; the problem is in DBURNM).</li>
+<li>Missing question. MDOT sets <code>FMASSACC</code> only when mass is gained (<code>DELM &gt; 0</code>). The accretion branch of the burning (<code>LMDOT .AND. IEND.EQ.M</code>) does not test <code>DMDT0 &gt; 0</code> (the zeroing test above it does), so with mass loss it mixes in a stale <code>FMASSACC</code> from an earlier accreting step (or 0). Fix: add.</li>
+<li>Wrong. "Who calls it: MIX, for each radiative shell and each convection zone above the burning cut-off": MIX calls DBURN only with <code>LEXCOM</code> (the extended composition, 15 species); the cut-off <code>TCUT(1)</code> stops the loop over radiative shells, but every convection zone is passed. Fix: reword.</li>
+<li>Minor. Step 2: on zeroing, the routine returns at once, leaving <code>X</code> and $^3$He as they are in <code>HCOMP</code>. Fix: a clause.</li>
+</ol>
+<p>Revised: question 1 rewritten (<code>FMASSACC</code> is in grams; the comment is outdated and DBURNM's weighting is the suspect one); question 4 (accretion branch under mass loss) added; the call condition <code>LEXCOM</code> and the cut-off corrected; the early return stated.</p></div></details>
+</main></body></html>

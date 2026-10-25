@@ -1,0 +1,300 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>meval.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ meval.f</span></header><main>
+<h1>meval.f</h1>
+<p class='muted'>257 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/meval.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>MEVAL</code> evaluates a shape-preserving (osculatory) quadratic spline at a set of points: McAllister and Roulier's algorithm, "coded by S. L. Dodd and M. Roulier, N.C. State University" (its header). The spline passes through the data with given slopes and keeps the data's monotonicity and convexity.</p>
+<p><strong>How it fits.</strong> Called only by <a href="../files/osplin.f.html#def-OSPLIN"><code>OSPLIN</code></a>, which computes the slopes and passes <code>EPS</code> = $10^{-4}$; <code>OSPLIN</code> is the interpolator that <a href="../files/hpoint.f.html#def-HPOINT"><code>HPOINT</code></a> uses to move every model variable to the new mass points, and is also called by <a href="../files/eq2mod.f.html#def-EQ2MOD"><code>EQ2MOD</code></a> and <a href="../files/getgrid.f.html#def-GETGRID"><code>GETGRID</code></a>. It calls <a href="../files/search.f.html#def-SEARCH"><code>SEARCH</code></a> (the interval of a point), <a href="../files/choose.f.html#def-CHOOSE"><code>CHOOSE</code></a> (which of the spline's cases applies in an interval), <a href="../files/cases.f.html#def-CASES"><code>CASES</code></a> (the spline's parameters for that case) and the function <a href="../files/spline.f.html#def-SPLINE"><code>SPLINE</code></a> (its value). No COMMON blocks.</p>
+<p><strong>The method.</strong> Its arguments: the points <code>XVAL(1..NUME)</code> (nondecreasing), the data <code>XTAB</code>, <code>YTAB</code> and slopes <code>MTAB</code> (<code>NUM</code> points), the tolerance <code>EPS</code>; the output <code>YVAL</code> and the error code <code>ERR</code> (0 normal; 1 extrapolation; 2 <code>XVAL</code> not sorted, in which case nothing is computed). It walks through the evaluation points and the data intervals together: points equal to a data abscissa get the data value; for each interval containing points it calls <code>CHOOSE</code> and <code>CASES</code> once and evaluates <code>SPLINE</code> at each point; points beyond the ends are extrapolated with the end intervals' splines.</p>
+<p><strong>KC's changes.</strong> 2025-05-30: arithmetic IF statements replaced by block IFs (no change in behaviour intended).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A comment contradicts the code.</strong> "If XVAL(I) .LT. XTAB(1), then XVAL(I)=YTAB(1)" (and the same at the top end): the code extrapolates with the end spline instead, and writes <code>YVAL</code>, not <code>XVAL</code>. Which behaviour is wanted for the outermost points of a rezoned model?</li>
+<li><strong>The error code is ignored.</strong> <code>ERR</code> = 2 (unsorted <code>XVAL</code>) returns without setting <code>YVAL</code>, and <code>OSPLIN</code> does not check <code>ERR</code> after the call, so the caller gets whatever <code>YVAL</code> held. Should <code>OSPLIN</code> stop, or warn?</li>
+<li><strong>Fixed array size.</strong> The dummy arrays are declared with <code>JSON</code> = 5000 rather than with <code>NUM</code> and <code>NUME</code>.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+MEVAL
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MEVAL'>MEVAL</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MEVAL'><h3><span class='kind'>subroutine</span>MEVAL</h3>
+<p class='muted'>lines 5–257 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/meval.f#L5-L257'>GitHub</a></p>
+<pre>SUBROUTINE MEVAL(XVAL,YVAL,XTAB,YTAB,MTAB,NUM,NUME,EPS,ERR)</pre>
+<div class='notes'><p>Evaluates McAllister–Roulier's shape-preserving quadratic spline at many points (above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+MEVAL
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/cases.f.html#def-CASES'>CASES</a> <span class='muted'>(cases.f)</span> ×4</li>
+<li><a href='../files/choose.f.html#def-CHOOSE'>CHOOSE</a> <span class='muted'>(choose.f)</span> ×4</li>
+<li><a href='../files/search.f.html#def-SEARCH'>SEARCH</a> <span class='muted'>(search.f)</span></li>
+<li><a href='../files/spline.f.html#def-SPLINE'>SPLINE</a> <span class='muted'>(spline.f)</span> ×3</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/osplin.f.html#def-OSPLIN'>OSPLIN</a> <span class='muted'>(osplin.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">5</span>      SUBROUTINE MEVAL(XVAL,YVAL,XTAB,YTAB,MTAB,NUM,NUME,EPS,ERR)
+<span class="ln">6</span>C
+<span class="ln">7</span>C                                 SHAPE PRESERVING QUADRATIC SPLINES
+<span class="ln">8</span>C                                   BY D.F.MCALLISTER &amp; J.A.ROULIER
+<span class="ln">9</span>C                                     CODED BY S.L.DOOD &amp; M.ROULIER
+<span class="ln">10</span>C                                       N.C. STATE UNIVERSITY
+<span class="ln">11</span>C
+<span class="ln">12</span>      PARAMETER (JSON=5000)
+<span class="ln">13</span>      REAL*8 XVAL(JSON),YVAL(JSON),XTAB(JSON),YTAB(JSON),
+<span class="ln">14</span>     *     MTAB(JSON),V1,V2,W1,W2,Z1,Z2,Y1,Y2,E1,E2,SPLINE,EPS
+<span class="ln">15</span>      INTEGER START,START1,END,END1,ERR,FND
+<span class="ln">16</span>C
+<span class="ln">17</span>C MEVAL CONTROLS THE EVALUATION OF AN OSCULATORY QUADRATIC SPLINE. THE
+<span class="ln">18</span>C USER MAY PROVIDE HIS OWN SLOPES AT THE POINTS OF INTERPOLATION OR USE
+<span class="ln">19</span>C THE SUBROUTINE &#x27;SLOPES&#x27; TO CALCULATE SLOPES WHICH ARE CONSISTENT WITH
+<span class="ln">20</span>C THE SHAPE OF THE DATA.
+<span class="ln">21</span>C
+<span class="ln">22</span>C
+<span class="ln">23</span>C
+<span class="ln">24</span>C ON INPUT--
+<span class="ln">25</span>C
+<span class="ln">26</span>C   XVAL MUST BE A NONDECREASING VECTOR OF POINTS AT WHICH THE SPLINE
+<span class="ln">27</span>C   WILL BE EVALUATED.
+<span class="ln">28</span>C
+<span class="ln">29</span>C   XTAB CONTAINS THE ABSCISSAS OF THE DATA POINTS TO BE INTERPOLATED.
+<span class="ln">30</span>C   XTAB MUST BE INCREASING.
+<span class="ln">31</span>C
+<span class="ln">32</span>C   YTAB CONTAINS THE ORDINATES OF THE DATA POINTS TO BE INTERPOLATED.
+<span class="ln">33</span>C
+<span class="ln">34</span>C   MTAB CONTAINS THE SLOPE OF THE SPLINE AT EACH POINT OF INTERPOLA-
+<span class="ln">35</span>C   TION.
+<span class="ln">36</span>C
+<span class="ln">37</span>C   NUM IS THE NUMBER OF DATA POINTS (DIMENSION OF XTAB AND YTAB).
+<span class="ln">38</span>C
+<span class="ln">39</span>C   NUME IS THE NUMBER OF POINTS OF EVALUATION (DIMENSION OF XVAL AND
+<span class="ln">40</span>C   YVAL).
+<span class="ln">41</span>C
+<span class="ln">42</span>C   EPS IS A RELATIVE ERROR TOLERANCE USED IN SUBROUTINE &#x27;CHOOSE&#x27;
+<span class="ln">43</span>C   TO DISTINGUISH THE SITUATION MTAB(I) OR MTAB(I+1) IS RELATIVELY
+<span class="ln">44</span>C   CLOSE TO THE SLOPE OR TWICE THE SLOPE OF THE LINEAR SEGMENT
+<span class="ln">45</span>C   BETWEEN XTAB(I) AND XTAB(I+1). IF THIS SITUATION OCCURS,
+<span class="ln">46</span>C   ROUNDOFF MAY CAUSE A CHANGE IN CONVEXITY OR MONOTONICITY OF THE
+<span class="ln">47</span>C   RESULTING SPLINE AND A CHANGE IN THE CASE NUMBER PROVIDED BY
+<span class="ln">48</span>C   CHOOSE. IF EPS IS NOT EQUAL TO ZERO, THEN EPS SHOULD BE GREATER
+<span class="ln">49</span>C   THAN OR EQUAL TO MACHINE EPSILON.
+<span class="ln">50</span>C
+<span class="ln">51</span>C
+<span class="ln">52</span>C ON OUTPUT--
+<span class="ln">53</span>C
+<span class="ln">54</span>C   YVAL CONTAINS THE IMAGES OF THE POINTS IN XVAL.
+<span class="ln">55</span>C
+<span class="ln">56</span>C   ERR IS AN ERROR CODE--
+<span class="ln">57</span>C   ERR=0 - MEVAL RAN NORMALLY.
+<span class="ln">58</span>C   ERR=1 - XVAL(I) IS LESS THAN XTAB(1) FOR AT LEAST ONE I OR
+<span class="ln">59</span>C           XVAL(I) IS GREATER THAN XTAB(NUM) FOR AT LEAST ONE I.
+<span class="ln">60</span>C           MEVAL WILL EXTRAPOLATE TO PROVIDE FUNCTION VALUES FOR
+<span class="ln">61</span>C           THESE ABSCISSAS.
+<span class="ln">62</span>C   ERR=2 - XVAL(I+1) .LT. XVAL(I) FOR SOME I.
+<span class="ln">63</span>C
+<span class="ln">64</span>C AND
+<span class="ln">65</span>C
+<span class="ln">66</span>C   MEVAL DOES NOT ALTER XVAL,XTAB,YTAB,MTAB,NUM,NUME.
+<span class="ln">67</span>C
+<span class="ln">68</span>C
+<span class="ln">69</span>C   MEVAL CALLS THE FOLLOWING SUBROUTINES OR FUNCTIONS:
+<span class="ln">70</span>C      SEARCH
+<span class="ln">71</span>C      CASES
+<span class="ln">72</span>C      CHOOSE
+<span class="ln">73</span>C      SPLINE
+<span class="ln">74</span>C
+<span class="ln">75</span>C---------------------------------------------------------------------
+<span class="ln">76</span>C
+<span class="ln">77</span>      save
+<span class="ln">78</span>
+<span class="ln">79</span>
+<span class="ln">80</span>      START=1
+<span class="ln">81</span>      END=NUME
+<span class="ln">82</span>      ERR=0
+<span class="ln">83</span>      IF (NUME .EQ. 1) GO TO 20
+<span class="ln">84</span>C
+<span class="ln">85</span>C DETERMINE IF XVAL IS NONDECREASING.
+<span class="ln">86</span>      NUME1=NUME - 1
+<span class="ln">87</span>      DO 10 I=1,NUME1
+<span class="ln">88</span>        IF (XVAL(I+1) .GE. XVAL(I)) GO TO 10
+<span class="ln">89</span>        ERR=2
+<span class="ln">90</span>        GO TO 230
+<span class="ln">91</span>  10  CONTINUE
+<span class="ln">92</span>C
+<span class="ln">93</span>C
+<span class="ln">94</span>C IF XVAL(I) .LT. XTAB(1), THEN XVAL(I)=YTAB(1).
+<span class="ln">95</span>C IF XVAL(I) .GT. XTAB(NUM), THEN XVAL(I)=YTAB(NUM).
+<span class="ln">96</span>C
+<span class="ln">97</span>C DETERMINE IF ANY OF THE POINTS IN XVAL ARE LESS THAN THE ABSCISSA OF
+<span class="ln">98</span>C THE FIRST DATA POINT.
+<span class="ln">99</span>  20  DO 30 I=1,NUME
+<span class="ln">100</span>        IF (XVAL(I) .GE. XTAB(1)) GO TO 40
+<span class="ln">101</span>        START=I+1
+<span class="ln">102</span>  30  CONTINUE
+<span class="ln">103</span>C
+<span class="ln">104</span>C
+<span class="ln">105</span>  40  NUME1=NUME+1
+<span class="ln">106</span>C
+<span class="ln">107</span>C DETERMINE IF ANY OF THE POINTS IN XVAL ARE GREATER THAN THE ABSCISSA
+<span class="ln">108</span>C OF THE LAST DATA POINT.
+<span class="ln">109</span>      DO 50 I=1,NUME
+<span class="ln">110</span>        IND=NUME1-I
+<span class="ln">111</span>        IF (XVAL(IND) .LE. XTAB(NUM)) GO TO 60
+<span class="ln">112</span>        END = IND-1
+<span class="ln">113</span>  50  CONTINUE
+<span class="ln">114</span>C
+<span class="ln">115</span>C
+<span class="ln">116</span>C CALCULATE THE IMAGES OF POINTS OF EVALUATION WHOSE ABSCISSAS
+<span class="ln">117</span>C ARE LESS THAN THE ABSCISSA OF THE FIRST DATA POINT.
+<span class="ln">118</span>  60  IF (START .EQ. 1) GO TO 80
+<span class="ln">119</span>C SET THE ERROR PARAMETER TO INDICATE THAT EXTRAPOLATION HAS OCCURRED.
+<span class="ln">120</span>      ERR=1
+<span class="ln">121</span>      CALL <a href="../files/choose.f.html#def-CHOOSE" title="CHOOSE in choose.f">CHOOSE</a>(XTAB(1),YTAB(1),MTAB(1),MTAB(2),XTAB(2),
+<span class="ln">122</span>     *            YTAB(2),EPS,NCASE)
+<span class="ln">123</span>      CALL <a href="../files/cases.f.html#def-CASES" title="CASES in cases.f">CASES</a>(XTAB(1),YTAB(1),MTAB(1),MTAB(2),XTAB(2),
+<span class="ln">124</span>     *           YTAB(2),E1,E2,V1,V2,W1,W2,Z1,Z2,Y1,Y2,NCASE)
+<span class="ln">125</span>      START1=START - 1
+<span class="ln">126</span>      DO 70 I=1,START1
+<span class="ln">127</span>       YVAL(I)= <a href="../files/spline.f.html#def-SPLINE" title="SPLINE in spline.f">SPLINE</a>(XVAL(I),Z1,Z2,XTAB(1),YTAB(1),XTAB(2),YTAB(2),
+<span class="ln">128</span>     *                   Y1,Y2,E2,W2,V2,NCASE)
+<span class="ln">129</span>  70  CONTINUE
+<span class="ln">130</span>      IF (NUME .EQ. 1) GO TO 230
+<span class="ln">131</span>C
+<span class="ln">132</span>C
+<span class="ln">133</span>C SEARCH LOCATES THE INTERVAL IN WHICH THE FIRST IN-RANGE POINT OF
+<span class="ln">134</span>C EVALUATION LIES.
+<span class="ln">135</span>  80  IF ((NUME .EQ. 1) .AND. (END .NE. NUME)) GO TO 200
+<span class="ln">136</span>      CALL <a href="../files/search.f.html#def-SEARCH" title="SEARCH in search.f">SEARCH</a>(XTAB,NUM,XVAL(START),LCN,FND)
+<span class="ln">137</span>C
+<span class="ln">138</span>      LCN1=LCN+1
+<span class="ln">139</span>C
+<span class="ln">140</span>C
+<span class="ln">141</span>C IF THE FIRST IN-RANGE POINT OF EVALUATION IS EQUAL TO ONE OF THE DATA
+<span class="ln">142</span>C POINTS, ASSIGN THE APPROPRIATE VALUE FROM YTAB. CONTINUE UNTIL A
+<span class="ln">143</span>C POINT OF EVALUATION IS FOUND WHICH IS NOT EQUAL TO A DATA POINT.
+<span class="ln">144</span>      IF (FND .EQ. 0) GO TO 130
+<span class="ln">145</span>  90  YVAL(START)=YTAB(LCN)
+<span class="ln">146</span>      START1=START
+<span class="ln">147</span>      START=START+1
+<span class="ln">148</span>      IF (START .GT. NUME) GO TO 230
+<span class="ln">149</span>      IF (XVAL(START1) .EQ. XVAL(START)) GO TO 90
+<span class="ln">150</span>C
+<span class="ln">151</span>C KC 2025-05-30 fixed &quot;Arithmetic IF statement&quot;
+<span class="ln">152</span>C   100 IF (XVAL(START) - XTAB(LCN1)) 130,110,120
+<span class="ln">153</span>  100 IF (XVAL(START) .LT. XTAB(LCN1)) THEN
+<span class="ln">154</span>         GOTO 130
+<span class="ln">155</span>      ELSE IF (XVAL(START) .EQ. XTAB(LCN1)) THEN
+<span class="ln">156</span>         GOTO 110
+<span class="ln">157</span>      ELSE
+<span class="ln">158</span>         GOTO 120
+<span class="ln">159</span>      END IF
+<span class="ln">160</span>C
+<span class="ln">161</span>  110 YVAL(START)=YTAB(LCN1)
+<span class="ln">162</span>      START1=START
+<span class="ln">163</span>      START=START+1
+<span class="ln">164</span>      IF (START .GT. NUME) GO TO 230
+<span class="ln">165</span>      IF (XVAL(START) .NE. XVAL(START1)) GO TO 120
+<span class="ln">166</span>      GO TO 110
+<span class="ln">167</span>C
+<span class="ln">168</span>  120 LCN=LCN1
+<span class="ln">169</span>      LCN1=LCN1+1
+<span class="ln">170</span>      GO TO 100
+<span class="ln">171</span>C
+<span class="ln">172</span>C
+<span class="ln">173</span>C
+<span class="ln">174</span>C CALCULATE THE IMAGES OF ALL THE POINTS WHICH LIE WITHIN RANGE OF THE
+<span class="ln">175</span>C DATA.
+<span class="ln">176</span>C
+<span class="ln">177</span>  130 IF ((LCN .EQ. 1) .AND. (ERR .EQ. 1)) GO TO 140
+<span class="ln">178</span>      CALL <a href="../files/choose.f.html#def-CHOOSE" title="CHOOSE in choose.f">CHOOSE</a>(XTAB(LCN),YTAB(LCN),MTAB(LCN),MTAB(LCN1),
+<span class="ln">179</span>     *            XTAB(LCN1),YTAB(LCN1),EPS,NCASE)
+<span class="ln">180</span>      CALL <a href="../files/cases.f.html#def-CASES" title="CASES in cases.f">CASES</a>(XTAB(LCN),YTAB(LCN),MTAB(LCN),MTAB(LCN1),
+<span class="ln">181</span>     *           XTAB(LCN1),YTAB(LCN1),E1,E2,V1,V2,W1,W2,Z1,Z2,
+<span class="ln">182</span>     *           Y1,Y2,NCASE)
+<span class="ln">183</span>C
+<span class="ln">184</span>  140 DO 190 I=START,END
+<span class="ln">185</span>C
+<span class="ln">186</span>C IF XVAL(I) -XTAB(LCN1) IS NEGATIVE, DO NOT RECALCULATE THE PARAMETERS
+<span class="ln">187</span>C FOR THIS SECTION OF THE SPLINE SINCE THEY ARE ALREADY KNOWN.
+<span class="ln">188</span>C KC 2025-05-30 fixed &quot;Arithmetic IF statement&quot;
+<span class="ln">189</span>C       IF (XVAL(I) - XTAB(LCN1)) 150,160,170
+<span class="ln">190</span>      IF (XVAL(I) .LT. XTAB(LCN1)) THEN
+<span class="ln">191</span>         GOTO 150
+<span class="ln">192</span>      ELSE IF (XVAL(I) .EQ. XTAB(LCN1)) THEN
+<span class="ln">193</span>         GOTO 160
+<span class="ln">194</span>      ELSE
+<span class="ln">195</span>         GOTO 170
+<span class="ln">196</span>      END IF
+<span class="ln">197</span>C
+<span class="ln">198</span>  150 YVAL(I)=<a href="../files/spline.f.html#def-SPLINE" title="SPLINE in spline.f">SPLINE</a>(XVAL(I),Z1,Z2,XTAB(LCN),YTAB(LCN),XTAB(LCN1),
+<span class="ln">199</span>     *               YTAB(LCN1),Y1,Y2,E2,W2,V2,NCASE)
+<span class="ln">200</span>      GO TO 190
+<span class="ln">201</span>C
+<span class="ln">202</span>C IF XVAL(I) IS A DATA POINT, ITS IMAGE IS KNOWN.
+<span class="ln">203</span>  160 YVAL(I)=YTAB(LCN1)
+<span class="ln">204</span>      GO TO 190
+<span class="ln">205</span>C
+<span class="ln">206</span>C INCREMENT THE POINTERS WHICH GIVE THE LOCATION IN THE DATA VECTOR.
+<span class="ln">207</span>  170 LCN=LCN1
+<span class="ln">208</span>      LCN1=LCN+1
+<span class="ln">209</span>C
+<span class="ln">210</span>C DETERMINE THAT THE ROUTINE IS IN THE CORRECT PART OF THE SPLINE.
+<span class="ln">211</span>C KC 2025-05-30 fixed &quot;Arithmetic IF statement&quot;
+<span class="ln">212</span>C       IF (XVAL(I) - XTAB(LCN1)) 180,160,170
+<span class="ln">213</span>      IF (XVAL(I) .LT. XTAB(LCN1)) THEN
+<span class="ln">214</span>         GOTO 180
+<span class="ln">215</span>      ELSE IF (XVAL(I) .EQ. XTAB(LCN1)) THEN
+<span class="ln">216</span>         GOTO 160
+<span class="ln">217</span>      ELSE
+<span class="ln">218</span>         GOTO 170
+<span class="ln">219</span>      END IF
+<span class="ln">220</span>C
+<span class="ln">221</span>C CALL CHOOSE TO DETERMINE THE APPROPRIATE CASE AND THEN CALL
+<span class="ln">222</span>C CASES TO COMPUTE THE PARAMETERS OF THE SPLINE.
+<span class="ln">223</span>  180 CALL <a href="../files/choose.f.html#def-CHOOSE" title="CHOOSE in choose.f">CHOOSE</a>(XTAB(LCN),YTAB(LCN),MTAB(LCN),MTAB(LCN1),
+<span class="ln">224</span>     *            XTAB(LCN1),YTAB(LCN1),EPS,NCASE)
+<span class="ln">225</span>      CALL <a href="../files/cases.f.html#def-CASES" title="CASES in cases.f">CASES</a>(XTAB(LCN),YTAB(LCN),MTAB(LCN),MTAB(LCN1),
+<span class="ln">226</span>     *           XTAB(LCN1),YTAB(LCN1),E1,E2,V1,V2,W1,W2,Z1,Z2,
+<span class="ln">227</span>     *           Y1,Y2,NCASE)
+<span class="ln">228</span>      GO TO 150
+<span class="ln">229</span>  190 CONTINUE
+<span class="ln">230</span>C
+<span class="ln">231</span>C
+<span class="ln">232</span>C CALCULATE THE IMAGES OF THE POINTS OF EVALUATION WHOSE ABSCISSAS
+<span class="ln">233</span>C ARE GREATER THAN THE ABSCISSA OF THE LAST DATA POINT.
+<span class="ln">234</span>      IF (END .EQ. NUME) GO TO 230
+<span class="ln">235</span>      IF ((LCN1 .EQ. NUM) .AND. (XVAL(END) .NE. XTAB(NUM))) GO TO 210
+<span class="ln">236</span>
+<span class="ln">237</span>C Previously, when we arrived at 200 or 210, NUM1 could be improperly set.
+<span class="ln">238</span>C The NUM1= lines below protect from that.  llp   8/19/08
+<span class="ln">239</span>
+<span class="ln">240</span>C SET THE ERROR PRARMETER TO INDICATE THAT EXTRAPOLATION HAS OCCURRED.
+<span class="ln">241</span>  200 ERR=1
+<span class="ln">242</span>      NUM1=max(NUM-1,1)
+<span class="ln">243</span>      CALL <a href="../files/choose.f.html#def-CHOOSE" title="CHOOSE in choose.f">CHOOSE</a>(XTAB(NUM1),YTAB(NUM1),MTAB(NUM1),MTAB(NUM),
+<span class="ln">244</span>     *            XTAB(NUM),YTAB(NUM),EPS,NCASE)
+<span class="ln">245</span>      CALL <a href="../files/cases.f.html#def-CASES" title="CASES in cases.f">CASES</a>(XTAB(NUM1),YTAB(NUM1),MTAB(NUM1),MTAB(NUM),
+<span class="ln">246</span>     *           XTAB(NUM),YTAB(NUM),E1,E2,V1,V2,W1,W2,Z1,Z2,
+<span class="ln">247</span>     *           Y1,Y2,NCASE)
+<span class="ln">248</span>  210 END1=END + 1
+<span class="ln">249</span>      NUM1=max(NUM-1,1)
+<span class="ln">250</span>      DO 220 I=END1,NUME
+<span class="ln">251</span>       YVAL(I)= <a href="../files/spline.f.html#def-SPLINE" title="SPLINE in spline.f">SPLINE</a>(XVAL(I),Z1,Z2,XTAB(NUM1),YTAB(NUM1),
+<span class="ln">252</span>     *                   XTAB(NUM),YTAB(NUM),Y1,Y2,E2,W2,V2,NCASE)
+<span class="ln">253</span>  220 CONTINUE
+<span class="ln">254</span>C
+<span class="ln">255</span>C
+<span class="ln">256</span>  230 RETURN
+<span class="ln">257</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked: the sorting check (<code>ERR</code> = 2), the walk through points and intervals, the extrapolation at both ends (<code>ERR</code> = 1), the first question (the comment contradicts the code).</p>
+<ol>
+<li><strong>Missing.</strong> <code>OSPLIN</code> is also called by <code>EQ2MOD</code> and <code>GETGRID</code>, not only by <code>HPOINT</code>. Fix: name them.</li>
+<li><strong>Unclear (question 2).</strong> "Does <code>OSPLIN</code> check <code>ERR</code>?" It does not (osplin.f:41 is the last use). Fix: state it and ask what should happen.</li>
+</ol>
+<p>Revised: both applied.</p></div></details>
+</main></body></html>

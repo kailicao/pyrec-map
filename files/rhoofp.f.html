@@ -1,0 +1,184 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>rhoofp.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ rhoofp.f</span></header><main>
+<h1>rhoofp.f</h1>
+<p class='muted'>129 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/rhoofp.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Inverts the OPAL equation of state (the original tables): given the hydrogen abundance $X$, the temperature $T_6$ and a pressure $P$, it finds the density $\rho$ such that $P(\rho, T_6, X) = P$. The versions for the 2001 and 2006 tables are <a href="../files/rhoofp01.f.html#def-RHOOFP01"><code>RHOOFP01</code></a> and <a href="../files/rhoofp06.f.html#def-RHOOFP06"><code>RHOOFP06</code></a>.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/oeqos.f.html#def-OEQOS"><code>OEQOS</code></a>, which works in pressure and temperature and needs the density.</li>
+<li><strong>What it calls:</strong> <a href="../files/esac.f.html#def-ESAC"><code>ESAC</code></a>, for $P(\rho)$ at each trial density (its result is in <code>EOS(1)</code> of <code>/E/</code>). On the first use (<code>ITIME</code> in <code>/LREADCO/</code> not yet set), it first calls <code>ESAC</code> once at a fixed point ($X = 0.5$, $T_6 = 1$, $\rho = 0.001$) so that the tables get read.</li>
+<li><strong>COMMON:</strong> <code>/A/</code> (the tables and grids <code>XZ</code>, <code>T6LIST</code>, <code>RHO</code>, <code>XA</code>, read by <a href="../files/readco.f.html#def-READCO"><code>READCO</code></a>), <code>/B/</code>, <code>/E/</code>, <code>/LREADCO/</code>, <code>/LUOUT/</code>.</li>
+<li><strong>Output:</strong> the function's value, $\rho$, or $-999$ when it fails. <code>OEQOS</code> tests for it (<code>R</code> $\le -998$) and then takes its error return (<code>RETURN 1</code>); <a href="../files/oeqos01.f.html#def-OEQOS01"><code>OEQOS01</code></a> and <a href="../files/oeqos06.f.html#def-OEQOS06"><code>OEQOS06</code></a> do the same with the other two versions.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Find the bracketing composition index <code>MLO</code> in <code>XA</code> and temperature index <code>KLO</code> in <code>T6LIST(1,·)</code>, by bisection.</li>
+<li>Estimate the table's pressure range at that temperature from the first stored quantity, which this code treats as $P/(\rho T_6)$ (our reading of <code>XZ(…,1,…)*T6*RHO</code>):
+   $$P_\mathrm{max} = \texttt{XZ}(\cdot,1,k,n_k)\,T_6\,\rho_{n_k} + I_\mathrm{rad}\,\tfrac43\tfrac{\sigma}{c}T_6^4,\qquad P_\mathrm{min} = \texttt{XZ}(\cdot,1,k,1)\,T_6\,\rho_1 + I_\mathrm{rad}\,\tfrac43\tfrac{\sigma}{c}T_6^4,$$
+   with $n_k$ = <code>NRA(KLO)</code>, the last density index at that temperature. If $P &gt; 1.25\,P_\mathrm{max}$ or $P &lt; P_\mathrm{min}$, it fails.</li>
+<li>First guess $\rho_1 = \rho_{n_k} P/P_\mathrm{max}$; a second guess five times larger (capped at $\rho_{n_k}$) or five times smaller (floored at $10^{-14}$), depending on the side.</li>
+<li>Up to 11 steps of the secant method, keeping a bracket (regula falsi):
+   $$\rho_3 = \rho_1 + (\rho_2 - \rho_1)\,\frac{P - P_1}{P_2 - P_1},$$
+   until $|P_3 - P|/P &lt; 5\times10^{-8}$.</li>
+</ol>
+<p>The radiation pressure is not subtracted (<code>PR</code> = 0; the line that would compute it is commented out), and <code>ESAC</code> is called with <code>IRAD</code>, so $P$ is compared with the total pressure when <code>IRAD</code> is 1.</p>
+<p><strong>Design.</strong> Failures (out of the table, no convergence, an error return from <code>ESAC</code>) all return $-999$ silently; the messages are commented out. The edge <code>NRA</code> is a hard-coded <code>DATA</code> list, the same as <code>KRA</code> in <a href="../files/readco.f.html#def-READCO"><code>READCO</code></a>.</p>
+<p><strong>KC's changes.</strong> The unused argument <code>ZTAB</code> was removed from the function and from its calls to <code>ESAC</code> (KC 2025-05-31).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The extra factor 1.25.</strong> The upper check allows $P$ up to $1.25\,P_\mathrm{max}$, beyond the table's edge, while the second guess is capped at the edge density. What happens in <code>ESAC</code> for $P$ between $P_\mathrm{max}$ and $1.25\,P_\mathrm{max}$?</li>
+<li><strong>Few iterations, tight tolerance.</strong> Eleven secant steps toward $5\times10^{-8}$; in <a href="../files/rhoofp06.f.html#def-RHOOFP06"><code>RHOOFP06</code></a> the tolerance was relaxed to $10^{-5}$ in 2025 because of a crash. Should the same change be made here and in <code>RHOOFP01</code>?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>********************************************************************
+REAL*8 FUNCTION RHOOFP(X,ZTAB,T6,P,IRAD)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-RHOOFP'>RHOOFP</a> <span class='muted'>function · ********************************************************************</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-RHOOFP'><h3><span class='kind'>function</span>RHOOFP</h3>
+<p class='muted'>lines 3–129 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/rhoofp.f#L3-L129'>GitHub</a></p>
+<pre>REAL*8 FUNCTION RHOOFP(X,T6,P,IRAD)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>********************************************************************
+REAL*8 FUNCTION RHOOFP(X,ZTAB,T6,P,IRAD)  ! KC 2025-05-31</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-A'>/A/</a>, <a href='../commons.html#c-B'>/B/</a>, <a href='../commons.html#c-E'>/E/</a>, <a href='../commons.html#c-LREADCO'>/LREADCO/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/esac.f.html#def-ESAC'>ESAC</a> <span class='muted'>(esac.f)</span> ×5</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/oeqos.f.html#def-OEQOS'>OEQOS</a> <span class='muted'>(oeqos.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">3</span>      REAL*8 FUNCTION RHOOFP(X,T6,P,IRAD)
+<span class="ln">4</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">5</span>      PARAMETER (MX=5,MV=10,NR=77,NT=56)
+<span class="ln">6</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">7</span>      COMMON/LREADCO/ITIME
+<span class="ln">8</span>      COMMON/A/  XZ(MX,MV,NT,NR),
+<span class="ln">9</span>     .T6LIST(NR,NT),RHO(NR),T6A(NT),ESK(NT,NR),ESK2(NT,NR),DFSX(MX),
+<span class="ln">10</span>     . DFS(NT),DFSR(NR),XA(MX),M,MF
+<span class="ln">11</span>      COMMON/B/ ZZ(MX),IRI(10),INDEX(10),NTA(NR)
+<span class="ln">12</span>      COMMON/E/ ESACT,EOS(MV)
+<span class="ln">13</span>      DIMENSION NRA (NT)
+<span class="ln">14</span>      DATA SIGMACC/1.8914785D-3/
+<span class="ln">15</span>      DATA (NRA(I),I=1,NT)/7*77,2*76,2*74,2*72,2*70,68,67,66,65,64,
+<span class="ln">16</span>     X 63,61,60,59,58,57,55,54,53,52,51,2*49,48,2*47,46,2*45,
+<span class="ln">17</span>     X 15*44,2*37/
+<span class="ln">18</span>      SAVE
+<span class="ln">19</span>      RAT=SIGMACC
+<span class="ln">20</span>      PR=0.0D0
+<span class="ln">21</span>C      IF(IRAD .EQ. 1) PR=4.D0/3.D0*RAT*T6**4   ! MB
+<span class="ln">22</span>      PNR=P-PR
+<span class="ln">23</span>
+<span class="ln">24</span>      IF (ITIME .NE. 12345678) THEN
+<span class="ln">25</span>      XDBG = 0.5D0
+<span class="ln">26</span>      T6DBG = 1.0D0
+<span class="ln">27</span>      RDBG = 0.001D0
+<span class="ln">28</span>      IDBG = 1
+<span class="ln">29</span>C       CALL ESAC (XDBG,ZTAB,T6DBG,RDBG,IDBG,IRAD,*999)  ! KC 2025-05-31
+<span class="ln">30</span>      CALL <a href="../files/esac.f.html#def-ESAC" title="ESAC in esac.f">ESAC</a> (XDBG,T6DBG,RDBG,IDBG,IRAD,*999)
+<span class="ln">31</span>      ENDIF
+<span class="ln">32</span>
+<span class="ln">33</span>        ILO=2
+<span class="ln">34</span>        IHI=MX
+<span class="ln">35</span>    8   IF(IHI-ILO .GT. 1) THEN
+<span class="ln">36</span>          IMD=(IHI+ILO)/2
+<span class="ln">37</span>            IF(X .LE. XA(IMD)+1.D-7) THEN
+<span class="ln">38</span>              IHI=IMD
+<span class="ln">39</span>            ELSE
+<span class="ln">40</span>              ILO=IMD
+<span class="ln">41</span>            ENDIF
+<span class="ln">42</span>          GO TO 8
+<span class="ln">43</span>        ENDIF
+<span class="ln">44</span>        MLO=ILO
+<span class="ln">45</span>
+<span class="ln">46</span>        ILO=NT
+<span class="ln">47</span>        IHI=2
+<span class="ln">48</span>   11     IF(ILO-IHI .GT. 1) THEN
+<span class="ln">49</span>          IMD=(IHI+ILO)/2
+<span class="ln">50</span>           IF (T6 .EQ. T6LIST(1,IMD)) THEN
+<span class="ln">51</span>           ILO=IMD
+<span class="ln">52</span>           GO TO 14
+<span class="ln">53</span>           ENDIF
+<span class="ln">54</span>            IF(T6 .LE. T6LIST(1,IMD)) THEN
+<span class="ln">55</span>              IHI=IMD
+<span class="ln">56</span>            ELSE
+<span class="ln">57</span>              ILO=IMD
+<span class="ln">58</span>            ENDIF
+<span class="ln">59</span>          GO TO 11
+<span class="ln">60</span>          ENDIF
+<span class="ln">61</span>   14     KLO=ILO
+<span class="ln">62</span>
+<span class="ln">63</span>      PMAX=XZ(MLO,1,KLO,NRA(KLO))*T6*RHO(NRA(KLO))+
+<span class="ln">64</span>     + IRAD*4.D0/3.D0*RAT*T6**4
+<span class="ln">65</span>      PMIN=XZ(MLO,1,KLO,1)*T6*RHO(1)+
+<span class="ln">66</span>     + IRAD*4.D0/3.D0*RAT*T6**4
+<span class="ln">67</span>      IF((PNR .GT. 1.25D0*PMAX) .OR. (PNR .LT. PMIN)) THEN
+<span class="ln">68</span>C      WRITE(ISHORT,&#x27;(&quot; THE REQUESTED PRESSURE-TEMPERATURE NOT IN &quot;,
+<span class="ln">69</span>C     *       &quot;TABLE&quot;)&#x27;)
+<span class="ln">70</span>C     STOP
+<span class="ln">71</span>C      WRITE(ISHORT,&#x27;(&quot;PNR, PMAX,PMIN=&quot;,3E14.4)&#x27;) PNR,PMAX,PMIN
+<span class="ln">72</span>      GO TO 999
+<span class="ln">73</span>      ENDIF
+<span class="ln">74</span>
+<span class="ln">75</span>      RHOG1=RHO(NRA(KLO))*PNR/PMAX
+<span class="ln">76</span>C       CALL ESAC (X,ZTAB,T6,RHOG1,1,IRAD,*999)  ! KC 2025-05-31
+<span class="ln">77</span>      CALL <a href="../files/esac.f.html#def-ESAC" title="ESAC in esac.f">ESAC</a> (X,T6,RHOG1,1,IRAD,*999)
+<span class="ln">78</span>      P1=EOS(1)
+<span class="ln">79</span>        IF(P1 .GT. PNR) THEN
+<span class="ln">80</span>          P2=P1
+<span class="ln">81</span>          RHOG2=RHOG1
+<span class="ln">82</span>          RHOG1=0.2D0*RHOG1
+<span class="ln">83</span>          IF(RHOG1 .LT. 1.D-14) RHOG1=1.D-14
+<span class="ln">84</span>C           CALL ESAC (X,ZTAB,T6,RHOG1,1,IRAD,*999)  ! KC 2025-05-31
+<span class="ln">85</span>          CALL <a href="../files/esac.f.html#def-ESAC" title="ESAC in esac.f">ESAC</a> (X,T6,RHOG1,1,IRAD,*999)
+<span class="ln">86</span>          P1=EOS(1)
+<span class="ln">87</span>        ELSE
+<span class="ln">88</span>          RHOG2=5.D0*RHOG1
+<span class="ln">89</span>C          IF(RHOG2 .GT. RHO(KLO)) RHOG2=RHO(KLO) ! Corrected below  llp 8/19/08
+<span class="ln">90</span>          IF(RHOG2 .GT. RHO(NRA(KLO))) RHOG2=RHO(NRA(KLO)) ! Had wrong pointer, see RHOG1= ten lines up
+<span class="ln">91</span>C           CALL ESAC (X,ZTAB,T6,RHOG2,1,IRAD,*999)  ! KC 2025-05-31
+<span class="ln">92</span>          CALL <a href="../files/esac.f.html#def-ESAC" title="ESAC in esac.f">ESAC</a> (X,T6,RHOG2,1,IRAD,*999)
+<span class="ln">93</span>          P2=EOS(1)
+<span class="ln">94</span>        ENDIF
+<span class="ln">95</span>
+<span class="ln">96</span>      ICOUNT=0
+<span class="ln">97</span>    1 CONTINUE
+<span class="ln">98</span>      ICOUNT=ICOUNT+1
+<span class="ln">99</span>      RHOG3=RHOG1+(RHOG2-RHOG1)*(PNR-P1)/(P2-P1)
+<span class="ln">100</span>C       CALL ESAC (X,ZTAB,T6,RHOG3,1,IRAD,*999)  ! KC 2025-05-31
+<span class="ln">101</span>      CALL <a href="../files/esac.f.html#def-ESAC" title="ESAC in esac.f">ESAC</a> (X,T6,RHOG3,1,IRAD,*999)
+<span class="ln">102</span>      P3=EOS(1)
+<span class="ln">103</span>C      IF (ABS((P3-PNR)/PNR) .LT. 1.D-5) THEN
+<span class="ln">104</span>      IF (ABS((P3-PNR)/PNR) .LT. 0.5D-7) THEN
+<span class="ln">105</span>      RHOOFP=RHOG3
+<span class="ln">106</span>C      WRITE(ISHORT,*)RHOG3,P,PNR,P3
+<span class="ln">107</span>C      WRITE(ISHORT,*)X,ZTAB,T6,P,RHOG3,IORDER,IRAD
+<span class="ln">108</span>      RETURN
+<span class="ln">109</span>      ENDIF
+<span class="ln">110</span>      IF (P3 .GT. PNR) THEN
+<span class="ln">111</span>        RHOG2=RHOG3
+<span class="ln">112</span>        P2=P3
+<span class="ln">113</span>        IF (ICOUNT .LT. 11) GO TO 1
+<span class="ln">114</span>C        WRITE(ISHORT,&#x27;(&quot;NO CONVERGENCE AFTER 10 TRIES&quot;)&#x27;)
+<span class="ln">115</span>        GOTO 999
+<span class="ln">116</span>C        STOP
+<span class="ln">117</span>      ELSE
+<span class="ln">118</span>        RHOG1=RHOG3
+<span class="ln">119</span>        P1=P3
+<span class="ln">120</span>        IF (ICOUNT .LT. 11) GO TO 1
+<span class="ln">121</span>C        WRITE(ISHORT,&#x27;(&quot;NO CONVERGENCE AFTER 10 TRIES&quot;)&#x27;)
+<span class="ln">122</span>        GOTO 999
+<span class="ln">123</span>C        STOP
+<span class="ln">124</span>      ENDIF
+<span class="ln">125</span>  999 CONTINUE
+<span class="ln">126</span>      RHOOFP=-999.0D0
+<span class="ln">127</span>C      WRITE(ISHORT,&#x27;(&quot;FAIL TO FIND RHO&quot;)&#x27;)
+<span class="ln">128</span>      RETURN
+<span class="ln">129</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ul>
+<li><strong>Question answerable.</strong> Question 3 asks whether <code>OEQOS</code> tests for $-999$ in every path: it does (<code>IF(R.LE.-998.0D0) RETURN 1</code>), and so do <code>OEQOS01</code>, <code>OEQOS06</code>. Fix: state it under Output, cut the question.</li>
+</ul>
+<p>Revised: applied.</p></div></details>
+</main></body></html>

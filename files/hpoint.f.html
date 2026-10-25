@@ -1,0 +1,894 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>hpoint.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ hpoint.f</span></header><main>
+<h1>hpoint.f</h1>
+<p class='muted'>797 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/hpoint.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>HPOINT</code> rezones the model: at the start of each step it chooses a new set of mass points so that the jumps between neighbours in mass, luminosity, pressure, $X$ and $Z$ stay below user limits, keeps real discontinuities (convection-zone edges, composition jumps) as fixed points, and interpolates every model variable to the new points. It also adds or removes outer points when the outermost point drifts out of the allowed envelope temperature range, and recomputes the shell masses and, for rotating models, the rotation quantities.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> the main program, <a href="../files/main.f.html#def-_file_level_">main.f</a>, once per evolutionary step.</li>
+<li><strong>Inputs (arguments, changed in place):</strong> the model (<code>HS</code> = $\log m$, <code>HP</code>, <code>HT</code>, <code>HR</code>, <code>HL</code>, <code>HD</code>, <code>HCOMP</code>, <code>LC</code>, <code>M</code>), <code>HSTOT</code> ($\log M_*$), the envelope-fitting values <code>PS</code>, <code>RS</code>, <code>ESTORE</code>, <code>ISTORE</code>, the indices <code>JCORE</code>, <code>JENV</code> (edges of the convective core and envelope), <code>JXBEG</code> (H-shell base), <code>LSHELL</code>, the model number <code>MODEL</code>, the rotation arrays (<code>OMEGA</code>, <code>ETA2</code>, <code>R0</code>, <code>HI</code>, <code>HJM</code>, <code>HKEROT</code>, <code>FP</code>, <code>FT</code>, <code>HG</code>, <code>QIW</code>), the totals <code>SJTOT</code>, <code>SKEROT</code>, and <code>TEFFL</code>.</li>
+<li><strong>Outputs:</strong> the rezoned model; <code>HS1</code> (mass at each point) and <code>HS2</code> (mass of each shell); <code>LRESET</code> (true when outer points were added or removed); and in COMMON, the previous model on the new grid for the next step.</li>
+<li><strong>Calls:</strong> <a href="../files/splinc.f.html#def-SPLINC"><code>SPLINC</code></a> and <a href="../files/splintd2.f.html#def-SPLINTD2"><code>SPLINTD2</code></a> (splines to place the points), <a href="../files/osplin.f.html#def-OSPLIN"><code>OSPLIN</code></a> (an "oscillatory" spline for interpolating the variables); for rotation <a href="../files/ovrot.f.html#def-OVROT"><code>OVROT</code></a>, <a href="../files/momi.f.html#def-MOMI"><code>MOMI</code></a>, <a href="../files/getrot.f.html#def-GETROT"><code>GETROT</code></a>, <a href="../files/fpft.f.html#def-FPFT"><code>FPFT</code></a>; <a href="../files/physic.f.html#def-PHYSIC"><code>PHYSIC</code></a> (the physics at the new points); <a href="../files/surfopac.f.html#def-SURFOPAC"><code>SURFOPAC</code></a> (a new surface opacity table when surface $X$ changed).</li>
+<li><strong>COMMON blocks, the main ones:</strong> <code>CTOL</code> (<code>HPTTOL(1..12)</code>, the zoning limits, from <a href="../files/parmin.f.html#def-PARMIN"><code>PARMIN</code></a>); <code>OLDMOD</code> (after the rezoning, <code>HSS</code>, <code>HPO</code>, <code>HTO</code>, <code>HRO</code>, <code>HLO</code>, <code>HDO</code> and <code>HCOMPP</code> hold the start-of-step model on the new grid, and <code>TEFFLO</code>, <code>MO</code> the start-of-step $T_\mathrm{eff}$ and number of points; read by <a href="../files/kemcom.f.html#def-KEMCOM"><code>KEMCOM</code></a>, <a href="../files/liburn.f.html#def-LIBURN"><code>LIBURN</code></a>, <a href="../files/lirate88.f.html#def-LIRATE88"><code>LIRATE88</code></a>, <a href="../files/crrect.f.html#def-CRRECT"><code>CRRECT</code></a> and others); <code>BURN</code> (<code>HCOMPM</code>, the burning changes, with <code>MIX</code>, <code>ROTMIX</code>, <code>MIDMOD</code>); <code>ENTROP</code> (the previous step's rates of change of $\log T$, $\log P$, $\ln L$, $\log r$, which main.f uses for its first guess of the new structure; shared with main.f only); <code>DEUTER</code> (<code>DRATE0</code>); <code>OLDROT</code>, <code>OLDROT2</code>, <code>OLDPHY</code> (rotation and the physics at the start of the step, for the angular-momentum transport in <a href="../files/getw.f.html#def-GETW"><code>GETW</code></a> and <a href="../files/midmod.f.html#def-MIDMOD"><code>MIDMOD</code></a>); <code>SCRTCH</code>, <code>TEMP</code> (the physics just computed by <code>PHYSIC</code>); <code>COMP</code> (<code>XNEW</code>, <code>ZNEW</code>, <code>SENV</code>); <code>DPMIX</code> (overshoot settings); <code>CTLIM</code> (<code>TENV0</code>, <code>TENV1</code>); <code>FLAG</code> (<code>LEXCOM</code>, whether light elements 12–15 are followed); <code>ROT</code> (<code>LROT</code>); <code>CCOUT1</code>, <code>CCOUT2</code> (debug output); 24 blocks in all.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Outer boundary.</strong> If $\log T$ at the outermost point is below <code>TENV0</code>, drop the outer points down to the first one hotter than <code>TENV0</code> (and put the dropped mass into the envelope, <code>SENV</code>). If it is above <code>TENV1</code>, add one point from the stored envelope integration: $\Delta\log P$ from <code>ESTORE</code>, $\Delta\log T = 0.25\,\Delta\log P$, $\Delta\log r$ from <code>ESTORE</code>, the same $L$ and composition, and $\log\rho = \log P - \log T - 8$.</li>
+<li><strong>Fixed points.</strong> Flag the edge of the convective core, the base of the convective envelope, the base of the H shell, every point where $|\Delta X|$ &gt; <code>HPTTOL(3)</code>, $|\Delta Z|$ &gt; <code>HPTTOL(4)</code>, or (rotating models) $|\Delta\log\Omega|$ &gt; <code>HPTTOL(12)</code>, the base of envelope overshoot and the base of a finely zoned region around the envelope's base (<code>HPTTOL(7)</code> in $\log P$). At most 100 flags; sort them and remove duplicates.</li>
+<li>
+<p><strong>New mass points.</strong> Build a cumulative "distance" along the star,
+$$\chi_j = \chi_{j-1} + \frac{\Delta\log m}{\delta_m} + \frac{\Delta L}{\delta_L} - \frac{\Delta\log P}{\delta_P},$$
+with $\delta_m$ = <code>HPTTOL(2)</code>, $\delta_L$ = <code>HPTTOL(9)</code> times the largest $L$, and $\delta_P$ = <code>HPTTOL(10)</code> in the finely zoned region, <code>HPTTOL(11)</code> below it, <code>HPTTOL(8)</code> in the convective envelope (the $L$ term only where $L$ increases outward). Between consecutive flagged points, place points evenly in $\chi$, one per unit, and find their masses from a spline of $\log m$ against $\chi$.</p>
+</li>
+<li>
+<p><strong>Refinement in X and Z.</strong> Where $X$ increases outward between new points by more than <code>HPTTOL(5)</code>, or $Z$ decreases outward by more than <code>HPTTOL(6)</code>, insert evenly spaced points. Then drop points closer than <code>HPTTOL(1)</code> in $\log m$.</p>
+</li>
+<li><strong>Convection flags.</strong> Relocate <code>JCORE</code> and <code>JENV</code> on the new grid and reset <code>LC</code>.</li>
+<li><strong>Interpolation.</strong> With <code>OSPLIN</code>, interpolate to the new points: the entropy-term variables (<code>ENTROP</code>), the composition <code>HCOMP</code> and the starting composition <code>HCOMPP</code>, the burning changes <code>HCOMPM</code> (7 species), the deuterium burning rate (if followed), then $\log P$, $\log r$, $L$, $\log T$, $\log\rho$, and for rotating models $\Omega$, $j$, $f_P$, $f_T$, $r_0$, $\eta_2$; and the energy generation at the start of the step when needed.</li>
+<li>
+<p><strong>Masses.</strong> With $m_i = 10^{\log m_i}$:
+$$\texttt{HS1}_i = m_i,\qquad \texttt{HS2}_i = \tfrac12\,(m_{i+1} - m_{i-1}),\qquad \texttt{HS2}_1 = \tfrac12(m_2 + m_1),\qquad \texttt{HS2}_M = M_* - \tfrac12(m_{M-1}+m_M).$$</p>
+</li>
+<li>
+<p><strong>Rotation.</strong> First guess of the moment of inertia $I_i = \tfrac23\,\Delta m_i\,r_i^2$; overshoot zones (<code>OVROT</code>); moment of inertia (<code>MOMI</code>); $\Omega$ from the conserved specific angular momentum (<code>GETROT</code>); the distortion terms (<code>FPFT</code>); <code>MOMI</code> again; then the totals $J = \sum j_i\Delta m_i$ and $K = \sum \tfrac12\Omega_i j_i \Delta m_i$, printed against the previous ones; and the old rotation state saved in <code>OLDROT</code>.</p>
+</li>
+<li>
+<p><strong>Physics at the start of the step</strong> (rotating models, or light elements with envelope overshoot): <code>PHYSIC</code> at the new points; the results stored in <code>OLDPHY</code>, <code>DWMAX</code>, and the shear term
+$$\theta_i = \frac{\bar r^{\,4}}{G\,\bar m}\,\bar\Omega\,\frac{\Delta\Omega}{\Delta r}$$
+(<code>THO</code>, with geometric means of $r$ and $m$ over the two points) and $d\Omega/dr$ (<code>QWRST</code>) in <code>OLDROT2</code>.</p>
+</li>
+<li>
+<p>A new surface opacity table (<code>SURFOPAC</code>) if surface $X$ changed by more than $10^{-8}$.</p>
+</li>
+</ol>
+<p><strong>Design.</strong> It prints the flag points and the old and new numbers of points to the short output every step, and a full table of old and new points to the debug unit every <code>NPOINT</code> models when <code>LDEBUG</code> is on. Several COMMON arrays of the old model (<code>HPO</code>, <code>HTO</code>, <code>HDO</code>) serve as scratch space before receiving their final contents.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused arguments <code>BL</code>, <code>DELTS</code> and <code>SMASS</code> removed; the calls to <code>MOMI</code> and <code>PHYSIC</code> updated to their shorter interfaces. (JNT 2025-09-03 added a call to <code>MOMI</code> before <code>GETROT</code>.)</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>No size check in the X and Z refinement.</strong> Step 3 stops if the new points exceed <code>JSON</code> (5000), but the insertions of step 4 can add points without any check.</li>
+<li><strong>Flags beyond 100.</strong> The convection-zone edges and the H-shell base are flagged first, but when the composition and $\Omega$ tests reach 100 flags, the code jumps (<code>GOTO 130</code>) past the flags for the base of envelope overshoot and the base of the finely zoned region. Should those two be flagged before the gradient tests?</li>
+<li><strong>Unused values.</strong> <code>PMAX1</code>–<code>PMAX5</code>, <code>HPMAX(1)</code>, <code>OMEGAL</code> and the variables <code>JOS</code>, <code>JFINE</code> beyond their flags are computed but not used for the zoning (step 3 uses <code>HPTTOL</code> directly). Leftovers of an older scheme?</li>
+<li><strong>The added outer point.</strong> $\Delta\log T = 0.25\,\Delta\log P$ and $\log\rho = \log P - \log T - 8$ are rough, hard-coded guesses. Are they only starting values for the next Henyey iteration?</li>
+<li><strong>The debug table.</strong> Under the heading "old points" it prints <code>HKO</code> and <code>HFO</code>, which by then hold $X$ and $Z$ at the new points, not the old ones. The comments also say these values go into <code>HIO</code> and <code>HGO</code>.</li>
+<li><strong><code>MO</code> is the old number of points.</strong> <code>MO = M</code> is set before the rezoning, while <code>HLO</code> (and <code>HPO</code>, …) end on the new grid with <code>MNEW</code> points. <a href="../files/entime.f.html#def-ENTIME"><code>ENTIME</code></a> (called by <code>HTIMER</code> when <code>LTRIST</code>) reads <code>HLO(MO)</code> as the previous model's surface luminosity, which is the surface only if the number of points did not change. Should <code>MO = MNEW</code> be set after the rezoning?</li>
+<li><strong><code>ALPHAE</code> as a depth in $\log P$.</strong> The base of envelope overshoot is the first point where $\log_{10}P - \log_{10}P(\texttt{JENV}) &gt;$ <code>ALPHAE</code>, so <code>ALPHAE</code> acts as a depth in $\log_{10}P$. main.f uses it as a fraction of $H_P$ (<code>PSCAL0</code> = <code>ALPHAE</code> $\cdot H_P$); an overshoot of $\alpha H_P$ is about $\Delta\ln P = \alpha$, i.e. $\Delta\log_{10}P \approx 0.43\,\alpha$. Which is meant here?</li>
+<li><strong>The JNT comment.</strong> "WALPCZ does run in this version but I don't think it can hurt": is the extra <code>MOMI</code> call before <code>GETROT</code> still needed?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+HPOINT
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-HPOINT'>HPOINT</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-HPOINT'><h3><span class='kind'>subroutine</span>HPOINT</h3>
+<p class='muted'>lines 6–797 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/hpoint.f#L6-L797'>GitHub</a></p>
+<pre>SUBROUTINE HPOINT(M,HSTOT,HS,HS1,HS2,HT,HP,HR,LC,</pre>
+<div class='notes'><p>Rezoning: fixed points, even spacing in the cumulative variable $\chi$, refinement in $X$ and $Z$, interpolation of all variables, new shell masses, and the rotation and start-of-step physics on the new grid (above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+HPOINT
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-BURN'>/BURN/</a>, <a href='../commons.html#c-CCOUT'>/CCOUT/</a>, <a href='../commons.html#c-CCOUT1'>/CCOUT1/</a>, <a href='../commons.html#c-CCOUT2'>/CCOUT2/</a>, <a href='../commons.html#c-COMP'>/COMP/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-CONST3'>/CONST3/</a>, <a href='../commons.html#c-CTLIM'>/CTLIM/</a>, <a href='../commons.html#c-CTOL'>/CTOL/</a>, <a href='../commons.html#c-DEUTER'>/DEUTER/</a>, <a href='../commons.html#c-DPMIX'>/DPMIX/</a>, <a href='../commons.html#c-DWMAX'>/DWMAX/</a>, <a href='../commons.html#c-ENTROP'>/ENTROP/</a>, <a href='../commons.html#c-FLAG'>/FLAG/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-OLDMOD'>/OLDMOD/</a>, <a href='../commons.html#c-OLDPHY'>/OLDPHY/</a>, <a href='../commons.html#c-OLDROT'>/OLDROT/</a>, <a href='../commons.html#c-OLDROT2'>/OLDROT2/</a>, <a href='../commons.html#c-OPTAB'>/OPTAB/</a>, <a href='../commons.html#c-ROT'>/ROT/</a>, <a href='../commons.html#c-SCRTCH'>/SCRTCH/</a>, <a href='../commons.html#c-TEMP'>/TEMP/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/fpft.f.html#def-FPFT'>FPFT</a> <span class='muted'>(fpft.f)</span></li>
+<li><a href='../files/getrot.f.html#def-GETROT'>GETROT</a> <span class='muted'>(getrot.f)</span></li>
+<li><a href='../files/momi.f.html#def-MOMI'>MOMI</a> <span class='muted'>(momi.f)</span> ×2</li>
+<li><a href='../files/osplin.f.html#def-OSPLIN'>OSPLIN</a> <span class='muted'>(osplin.f)</span> ×21</li>
+<li><a href='../files/ovrot.f.html#def-OVROT'>OVROT</a> <span class='muted'>(ovrot.f)</span></li>
+<li><a href='../files/physic.f.html#def-PHYSIC'>PHYSIC</a> <span class='muted'>(physic.f)</span></li>
+<li><a href='../files/splinc.f.html#def-SPLINC'>SPLINC</a> <span class='muted'>(splinc.f)</span> ×3</li>
+<li><a href='../files/splintd2.f.html#def-SPLINTD2'>SPLINTD2</a> <span class='muted'>(splintd2.f)</span> ×3</li>
+<li><a href='../files/surfopac.f.html#def-SURFOPAC'>SURFOPAC</a> <span class='muted'>(surfopac.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE HPOINT(M,HSTOT,HS,HS1,HS2,HT,HP,HR,LC,
+<span class="ln">7</span>     *HL,HD,HCOMP,PS,RS,ESTORE,ISTORE,LRESET,JXBEG,MODEL,
+<span class="ln">8</span>     *LSHELL,JCORE,JENV,OMEGA,ETA2,R0,HI,HJM,HKEROT,SJTOT,SKEROT,
+<span class="ln">9</span>C      * BL,DELTS,FP,FT,HG,QIW,SMASS,TEFFL)  ! KC 2025-05-31
+<span class="ln">10</span>     * FP,FT,HG,QIW,TEFFL)
+<span class="ln">11</span>
+<span class="ln">12</span>      PARAMETER(JSON=5000)
+<span class="ln">13</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">14</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">15</span>
+<span class="ln">16</span>C MHP 10/02 ADDED MRZONE,MXZONE TO DIMENSION STATEMENTS
+<span class="ln">17</span>      DIMENSION HS(JSON),HS1(JSON),HS2(JSON),HT(JSON),
+<span class="ln">18</span>     * OMEGAL(JSON),HPMAX(4),NFLAG(100),HP(JSON),
+<span class="ln">19</span>     * HR(JSON),HL(JSON),HD(JSON),HCOMP(15,JSON),LCZ(JSON),FTX(JSON),
+<span class="ln">20</span>     * OMEGA(JSON),ETA2(JSON),R0(JSON),HI(JSON),HJM(JSON),
+<span class="ln">21</span>     * HKEROT(JSON),FP(JSON),FT(JSON),HG(JSON),LC(JSON),QIW(JSON),
+<span class="ln">22</span>     * FPX(JSON),
+<span class="ln">23</span>     * MRZONE(13,2),MXZONE(12,2)
+<span class="ln">24</span>      DIMENSION PS(3),RS(3),ESTORE(4)
+<span class="ln">25</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">26</span>      COMMON/BURN/HCOMPM(15,JSON)
+<span class="ln">27</span>      COMMON/CCOUT/LSTORE,LSTATM,LSTENV,LSTMOD,LSTPHYS,LSTROT,LSCRIB,LSTCH,LPHHD
+<span class="ln">28</span>      COMMON/CCOUT1/NPENV,NPRTMOD,NPRTPT,NPOINT
+<span class="ln">29</span>      COMMON/CCOUT2/LDEBUG,LCORR,LMILNE,LTRACK,LSTPCH
+<span class="ln">30</span>      COMMON/COMP/XENV,ZENV,ZENVM,AMUENV,FXENV(12),XNEW,ZNEW,STOTAL,
+<span class="ln">31</span>     *     SENV
+<span class="ln">32</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">33</span>      COMMON/CONST3/CDELRL,CMIXL,CMIXL2,CMIXL3,CLNDP,CSECYR
+<span class="ln">34</span>      COMMON/CTLIM/ATIME(14),TCUT(5),TSCUT,TENV0,TENV1,TENV,TGCUT
+<span class="ln">35</span>      COMMON/CTOL/HTOLER(5,2),FCORR0,FCORRI,FCORR,HPTTOL(12),NITER1,
+<span class="ln">36</span>     *     NITER2,NITER3
+<span class="ln">37</span>      COMMON/DPMIX/DPENV,ALPHAC,ALPHAE,ALPHAM,BETAC,IOV1,IOV2,
+<span class="ln">38</span>     *      IOVIM, LOVSTC, LOVSTE, LOVSTM, LSEMIC, LADOV, LOVMAX
+<span class="ln">39</span>      COMMON/DWMAX/QWRMAX(JSON),QWRMX0(JSON)
+<span class="ln">40</span>      COMMON/FLAG/LEXCOM
+<span class="ln">41</span>      COMMON/OLDMOD/HPO(JSON),HTO(JSON),HRO(JSON),HLO(JSON),
+<span class="ln">42</span>     *     HDO(JSON),HCOMPP(15,JSON),HSS(JSON),LCO(JSON),LCZO(JSON),TEFFLO,MO
+<span class="ln">43</span>      COMMON/OLDROT/WOLD(JSON),HJX(JSON),HIO(JSON),HGO(JSON),
+<span class="ln">44</span>     *     R0X(JSON),ETA2X(JSON)
+<span class="ln">45</span>      COMMON/OLDPHY/DELO(JSON),DELAO(JSON),AMUO(JSON),OO(JSON),
+<span class="ln">46</span>     *     CPO(JSON),QDTO(JSON),VELO(JSON),VISCO(JSON),
+<span class="ln">47</span>     *     THDIFO(JSON),ESUMO(JSON),DELRO(JSON),EPSO(JSON)
+<span class="ln">48</span>C MHP 06/02
+<span class="ln">49</span>C Time change of theta
+<span class="ln">50</span>      COMMON/OLDROT2/THO(JSON),THN(JSON),THM(JSON),
+<span class="ln">51</span>     *               DDELM(JSON),FESTIME(JSON),THP(JSON),
+<span class="ln">52</span>     *               QWRST(JSON),WMST(JSON),QWRMST(JSON)
+<span class="ln">53</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">54</span>      COMMON/OPTAB/OPTOL,ZSI,IDT,IDD(4)
+<span class="ln">55</span>      COMMON/ROT/WNEW,WALPCZ,ACFPFT,ITFP1,ITFP2,LROT,LINSTB,LWNEW
+<span class="ln">56</span>      COMMON/SCRTCH/SESUM(JSON),SEG(7,JSON),SBETA(JSON),SETA(JSON),
+<span class="ln">57</span>     * LOCONS(JSON),SO(JSON),SDEL(3,JSON),SFXION(3,JSON),SVEL(JSON),SCP(JSON)
+<span class="ln">58</span>      COMMON/TEMP/CP(JSON),HAMU(JSON),SQDT(JSON),THDIF(JSON),
+<span class="ln">59</span>     *     VISC(JSON)
+<span class="ln">60</span>C 7/91 ENTROPY TERM COMMON BLOCK ADDED.
+<span class="ln">61</span>      COMMON/ENTROP/HTT0(JSON),HPP0(JSON),HLL0(JSON),HRR0(JSON)
+<span class="ln">62</span>C MHP 05/02 DEUTERIUM BURNING RATE ADDED
+<span class="ln">63</span>      COMMON/DEUTER/DRATE(JSON),DRATE0(JSON),FMASSACC,JCZ
+<span class="ln">64</span>      DIMENSION ID(7)
+<span class="ln">65</span>      DIMENSION HFO(JSON),HKO(JSON)
+<span class="ln">66</span>C MHP 6/00 ADDED DUMMY VECTOR
+<span class="ln">67</span>C MHP 7/02 ADDED CHI VECTOR - A RUNNING TOTAL OF THE NORMALIZED
+<span class="ln">68</span>C DIFFERENCES IN M, L, P BETWEEN SHELLS THAT IS USED TO SET THE
+<span class="ln">69</span>C POINT SPACING.
+<span class="ln">70</span>      DIMENSION XTAB(JSON),YTAB(JSON),CHI(JSON),Y2(JSON)
+<span class="ln">71</span>      DIMENSION IXFLAG(JSON)
+<span class="ln">72</span>C       DATA IDMAX/JSON/
+<span class="ln">73</span>      DATA ID/1,2,4,5,6,7,9/
+<span class="ln">74</span>      SAVE
+<span class="ln">75</span>
+<span class="ln">76</span>C  THIS SUBROUTINE REZONES THE MODEL, SPACING THE SHELLS SUCH THAT
+<span class="ln">77</span>C  THE MAXIMUM DISTANCE BETWEEN 2 SUCCESSIVE POINTS IN P,L,X, AND Z
+<span class="ln">78</span>C  SPECIFIED BY THE USER IS NOT EXCEEDED.  IT ALSO FLAGS REAL
+<span class="ln">79</span>C  DISCONTINUITIES TO PREVENT ARTIFICIAL SMOOTHING.
+<span class="ln">80</span>      LRESET = .FALSE.
+<span class="ln">81</span>C  IEND IS THE NUMBER OF SPECIES THE PROGRAM IS KEEPING TRACK OF
+<span class="ln">82</span>      IEND = 11
+<span class="ln">83</span>      IF(LEXCOM) IEND = 15
+<span class="ln">84</span>C CHECK IF TEMPERATURE OF OUTERMOST HENYEY POINT &gt; MIMIMUM ENVELOPE T
+<span class="ln">85</span>      IF(HT(M).LT.TENV0) THEN
+<span class="ln">86</span>       DO 20 I = M-1,1,-1
+<span class="ln">87</span>          IF(HT(I).GT.TENV0) THEN
+<span class="ln">88</span>             WRITE(ISHORT,10) M,I
+<span class="ln">89</span>   10     FORMAT(&#x27; OUTER POINTS DELETED OLD M =&#x27;,I5,&#x27;  NEW M =&#x27;,I5)
+<span class="ln">90</span>             M = I
+<span class="ln">91</span>             SENV = HS(M) - HSTOT
+<span class="ln">92</span>             LRESET = .TRUE.
+<span class="ln">93</span>             GOTO 40
+<span class="ln">94</span>          ENDIF
+<span class="ln">95</span>   20    CONTINUE
+<span class="ln">96</span>C  ENTIRE MODEL HAS T&lt;TENV0 - UNLIKELY - BUT STOP IF TRUE
+<span class="ln">97</span>       WRITE(ISHORT,30)
+<span class="ln">98</span>       WRITE(IOWR,30)
+<span class="ln">99</span>   30    FORMAT(1X,39(&#x27;&gt;&#x27;),40(&#x27;&lt;&#x27;)/1X,&#x27;ERROR IN HPOINT&#x27;/
+<span class="ln">100</span>     *   1X,&#x27;MAX. STAR T LESS THAN MINIMUM ENVELOPE T.RUN STOPPED&#x27;)
+<span class="ln">101</span>       STOP
+<span class="ln">102</span>   40    CONTINUE
+<span class="ln">103</span>C  CHECK IF OUTER POINT T &lt; MAXIMUM ENVELOPE T
+<span class="ln">104</span>      ELSE IF(HT(M).GT.TENV1.AND.ISTORE.NE.0) THEN
+<span class="ln">105</span>       M = M + 1
+<span class="ln">106</span>       SENV = ESTORE(4)
+<span class="ln">107</span>       HS(M) = HSTOT + SENV
+<span class="ln">108</span>       HP(M) = HP(M-1) + (ESTORE(1) - PS(ISTORE))
+<span class="ln">109</span>       HT(M) = HT(M-1) + (ESTORE(1) - PS(ISTORE))*0.250D0
+<span class="ln">110</span>       HR(M) = HR(M-1) + (ESTORE(3) - RS(ISTORE))
+<span class="ln">111</span>       HL(M) = HL(M-1)
+<span class="ln">112</span>       DO 50 I = 1,IEND
+<span class="ln">113</span>          HCOMP(I,M) = HCOMP(I,M-1)
+<span class="ln">114</span>   50    CONTINUE
+<span class="ln">115</span>       HD(M) = HP(M) - HT(M) - 8.0D0
+<span class="ln">116</span>       J = M - 1
+<span class="ln">117</span>       WRITE(ISHORT,60) J,HS(J),HP(J),HT(J),HR(J),M,HS(M),HP(M),
+<span class="ln">118</span>     *   HT(M),HR(M)
+<span class="ln">119</span>   60    FORMAT(&#x27; OUTER POINT ADDED&#x27;,I5,F15.10,&#x27;  PTR&#x27;,3F10.6)
+<span class="ln">120</span>       LRESET = .TRUE.
+<span class="ln">121</span>      ENDIF
+<span class="ln">122</span>
+<span class="ln">123</span>
+<span class="ln">124</span>C SET UP FLAGGED POINTS - PROGRAM WILL NOT REZONE ACROSS FLAGGED POINTS
+<span class="ln">125</span>      IFLAG = 1
+<span class="ln">126</span>C FLAG EDGES OF CENTRAL AND SURFACE CONVECTION ZONES
+<span class="ln">127</span>      IF(JCORE.GT.1) THEN
+<span class="ln">128</span>       NFLAG(IFLAG) = JCORE
+<span class="ln">129</span>       IFLAG = IFLAG + 1
+<span class="ln">130</span>      ENDIF
+<span class="ln">131</span>      IF(JENV.LT.M .AND.JENV.GT.1) THEN
+<span class="ln">132</span>       NFLAG(IFLAG) = JENV
+<span class="ln">133</span>       IFLAG = IFLAG + 1
+<span class="ln">134</span>      ENDIF
+<span class="ln">135</span>C FLAG EDGE OF H SHELL
+<span class="ln">136</span>      IF(LSHELL.AND.JXBEG.GT.1) THEN
+<span class="ln">137</span>       NFLAG(IFLAG) = JXBEG - 1
+<span class="ln">138</span>       IFLAG = IFLAG + 1
+<span class="ln">139</span>      ENDIF
+<span class="ln">140</span>      DO 120 I = 2,M
+<span class="ln">141</span>C  TEST FOR FLAGGING DUE TO X GRADIENT
+<span class="ln">142</span>       IF(DABS(HCOMP(1,I)-HCOMP(1,I-1)).GT.HPTTOL(3)) THEN
+<span class="ln">143</span>          NFLAG(IFLAG) = I
+<span class="ln">144</span>          IFLAG = IFLAG + 1
+<span class="ln">145</span>C  TEST FOR FLAGGING DUE TO Z GRADIENT
+<span class="ln">146</span>       ELSE IF(DABS(HCOMP(3,I)-HCOMP(3,I-1)).GT.HPTTOL(4)) THEN
+<span class="ln">147</span>          NFLAG(IFLAG) = I
+<span class="ln">148</span>          IFLAG = IFLAG + 1
+<span class="ln">149</span>C  TEST FOR FLAGGING DUE TO GRADIENT IN LOG OMEGA.
+<span class="ln">150</span>       ELSE IF(LROT) THEN
+<span class="ln">151</span>          WLTOP = DLOG10(OMEGA(I))
+<span class="ln">152</span>          WLBOT = DLOG10(OMEGA(I-1))
+<span class="ln">153</span>          IF(DABS(WLTOP-WLBOT).GT.HPTTOL(12)) THEN
+<span class="ln">154</span>             NFLAG(IFLAG) = I
+<span class="ln">155</span>             IFLAG = IFLAG + 1
+<span class="ln">156</span>          ENDIF
+<span class="ln">157</span>       ENDIF
+<span class="ln">158</span>       IF(IFLAG.GE.100) THEN
+<span class="ln">159</span>          WRITE(ISHORT,110)
+<span class="ln">160</span>  110       FORMAT(1X,&#x27;MORE THAN 100 FLAG POINTS-FIRST 100 RETAINED&#x27;)
+<span class="ln">161</span>          GOTO 130
+<span class="ln">162</span>       ENDIF
+<span class="ln">163</span>  120 CONTINUE
+<span class="ln">164</span>C  PMAX1 = MAX DEL LOG P BELOW SURFACE C.Z. AND BELOW FINELY ZONED
+<span class="ln">165</span>C  REGION AROUND IT.
+<span class="ln">166</span>C  PMAX2 = MAX DEL LOG P BETWEEN LOWER EDGE OF FINELY ZONED REGION
+<span class="ln">167</span>C  AROUND SURFACE C.Z. AND BASE OF OVERSHOOT REGION.
+<span class="ln">168</span>C  PMAX3 = SAME FOR OVERSHOOT REGION.
+<span class="ln">169</span>C  PMAX4 = MAX DEL LOG P ABOVE BASE OF SURFACE C.Z. IN FINELY ZONED
+<span class="ln">170</span>C  REGION AROUND IT.
+<span class="ln">171</span>C  PMAX5 = SAME FOR THE OUTER POINTS IN THE STAR.
+<span class="ln">172</span>      PMAX1 = HPTTOL(11)
+<span class="ln">173</span>      PMAX4 = HPTTOL(10)
+<span class="ln">174</span>      PMAX5 = HPTTOL(8)
+<span class="ln">175</span>      IF(.NOT.LC(M))THEN
+<span class="ln">176</span>       JOS = M
+<span class="ln">177</span>       JFINE = M
+<span class="ln">178</span>      ELSE IF (JENV.EQ.1)THEN
+<span class="ln">179</span>       JOS = 1
+<span class="ln">180</span>       JFINE = 1
+<span class="ln">181</span>      ELSE
+<span class="ln">182</span>C  LOCATE BASE OF OVERSHOOT REGION IF APPLICABLE.
+<span class="ln">183</span>       IF(.NOT.LOVSTE)THEN
+<span class="ln">184</span>          I = JENV
+<span class="ln">185</span>          JOS = JENV
+<span class="ln">186</span>       ELSE
+<span class="ln">187</span>          DO 191 JOS = JENV-1,1,-1
+<span class="ln">188</span>             IF(HP(JOS)-HP(JENV).GT.ALPHAE)GOTO 193
+<span class="ln">189</span>  191       CONTINUE
+<span class="ln">190</span>  193       JOS = JOS + 1
+<span class="ln">191</span>          DELP = HP(JOS)-HP(JENV)
+<span class="ln">192</span>          IF(DELP.GT.0.0D0) THEN
+<span class="ln">193</span>             NP = INT(DELP/HPTTOL(10))
+<span class="ln">194</span>             IF(MOD(DELP,HPTTOL(10)).NE.0D0)NP=NP+1
+<span class="ln">195</span>             PMAX3 = DELP/DFLOAT(NP)
+<span class="ln">196</span>          ELSE
+<span class="ln">197</span>             PMAX3 = HPTTOL(10)
+<span class="ln">198</span>          ENDIF
+<span class="ln">199</span>            IF(JOS.GT.1)THEN
+<span class="ln">200</span>               NFLAG(IFLAG) = JOS
+<span class="ln">201</span>               IFLAG = IFLAG + 1
+<span class="ln">202</span>            ENDIF
+<span class="ln">203</span>       ENDIF
+<span class="ln">204</span>       IF(HPTTOL(7).EQ.0.0D0) THEN
+<span class="ln">205</span>          JFINE = JOS
+<span class="ln">206</span>       ELSE
+<span class="ln">207</span>C  NOW LOCATE BASE OF FINELY ZONED REGION.
+<span class="ln">208</span>          IF(JOS.EQ.1)THEN
+<span class="ln">209</span>             JFINE = 1
+<span class="ln">210</span>             GOTO 198
+<span class="ln">211</span>          ENDIF
+<span class="ln">212</span>          DO 195 JFINE = JOS-1,1,-1
+<span class="ln">213</span>             IF(HP(JFINE) - HP(JENV).GT.HPTTOL(7))GOTO 197
+<span class="ln">214</span>  195       CONTINUE
+<span class="ln">215</span>  197       JFINE = JFINE + 1
+<span class="ln">216</span>          IF(JFINE.EQ.JOS)GOTO 198
+<span class="ln">217</span>          DELP = HP(JFINE) - HP(JOS)
+<span class="ln">218</span>          NP = INT(DELP/HPTTOL(10))
+<span class="ln">219</span>          IF(MOD(DELP,HPTTOL(10)).NE.0D0)NP=NP+1
+<span class="ln">220</span>          PMAX2 = DELP/DFLOAT(NP)
+<span class="ln">221</span>          IF(PMAX2.EQ.0.0D0)PMAX2 = HPTTOL(10)
+<span class="ln">222</span>            IF(JFINE.GT.1)THEN
+<span class="ln">223</span>               NFLAG(IFLAG) = JFINE
+<span class="ln">224</span>               IFLAG = IFLAG + 1
+<span class="ln">225</span>            ENDIF
+<span class="ln">226</span>  198       CONTINUE
+<span class="ln">227</span>       ENDIF
+<span class="ln">228</span>      ENDIF
+<span class="ln">229</span>  130 NFLAG(IFLAG) = M
+<span class="ln">230</span>C ARRANGE THE FLAG POINTS IN ASCENDING ORDER
+<span class="ln">231</span>      IF(IFLAG.EQ.1) GOTO 180
+<span class="ln">232</span>  140 CONTINUE
+<span class="ln">233</span>      LDONE = .TRUE.
+<span class="ln">234</span>      DO 150 I = 1,IFLAG-1
+<span class="ln">235</span>       IF (NFLAG(I+1).LT.NFLAG(I)) THEN
+<span class="ln">236</span>          NTEMP = NFLAG(I)
+<span class="ln">237</span>          NFLAG(I) = NFLAG(I+1)
+<span class="ln">238</span>          NFLAG(I+1) = NTEMP
+<span class="ln">239</span>          LDONE = .FALSE.
+<span class="ln">240</span>       ENDIF
+<span class="ln">241</span>  150 CONTINUE
+<span class="ln">242</span>      IF(.NOT.LDONE) GOTO 140
+<span class="ln">243</span>C ENSURE THAT POINTS ARENT FLAGGED MORE THAN ONCE.
+<span class="ln">244</span>      I = 2
+<span class="ln">245</span>  160 CONTINUE
+<span class="ln">246</span>      IF(NFLAG(I).EQ.NFLAG(I-1))THEN
+<span class="ln">247</span>       IF(I.LT.IFLAG) THEN
+<span class="ln">248</span>          DO 170 J = I,IFLAG-1
+<span class="ln">249</span>             NFLAG(J) = NFLAG(J+1)
+<span class="ln">250</span>  170       CONTINUE
+<span class="ln">251</span>       ENDIF
+<span class="ln">252</span>       IFLAG = IFLAG - 1
+<span class="ln">253</span>      ENDIF
+<span class="ln">254</span>      I = I + 1
+<span class="ln">255</span>      IF(I.LE.IFLAG) GOTO 160
+<span class="ln">256</span>  180 CONTINUE
+<span class="ln">257</span>      WRITE(ISHORT,185) (NFLAG(J),J=1,IFLAG)
+<span class="ln">258</span>  185 FORMAT(1X,&#x27;FLAG-POINTS&#x27;,20I4)
+<span class="ln">259</span>C BEGIN REFLOATING OF POINTS
+<span class="ln">260</span>      IF(LROT) THEN
+<span class="ln">261</span>       DO 190 I = 1,M
+<span class="ln">262</span>          IF(OMEGA(I).GT.0.0D0) THEN
+<span class="ln">263</span>             OMEGAL(I) = DLOG10(OMEGA(I))
+<span class="ln">264</span>          ELSE
+<span class="ln">265</span>             OMEGAL(I) = 0.0D0
+<span class="ln">266</span>          ENDIF
+<span class="ln">267</span>  190    CONTINUE
+<span class="ln">268</span>      ENDIF
+<span class="ln">269</span>      HSS(1) = HS(1)
+<span class="ln">270</span>      HPO(1) = HP(1)
+<span class="ln">271</span>      HLO(1) = HL(1)
+<span class="ln">272</span>      HKO(1) = HCOMP(1,1)
+<span class="ln">273</span>      HFO(1) = HCOMP(3,1)
+<span class="ln">274</span>      HLMAX = HL(M)
+<span class="ln">275</span>C JVS 04/14 added Teff to saved variables
+<span class="ln">276</span>        TEFFLO = TEFFL
+<span class="ln">277</span>C  JVS 05/25 Added model number to list of saved values
+<span class="ln">278</span>      MO = M
+<span class="ln">279</span>      DO I = M-1,1,-1
+<span class="ln">280</span>         IF(HL(I).GT.HLMAX)THEN
+<span class="ln">281</span>            HLMAX = HL(I)
+<span class="ln">282</span>         ENDIF
+<span class="ln">283</span>      END DO
+<span class="ln">284</span>      HPMAX(1) = HPTTOL(8)
+<span class="ln">285</span>      HPMAX(2) = HPTTOL(9)*HLMAX
+<span class="ln">286</span>      HPMAX(3) = HPTTOL(5)
+<span class="ln">287</span>      HPMAX(4) = HPTTOL(6)
+<span class="ln">288</span>C      KFACT = 0
+<span class="ln">289</span>C  200 CONTINUE
+<span class="ln">290</span>      IIFLG = 1
+<span class="ln">291</span>      J = 2
+<span class="ln">292</span>      I0 = 2
+<span class="ln">293</span>C CHI IS THE NORMALIZED VECTOR OF DIFFERENCES IN M,L,P:
+<span class="ln">294</span>C CHI = HS/DELTA M + HL/DELTA L - HP/DELTA P
+<span class="ln">295</span>      DM = HPTTOL(2)
+<span class="ln">296</span>      DL = HPMAX(2)
+<span class="ln">297</span>      CHI(1) = 1.0D0
+<span class="ln">298</span>      DO J = 2, M
+<span class="ln">299</span>         TESTP = HP(J) - HP(JENV)
+<span class="ln">300</span>         IF(ABS(TESTP).LT.HPTTOL(7))THEN
+<span class="ln">301</span>C FINELY ZONED REGION
+<span class="ln">302</span>            DP = HPTTOL(10)
+<span class="ln">303</span>         ELSE IF(TESTP.GT.HPTTOL(7))THEN
+<span class="ln">304</span>C BELOW SURFACE CZ
+<span class="ln">305</span>            DP = HPTTOL(11)
+<span class="ln">306</span>         ELSE
+<span class="ln">307</span>C IN SURFACE CZ
+<span class="ln">308</span>            DP = HPTTOL(8)
+<span class="ln">309</span>         ENDIF
+<span class="ln">310</span>         IF(HL(J).GT.HL(J-1))THEN
+<span class="ln">311</span>            DCHI = (HS(J)-HS(J-1))/DM +
+<span class="ln">312</span>     *             (HL(J)-HL(J-1))/DL -
+<span class="ln">313</span>     *             (HP(J)-HP(J-1))/DP
+<span class="ln">314</span>         ELSE
+<span class="ln">315</span>            DCHI = (HS(J)-HS(J-1))/DM -
+<span class="ln">316</span>     *             (HP(J)-HP(J-1))/DP
+<span class="ln">317</span>         ENDIF
+<span class="ln">318</span>         CHI(J) = CHI(J-1)+DCHI
+<span class="ln">319</span>      END DO
+<span class="ln">320</span>      DO J = 1,M
+<span class="ln">321</span>         XTAB(J) = CHI(J)
+<span class="ln">322</span>         YTAB(J) = HS(J)
+<span class="ln">323</span>      END DO
+<span class="ln">324</span>C GET SPLINE COEFFICIENTS
+<span class="ln">325</span>      CALL <a href="../files/splinc.f.html#def-SPLINC" title="SPLINC in splinc.f">SPLINC</a>(XTAB,YTAB,Y2,M)
+<span class="ln">326</span>      CHIPREV = CHI(1)
+<span class="ln">327</span>      JPREV = 1
+<span class="ln">328</span>      MNEW = 1
+<span class="ln">329</span>      DO I = 1,IFLAG
+<span class="ln">330</span>         DELCHI = CHI(NFLAG(I))-CHIPREV
+<span class="ln">331</span>         NPT = INT(DELCHI)+1
+<span class="ln">332</span>         IF(MNEW+NPT.GT.JSON)THEN
+<span class="ln">333</span>C EXCEEDED ARRAY DIMENSIONS; COMPLAIN AND STOP
+<span class="ln">334</span>            WRITE(*,101)MNEW+NPT,JSON
+<span class="ln">335</span> 101        FORMAT(&#x27; DESIRED NUMBER OF POINTS &#x27;,I6,&#x27;EXCEEEDS JSON &#x27;,
+<span class="ln">336</span>     *             I6/&#x27; RUN STOPPED&#x27;)
+<span class="ln">337</span>            STOP 9999
+<span class="ln">338</span>         ENDIF
+<span class="ln">339</span>         DCHI = DELCHI/DFLOAT(NPT)
+<span class="ln">340</span>C ASSIGN NEW POINTS
+<span class="ln">341</span>         DO J = JPREV+1,JPREV+NPT
+<span class="ln">342</span>            X = CHIPREV + DCHI
+<span class="ln">343</span>            CALL <a href="../files/splintd2.f.html#def-SPLINTD2" title="SPLINTD2 in splintd2.f">SPLINTD2</a>(XTAB, YTAB, M, Y2, X, Y, KLO, KHI)
+<span class="ln">344</span>            HSS(J) = Y
+<span class="ln">345</span>            CHIPREV = X
+<span class="ln">346</span>C
+<span class="ln">347</span>
+<span class="ln">348</span>         END DO
+<span class="ln">349</span>         MNEW = MNEW + NPT
+<span class="ln">350</span>         JPREV = MNEW
+<span class="ln">351</span>C
+<span class="ln">352</span>      END DO
+<span class="ln">353</span>
+<span class="ln">354</span>
+<span class="ln">355</span>
+<span class="ln">356</span>
+<span class="ln">357</span>
+<span class="ln">358</span>
+<span class="ln">359</span>
+<span class="ln">360</span>C TEST FOR ASSIGNING POINTS BASED ON THE GRADIENT IN X.
+<span class="ln">361</span>      DO J = 1,M
+<span class="ln">362</span>         XTAB(J) = HS(J)
+<span class="ln">363</span>         YTAB(J) = HCOMP(1,J)
+<span class="ln">364</span>      END DO
+<span class="ln">365</span>C GET SPLINE COEFFICIENTS
+<span class="ln">366</span>      CALL <a href="../files/splinc.f.html#def-SPLINC" title="SPLINC in splinc.f">SPLINC</a>(XTAB,YTAB,Y2,M)
+<span class="ln">367</span>C ASSIGN INTERPOLATED VECTOR OF X VALUES TO HIO
+<span class="ln">368</span>      DO I = 2,MNEW
+<span class="ln">369</span>         X = HSS(I)
+<span class="ln">370</span>         CALL <a href="../files/splintd2.f.html#def-SPLINTD2" title="SPLINTD2 in splintd2.f">SPLINTD2</a>(XTAB, YTAB, M, Y2, X, Y, KLO, KHI)
+<span class="ln">371</span>         HKO(I) = Y
+<span class="ln">372</span>      END DO
+<span class="ln">373</span>
+<span class="ln">374</span>
+<span class="ln">375</span>
+<span class="ln">376</span>
+<span class="ln">377</span>C SKIP IF HPMAX(3) IS ZEROED OUT
+<span class="ln">378</span>      IF(HPMAX(3).LE.1.0D-15)GOTO 102
+<span class="ln">379</span>C TEST ON X-CHANGE (ONLY FOR INCREASING X) USING HIO AS DUMMY ARRAY
+<span class="ln">380</span>      IXX = 0
+<span class="ln">381</span>      DO J = MNEW,2,-1
+<span class="ln">382</span>         IF(HKO(J)-HKO(J-1).GT.HPMAX(3)) THEN
+<span class="ln">383</span>            IXX = IXX + 1
+<span class="ln">384</span>            IXFLAG(IXX) = J
+<span class="ln">385</span>         ENDIF
+<span class="ln">386</span>      END DO
+<span class="ln">387</span>      IF(IXX.EQ.0)GOTO 102
+<span class="ln">388</span>      MM = MNEW
+<span class="ln">389</span>      DO I = 1,IXX
+<span class="ln">390</span>         J = IXFLAG(I)
+<span class="ln">391</span>         DX = (HKO(J) - HKO(J-1))/HPMAX(3)
+<span class="ln">392</span>C NUMBER OF NEW POINTS NEEDED
+<span class="ln">393</span>         NN = INT(DX)
+<span class="ln">394</span>C
+<span class="ln">395</span>         DSS = (HSS(J)-HSS(J-1))/DFLOAT(NN+1)
+<span class="ln">396</span>         DO K = MM+NN,J+NN,-1
+<span class="ln">397</span>            HSS(K) = HSS(K-NN)
+<span class="ln">398</span>C
+<span class="ln">399</span>         END DO
+<span class="ln">400</span>         DO K = J + NN -1, J -1, -1
+<span class="ln">401</span>            HSS(K) = HSS(K+1) - DSS
+<span class="ln">402</span>         END DO
+<span class="ln">403</span>         MM = MM + NN
+<span class="ln">404</span>      END DO
+<span class="ln">405</span>      MNEW = MM
+<span class="ln">406</span>C
+<span class="ln">407</span> 102  CONTINUE
+<span class="ln">408</span>C TEST FOR ASSIGNING POINTS BASED ON THE GRADIENT IN Z.
+<span class="ln">409</span>      DO J = 1,M
+<span class="ln">410</span>         XTAB(J) = HS(J)
+<span class="ln">411</span>         YTAB(J) = HCOMP(3,J)
+<span class="ln">412</span>      END DO
+<span class="ln">413</span>C GET SPLINE COEFFICIENTS
+<span class="ln">414</span>      CALL <a href="../files/splinc.f.html#def-SPLINC" title="SPLINC in splinc.f">SPLINC</a>(XTAB,YTAB,Y2,M)
+<span class="ln">415</span>C ASSIGN INTERPOLATED VECTOR OF Z VALUES TO HGO
+<span class="ln">416</span>      DO I = 2,MNEW
+<span class="ln">417</span>         X = HSS(I)
+<span class="ln">418</span>         CALL <a href="../files/splintd2.f.html#def-SPLINTD2" title="SPLINTD2 in splintd2.f">SPLINTD2</a>(XTAB, YTAB, M, Y2, X, Y, KLO, KHI)
+<span class="ln">419</span>         HFO(I) = Y
+<span class="ln">420</span>C
+<span class="ln">421</span>      END DO
+<span class="ln">422</span>C TEST ON Z-CHANGE (ONLY FOR DECREASING Z) USING HIO AS DUMMY ARRAY
+<span class="ln">423</span>C SKIP IF HPMAX(4) IS ZEROED OUT
+<span class="ln">424</span>C
+<span class="ln">425</span>
+<span class="ln">426</span>      IF(HPMAX(4).LE.1.0D-15)GOTO 103
+<span class="ln">427</span>      IXX = 0
+<span class="ln">428</span>      DO J = MNEW,2,-1
+<span class="ln">429</span>         IF(HFO(J-1)-HFO(J).GT.HPMAX(4)) THEN
+<span class="ln">430</span>            IXX = IXX + 1
+<span class="ln">431</span>            IXFLAG(IXX) = J
+<span class="ln">432</span>        ENDIF
+<span class="ln">433</span>      END DO
+<span class="ln">434</span>C
+<span class="ln">435</span>      IF(IXX.EQ.0)GOTO 103
+<span class="ln">436</span>      MM = MNEW
+<span class="ln">437</span>C
+<span class="ln">438</span>      DO I = 1,IXX
+<span class="ln">439</span>         J = IXFLAG(I)
+<span class="ln">440</span>         DZ = (HFO(J-1) - HFO(J))/HPMAX(4)
+<span class="ln">441</span>C NUMBER OF NEW POINTS NEEDED
+<span class="ln">442</span>         NN = INT(DZ)
+<span class="ln">443</span>         DSS = (HSS(J)-HSS(J-1))/DFLOAT(NN+1)
+<span class="ln">444</span>         DO K = MM+NN,J+NN,-1
+<span class="ln">445</span>            HSS(K) = HSS(K-NN)
+<span class="ln">446</span>         END DO
+<span class="ln">447</span>         DO K = J + NN -1, J -1, -1
+<span class="ln">448</span>            HSS(K) = HSS(K+1) - DSS
+<span class="ln">449</span>         END DO
+<span class="ln">450</span>         MM = MM + NN
+<span class="ln">451</span>      END DO
+<span class="ln">452</span>      MNEW = MM
+<span class="ln">453</span>C
+<span class="ln">454</span> 103  CONTINUE
+<span class="ln">455</span>C DELETE NEW POINTS THAT ARE TOO CLOSE TOGETHER.
+<span class="ln">456</span>C (NOTE HDO IS BEING USED AS A DUMMY ARRAY HERE).
+<span class="ln">457</span>      J = 1
+<span class="ln">458</span>      HDO(J) = HSS(J)
+<span class="ln">459</span>      DO 810 JJ = 2,MNEW-1
+<span class="ln">460</span>C
+<span class="ln">461</span>       IF(HSS(JJ) - HDO(J).GT.HPTTOL(1))THEN
+<span class="ln">462</span>          J = J + 1
+<span class="ln">463</span>          HDO(J) = HSS(JJ)
+<span class="ln">464</span>       ENDIF
+<span class="ln">465</span>  810 CONTINUE
+<span class="ln">466</span>      J = J + 1
+<span class="ln">467</span>      HDO(J) = HSS(MNEW)
+<span class="ln">468</span>      MNEW = J
+<span class="ln">469</span>      DO 820 J = 2,MNEW
+<span class="ln">470</span>       HSS(J) = HDO(J)
+<span class="ln">471</span>  820 CONTINUE
+<span class="ln">472</span>C
+<span class="ln">473</span>
+<span class="ln">474</span>C  NOW LOCATE OUTER EDGE OF CONVECTIVE CORE AND INNER EDGE OF CONVECTIVE
+<span class="ln">475</span>C  ENVELOPE IN THE NEW POINT DISTRIBUTION.
+<span class="ln">476</span>      IF(JCORE.GT.1)THEN
+<span class="ln">477</span>       DO 823 J = 2,MNEW
+<span class="ln">478</span>          IF(HSS(J).GT.HS(JCORE))GOTO 824
+<span class="ln">479</span>  823    CONTINUE
+<span class="ln">480</span>  824    JCORE = J - 1
+<span class="ln">481</span>      ELSE
+<span class="ln">482</span>       JCORE = 1
+<span class="ln">483</span>      ENDIF
+<span class="ln">484</span>      IF(JENV.LT.M)THEN
+<span class="ln">485</span>       DO 825 J = MNEW-1,1,-1
+<span class="ln">486</span>          IF(HSS(J).LT.HS(JENV))GOTO 826
+<span class="ln">487</span>  825    CONTINUE
+<span class="ln">488</span>  826    JENV = J + 1
+<span class="ln">489</span>      ELSE
+<span class="ln">490</span>       JENV = MNEW
+<span class="ln">491</span>      ENDIF
+<span class="ln">492</span>      IF(JCORE.GT.1)THEN
+<span class="ln">493</span>       DO 827 I = 1,JCORE
+<span class="ln">494</span>          LC(I) = .TRUE.
+<span class="ln">495</span>  827    CONTINUE
+<span class="ln">496</span>       JBEG = JCORE + 1
+<span class="ln">497</span>      ELSE
+<span class="ln">498</span>       JBEG = 1
+<span class="ln">499</span>      ENDIF
+<span class="ln">500</span>      IF(JENV.LT.MNEW)THEN
+<span class="ln">501</span>       DO 828 I = JENV,MNEW
+<span class="ln">502</span>          LC(I) = .TRUE.
+<span class="ln">503</span>  828    CONTINUE
+<span class="ln">504</span>       JEND = JENV - 1
+<span class="ln">505</span>      ELSE
+<span class="ln">506</span>       JEND = MNEW
+<span class="ln">507</span>      ENDIF
+<span class="ln">508</span>      IF(JEND.LT.1.OR.JBEG.GT.MNEW) GOTO 830
+<span class="ln">509</span>      DO 829 J = JBEG,JEND
+<span class="ln">510</span>       LC(J) = .FALSE.
+<span class="ln">511</span>  829 CONTINUE
+<span class="ln">512</span>  830 CONTINUE
+<span class="ln">513</span>
+<span class="ln">514</span>
+<span class="ln">515</span>C  NOW USE AN OSCILLATORY SPLINE TO FIT THE OLD RUN OF PHYSICAL VARIABLES
+<span class="ln">516</span>C  AT THE NEW RUN OF MASS POINTS.
+<span class="ln">517</span>      NTAB = M
+<span class="ln">518</span>      NTOT = MNEW
+<span class="ln">519</span>C  XVAL=RUN OF NEW MODEL MASS COORDINATES(HSS)
+<span class="ln">520</span>C  XTAB = RUN OF OLD MODEL MASS CO-ORDINATES(HS)
+<span class="ln">521</span>C  YTAB = RUN OF VARIABLE WHOSE VALUE AT THE NEW MASS POINTS
+<span class="ln">522</span>C         IS DESIRED(HP,HT,HL,HR,HD,ETC.)
+<span class="ln">523</span>C  NTAB = NUMBER OF DATA POINTS(M)
+<span class="ln">524</span>C  NTOT=NUMBER OF POINTS AT WHICH SPLINE IS TO BE EVALUTED(MNEW)
+<span class="ln">525</span>C  YVAL = OUTPUT RUN OF VARIABLE VALUES AT THE NEW RUN OF MASS POINTS.
+<span class="ln">526</span>C  FORM OF CALL IS CALL OSPLIN(XVAL,YVAL,XTAB,YTAB,NTAB,NTOT)
+<span class="ln">527</span>C  DO EACH COMPOSITION IN ORDER USING HPO AND HTO AS DUMMY ARRAYS.
+<span class="ln">528</span>C 7/91 ADD ENTROPY TERM INTERPOLATION.
+<span class="ln">529</span>      DO 904 J = 1,M
+<span class="ln">530</span>         HPO(J) = HTT0(J)
+<span class="ln">531</span>  904 CONTINUE
+<span class="ln">532</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HTO,HS,HPO,NTAB,NTOT)
+<span class="ln">533</span>      DO 905 J = 1,MNEW
+<span class="ln">534</span>         HTT0(J) = HTO(J)
+<span class="ln">535</span>  905 CONTINUE
+<span class="ln">536</span>
+<span class="ln">537</span>C
+<span class="ln">538</span>
+<span class="ln">539</span>
+<span class="ln">540</span>      DO 906 J = 1,M
+<span class="ln">541</span>         HPO(J) = HPP0(J)
+<span class="ln">542</span>  906 CONTINUE
+<span class="ln">543</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HTO,HS,HPO,NTAB,NTOT)
+<span class="ln">544</span>      DO 907 J = 1,MNEW
+<span class="ln">545</span>         HPP0(J) = HTO(J)
+<span class="ln">546</span>  907 CONTINUE
+<span class="ln">547</span>      DO 911 J = 1,M
+<span class="ln">548</span>         HPO(J) = HLL0(J)
+<span class="ln">549</span>  911 CONTINUE
+<span class="ln">550</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HTO,HS,HPO,NTAB,NTOT)
+<span class="ln">551</span>      DO 912 J = 1,MNEW
+<span class="ln">552</span>         HLL0(J) = HTO(J)
+<span class="ln">553</span>  912 CONTINUE
+<span class="ln">554</span>      DO 913 J = 1,M
+<span class="ln">555</span>         HPO(J) = HRR0(J)
+<span class="ln">556</span>  913 CONTINUE
+<span class="ln">557</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HTO,HS,HPO,NTAB,NTOT)
+<span class="ln">558</span>      DO 914 J = 1,MNEW
+<span class="ln">559</span>         HRR0(J) = HTO(J)
+<span class="ln">560</span>  914 CONTINUE
+<span class="ln">561</span>
+<span class="ln">562</span>
+<span class="ln">563</span>      DO 850 I = 1,IEND
+<span class="ln">564</span>       DO 833 J = 1,M
+<span class="ln">565</span>          HPO(J) = HCOMP(I,J)
+<span class="ln">566</span>  833    CONTINUE
+<span class="ln">567</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HTO,HS,HPO,NTAB,NTOT)
+<span class="ln">568</span>       DO 835 J = 1,MNEW
+<span class="ln">569</span>          HCOMP(I,J) = HTO(J)
+<span class="ln">570</span>  835    CONTINUE
+<span class="ln">571</span>C  HCOMPP IS THE ARRAY OF COMPOSITION AT THE BEGINNING OF THE TIMESTEP.
+<span class="ln">572</span>C  THIS IS NEEDED FOR COMPOSITION DIFFUSION IN ROTATING MODELS.
+<span class="ln">573</span>       DO 840 J = 1,M
+<span class="ln">574</span>          HPO(J) = HCOMPP(I,J)
+<span class="ln">575</span>  840    CONTINUE
+<span class="ln">576</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HTO,HS,HPO,NTAB,NTOT)
+<span class="ln">577</span>       DO 845 J = 1,MNEW
+<span class="ln">578</span>          HCOMPP(I,J) = HTO(J)
+<span class="ln">579</span>  845    CONTINUE
+<span class="ln">580</span>  850 CONTINUE
+<span class="ln">581</span>
+<span class="ln">582</span>
+<span class="ln">583</span>C  HCOMPM IS THE ARRAY OF CHANGES IN COMPOSITION DUE TO NUCLEAR BURNING.
+<span class="ln">584</span>C  THIS IS NEEDED FOR COMPOSITION DIFFUSION IN ROTATING MODELS.
+<span class="ln">585</span>      DO 849 I = 1,7
+<span class="ln">586</span>       DO 847 J = 1,M
+<span class="ln">587</span>          HPO(J) = HCOMPM(ID(I),J)
+<span class="ln">588</span>  847    CONTINUE
+<span class="ln">589</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HTO,HS,HPO,NTAB,NTOT)
+<span class="ln">590</span>       DO 848 J = 1,MNEW
+<span class="ln">591</span>          HCOMPM(ID(I),J) = HTO(J)
+<span class="ln">592</span>  848    CONTINUE
+<span class="ln">593</span>  849 CONTINUE
+<span class="ln">594</span>C MHP 05/02 IF THE SURFACE DEUTERIUM IS ABOVE
+<span class="ln">595</span>C THRESHOLD (1.0D-14) FIND THE NEW RUN OF
+<span class="ln">596</span>C DEUTERIUM BURNING RATES
+<span class="ln">597</span>      IF(LEXCOM .AND. HCOMP(12,M).GE.1.0D-14)THEN
+<span class="ln">598</span>         DO J = 1,M
+<span class="ln">599</span>            HPO(J) = DRATE0(J)
+<span class="ln">600</span>         END DO
+<span class="ln">601</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HTO,HS,HPO,NTAB,NTOT)
+<span class="ln">602</span>         DO J = 1,MNEW
+<span class="ln">603</span>            DRATE0(J) = HTO(J)
+<span class="ln">604</span>         END DO
+<span class="ln">605</span>      ENDIF
+<span class="ln">606</span>C NOW FIND RUN OF P,R,L,T,AND RHO IN THAT ORDER FOR THE NEW POINTS.
+<span class="ln">607</span>
+<span class="ln">608</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HPO,HS,HP,NTAB,NTOT)
+<span class="ln">609</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HRO,HS,HR,NTAB,NTOT)
+<span class="ln">610</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HLO,HS,HL,NTAB,NTOT)
+<span class="ln">611</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HTO,HS,HT,NTAB,NTOT)
+<span class="ln">612</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HDO,HS,HD,NTAB,NTOT)
+<span class="ln">613</span>
+<span class="ln">614</span>C FOR ROTATING MODELS FIND THE NEW RUN OF OMEGA,J/M,FP,FT,R0,AND ETA2.
+<span class="ln">615</span>      IF(LROT) THEN
+<span class="ln">616</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,WOLD,HS,OMEGA,NTAB,NTOT)
+<span class="ln">617</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,HJX,HS,HJM,NTAB,NTOT)
+<span class="ln">618</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,FPX,HS,FP,NTAB,NTOT)
+<span class="ln">619</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,FTX,HS,FT,NTAB,NTOT)
+<span class="ln">620</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,R0X,HS,R0,NTAB,NTOT)
+<span class="ln">621</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,ETA2X,HS,ETA2,NTAB,NTOT)
+<span class="ln">622</span>      ENDIF
+<span class="ln">623</span>C
+<span class="ln">624</span>
+<span class="ln">625</span>C     SPIT OUT POINT DISTRIBUTION DETAILS IF REQUESTED
+<span class="ln">626</span>      IF(LDEBUG .AND.  NPOINT.LT.9999) THEN
+<span class="ln">627</span>      IF(MOD(MODEL,NPOINT).EQ.0) THEN
+<span class="ln">628</span>         MINMIN = MIN0(M,MNEW)
+<span class="ln">629</span>C
+<span class="ln">630</span>         WRITE(IDEBUG,910)
+<span class="ln">631</span>  910    FORMAT(&#x27;1&#x27;,20X,&#x27;OLD POINTS&#x27;,54X,&#x27;NEW POINTS&#x27;/2(3X,&#x27;N&#x27;,5X,&#x27;S&#x27;,
+<span class="ln">632</span>     *   8X,&#x27;P&#x27;,7X,&#x27;T&#x27;,7X,&#x27;R&#x27;,8X,&#x27;L&#x27;,7X,&#x27;X&#x27;,4X,&#x27;Z&#x27;,3X,&#x27;O16&#x27;,1X) )
+<span class="ln">633</span>         WRITE(IDEBUG,920) (I,HS(I),HP(I),HT(I),HR(I),HL(I),
+<span class="ln">634</span>     *   HKO(I),HFO(I),HCOMP(9,I),I,HSS(I),HPO(I),HTO(I),
+<span class="ln">635</span>     *   HRO(I),HLO(I),HCOMP(1,I),HCOMP(3,I),HCOMP(9,I), I = 1,MINMIN)
+<span class="ln">636</span>  920    FORMAT( 2(1X,I3,F11.7,F8.4,F8.5,F8.4,1PE9.2,0PF6.3,2F5.3) )
+<span class="ln">637</span>         IF(M.GT.MINMIN) THEN
+<span class="ln">638</span>            MINMIN = MINMIN + 1
+<span class="ln">639</span>            WRITE(IDEBUG,930) (I,HS(I),HP(I),HT(I),HR(I),HL(I),
+<span class="ln">640</span>     *      HKO(I),HFO(I),HCOMP(9,I),I=MINMIN,M)
+<span class="ln">641</span>  930       FORMAT( 1X,I3,F11.7,F8.4,F8.5,F8.4,1PE9.2,0PF6.3,2F5.3)
+<span class="ln">642</span>         ELSE IF(MNEW.GT.MINMIN) THEN
+<span class="ln">643</span>            MINMIN = MINMIN + 1
+<span class="ln">644</span>            WRITE(IDEBUG,940)(I,HSS(I),HPO(I),HTO(I),HRO(I),HLO(I),
+<span class="ln">645</span>     *      HCOMP(1,I),HCOMP(3,I),HCOMP(9,I),I=MINMIN,MNEW)
+<span class="ln">646</span>  940       FORMAT(65X,I3,F11.7,F8.4,F8.5,F8.4,1PE9.2,0PF6.3,2F5.3)
+<span class="ln">647</span>         ENDIF
+<span class="ln">648</span>      ENDIF
+<span class="ln">649</span>      ENDIF
+<span class="ln">650</span>
+<span class="ln">651</span>
+<span class="ln">652</span>C TRANSFER NEW POINTS.
+<span class="ln">653</span>      DO 1000 J = 1,MNEW
+<span class="ln">654</span>       HS(J) = HSS(J)
+<span class="ln">655</span>       HP(J) = HPO(J)
+<span class="ln">656</span>       HT(J) = HTO(J)
+<span class="ln">657</span>       HR(J) = HRO(J)
+<span class="ln">658</span>       HL(J) = HLO(J)
+<span class="ln">659</span>       HD(J) = HDO(J)
+<span class="ln">660</span> 1000 CONTINUE
+<span class="ln">661</span>      IF (LROT) THEN
+<span class="ln">662</span>       DO 1005 J = 1, MNEW
+<span class="ln">663</span>          HJM(J) = HJX(J)
+<span class="ln">664</span>          OMEGA(J) = WOLD(J)
+<span class="ln">665</span>          FP(J) = FPX(J)
+<span class="ln">666</span>          FT(J) = FTX(J)
+<span class="ln">667</span>          ETA2(J) = ETA2X(J)
+<span class="ln">668</span>          R0(J) = R0X(J)
+<span class="ln">669</span> 1005    CONTINUE
+<span class="ln">670</span>      ENDIF
+<span class="ln">671</span>C MHP 6/00 INTERPOLATED IN ENERGY GENERATION AT START OF TIMESTEP
+<span class="ln">672</span>      IF(LROT .OR. (LEXCOM .AND. LOVSTE))THEN
+<span class="ln">673</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,ESUMO,HS,SESUM,NTAB,NTOT)
+<span class="ln">674</span>         DO IM = 1,M
+<span class="ln">675</span>            YTAB(IM) = SESUM(IM)+SEG(6,IM)+SEG(7,IM)
+<span class="ln">676</span>         END DO
+<span class="ln">677</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(HSS,EPSO,HS,YTAB,NTAB,NTOT)
+<span class="ln">678</span>      ENDIF
+<span class="ln">679</span>      WRITE(ISHORT,1020) M,MNEW
+<span class="ln">680</span> 1020 FORMAT(&#x27; POINTS  OLD&#x27;,I5,&#x27;   NEW&#x27;,I5)
+<span class="ln">681</span>      M = MNEW
+<span class="ln">682</span>C SET UP WEIGHTS AND MASSES
+<span class="ln">683</span>      DS3 = DEXP(CLNDP*HS(1))
+<span class="ln">684</span>      DS2 = - DS3
+<span class="ln">685</span>      DO 1030 I = 2,M
+<span class="ln">686</span>       DS1 = DS2
+<span class="ln">687</span>       DS2 = DS3
+<span class="ln">688</span>       DS3 = DEXP(CLNDP*HS(I))
+<span class="ln">689</span>       HS1(I-1) = DS2
+<span class="ln">690</span>       HS2(I-1) = 0.5D0*(DS3-DS1)
+<span class="ln">691</span> 1030 CONTINUE
+<span class="ln">692</span>      HS1(M) = DS3
+<span class="ln">693</span>      HS2(M) = DEXP(CLN*HSTOT) - 0.5D0*(DS2+DS3)
+<span class="ln">694</span>      IF(LROT) THEN
+<span class="ln">695</span>C  FIRST GUESS AT MOMENT OF INERTIA(HI)
+<span class="ln">696</span>       DO 1070 I=1,M
+<span class="ln">697</span>          HI(I) = CC23*HS2(I)*DEXP(CLN*2.0D0*HR(I))
+<span class="ln">698</span> 1070    CONTINUE
+<span class="ln">699</span>C   CALCULATE OVERSHOOT
+<span class="ln">700</span>       CALL <a href="../files/ovrot.f.html#def-OVROT" title="OVROT in ovrot.f">OVROT</a>(HCOMP,HD,HP,HR,HS,HT,LC,M,LCZ,MRZONE,MXZONE,
+<span class="ln">701</span>     &amp;        NRZONE,NZONE)
+<span class="ln">702</span>C JNT 2025/09/03 duplicating 2015/04/06 recompute moment of interia
+<span class="ln">703</span>C before recomputing the rotation I am less confident that this is 
+<span class="ln">704</span>C necessary since WALPCZ does run in this version but I don&#x27;t think
+<span class="ln">705</span>C it can hurt.
+<span class="ln">706</span>       CALL <a href="../files/momi.f.html#def-MOMI" title="MOMI in momi.f">MOMI</a>(ETA2,HR,HS,HS2,1,M,OMEGA,R0,HI,QIW)
+<span class="ln">707</span>C END JNT
+<span class="ln">708</span>     
+<span class="ln">709</span>C   FIND THE ANGULAR VELOCITY OMEGA THAT CORRESPONDS TO THE GIVEN
+<span class="ln">710</span>C   SPECIFIC ANGULAR MOMENTUM HJM.
+<span class="ln">711</span>       CALL <a href="../files/getrot.f.html#def-GETROT" title="GETROT in getrot.f">GETROT</a>(HD,HJM,HR,HS,HS2,LCZ,M,ETA2,HI,OMEGA,QIW,R0)
+<span class="ln">712</span>C  CALCULATE FP,FT,R0 AND ETA2 GIVEN OMEGA
+<span class="ln">713</span>       CALL <a href="../files/fpft.f.html#def-FPFT" title="FPFT in fpft.f">FPFT</a>(HD,HR,HS,M,OMEGA,ETA2,FP,FT,HG,R0)
+<span class="ln">714</span>C  FIND CORRECT MOMENT OF INERTIA(HI)
+<span class="ln">715</span>C        CALL MOMI(ETA2,HD,HR,HS,HS2,1,M,OMEGA,R0,HI,QIW,M)  ! KC 2025-05-31
+<span class="ln">716</span>       CALL <a href="../files/momi.f.html#def-MOMI" title="MOMI in momi.f">MOMI</a>(ETA2,HR,HS,HS2,1,M,OMEGA,R0,HI,QIW)
+<span class="ln">717</span>C  FIND NEW TOTAL ANGULAR MOMENTUM
+<span class="ln">718</span>       SUMJ = 0.0D0
+<span class="ln">719</span>       SUMKE = 0.0D0
+<span class="ln">720</span>       DO 1110 I = 1,M
+<span class="ln">721</span>          HJ = HJM(I)*HS2(I)
+<span class="ln">722</span>          HKEROT(I) = 0.5D0*OMEGA(I)*HJ
+<span class="ln">723</span>          SUMJ = SUMJ + HJ
+<span class="ln">724</span>          SUMKE = SUMKE + HKEROT(I)
+<span class="ln">725</span> 1110    CONTINUE
+<span class="ln">726</span>       WRITE(ISHORT,1120)SJTOT,SUMJ,SKEROT,SUMKE
+<span class="ln">727</span> 1120    FORMAT(1X,&#x27;TOTAL J OF STAR - PREVIOUS &#x27;,1PE21.13,&#x27; NEW &#x27;,
+<span class="ln">728</span>     *    1PE21.13/&#x27; TOTAL ROTATIONAL K.E. OF STAR-PREVIOUS &#x27;,1PE21.13,
+<span class="ln">729</span>     *    &#x27; NEW &#x27;,1PE21.13)
+<span class="ln">730</span>       SJTOT = SUMJ
+<span class="ln">731</span>       SKEROT = SUMKE
+<span class="ln">732</span>C  STORE THE OLD MODEL STRUCTURE FOR USE IN DIFFUSION.
+<span class="ln">733</span>       DO 1130 I = 1,M
+<span class="ln">734</span>          WOLD(I) = OMEGA(I)
+<span class="ln">735</span>          HGO(I) = HG(I)
+<span class="ln">736</span>          HIO(I) = HI(I)
+<span class="ln">737</span>          ETA2X(I) = ETA2(I)
+<span class="ln">738</span>          R0X(I) = R0(I)
+<span class="ln">739</span>          LCO(I) = LC(I)
+<span class="ln">740</span>          LCZO(I) = LCZ(I)
+<span class="ln">741</span>C MHP 10/91 J/M STORED IN HJX FOR I/O USE.
+<span class="ln">742</span>            HJX(I) = HJM(I)
+<span class="ln">743</span> 1130    CONTINUE
+<span class="ln">744</span>C MHP 9/91 CHANGE : T GRADIENTS STORED IF LEXCOM=T AND LOVSTE=T; OR FOR
+<span class="ln">745</span>C ROTATION; THIS IS NEEDED SO THAT THE BASE OF THE OVERSHOOT REGION FOR
+<span class="ln">746</span>C PRE-MS MODELS CAN BE ACCURATELY LOCATED.
+<span class="ln">747</span>      ENDIF
+<span class="ln">748</span>      IF(LROT .OR. (LEXCOM .AND. LOVSTE))THEN
+<span class="ln">749</span>C END OF 9/91 CHANGE
+<span class="ln">750</span>C   FIND THE NEW RUN OF PHYSICAL VARIABLES AT THE NEW SET OF POINTS;
+<span class="ln">751</span>C   THIS IS NEEDED EVEN IN THE ABSENCE OF DIFFUSION TO ACCURATELY LOCATE
+<span class="ln">752</span>C   THE EDGES OF CONVECTION ZONES.
+<span class="ln">753</span>C        CALL PHYSIC(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,LCZ,M,TEFFL)  ! KC 2025-05-31
+<span class="ln">754</span>       CALL <a href="../files/physic.f.html#def-PHYSIC" title="PHYSIC in physic.f">PHYSIC</a>(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,M,TEFFL)
+<span class="ln">755</span>C   FOR DIFFUSION STORE THE AUXILLARY QUANTITIES NEEDED TO CALCULATE
+<span class="ln">756</span>C   VELOCITIES AT THE START OF THE TIMESTEP WITH THE NEW POINT DISTRIBUTION
+<span class="ln">757</span>C   SO THAT A SERIES OF SMALL DIFFUSION TIMESTEPS CAN BE TAKEN WITHIN
+<span class="ln">758</span>C   ONE LARGE EVOLUTIONARY TIMESTEP.
+<span class="ln">759</span>         DO 1040 IM = 1,M
+<span class="ln">760</span>            DELRO(IM) = SDEL(1,IM)
+<span class="ln">761</span>            DELO(IM) = SDEL(2,IM)
+<span class="ln">762</span>            DELAO(IM) = SDEL(3,IM)
+<span class="ln">763</span>            AMUO(IM) = HAMU(IM)
+<span class="ln">764</span>            OO(IM) = SO(IM)
+<span class="ln">765</span>            CPO(IM) = CP(IM)
+<span class="ln">766</span>            QDTO(IM) = SQDT(IM)
+<span class="ln">767</span>            VELO(IM) = SVEL(IM)
+<span class="ln">768</span>            VISCO(IM) = VISC(IM)
+<span class="ln">769</span>            THDIFO(IM) = THDIF(IM)
+<span class="ln">770</span>C MHP 06/02
+<span class="ln">771</span>            DDELM(IM) = DELAO(IM) - DELO(IM)
+<span class="ln">772</span>C MHP 6/00 CALCULATED EARLIER
+<span class="ln">773</span>C            ESUMO(IM) = SESUM(IM)
+<span class="ln">774</span>            QWRMX0(IM) = QWRMAX(IM)
+<span class="ln">775</span> 1040    CONTINUE
+<span class="ln">776</span>C MHP 06/02 ADDED TERM FOR THE TIME EVOLUTION
+<span class="ln">777</span>C OF THE ANGULAR VELOCITY DISTRIBUTION
+<span class="ln">778</span>         DO I = 2,M
+<span class="ln">779</span>            DR = EXP(CLN*HR(I))-EXP(CLN*HR(I-1))
+<span class="ln">780</span>            DW = OMEGA(I) - OMEGA(I-1)
+<span class="ln">781</span>            WMID = 0.5D0*(OMEGA(I)+OMEGA(I-1))
+<span class="ln">782</span>            FAC = 2.0D0*(HR(I)+HR(I-1))-0.5D0*
+<span class="ln">783</span>     *            (HS(I)+HS(I-1))-CGL
+<span class="ln">784</span>            THO(I) = EXP(CLN*FAC)*WMID*DW/DR
+<span class="ln">785</span>            QWRST(I) = DW/DR
+<span class="ln">786</span>         END DO
+<span class="ln">787</span>      ENDIF
+<span class="ln">788</span>C  CALCULATE NEW SURFACE OPACITY TABLE IF NEEDED.
+<span class="ln">789</span>      IF(DABS(XNEW-HCOMP(1,M)).GT.1.0D-8) THEN
+<span class="ln">790</span>               XNEW = HCOMP(1,M)
+<span class="ln">791</span>               ZNEW = HCOMP(3,M)
+<span class="ln">792</span>               CALL <a href="../files/surfopac.f.html#def-SURFOPAC" title="SURFOPAC in surfopac.f">SURFOPAC</a>(XNEW)
+<span class="ln">793</span>
+<span class="ln">794</span>      END IF
+<span class="ln">795</span>
+<span class="ln">796</span>      RETURN
+<span class="ln">797</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> Question 2: "the loop jumps past the convection-zone, overshoot and fine-zoning flags". The convection-zone edges and the H-shell base are flagged before the loop; only the overshoot base <code>JOS</code> and the fine-zoning base <code>JFINE</code> are skipped. Fix: correct the question.</li>
+<li><strong>Wrong.</strong> "25 blocks in all": HPOINT declares 24. Fix: 24.</li>
+<li><strong>Wrong.</strong> <code>ENTROP</code> described as "the previous step's $T$, $P$, $L$, $r$": it holds their rates of change (<code>HTT0</code> = $d\log T/dt$, …), which main.f uses for the first guess. Fix.</li>
+<li><strong>Unclear.</strong> <code>OLDMOD</code>: after HPOINT, <code>HPO</code>, <code>HTO</code>, <code>HRO</code>, <code>HLO</code>, <code>HDO</code>, <code>HSS</code> hold the start-of-step model on the new grid (they are the <code>OSPLIN</code> outputs). Fix: say so.</li>
+<li><strong>Missing question (apparent bug).</strong> <code>MO = M</code> is set before the rezoning (old number of points), while <code>HLO</code> ends on the new grid with <code>MNEW</code> points. <a href="../files/entime.f.html#def-ENTIME"><code>ENTIME</code></a> (called by <code>HTIMER</code> when <code>LTRIST</code>) reads <code>HLO(MO)</code> as the previous surface luminosity, which is the surface only if the number of points did not change. Fix: add a question (set <code>MO = MNEW</code> after the rezoning?).</li>
+<li><strong>Missing question.</strong> The overshoot base is found where $\log_{10}P - \log_{10}P_\mathrm{env} &gt;$ <code>ALPHAE</code>, so <code>ALPHAE</code> is used as a depth in $\log_{10}P$, while main.f uses it as a fraction of $H_P$ (an overshoot of $\alpha H_P$ is $\Delta\ln P \approx \alpha$, i.e. $\Delta\log_{10}P \approx 0.43\alpha$). Fix: add a question.</li>
+</ol>
+<p>Revised: all six findings applied (questions 2, 6, 7; 24 blocks; <code>ENTROP</code> as rates of change; <code>OLDMOD</code> on the new grid).</p></div></details>
+</main></body></html>

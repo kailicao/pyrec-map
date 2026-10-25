@@ -1,0 +1,146 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>intpt.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ intpt.f</span></header><main>
+<h1>intpt.f</h1>
+<p class='muted'>96 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/intpt.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>INTPT</code> interpolates the MHD equation-of-state table in pressure and temperature: for a given $\log P$ and $\log T$ it returns the <code>IVAR</code> tabulated quantities by 4×4-point cubic interpolation.</p>
+<p><strong>How it fits.</strong> Called only by <a href="../files/mhdpx2.f.html#def-MHDPX2"><code>MHDPX2</code></a>, which passes one of the MHD tables (<code>TDVAR(NTM,NRM,IVAR)</code>, with <code>TDVAR(…,2)</code> the pressure variable on each row) and its temperature grid <code>TLOG</code>. It calls <a href="../files/lir.f.html#def-LIR"><code>LIR</code></a> five times. COMMON: <code>CCOUT2</code> (debug flags), declared but not used.</p>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Find <code>IT(1)</code>, the last grid temperature below <code>TL</code> (<code>TLOG</code> ascending), step back by one and clamp it to at most <code>NT</code>−3, so that four rows <code>IT(1..4)</code> are available.</li>
+<li>On each of those rows, find the four density points whose pressure brackets <code>PL</code> the same way.</li>
+<li>On each row, interpolate all <code>IVAR</code> quantities in pressure with <code>LIR</code> (4-point Lagrange in <code>TDVAR(…,2)</code>).</li>
+<li>Interpolate the four row results in $\log T$ with <code>LIR</code>, giving <code>VAROUT</code>.</li>
+</ol>
+<p><strong>KC's changes.</strong> 2025-05-30: DO loops with shared or non-<code>CONTINUE</code> terminations rewritten (no change in behaviour intended).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>IT(1)</code> may be undefined.</strong> The loop sets <code>IT(1)</code> only for rows with <code>TLOG(N)</code> &lt; <code>TL</code>. If <code>TL</code> ≤ <code>TLOG(1)</code>, the loop exits at once and <code>IT(1)</code> keeps whatever value the previous call left (it is <code>SAVE</code>d) or is undefined on the first call. Should it start at 1?</li>
+<li><strong>Silent return above the table.</strong> If <code>PL</code> exceeds a row's largest pressure, the routine returns without setting <code>VAROUT</code>. Does <code>MHDPX2</code> detect this?</li>
+<li><strong>Unused.</strong> <code>PMINI</code> and the COMMON block <code>CCOUT2</code> are unused.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>------------------------    GROUP: SR_P     -------------------------------
+
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+INTPT
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-INTPT'>INTPT</a> <span class='muted'>subroutine · ------------------------    GROUP: SR_P     -------------------------------</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-INTPT'><h3><span class='kind'>subroutine</span>INTPT</h3>
+<p class='muted'>lines 7–96 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/intpt.f#L7-L96'>GitHub</a></p>
+<pre>SUBROUTINE INTPT(PL,TL,TDVAR,NTM,NRM,IVAR,TLOG,NT,NR,</pre>
+<div class='notes'><p>Bicubic (Lagrange, via <code>LIR</code>) interpolation of the MHD table in $(\log P, \log T)$ (above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>------------------------    GROUP: SR_P     -------------------------------
+
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+INTPT
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CCOUT2'>/CCOUT2/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/lir.f.html#def-LIR'>LIR</a> <span class='muted'>(lir.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/mhdpx2.f.html#def-MHDPX2'>MHDPX2</a> <span class='muted'>(mhdpx2.f)</span> ×11</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">7</span>      SUBROUTINE INTPT(PL,TL,TDVAR,NTM,NRM,IVAR,TLOG,NT,NR,
+<span class="ln">8</span>     1                 VAR1,VAR2,Y,VAROUT)
+<span class="ln">9</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">10</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">11</span>      DIMENSION TDVAR(NTM,NRM,IVAR),TLOG(NTM),VAR1(IVAR,4),
+<span class="ln">12</span>     1          VAR2(IVAR,4),VAROUT(IVAR),Y(IVAR)
+<span class="ln">13</span>      DIMENSION IRM(4),IR(4,4),IT(4),XX(4)
+<span class="ln">14</span>      COMMON/CCOUT2/LDEBUG,LCORR,LMILNE,LTRACK,LSTPCH
+<span class="ln">15</span>      INTEGER*4 L
+<span class="ln">16</span>      SAVE
+<span class="ln">17</span>      DO 100 N=1,NT
+<span class="ln">18</span>         IF(TLOG(N).GE.TL) GOTO 101
+<span class="ln">19</span>         IT(1)=N
+<span class="ln">20</span> 100  CONTINUE
+<span class="ln">21</span> 101  IF(IT(1).GE.2) IT(1)=IT(1)-1
+<span class="ln">22</span>      ITMAX=NT-3
+<span class="ln">23</span>      IF(IT(1).GT.ITMAX) IT(1)=ITMAX
+<span class="ln">24</span>      DO 150 I=2,4
+<span class="ln">25</span>C KC 2025-05-30 fixed &quot;DO termination statement which is not END DO or CONTINUE&quot;
+<span class="ln">26</span>C  150  IT(I)=IT(1)+I-1
+<span class="ln">27</span>         IT(I)=IT(1)+I-1
+<span class="ln">28</span> 150  CONTINUE
+<span class="ln">29</span>      DO 210 I=1,4
+<span class="ln">30</span>         IRM(I)=1
+<span class="ln">31</span>         INDT=IT(I)
+<span class="ln">32</span>         PMINI=TDVAR(INDT, 1,2)
+<span class="ln">33</span>         PMAXI=TDVAR(INDT,NR,2)
+<span class="ln">34</span>         IF(PL.GT.PMAXI) THEN
+<span class="ln">35</span>            RETURN
+<span class="ln">36</span>         END IF
+<span class="ln">37</span>         DO 200 M=1,NR
+<span class="ln">38</span>            IF(TDVAR(INDT,M,2).GE.PL) GOTO 201
+<span class="ln">39</span>            IRM(I)=M
+<span class="ln">40</span> 200     CONTINUE
+<span class="ln">41</span> 201     IF(IRM(I).GE.2) IRM(I)=IRM(I)-1
+<span class="ln">42</span>         IRMAX=NR-3
+<span class="ln">43</span>         IF(IRM(I).GT.IRMAX) IRM(I)=IRMAX
+<span class="ln">44</span> 210  CONTINUE
+<span class="ln">45</span>      DO 310 I=1,4
+<span class="ln">46</span>C KC 2025-05-30 fixed &quot;Shared DO termination label&quot;
+<span class="ln">47</span>C          DO 310 J=1,4
+<span class="ln">48</span>         DO 311 J=1,4
+<span class="ln">49</span>            IR(J,I)=IRM(I)+J-1
+<span class="ln">50</span> 311     CONTINUE
+<span class="ln">51</span> 310  CONTINUE
+<span class="ln">52</span>      DO 500 ILIR=1,4
+<span class="ln">53</span>         INDT=IT(ILIR)
+<span class="ln">54</span>         DO 400 I=1,4
+<span class="ln">55</span>            INDR=IR(I,ILIR)
+<span class="ln">56</span>            XX(I)=TDVAR(INDT,INDR,2)
+<span class="ln">57</span> 400     CONTINUE
+<span class="ln">58</span>         DO 410 I=1,4
+<span class="ln">59</span>            INDR=IR(I,ILIR)
+<span class="ln">60</span>C KC 2025-05-30 fixed &quot;Shared DO termination label&quot;
+<span class="ln">61</span>C             DO 410 IV=1,IVAR
+<span class="ln">62</span>            DO 411 IV=1,IVAR
+<span class="ln">63</span>               VAR1(IV,I)=TDVAR(INDT,INDR,IV)
+<span class="ln">64</span> 411        CONTINUE
+<span class="ln">65</span> 410     CONTINUE
+<span class="ln">66</span>
+<span class="ln">67</span>         II=IVAR
+<span class="ln">68</span>         ID=IVAR
+<span class="ln">69</span>         NP=4
+<span class="ln">70</span>         L=1
+<span class="ln">71</span>         INTER=1
+<span class="ln">72</span>         CALL <a href="../files/lir.f.html#def-LIR" title="LIR in lir.f">LIR</a>(PL,XX,Y,VAR1,II,ID,NP,L,INTER)
+<span class="ln">73</span>         DO 420 IV=1,IVAR
+<span class="ln">74</span>C KC 2025-05-30 fixed &quot;DO termination statement which is not END DO or CONTINUE&quot;
+<span class="ln">75</span>C  420     VAR2(IV,ILIR) = Y(IV)
+<span class="ln">76</span>            VAR2(IV,ILIR) = Y(IV)
+<span class="ln">77</span> 420     CONTINUE
+<span class="ln">78</span>
+<span class="ln">79</span> 500  CONTINUE
+<span class="ln">80</span>      DO 600 I=1,4
+<span class="ln">81</span>         INDT=IT(I)
+<span class="ln">82</span>C KC 2025-05-30 fixed &quot;DO termination statement which is not END DO or CONTINUE&quot;
+<span class="ln">83</span>C  600  XX(I) = TLOG(INDT)
+<span class="ln">84</span>         XX(I) = TLOG(INDT)
+<span class="ln">85</span> 600  CONTINUE
+<span class="ln">86</span>
+<span class="ln">87</span>      II=IVAR
+<span class="ln">88</span>      ID=IVAR
+<span class="ln">89</span>      NP=4
+<span class="ln">90</span>      L=1
+<span class="ln">91</span>      INTER=1
+<span class="ln">92</span>
+<span class="ln">93</span>      CALL <a href="../files/lir.f.html#def-LIR" title="LIR in lir.f">LIR</a>(TL,XX,VAROUT,VAR2,II,ID,NP,L,INTER)
+<span class="ln">94</span>
+<span class="ln">95</span>      RETURN
+<span class="ln">96</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Unclear.</strong> Method step 1: "the first temperature index <code>IT(1)</code> below <code>TL</code>". The loop leaves <code>IT(1)</code> at the <em>last</em> grid temperature below <code>TL</code>. Fix: say so, and give the clamp (<code>NT</code>−3).</li>
+</ol>
+<p>Checked otherwise: the pressure brackets, the five <code>LIR</code> calls, the early <code>RETURN</code>, KC's changes. Questions 1–3 are real.</p>
+<p>Revised: finding 1 applied.</p></div></details>
+</main></body></html>

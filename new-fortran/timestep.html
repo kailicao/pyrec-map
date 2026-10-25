@@ -1,0 +1,35 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Time stepping · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ New version (Fortran) / Time stepping</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='fortran.html'>Language and style</a></li><li><a href='kernels.html'>Kernels and settings</a></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><strong>Time stepping</strong></li><li><a href='composition.html'>Composition and settling</a></li><li><a href='rotation.html'>Rotation and mass loss</a></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><a href='common-map.html'>The COMMON-block map</a></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>Time stepping</h1>
+<p><em>In Python: <a href="../files/new/pyrec/timestep/__init__.py.html"><code>pyrec.timestep</code></a>.</em></p>
+<h2>3.8 The time step: <code>TimeStepper</code>, <code>StepCriterion</code></h2>
+<p><strong>Responsibility:</strong> propose the next time step as the most restrictive of several criteria, each a subclass of <code>StepCriterion</code>, limited in growth by <code>ATIME(13)</code>.</p>
+<pre><code class="language-fortran">type, abstract :: StepCriterion
+contains
+    procedure(dt_if), deferred :: dt_max
+        !! (star, start, dt_old) -&gt; real(dp) Largest step allowed [s];
+        !! DT_NOLIMIT if the criterion does not apply.
+    procedure :: name             !! () -&gt; character: for the .short file.
+end type
+type, extends(StepCriterion) :: StructureCriterion   !! PTIME, ATIME(8-11)
+type, extends(StepCriterion) :: HydrogenCriterion    !! XTIME
+type, extends(StepCriterion) :: HeliumCriterion      !! YTIME
+type, extends(StepCriterion) :: RotationCriterion    !! WTIME, DTWIND
+type, extends(StepCriterion) :: SurfaceCriterion     !! ENTIME (triangle)
+type :: CriterionSlot
+    class(StepCriterion), allocatable :: c
+end type
+
+type :: TimeStepper
+    type(CriterionSlot), allocatable :: criteria(:)
+    logical :: use_structure = .true.   !! LPTIME; switched off by HTIMER.
+contains
+    procedure :: next_dt
+        !! (star, start, card, dt_old, dt, limiting) HTIMER: the step [s]
+        !! and the name of the criterion that set it.
+end type
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../files/htimer.f.html#def-HTIMER"><code>HTIMER</code></a>, <a href="../files/ptime.f.html#def-PTIME"><code>PTIME</code></a>, <a href="../files/xtime.f.html#def-XTIME"><code>XTIME</code></a>, <a href="../files/ytime.f.html#def-YTIME"><code>YTIME</code></a>, <a href="../files/wtime.f.html#def-WTIME"><code>WTIME</code></a>, <a href="../files/entime.f.html#def-ENTIME"><code>ENTIME</code></a>. A new criterion is a new subclass in the list, which is also the hook for a user's own criterion (<a href="hooks.html">Section 6.5</a>). Today <code>HTIMER</code> switches the structure criterion off for the whole job by changing <code>LPTIME</code> in COMMON; here that switch is a component of the <code>TimeStepper</code>, and <code>SolarCalibr</code> resets it at each cycle as <code>main.f</code> does now.</p>
+
+</main></body></html>

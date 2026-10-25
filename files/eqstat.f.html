@@ -1,0 +1,228 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>eqstat.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ eqstat.f</span></header><main>
+<h1>eqstat.f</h1>
+<p class='muted'>163 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/eqstat.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>EQSTAT</code> is the equation of state that the rest of YREC calls. Its header says it was added ("LLP 10-22-06") as a "new front end" so that the derivatives of the equation of state can be computed numerically, by calling the older routine, now <a href="../files/eqstat2.f.html#def-EQSTAT2">EQSTAT2</a>, at neighbouring points. All the physics is in <code>EQSTAT2</code>.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> ten routines across the code: <a href="../files/coefft.f.html#def-COEFFT">COEFFT</a>, <a href="../files/envint.f.html#def-ENVINT">ENVINT</a>, <a href="../files/hsubp.f.html#def-HSUBP">HSUBP</a>, <a href="../files/massloss.f.html#def-MASSLOSS">MASSLOSS</a>, <a href="../files/physic.f.html#def-PHYSIC">PHYSIC</a>, <a href="../files/qatm.f.html#def-QATM">QATM</a>, <a href="../files/qenv.f.html#def-QENV">QENV</a>, <a href="../files/sconvec.f.html#def-SCONVEC">SCONVEC</a>, <a href="../files/starin.f.html#def-STARIN">STARIN</a> and <a href="../files/wrtout.f.html#def-WRTOUT">WRTOUT</a>.</li>
+<li><strong>Inputs:</strong> <code>TL</code>, <code>PL</code> ($\log_{10}$ of $T$ in K and $P$ in dyn cm$^{-2}$), <code>X</code>, <code>Z</code>, and the flags <code>LDERIV</code> (second derivatives wanted) and <code>LATMO</code> (atmosphere). <code>DL</code> serves as a starting guess.</li>
+<li><strong>What it calls:</strong> only <code>EQSTAT2</code>.</li>
+<li><strong>Outputs:</strong> those of <code>EQSTAT2</code>: <code>T</code>, <code>P</code>, <code>D</code>, <code>DL</code>, <code>BETA</code>, <code>FXION</code>, <code>RMU</code>, <code>AMU</code>, <code>EMU</code>, <code>ETA</code>, <code>QDT</code> $=\partial\ln\rho/\partial\ln T|_P$, <code>QDP</code> $=\partial\ln\rho/\partial\ln P|_T$, <code>QCP</code> ($c_P$), <code>DELA</code> ($\nabla_\mathrm{ad}$), and the derivatives <code>QDTT</code>, <code>QDTP</code>, <code>QAT</code>, <code>QAP</code>, <code>QCPT</code>, <code>QCPP</code>.</li>
+<li><strong>COMMON blocks:</strong> it reads only <code>CLN</code> ($\ln 10$, from <code>/CONST1/</code>) and <code>LNumDeriv</code> (from <code>/OPALEOS/</code>, set in the <code>PHYSICS</code> namelist read by <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a>). It declares the same blocks as <code>EQSTAT2</code> (<code>/COMP/</code>, <code>/CTLIM/</code>, <code>/DEBHU/</code>, <code>/SCVEOS/</code>, <code>/GRAVS3/</code>, …) without using them.</li>
+</ul>
+<p><strong>The method.</strong> If <code>LDERIV</code> and <code>LNumDeriv</code> are both set, <code>EQSTAT2</code> is called four times without derivatives, at $\log T \pm h_T$ and $\log P \pm h_P$, with $h_T = 3\times10^{-4}$ and $h_P = 1.5\times10^{-3}$ (the "approximate table intervals", 0.03 and 0.15, scaled down by 100: "empirically, scaling the intervals down by 100 seemed to work best"). Central differences give the second derivatives, for example
+$$\frac{\partial Q_{\rho T}}{\partial\ln T} = \frac{Q_{\rho T}^{+} - Q_{\rho T}^{-}}{2h_T\ln 10},\qquad \frac{\partial\log c_P}{\partial\log T} = \frac{\log c_P^{+} - \log c_P^{-}}{2h_T},\qquad \frac{\partial\log\nabla_\mathrm{ad}}{\partial\log T} = \frac{\log\nabla_\mathrm{ad}^{+} - \log\nabla_\mathrm{ad}^{-}}{2h_T},$$
+and the same in $\log P$. A last call at the point itself, without derivatives, gives the values; its derivative outputs go to dummy variables so they cannot overwrite the numerical ones. Otherwise <code>EQSTAT2</code> is called once, with analytic derivatives if <code>LDERIV</code> is set.</p>
+<p><strong>KC's changes.</strong> Unused arrays and DATA statements were commented out (2025-05-31), and the elements of <code>/OPALEOS/</code> were reordered (2025-05-30).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A typo that leaves a variable undefined.</strong> The line <code>KSSAHAx = KSAHA</code> assigns a misspelled variable; the calls then pass <code>KSAHAx</code>, which is never set. <code>KSAHAx</code> is a saved local that only the four derivative calls increment and nothing reads, so no result changes; the caller's counter <code>KSAHA</code> just misses those iterations. Should it read <code>KSAHAx = KSAHA</code>?</li>
+<li><strong>The step size.</strong> The steps are 1/100 of an assumed table spacing of 0.15 in $\log P$ and 0.03 in $\log T$. EQSTAT2's own comment gives the SCV tables' spacing as 0.20 and 0.08. Was the step tested for each table <code>EQSTAT2</code> can use?</li>
+<li><strong>Unused declarations.</strong> Most COMMON blocks here are copies from <code>EQSTAT2</code> and are not used. Can they be removed?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+EQSTAT - New front end to equation of state routines
+Provided to allow numerical differentiation of
+current EOS routines by calling old EOS routine
+(now called EQSTAT2) at aappropriated P and T
+points in support of numerical differentiation.
+LLP  10-22-06
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-EQSTAT'>EQSTAT</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-EQSTAT'><h3><span class='kind'>subroutine</span>EQSTAT</h3>
+<p class='muted'>lines 13–163 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/eqstat.f#L13-L163'>GitHub</a></p>
+<pre>SUBROUTINE EQSTAT(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,</pre>
+<div class='notes'><p>Front end to <code>EQSTAT2</code>: second derivatives by central differences when <code>LNumDeriv</code> is set, otherwise analytic; always returns <code>EQSTAT2</code>'s values at the point.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+EQSTAT - New front end to equation of state routines
+Provided to allow numerical differentiation of
+current EOS routines by calling old EOS routine
+(now called EQSTAT2) at aappropriated P and T
+points in support of numerical differentiation.
+LLP  10-22-06
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-COMP'>/COMP/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-CTLIM'>/CTLIM/</a>, <a href='../commons.html#c-DEBHU'>/DEBHU/</a>, <a href='../commons.html#c-GRAVS3'>/GRAVS3/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-OPALEOS'>/OPALEOS/</a>, <a href='../commons.html#c-SCVEOS'>/SCVEOS/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/eqstat2.f.html#def-EQSTAT2'>EQSTAT2</a> <span class='muted'>(eqstat2.f)</span> ×6</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/coefft.f.html#def-COEFFT'>COEFFT</a> <span class='muted'>(coefft.f)</span></li>
+<li><a href='../files/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+<li><a href='../files/hsubp.f.html#def-HSUBP'>HSUBP</a> <span class='muted'>(hsubp.f)</span></li>
+<li><a href='../files/massloss.f.html#def-MASSLOSS'>MASSLOSS</a> <span class='muted'>(massloss.f)</span> ×2</li>
+<li><a href='../files/physic.f.html#def-PHYSIC'>PHYSIC</a> <span class='muted'>(physic.f)</span></li>
+<li><a href='../files/qatm.f.html#def-QATM'>QATM</a> <span class='muted'>(qatm.f)</span></li>
+<li><a href='../files/qenv.f.html#def-QENV'>QENV</a> <span class='muted'>(qenv.f)</span></li>
+<li><a href='../files/sconvec.f.html#def-SCONVEC'>SCONVEC</a> <span class='muted'>(sconvec.f)</span> ×3</li>
+<li><a href='../files/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span></li>
+<li><a href='../files/wrtout.f.html#def-WRTOUT'>WRTOUT</a> <span class='muted'>(wrtout.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">13</span>      SUBROUTINE EQSTAT(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">14</span>     *AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP,LDERIV,
+<span class="ln">15</span>     *LATMO,KSAHA)
+<span class="ln">16</span>c
+<span class="ln">17</span>c  Input Arguments: TL, PL, X, Z, LDERIV, LATMO
+<span class="ln">18</span>c
+<span class="ln">19</span>c  Output Arguments: T, P, D, DL, BETA, BETAI, BETA14, FXION, RMU, AMU,
+<span class="ln">20</span>c          EMU, QDT, QDP, QCP, DELA, QDTT, QDTP, QAT, QAP, QCPT, QCPP,
+<span class="ln">21</span>c
+<span class="ln">22</span>c  Update (Input and Output) Arguments: KSAHA
+<span class="ln">23</span>c
+<span class="ln">24</span>
+<span class="ln">25</span>      PARAMETER (NTS=63, NPS=76)
+<span class="ln">26</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">27</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">28</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">29</span>C       DIMENSION ATOMWT(4),FXION(3),ATOMW2(12)  ! FX(12)  ! KC 2025-05-31
+<span class="ln">30</span>      DIMENSION FXION(3)
+<span class="ln">31</span>      COMMON/COMP/XENV,ZENV,ZENVM,AMUENV,FXENV(12),XNEW,ZNEW,STOTAL,
+<span class="ln">32</span>     *     SENV
+<span class="ln">33</span>      COMMON/CTLIM/ATIME(14),TCUT(5),TSCUT,TENV0,TENV1,TENV,TGCUT
+<span class="ln">34</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">35</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">36</span>C DBG 7/92 COMMON BLOCK ADDED TO COMPUTE DEBYE-HUCKEL CORRECTION.
+<span class="ln">37</span>      COMMON/DEBHU/CDH,ETADH0,ETADH1,ZDH(18),XXDY,
+<span class="ln">38</span>     1     YYDH,ZZDH,DHNUE(18),LDH
+<span class="ln">39</span>C YCK 2/95 OPAL eos
+<span class="ln">40</span>C LLP 2001 OPAL eos Mar 2003
+<span class="ln">41</span>C LLP 2006 OPAL eos Oct 2006
+<span class="ln">42</span>C LLP Add Use Numerical Derivatives flag, LNumDeriv   7/07
+<span class="ln">43</span>      LOGICAL*4 LOPALE, lopale01,lopale06,lNumDeriv
+<span class="ln">44</span>C MHP 8/25 Remove unused variables
+<span class="ln">45</span>C      CHARACTER*256 FOPALE,fopale01,fopale06
+<span class="ln">46</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">47</span>C       COMMON/OPALEOS/FOPALE,LOPALE,IOPALE,fopale01,lopale01,fopale06,
+<span class="ln">48</span>C      x     lopale06,lNumDeriv
+<span class="ln">49</span>C MHP 8/25 Remove file names from common blocks
+<span class="ln">50</span>      COMMON/OPALEOS/LOPALE,IOPALE,lopale01,lopale06,lNumDeriv
+<span class="ln">51</span>C MHP 3/94 ADDED METAL DIFFUSION
+<span class="ln">52</span>      COMMON/GRAVS3/FGRY,FGRZ,LTHOUL,LDIFZ
+<span class="ln">53</span>C MHP  5/97 ADDED COMMON BLOCK FOR SCV EOS TABLES
+<span class="ln">54</span>      COMMON/SCVEOS/TLOGX(NTS),TABLEX(NTS,NPS,12),
+<span class="ln">55</span>     *     TABLEY(NTS,NPS,12),SMIX(NTS,NPS),TABLEZ(NTS,NPS,13),
+<span class="ln">56</span>     *     TABLENV(NTS,NPS,12),NPTSX(NTS),LSCV,IDT,IDP
+<span class="ln">57</span>C       DATA NZP1/12/
+<span class="ln">58</span>C       DATA ATOMWT/0.9921D0,0.24975D0,0.08322D0,0.4995D0/
+<span class="ln">59</span>C       DATA SCALET,SCALES/0.500D0, 2.000D0/
+<span class="ln">60</span>C       DATA ATOMW2/23.0D0,26.99D0,24.32D0,55.86D0,28.1D0,12.015D0,
+<span class="ln">61</span>C      *            1.008D0,16.0D0,14.01D0,39.96D0,20.19D0,4.004D0/
+<span class="ln">62</span>      SAVE
+<span class="ln">63</span>
+<span class="ln">64</span>c  LDERIV: if true, provide derivatives needed for relaxation, else don&#x27;t
+<span class="ln">65</span>
+<span class="ln">66</span>c  LNumDeriv - if true derivatives are calculated numerically. else get
+<span class="ln">67</span>c              them the old way using Yale EOS.
+<span class="ln">68</span>c              LNumDeriv is part of the PARMIN PHYSICS namelist.
+<span class="ln">69</span>
+<span class="ln">70</span>      PLO = PL
+<span class="ln">71</span>      TLO = TL
+<span class="ln">72</span>      LATMOx = LATMO
+<span class="ln">73</span>      KSSAHAx = KSAHA
+<span class="ln">74</span>
+<span class="ln">75</span>      IF(LDERIV .AND. LNumDeriv) THEN
+<span class="ln">76</span>c Get Numerical Derivatives of Current EOS    LLP  8/5/07
+<span class="ln">77</span>c If both derivatives and numerical derivatives are requested.
+<span class="ln">78</span>
+<span class="ln">79</span>c A central difference approximation using values on both sides of
+<span class="ln">80</span>c TL and then PL is used. The error term in this approximation of
+<span class="ln">81</span>c the derivatives is of order h**2, where h is the interval. The
+<span class="ln">82</span>c error term when one sided derivatives are used is of order h.
+<span class="ln">83</span>
+<span class="ln">84</span>            dpl = .150d0    ! the approximate table intervals
+<span class="ln">85</span>            dtl = .030d0
+<span class="ln">86</span>
+<span class="ln">87</span>            dpl = dpl * .01d0   ! Empirically, scaling the intervals down
+<span class="ln">88</span>            dtl = dtl * .01d0   ! by 100 seemed to work best.
+<span class="ln">89</span>
+<span class="ln">90</span>            dpl2 = 2D0 * dpl
+<span class="ln">91</span>            dtl2 = 2D0 * dtl
+<span class="ln">92</span>
+<span class="ln">93</span>            DL1 = DL   ! Initialize DL1 and D1 to called values.
+<span class="ln">94</span>            D1 = D     ! This can avoid problems in initial table lookups
+<span class="ln">95</span>
+<span class="ln">96</span>            TTL = TL + dtl   ! Get derivatives wrt T.
+<span class="ln">97</span>            T = 10.0D0**TTL
+<span class="ln">98</span>            LDERIV2=.FALSE.
+<span class="ln">99</span>            CALL <a href="../files/eqstat2.f.html#def-EQSTAT2" title="EQSTAT2 in eqstat2.f">EQSTAT2</a>(TTL,T,PL,P,DL1,D1,X,Z,BETA,BETAI,BETA14,
+<span class="ln">100</span>     *         FXION,RMU,AMU,EMU,ETA,QDT1,QDP1,QCP1,DELA1,QDTTx,
+<span class="ln">101</span>     *         QDTPx,QATx,QAPx,QCPTx,QCPPx,LDERIV2,LATMOx,KSAHAx)
+<span class="ln">102</span>
+<span class="ln">103</span>            TTL = TL - dtl
+<span class="ln">104</span>            T = 10.0D0**TTL
+<span class="ln">105</span>            LDERIV2=.FALSE.
+<span class="ln">106</span>            CALL <a href="../files/eqstat2.f.html#def-EQSTAT2" title="EQSTAT2 in eqstat2.f">EQSTAT2</a>(TTL,T,PL,P,DL1,D1,X,Z,BETA,BETAI,BETA14,
+<span class="ln">107</span>     *         FXION,RMU,AMU,EMU,ETA,QDT2,QDP2,QCP2,DELA2,QDTTx,
+<span class="ln">108</span>     *         QDTPx,QATx,QAPx,QCPTx,QCPPx,LDERIV2,LATMOx,KSAHAx)
+<span class="ln">109</span>            QDTT1 = (QDT1-QDT2)/dtl2/CLN
+<span class="ln">110</span>            QCPT1 = (DLOG10(QCP1)-DLOG10(QCP2))/dtl2
+<span class="ln">111</span>            QAT1 = (DLOG10(DELA1)-DLOG10(DELA2))/dtl2
+<span class="ln">112</span>            TL = TLO
+<span class="ln">113</span>            T = 10.0D0**TLO   ! Restore original T
+<span class="ln">114</span>
+<span class="ln">115</span>            PPL = PL + dpl
+<span class="ln">116</span>            P = 10.0D0**PPL
+<span class="ln">117</span>            LDERIV2=.FALSE.
+<span class="ln">118</span>            CALL <a href="../files/eqstat2.f.html#def-EQSTAT2" title="EQSTAT2 in eqstat2.f">EQSTAT2</a>(TL,T,PPL,P,DL1,D1,X,Z,BETA,BETAI,BETA14,
+<span class="ln">119</span>     *         FXION,RMU,AMU,EMU,ETA,QDT1,QDP1,QCP1,DELA1,QDTTx,
+<span class="ln">120</span>     *         QDTPx,QATx,QAPx,QCPTx,QCPPx,LDERIV2,LATMOx,KSAHAx)
+<span class="ln">121</span>            PPL = PL - dpl
+<span class="ln">122</span>            P = 10.0D0**PPL
+<span class="ln">123</span>            LDERIV2=.FALSE.
+<span class="ln">124</span>            CALL <a href="../files/eqstat2.f.html#def-EQSTAT2" title="EQSTAT2 in eqstat2.f">EQSTAT2</a>(TL,T,PPL,P,DL1,D1,X,Z,BETA,BETAI,BETA14,
+<span class="ln">125</span>     *         FXION,RMU,AMU,EMU,ETA,QDT2,QDP2,QCP2,DELA2,QDTTx,
+<span class="ln">126</span>     *         QDTPx,QATx,QAPx,QCPTx,QCPPx,LDERIV2,LATMOx,KSAHAx)
+<span class="ln">127</span>            PL = PLO
+<span class="ln">128</span>            P = 10.0D0**PLO   ! Restore original P
+<span class="ln">129</span>            QDTP1 = (QDT1-QDT2)/dpl2/CLN
+<span class="ln">130</span>            QCPP1 = (DLOG10(QCP1)-DLOG10(QCP2))/dpl2
+<span class="ln">131</span>            QAP1 = (DLOG10(DELA1)-DLOG10(DELA2))/dpl2
+<span class="ln">132</span>
+<span class="ln">133</span>            QDTT = QDTT1
+<span class="ln">134</span>            QDTP = QDTP1
+<span class="ln">135</span>            QAT = QAT1
+<span class="ln">136</span>            QAP = QAP1
+<span class="ln">137</span>            QCPP = QCPP1
+<span class="ln">138</span>            QCPT = QCPT1
+<span class="ln">139</span>        ENDIF
+<span class="ln">140</span>
+<span class="ln">141</span>      TL = TLO    ! Restore original TL and PL.
+<span class="ln">142</span>      PL = PLO
+<span class="ln">143</span>
+<span class="ln">144</span>      IF (LDERIV .AND. .NOT. LNumDeriv) THEN
+<span class="ln">145</span>         LDERIV2=.TRUE.   ! Need derivatives and have no numerical ones.
+<span class="ln">146</span>                          ! Call eqstat2 and request derivatives
+<span class="ln">147</span>         CALL <a href="../files/eqstat2.f.html#def-EQSTAT2" title="EQSTAT2 in eqstat2.f">EQSTAT2</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">148</span>     *   AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP,
+<span class="ln">149</span>     *   LDERIV2,LATMO,KSAHA)
+<span class="ln">150</span>      ELSE
+<span class="ln">151</span>         LDERIV2=.FALSE.  ! We either already have numerical derivatives
+<span class="ln">152</span>                        ! or do not need any derivatives.
+<span class="ln">153</span>                          ! Call eqstat2 and request no derivatives
+<span class="ln">154</span>         CALL <a href="../files/eqstat2.f.html#def-EQSTAT2" title="EQSTAT2 in eqstat2.f">EQSTAT2</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">155</span>     *   AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTTx,QDTPx,QATx,QAPx,QCPTx,
+<span class="ln">156</span>     *   QCPPx,LDERIV2,LATMO,KSAHA)
+<span class="ln">157</span>c            Note that the QDTT,QDTP,QAT,QAP,QCPT,QCPP OUTPUTS are to
+<span class="ln">158</span>c            dummy variables so they can not affect the previously
+<span class="ln">159</span>c            calculated second derivatives.
+<span class="ln">160</span>      ENDIF
+<span class="ln">161</span>
+<span class="ln">162</span>      RETURN
+<span class="ln">163</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Unclear (question 1).</strong> "<code>KSAHA</code> is only an iteration counter, so the effect is probably small." <code>KSAHAx</code> is a saved local that only the four derivative calls increment and nothing reads, so the typo has no effect on any result; the caller's <code>KSAHA</code> simply does not count those iterations. Fix: say so.</li>
+<li><strong>Unsupported (question 2).</strong> "the OPAL 2006 table, whose spacing differs from the older tables" is not shown by the code. What the code does show: EQSTAT2's own comment gives the SCV tables' spacing as 0.20 in $\log P$ and 0.08 in $\log T$, not the 0.15 and 0.03 assumed here. Fix: base the question on that.</li>
+<li>Otherwise correct; the central differences and the dummy outputs of the last call match the code.</li>
+</ol>
+<p>Revised: questions 1 and 2 rewritten.</p></div></details>
+</main></body></html>

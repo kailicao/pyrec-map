@@ -1,0 +1,289 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>getopac.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ getopac.f</span></header><main>
+<h1>getopac.f</h1>
+<p class='muted'>205 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/getopac.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>GETOPAC</code> is YREC's opacity routine: for a given $\rho$, $T$, $X$, $Z$ it chooses among the low-temperature (molecular) tables and the interior tables, ramps between them, handles metal-rich helium-burning cores, and adds conductive opacity. It returns $\kappa$ and its logarithmic derivatives.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> seven routines: <a href="../files/coefft.f.html#def-COEFFT">COEFFT</a>, <a href="../files/envint.f.html#def-ENVINT">ENVINT</a>, <a href="../files/physic.f.html#def-PHYSIC">PHYSIC</a>, <a href="../files/qatm.f.html#def-QATM">QATM</a>, <a href="../files/qenv.f.html#def-QENV">QENV</a>, <a href="../files/sconvec.f.html#def-SCONVEC">SCONVEC</a> and <a href="../files/starin.f.html#def-STARIN">STARIN</a>.</li>
+<li><strong>Inputs:</strong> <code>DL</code>, <code>TL</code> ($\log\rho$, $\log T$), <code>X</code>, <code>Z</code>, and <code>FXION</code> (ionization fractions, passed on to the conductive opacity).</li>
+<li><strong>What it calls:</strong> low-temperature tables: <a href="../files/getalex06.f.html#def-GETALEX06">GETALEX06</a> (Ferguson–Alexander 2006), <a href="../files/yalo3d.f.html#def-YALO3D">YALO3D</a> (Alexander 1995), <a href="../files/kurucz.f.html#def-KURUCZ">KURUCZ</a> and <a href="../files/kurucz2.f.html#def-KURUCZ2">KURUCZ2</a> (Kurucz 1990, one or two $Z$); interior tables: <a href="../files/getopal95.f.html#def-GETOPAL95">GETOPAL95</a> (OPAL 1995), <a href="../files/yllo3d.f.html#def-YLLO3D">YLLO3D</a> and <a href="../files/yllo3d2.f.html#def-YLLO3D2">YLLO3D2</a> (OPAL 1992), <a href="../files/gtlaol.f.html#def-GTLAOL">GTLAOL</a> and <a href="../files/gtlaol2.f.html#def-GTLAOL2">GTLAOL2</a> (Los Alamos 1989); <a href="../files/gtpurz.f.html#def-GTPURZ">GTPURZ</a> (pure-metal table); and <a href="../files/condopacpint.f.html#def-CONDOPACPINT">CONDOPACPINT</a> (Potekhin conductive opacity).</li>
+<li><strong>Outputs:</strong> <code>O</code> ($\kappa$), <code>OL</code> ($\log\kappa$), <code>QOD</code> $=\partial\log\kappa/\partial\log\rho$, <code>QOT</code> $=\partial\log\kappa/\partial\log T$.</li>
+<li><strong>COMMON blocks:</strong> <code>/NEWOPAC/</code> (the table choice flags <code>LALEX06</code>, <code>LALEX95</code>, <code>LKUR90</code>, <code>LOPAL95</code>, <code>LOPAL92</code>, <code>LLAOL89</code>, <code>L2Z</code>, the tables' $Z$ values, and the ramp limits <code>TMOLMIN</code>, <code>TMOLMAX</code>), set by <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a> and the opacity setup routines; <code>/NWLAOL/</code> (<code>LPUREZ</code>); <code>/MISCOPAC/</code> (<code>LcondOpacP</code>); <code>/OPTAB/</code> (<code>OPTOL</code>); <code>/COMP/</code> (<code>ZENV</code>); <code>/LUOUT/</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Molecular opacity</strong> for $\log T \le$ <code>TMOLMAX</code>, from the first table enabled in the order Alexander 2006, Alexander 1995, Kurucz. With two Kurucz tables (<code>L2Z</code>), $\log\kappa$ and its derivatives are interpolated linearly in $Z$. If <code>KURUCZ</code> or <code>KURUCZ2</code> fails (it takes the alternate return), no molecular value is kept and the interior tables are used alone, even below <code>TMOLMIN</code>.</li>
+<li><strong>Interior opacity</strong>, unless $\log T &lt;$ <code>TMOLMIN</code> and a molecular value was found:</li>
+<li>for $Z &gt; 0.1$ and $\log T &gt; 7.7$ (helium-burning cores), linear interpolation in $Z$ between the interior table at $Z_\mathrm{tab}$ (0.1 for OPAL 1995) and the pure-metal table at $Z = 1$: $\log\kappa = \log\kappa_{Z=1} + (Z-1)\,\dfrac{\log\kappa_\mathrm{tab} - \log\kappa_{Z=1}}{Z_\mathrm{tab} - 1}$; the run stops if no pure-$Z$ table is loaded;</li>
+<li>the run stops if $Z &gt; 0.12$ below that temperature, or if $Z$ differs from the envelope's <code>ZENV</code> beyond <code>OPTOL</code> with a single-$Z$ table (neither <code>L2Z</code> nor OPAL 1995, which interpolates in $Z$ itself);</li>
+<li>otherwise OPAL 1995, OPAL 1992 or LAOL 1989, the last two with linear interpolation between two $Z$ tables if <code>L2Z</code>.</li>
+<li><strong>Ramp</strong> for <code>TMOLMIN</code> ≤ $\log T \le$ <code>TMOLMAX</code>: with $w = (\log T - \mathrm{TMOLMIN})/(\mathrm{TMOLMAX} - \mathrm{TMOLMIN})$, $\kappa = w\,\kappa_\mathrm{int} + (1-w)\,\kappa_\mathrm{mol}$, and the derivatives likewise.</li>
+<li>
+<p><strong>Conduction.</strong> Potekhin's opacity if <code>LcondOpacP</code> is set and it succeeds; otherwise, for $\log T \ge 4.2$ and $\log\rho \ge 2\log T - 13$, the Hubbard–Lampe fit as coded:
+$$\log\kappa_c = \log(1 - 0.6X) - 14.6196 - (3.5853 + 0.1386\log\rho)\log\rho + (5.1324 - 0.3219\log T)\log T + 0.3901\log\rho\log T.$$</p>
+</li>
+<li>
+<p><strong>Combination:</strong> $1/\kappa = 1/\kappa_\mathrm{rad} + 1/\kappa_c$, and
+$$\frac{\partial\log\kappa}{\partial\log\rho} = \frac{\kappa_c\,\partial\log\kappa_\mathrm{rad} + \kappa_\mathrm{rad}\,\partial\log\kappa_c}{\kappa_\mathrm{rad} + \kappa_c},$$
+and the same in $\log T$.</p>
+</li>
+</ol></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Undefined <code>ZIT</code>.</strong> In the helium-burning branch, if neither <code>LOPAL95</code>, <code>LOPAL92</code> nor <code>LLAOL89</code> is set, <code>ZIT</code> and the interior values are undefined. The final trap ("NO OPACITY TABLE CHOSEN") is not reached on that path. Add it there too?</li>
+<li><strong>Ramp in $\kappa$, not $\log\kappa$.</strong> The ramp is linear in $\kappa$, while the derivatives (which are of $\log\kappa$) are averaged with the same weights. The derivatives are then not exactly those of the ramped $\kappa$. Acceptable?</li>
+<li><strong>Conduction where no table applies.</strong> Below $\log T = 4.2$ or at low density the routine returns without conduction, which is fine; but when Potekhin is enabled and fails, Hubbard–Lampe is used without a message. Should the fallback be reported?</li>
+<li><strong><code>FXION</code> used only by conduction.</strong> Fine, but its meaning differs by equation of state (<code>EQSAHA</code> versus SCV); does <code>CONDOPACPINT</code> depend on which one supplied it?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+GETOPAC
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-GETOPAC'>GETOPAC</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-GETOPAC'><h3><span class='kind'>subroutine</span>GETOPAC</h3>
+<p class='muted'>lines 6–205 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/getopac.f#L6-L205'>GitHub</a></p>
+<pre>SUBROUTINE GETOPAC(DL,TL,X,Z,O,OL,QOD,QOT,FXION)</pre>
+<div class='notes'><p>Chooses, ramps and combines the molecular, interior, pure-metal and conductive opacities (method above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+GETOPAC
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-COMP'>/COMP/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-MISCOPAC'>/MISCOPAC/</a>, <a href='../commons.html#c-NEWOPAC'>/NEWOPAC/</a>, <a href='../commons.html#c-NWLAOL'>/NWLAOL/</a>, <a href='../commons.html#c-OPTAB'>/OPTAB/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/condopacpint.f.html#def-CONDOPACPINT'>CONDOPACPINT</a> <span class='muted'>(condopacpint.f)</span></li>
+<li><a href='../files/getalex06.f.html#def-GETALEX06'>GETALEX06</a> <span class='muted'>(getalex06.f)</span></li>
+<li><a href='../files/getopal95.f.html#def-GETOPAL95'>GETOPAL95</a> <span class='muted'>(getopal95.f)</span> ×2</li>
+<li><a href='../files/gtlaol.f.html#def-GTLAOL'>GTLAOL</a> <span class='muted'>(gtlaol.f)</span> ×2</li>
+<li><a href='../files/gtlaol2.f.html#def-GTLAOL2'>GTLAOL2</a> <span class='muted'>(gtlaol2.f)</span></li>
+<li><a href='../files/gtpurz.f.html#def-GTPURZ'>GTPURZ</a> <span class='muted'>(gtpurz.f)</span></li>
+<li><a href='../files/kurucz.f.html#def-KURUCZ'>KURUCZ</a> <span class='muted'>(kurucz.f)</span></li>
+<li><a href='../files/kurucz2.f.html#def-KURUCZ2'>KURUCZ2</a> <span class='muted'>(kurucz2.f)</span></li>
+<li><a href='../files/yalo3d.f.html#def-YALO3D'>YALO3D</a> <span class='muted'>(yalo3d.f)</span></li>
+<li><a href='../files/yllo3d.f.html#def-YLLO3D'>YLLO3D</a> <span class='muted'>(yllo3d.f)</span> ×2</li>
+<li><a href='../files/yllo3d2.f.html#def-YLLO3D2'>YLLO3D2</a> <span class='muted'>(yllo3d2.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/coefft.f.html#def-COEFFT'>COEFFT</a> <span class='muted'>(coefft.f)</span></li>
+<li><a href='../files/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+<li><a href='../files/physic.f.html#def-PHYSIC'>PHYSIC</a> <span class='muted'>(physic.f)</span></li>
+<li><a href='../files/qatm.f.html#def-QATM'>QATM</a> <span class='muted'>(qatm.f)</span></li>
+<li><a href='../files/qenv.f.html#def-QENV'>QENV</a> <span class='muted'>(qenv.f)</span></li>
+<li><a href='../files/sconvec.f.html#def-SCONVEC'>SCONVEC</a> <span class='muted'>(sconvec.f)</span> ×3</li>
+<li><a href='../files/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE GETOPAC(DL,TL,X,Z,O,OL,QOD,QOT,FXION)
+<span class="ln">7</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">8</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">9</span>      REAL*8 OLAOL,OXA,OT,ORHO,TOLLAOL
+<span class="ln">10</span>      REAL*8 FXION(3)
+<span class="ln">11</span>C MHP 8/25 Removed unused variables
+<span class="ln">12</span>C      CHARACTER*256 FLAOL, FPUREZ, FKUR2, FcondOpacP
+<span class="ln">13</span>C OPACITY COMMON BLOCKS - modified 3/09
+<span class="ln">14</span>      COMMON /NEWOPAC/ZLAOL1,ZLAOL2,ZOPAL1,ZOPAL2, ZOPAL951,
+<span class="ln">15</span>     +       ZALEX1, ZKUR1, ZKUR2,TMOLMIN,TMOLMAX,LALEX06,
+<span class="ln">16</span>     +       LLAOL89,LOPAL92,LOPAL95,LKUR90,LALEX95,L2Z
+<span class="ln">17</span>      COMMON/COMP/XENV,ZENV,ZENVM,AMUENV,FXENV(12),XNEW,ZNEW,STOTAL,
+<span class="ln">18</span>     *     SENV
+<span class="ln">19</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">20</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">21</span>      COMMON/NWLAOL/OLAOL(12,104,52),OXA(12),OT(52),ORHO(104),TOLLAOL,
+<span class="ln">22</span>     *     IOLAOL, NUMOFXYZ, NUMRHO, NUMT, LLAOL, LPUREZ, IOPUREZ
+<span class="ln">23</span>      COMMON/OPTAB/OPTOL,ZSI,IDT,IDD(4)
+<span class="ln">24</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">25</span>      COMMON /MISCOPAC/IKUR2,IcondOpacP,LcondOpacP
+<span class="ln">26</span>      SAVE
+<span class="ln">27</span>C
+<span class="ln">28</span>C     THIS SUBROUTINE CALCULATES THE OPACITY FOR A GIVEN X AND Z.
+<span class="ln">29</span>C     IF LDIFZ=T OR LZRAMP=T THEN INTERPOLATE BETWEEN TWO Z TABLES.
+<span class="ln">30</span>C     IN A SMALL T RANGE THE ATMOSPHERE AND INTERIOR OPACITY ARE
+<span class="ln">31</span>C     RAMPED FROM ONE TO THE OTHER.
+<span class="ln">32</span>C
+<span class="ln">33</span>C
+<span class="ln">34</span>C     GET ATMOSPHERE OPACITY
+<span class="ln">35</span>C
+<span class="ln">36</span>      LGOTATM = .FALSE.
+<span class="ln">37</span>      IF(TL.LE.TMOLMAX)THEN
+<span class="ln">38</span>         IF (LALEX06) THEN
+<span class="ln">39</span>            CALL <a href="../files/getalex06.f.html#def-GETALEX06" title="GETALEX06 in getalex06.f">GETALEX06</a>(DL,TL,X,Z, SO, SOL,SQOD,SQOT)
+<span class="ln">40</span>C             RR = DL - 3.0D0*(TL-6.0D0)
+<span class="ln">41</span>C             WRITE(*,911)X,Z,RR,TL,SOL
+<span class="ln">42</span>C 911         FORMAT(2f5.2,3f7.3)
+<span class="ln">43</span>          LGOTATM = .TRUE.
+<span class="ln">44</span>         ELSE IF (LALEX95) THEN
+<span class="ln">45</span>            CALL <a href="../files/yalo3d.f.html#def-YALO3D" title="YALO3D in yalo3d.f">YALO3D</a>(DL, TL, X, Z, SO, SOL, SQOD, SQOT)
+<span class="ln">46</span>          LGOTATM = .TRUE.
+<span class="ln">47</span>         ELSE IF (LKUR90) THEN
+<span class="ln">48</span>            CALL <a href="../files/kurucz.f.html#def-KURUCZ" title="KURUCZ in kurucz.f">KURUCZ</a>(DL, TL, SO, SOL, SQOD, SQOT, *100)
+<span class="ln">49</span>          IF (L2Z) THEN
+<span class="ln">50</span>             CALL <a href="../files/kurucz2.f.html#def-KURUCZ2" title="KURUCZ2 in kurucz2.f">KURUCZ2</a>(DL, TL, SO1, SOL1, SQOD1, SQOT1, *100)
+<span class="ln">51</span>             SLOPE = (SOL-SOL1)/(ZKUR1-ZKUR2)
+<span class="ln">52</span>               SOL = SOL1 + (Z-ZKUR2)*SLOPE
+<span class="ln">53</span>             SO = 10.0D0**SOL
+<span class="ln">54</span>             SLOPE = (SQOD-SQOD1)/(ZKUR1-ZKUR2)
+<span class="ln">55</span>             SQOD = SQOD1 + (Z-ZKUR2)*SLOPE
+<span class="ln">56</span>             SLOPE = (SQOT-SQOT1)/(ZKUR1-ZKUR2)
+<span class="ln">57</span>             SQOT = SQOT1 + (Z-ZKUR2)*SLOPE
+<span class="ln">58</span>           END IF
+<span class="ln">59</span>           LGOTATM = .TRUE.
+<span class="ln">60</span>         END IF
+<span class="ln">61</span>      ENDIF
+<span class="ln">62</span>  100 CONTINUE
+<span class="ln">63</span>
+<span class="ln">64</span>C     GET INTERIOR OPACITY IF NEEDED
+<span class="ln">65</span>
+<span class="ln">66</span>      IF (TL .LT. TMOLMIN.AND.LGOTATM) GOTO 1000
+<span class="ln">67</span>
+<span class="ln">68</span>C     HELIUM BURNING REGION (HB EVOLUTION) USE PURE Z TABLE
+<span class="ln">69</span>C mhp 7/12 Altered logic of the opacities in the He burnng
+<span class="ln">70</span>C regime.  Switched to exclusive usage of OPAL below 50 million K
+<span class="ln">71</span>C and switched the ramp to above Z = 0.1.
+<span class="ln">72</span>      IF((Z .GT. 0.1D0) .AND. (TL.GT.7.7D0)) THEN
+<span class="ln">73</span>C      IF((Z .GT. 0.15D0) .OR.
+<span class="ln">74</span>C     *     ((ABS(Z-ZENV) .GT. OPTOL).AND..NOT.L2Z)) THEN
+<span class="ln">75</span>         IF(.NOT.LPUREZ) THEN
+<span class="ln">76</span>C            WRITE(ISHORT, *)&#x27; ERROR: Z.NE.ZENV. NEED PURE Z&#x27;,
+<span class="ln">77</span>C     *        &#x27; TABLE TO CONTINUE. Z,ZENV=&#x27;,Z, ZENV
+<span class="ln">78</span>            WRITE(ISHORT, *)&#x27; ERROR: Z&gt;0.10 T &gt; 5 X 10^7 K&#x27;,
+<span class="ln">79</span>     *        &#x27; NEED PURE Z TABLE TO CONTINUE. Z,LOG T=&#x27;,Z, TL
+<span class="ln">80</span>              STOP
+<span class="ln">81</span>       END IF
+<span class="ln">82</span>       CALL <a href="../files/gtpurz.f.html#def-GTPURZ" title="GTPURZ in gtpurz.f">GTPURZ</a>(DL,TL,OZ,OLZ,QODZ,QOTZ)
+<span class="ln">83</span>         IF (LOPAL95) THEN
+<span class="ln">84</span>C MHP 7/12 INTERPOLATE TO MAXIMUM Z IN TABLE
+<span class="ln">85</span>             ZIT = 0.1D0
+<span class="ln">86</span>             CALL <a href="../files/getopal95.f.html#def-GETOPAL95" title="GETOPAL95 in getopal95.f">GETOPAL95</a>(DL,TL,X,ZIT,O,OL,QOD,QOT)
+<span class="ln">87</span>C           ZIT=ZOPAL951
+<span class="ln">88</span>         ELSE IF (LOPAL92) THEN
+<span class="ln">89</span>           CALL <a href="../files/yllo3d.f.html#def-YLLO3D" title="YLLO3D in yllo3d.f">YLLO3D</a>(DL,TL,X,O,OL,QOD,QOT)
+<span class="ln">90</span>           ZIT=ZOPAL1
+<span class="ln">91</span>         ELSE IF (LLAOL89) THEN
+<span class="ln">92</span>           CALL <a href="../files/gtlaol.f.html#def-GTLAOL" title="GTLAOL in gtlaol.f">GTLAOL</a>(DL,TL,X,O,OL,QOD,QOT)
+<span class="ln">93</span>           ZIT=ZLAOL1
+<span class="ln">94</span>         END IF
+<span class="ln">95</span>       SLOPE = (OL-OLZ)/(ZIT-1.0D0)
+<span class="ln">96</span>       OL = OLZ + (Z-1.0D0)*SLOPE
+<span class="ln">97</span>       O = 10.0D0**OL
+<span class="ln">98</span>       SLOPE = (QOD-QODZ)/(ZIT-1.0D0)
+<span class="ln">99</span>       QOD = QODZ + (Z-1.0D0)*SLOPE
+<span class="ln">100</span>       SLOPE = (QOT-QOTZ)/(ZIT-1.0D0)
+<span class="ln">101</span>       QOT = QOTZ + (Z-1.0D0)*SLOPE
+<span class="ln">102</span>C      ELSE
+<span class="ln">103</span>      ELSE IF((Z.GT.0.12D0) .OR. ((ABS(Z-ZENV) .GT. OPTOL)
+<span class="ln">104</span>     *   .AND..NOT.L2Z .AND. .NOT.LOPAL95))THEN
+<span class="ln">105</span>         WRITE(ISHORT,*)&#x27; Z&gt;0.12 T &lt; 5 X 10^7 K&#x27;,
+<span class="ln">106</span>     *   &#x27; OUTSIDE OPAL OPACITY TABLE RANGE OR Z&#x27;,
+<span class="ln">107</span>     *   &#x27; OUTSIDE SINGLE TABLE USED.Z,ZENV,LOG T=&#x27;,Z,ZENV,TL
+<span class="ln">108</span>         STOP
+<span class="ln">109</span>C
+<span class="ln">110</span>C     NOT HELIUM BURNING REGION (HB EVOLUTION) OR L2Z=T AND
+<span class="ln">111</span>C     Z STILL NOT TOO LARGE IN CORE (&lt;.15) SO CAN USE
+<span class="ln">112</span>C     SECOND Z TABLE RATHER THAN PURE Z TABLE
+<span class="ln">113</span>C
+<span class="ln">114</span>C      IF (LOPAL95) THEN
+<span class="ln">115</span>      ELSE IF (LOPAL95) THEN
+<span class="ln">116</span>         CALL <a href="../files/getopal95.f.html#def-GETOPAL95" title="GETOPAL95 in getopal95.f">GETOPAL95</a>(DL,TL,X,Z,O,OL,QOD,QOT)
+<span class="ln">117</span>      ELSE IF (LOPAL92) THEN
+<span class="ln">118</span>         CALL <a href="../files/yllo3d.f.html#def-YLLO3D" title="YLLO3D in yllo3d.f">YLLO3D</a>(DL,TL,X,O,OL,QOD,QOT)
+<span class="ln">119</span>         IF (L2Z) THEN
+<span class="ln">120</span>            CALL <a href="../files/yllo3d2.f.html#def-YLLO3D2" title="YLLO3D2 in yllo3d2.f">YLLO3D2</a>(DL,TL,X,O1,OL1,QOD1,QOT1)
+<span class="ln">121</span>          SLOPE = (OL-OL1)/(ZOPAL1-ZOPAL2)
+<span class="ln">122</span>          OL = OL1 + (Z-ZOPAL2)*SLOPE
+<span class="ln">123</span>          O = 10.0D0**OL
+<span class="ln">124</span>          SLOPE = (QOD-QOD1)/(ZOPAL1-ZOPAL2)
+<span class="ln">125</span>          QOD = QOD1 + (Z-ZOPAL2)*SLOPE
+<span class="ln">126</span>          SLOPE = (QOT-QOT1)/(ZOPAL1-ZOPAL2)
+<span class="ln">127</span>          QOT = QOT1 + (Z-ZOPAL2)*SLOPE
+<span class="ln">128</span>       END IF
+<span class="ln">129</span>      ELSE IF (LLAOL89) THEN
+<span class="ln">130</span>         CALL <a href="../files/gtlaol.f.html#def-GTLAOL" title="GTLAOL in gtlaol.f">GTLAOL</a>(DL,TL,X,O,OL,QOD,QOT)
+<span class="ln">131</span>         IF (L2Z) THEN
+<span class="ln">132</span>          CALL <a href="../files/gtlaol2.f.html#def-GTLAOL2" title="GTLAOL2 in gtlaol2.f">GTLAOL2</a>(DL,TL,X,O1,OL1,QOD1,QOT1)
+<span class="ln">133</span>          SLOPE = (OL-OL1)/(ZLAOL1-ZLAOL2)
+<span class="ln">134</span>          OL = OL1 + (Z-ZLAOL2)*SLOPE
+<span class="ln">135</span>          O = 10.0D0**OL
+<span class="ln">136</span>          SLOPE = (QOD-QOD1)/(ZLAOL1-ZLAOL2)
+<span class="ln">137</span>          QOD = QOD1 + (Z-ZLAOL2)*SLOPE
+<span class="ln">138</span>          SLOPE = (QOT-QOT1)/(ZLAOL1-ZLAOL2)
+<span class="ln">139</span>          QOT = QOT1 + (Z-ZLAOL2)*SLOPE
+<span class="ln">140</span>       END IF
+<span class="ln">141</span>C MHP 7/12 INSERT FINAL TRAP - NO OPACITY COMPUTED
+<span class="ln">142</span>C SHOULD NOT BE ABLE TO GET HERE.
+<span class="ln">143</span>      ELSE
+<span class="ln">144</span>         WRITE(ISHORT,*)&#x27;NO OPACITY TABLE CHOSEN&#x27;,
+<span class="ln">145</span>     *   &#x27; RUN STOPPED. X Z TL=&#x27;,X,Z,TL
+<span class="ln">146</span>         STOP
+<span class="ln">147</span>      END IF
+<span class="ln">148</span>C      END IF
+<span class="ln">149</span>C
+<span class="ln">150</span> 1000 CONTINUE
+<span class="ln">151</span>C     DO A RAMP BETWEEN SURFACE AND INTERIOR OPACITY
+<span class="ln">152</span>
+<span class="ln">153</span>      IF (LGOTATM .AND. TL .LE. TMOLMAX) THEN
+<span class="ln">154</span>         IF( TL.GE.TMOLMIN) THEN
+<span class="ln">155</span>C             RR = DL - 3.0D0*(TL-6.0D0)
+<span class="ln">156</span>C             WRITE(*,*)RR,TL,OL,SOL
+<span class="ln">157</span>            RMPWT = (TL-TMOLMIN)/(TMOLMAX-TMOLMIN)
+<span class="ln">158</span>            O = RMPWT*O + (1.0D0-RMPWT)*SO
+<span class="ln">159</span>            OL = DLOG10(O)
+<span class="ln">160</span>            QOD = RMPWT*QOD + (1.0D0-RMPWT)*SQOD
+<span class="ln">161</span>            QOT = RMPWT*QOT + (1.0D0-RMPWT)*SQOT
+<span class="ln">162</span>       ELSE
+<span class="ln">163</span>            O = SO
+<span class="ln">164</span>            OL = SOL
+<span class="ln">165</span>            QOD = SQOD
+<span class="ln">166</span>            QOT = SQOT
+<span class="ln">167</span>       END IF
+<span class="ln">168</span>      END IF
+<span class="ln">169</span>C     DO CONDUCTIVE OPACITY CORRECTION
+<span class="ln">170</span>      IF (LcondOpacP) THEN
+<span class="ln">171</span>C Get Potekhin conductive opacity
+<span class="ln">172</span>            CALL <a href="../files/condopacpint.f.html#def-CONDOPACPINT" title="CONDOPACPINT in condopacpint.f">condOpacPInt</a>(DL,TL,X,Z,OC,OCL,QODC,QOTC,FXION,LCONDO)
+<span class="ln">173</span>      ELSE
+<span class="ln">174</span>         LCONDO = .FALSE.
+<span class="ln">175</span>      END IF
+<span class="ln">176</span>
+<span class="ln">177</span>      IF (.NOT. LCONDO) THEN
+<span class="ln">178</span>C If we get here we have no Potekhin opacity, so we
+<span class="ln">179</span>C try for Hubbard Lampe
+<span class="ln">180</span>         IF(TL.LT.4.2D0) THEN
+<span class="ln">181</span>            RETURN
+<span class="ln">182</span>         ELSE IF(DL.LT.(2.0D0*TL-13.0D0)) THEN
+<span class="ln">183</span>            RETURN
+<span class="ln">184</span>         ELSE
+<span class="ln">185</span>C Do Hubbard Lampe conductive opacity calculation
+<span class="ln">186</span>          COND = DLOG10(1.0D0-0.6D0*X) - 14.6196D0 -
+<span class="ln">187</span>     *             (3.5853D0+0.1386D0*DL)*DL +
+<span class="ln">188</span>     *             (5.1324D0-0.3219D0*TL)*TL + 0.3901D0*DL*TL
+<span class="ln">189</span>          OC = 10.0D0**COND
+<span class="ln">190</span>            QODC = 0.3901D0*TL - 0.2772D0*DL - 3.5853D0
+<span class="ln">191</span>            QOTC = 0.3901D0*DL - 0.6438D0*TL + 5.1324D0
+<span class="ln">192</span>         ENDIF
+<span class="ln">193</span>      ENDIF
+<span class="ln">194</span>
+<span class="ln">195</span>      OX = O   ! Save the radiative opacity stuff
+<span class="ln">196</span>      QODX = QOD
+<span class="ln">197</span>      QOTX = QOT
+<span class="ln">198</span>C Add the opacities apppropriately
+<span class="ln">199</span>      O = OX*OC/(OX + OC)  ! e.g. 1/O = 1/OX + 1/OC
+<span class="ln">200</span>      OL = DLOG10(O)
+<span class="ln">201</span>      QOD = (QODX + QODC - (OX*QODX + OC*QODC)/(OX + OC))
+<span class="ln">202</span>      QOT = (QOTX + QOTC - (OX*QOTX + OC*QOTC)/(OX + OC))
+<span class="ln">203</span>
+<span class="ln">204</span>      RETURN
+<span class="ln">205</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing.</strong> The stop for $Z$ far from <code>ZENV</code> applies only without <code>L2Z</code> and without OPAL 1995 (<code>.AND..NOT.L2Z .AND. .NOT.LOPAL95</code>, getopac.f line 98 of the source): OPAL 1995 interpolates in $Z$ itself. The page says "with a single-$Z$ table". Fix: name both exceptions.</li>
+<li><strong>Missing.</strong> <code>KURUCZ</code> and <code>KURUCZ2</code> have an alternate return (<code>*100</code>): if either fails, <code>LGOTATM</code> stays false and the interior tables are used alone, even below <code>TMOLMIN</code>. Fix: add to step 1.</li>
+</ol>
+<p>Otherwise checked: the table order, the helium-burning interpolation to $Z = 1$, the ramp, the Hubbard–Lampe fit and its derivatives, the combination $1/\kappa = 1/\kappa_\mathrm{rad} + 1/\kappa_c$ with its derivatives, the callers and the COMMON blocks; the four questions are real.</p>
+<p>Revised: both added.</p></div></details>
+</main></body></html>

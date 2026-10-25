@@ -1,0 +1,250 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>stitch.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ stitch.f</span></header><main>
+<h1>stitch.f</h1>
+<p class='muted'>206 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/stitch.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>STITCH</code> writes one model's full profile to the <code>.store</code> file, in an alternative format (JvS 08/25): the interior shells, then, if asked, the envelope and atmosphere "stitched" onto them, one line per point with 61 columns. Its comment lists the columns: model, shell, $\log m$ [g], $\log r$ [cm], $L/L_\odot$, $\log P$, $\log T$, $\log\rho$, $\Omega$ [rad/s], three flags for the point's kind, the 15 mass fractions, the opacity, gravity, the three temperature gradients, the convective velocity, $\Gamma_1$, ionisation fractions, $\beta$, $\eta$, the energy rates of each burning chain, neutrino and gravitational energy, $c_P$, $d\ln\rho/d\ln T$, and the rotation columns (51–61).</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the model through the arguments, and the per-shell physics left in COMMON blocks by earlier routines: <code>SCRTCH</code> (opacity <code>SO</code>, gradients <code>SDEL</code>, <code>SVEL</code>, ionisation <code>SFXION</code>, $\eta$ <code>SETA</code>, energy rates <code>SEG</code> and <code>SESUM</code>, <code>SCP</code>; filled by the physics routines such as <a href="../files/physic.f.html#def-PHYSIC">PHYSIC</a>), <code>SOUND</code> (<code>GAM1</code>), <code>PULSE1</code> (<code>PQDT</code>), <code>ROTEN</code> (<code>DEROT</code>) and <code>TEMP2</code> (the circulation velocities <code>VES</code>, <code>VGSF</code>, <code>VSS</code>, written by <a href="../files/vcirc.f.html#def-VCIRC">VCIRC</a> among others).</li>
+<li><strong>Who calls it:</strong> <a href="../files/putstore.f.html#def-PUTSTORE">PUTSTORE</a>, and <a href="../files/wrtout.f.html#def-WRTOUT">WRTOUT</a> every <code>NPRTMOD</code> models when <code>LSTCH</code> is set.</li>
+<li><strong>What it calls:</strong> <a href="../files/envint.f.html#def-ENVINT">ENVINT</a>, to integrate the envelope (and atmosphere) again for output.</li>
+<li><strong>Output:</strong> lines on the unit <code>ISTOR</code> (COMMON <code>LUOUT</code>).</li>
+<li><strong>COMMON blocks:</strong> besides those above, <code>ENVSTRUCT</code> and <code>ATMSTRUCT</code> (the envelope's and atmosphere's points, filled by <code>ENVINT</code>), <code>ENVGEN</code>, <code>INTATM</code>, <code>INTENV</code> (the integration steps), <code>CCOUT</code> (the switches <code>LSTENV</code>, <code>LSTATM</code>), <code>SPOTS</code>, <code>ROT</code>, the constants.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Interior</strong> (shells 1 to $M$): the gravity $g = G m / r^2$, and, with rotation, the shape quantities
+   $$A = \frac{\Omega^2 r_0^3}{3\,G m}\,\frac{5}{2 + \eta_2},\qquad \frac{R_p}{R_e} = \frac{1 - A}{1 + A/2},$$
+   with $r_0$ (<code>R0</code>) and $\eta_2$ (<code>ETA2</code>) from the rotation routines, and the total circulation velocity <code>VTOT = VES + VGSF + VSS</code>. Without rotation the 11 rotation columns are zeros.</li>
+<li><strong>Envelope</strong> (<code>LSTENV</code>): the integration steps are set to the fixed output steps <code>ATMSTP</code>, <code>ENVSTP</code> ("dropping a sinkline"), and <code>ENVINT</code> integrates from the surface, at $\log R = \tfrac12(\log L + \log L_\odot - 4\log T_\mathrm{eff} - \log 4\pi - \log\sigma)$ and $\log g = \log G + \log M - 2\log R$, down to the pressure of the last interior shell; for a spotted star at the ambient temperature (the formula in <a href="../files/starin.f.html">starin.f</a>). The envelope points get shell numbers $M+1, \dots$; $\Omega$ and the composition are those of the last interior shell; the burning and rotation columns are zero.</li>
+<li><strong>Atmosphere</strong> (<code>LSTATM</code>): the atmosphere's points, outermost last, with $r = R_\mathrm{env} + $ <code>ATMOR</code>, the total mass and the surface luminosity.</li>
+</ol></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The integration steps are not restored.</strong> <code>STITCH</code> saves <code>ATMBEG</code>, <code>ATMMIN</code>, <code>ATMMAX</code>, <code>ENVBEG</code>, <code>ENVMIN</code>, <code>ENVMAX</code> into <code>ABEG0</code> … <code>EMAX0</code> and sets them to the output steps, but never restores them, so every later envelope integration of the run uses the output steps. (<a href="../files/calcad.f.html#def-CALCAD">CALCAD</a> does the same; <a href="../files/starin.f.html#def-STARIN">STARIN</a>, <a href="../files/wrtmod.f.html#def-WRTMOD">WRTMOD</a> and <a href="../files/getnewenv.f.html#def-GETNEWENV">GETNEWENV</a> restore the steps they change.) Intended?</li>
+<li><strong>β of the interior from the envelope's array.</strong> Column 39 (BETA) for interior shell $I$ is <code>EBETAS(I)</code>, the envelope's array, while <code>SBETA(I)</code> in <code>SCRTCH</code> seems to be the interior's. A bug?</li>
+<li><strong><code>LPULPT</code> undefined.</strong> <code>LPULPT</code> is passed to <code>ENVINT</code> but never set in <code>STITCH</code> (<code>CALCAD</code> sets its own to true). Is a value expected?</li>
+<li><strong>Gravity of the atmosphere.</strong> The atmosphere's lines write <code>SG</code>, which is left from the last envelope point (or interior shell when there is no envelope), not computed for each atmosphere point.</li>
+<li><strong>Atmosphere without envelope.</strong> With <code>LSTATM</code> but not <code>LSTENV</code>, the atmosphere's points are numbered and placed using <code>NUMENV</code> and <code>ENVR(NUMENV)</code> from whatever envelope integration ran last. And the atmosphere's luminosity column writes <code>B</code>, which is set (<code>B = DEXP(CLN*BL)</code>) only in the envelope branch, so it holds a value from an earlier call, or is undefined. Should the atmosphere require the envelope?</li>
+<li><strong>Spot test.</strong> The spotted-star branch tests <code>LC(M)</code> (the last shell convective), while <a href="../files/starin.f.html#def-STARIN">STARIN</a> and <code>CALCAD</code> test <code>JENV.EQ.M</code>. Same intent?</li>
+</ol></div>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-STITCH'>STITCH</a> <span class='muted'>subroutine</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-STITCH'><h3><span class='kind'>subroutine</span>STITCH</h3>
+<p class='muted'>lines 1–196 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/stitch.f#L1-L196'>GitHub</a></p>
+<pre>SUBROUTINE STITCH(HCOMP,HR,HP,HD,HS,HT,HL,HS1,</pre>
+<div class='notes'><p>Writes one model's interior, envelope and atmosphere to <code>ISTOR</code> in the 61-column <code>.store</code> format, integrating the envelope again with <code>ENVINT</code> at fixed output steps.</p></div>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-ATMSTRUCT'>/ATMSTRUCT/</a>, <a href='../commons.html#c-CCOUT'>/CCOUT/</a>, <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-ENVGEN'>/ENVGEN/</a>, <a href='../commons.html#c-ENVSTRUCT'>/ENVSTRUCT/</a>, <a href='../commons.html#c-INTATM'>/INTATM/</a>, <a href='../commons.html#c-INTENV'>/INTENV/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-OVRTRN'>/OVRTRN/</a>, <a href='../commons.html#c-PULSE1'>/PULSE1/</a>, <a href='../commons.html#c-ROT'>/ROT/</a>, <a href='../commons.html#c-ROTEN'>/ROTEN/</a>, <a href='../commons.html#c-SCRTCH'>/SCRTCH/</a>, <a href='../commons.html#c-SOUND'>/SOUND/</a>, <a href='../commons.html#c-SPOTS'>/SPOTS/</a>, <a href='../commons.html#c-TEMP2'>/TEMP2/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/putstore.f.html#def-PUTSTORE'>PUTSTORE</a> <span class='muted'>(putstore.f)</span></li>
+<li><a href='../files/wrtout.f.html#def-WRTOUT'>WRTOUT</a> <span class='muted'>(wrtout.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">1</span>      SUBROUTINE STITCH(HCOMP,HR,HP,HD,HS,HT,HL,HS1,
+<span class="ln">2</span>     * OMEGA,ETA2,HI,R0,HJM,FP,FT,TEFFL,HSTOT,BL,M,LC,MODEL)
+<span class="ln">3</span>
+<span class="ln">4</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">5</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">6</span>      PARAMETER (JSON=5000)
+<span class="ln">7</span>      REAL*8 DUM1(4),DUM2(3),DUM3(3),DUM4(3)
+<span class="ln">8</span>      REAL*8 ENVS1(JSON)
+<span class="ln">9</span>      COMMON/CCOUT/LSTORE,LSTATM,LSTENV,LSTMOD,LSTPHYS,LSTROT,LSCRIB,LSTCH,LPHHD
+<span class="ln">10</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">11</span>      COMMON/ENVGEN/ATMSTP,ENVSTP,LENVG
+<span class="ln">12</span>      COMMON/INTATM/ATMERR,ATMD0,ATMBEG,ATMMIN,ATMMAX
+<span class="ln">13</span>      COMMON/INTENV/ENVERR,ENVBEG,ENVMIN,ENVMAX
+<span class="ln">14</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">15</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">16</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">17</span>      COMMON/ROT/WNEW,WALPCZ,ACFPFT,ITFP1,ITFP2,LROT,LINSTB,LWNEW
+<span class="ln">18</span>      COMMON/ENVSTRUCT/ENVP(JSON),ENVT(JSON),ENVS(JSON),ENVD(JSON),
+<span class="ln">19</span>     *     ENVR(JSON),ENVX(JSON),ENVZ(JSON),LCENV(JSON),
+<span class="ln">20</span>     *     EDELS(3,JSON),EVELS(JSON),EBETAS(JSON),
+<span class="ln">21</span>     *     EGAM1(JSON),EQCP(JSON),EFXIONS(3,JSON),
+<span class="ln">22</span>     *     ENVO(JSON), ENVL(JSON),EQDT(JSON),NUMENV
+<span class="ln">23</span>      COMMON/ATMSTRUCT/ATMOP(JSON),ATMOT(JSON),ATMOD(JSON),
+<span class="ln">24</span>     *     ATMOR(JSON),ADELS(3,JSON),ABETAS(JSON),
+<span class="ln">25</span>     *     AGAM1(JSON),AQDT(JSON),AFXIONS(3,JSON),
+<span class="ln">26</span>     *     ATMOO(JSON),ATMOCP(JSON),NUMATM
+<span class="ln">27</span>      COMMON/SCRTCH/SESUM(JSON),SEG(7,JSON),SBETA(JSON),SETA(JSON),
+<span class="ln">28</span>     *LOCONS(JSON),SO(JSON),SDEL(3,JSON),SFXION(3,JSON),SVEL(JSON),SCP(JSON)
+<span class="ln">29</span>      DIMENSION HS(JSON),HL(JSON),HR(JSON),HP(JSON),HT(JSON),HD(JSON),
+<span class="ln">30</span>     * LC(JSON),HCOMP(15,JSON),OMEGA(JSON),HS1(JSON),
+<span class="ln">31</span>     * ETA2(JSON),HI(JSON),HJM(JSON),R0(JSON),FP(JSON),
+<span class="ln">32</span>     * FT(JSON)
+<span class="ln">33</span>      COMMON/PULSE1/PQDP(JSON),PQED(JSON),PQET(JSON),
+<span class="ln">34</span>     *   PQOD(JSON), PQOT(JSON), PQCP(JSON), PRMU(JSON),
+<span class="ln">35</span>     *   PQDT(JSON),PEMU(JSON),LPUMOD
+<span class="ln">36</span>
+<span class="ln">37</span>C G Somers 10/14, Add spot common block
+<span class="ln">38</span>        COMMON/SPOTS/SPOTF,SPOTX,LSDEPTH
+<span class="ln">39</span>C G Somers END
+<span class="ln">40</span>C G Somers 3/17, ADDING NEW TAUCZ COMMON BLOCK
+<span class="ln">41</span>      COMMON/OVRTRN/LNEWTCZ,LCALCENV,TAUCZ,TAUCZ0,PPHOT,PPHOT0,FRACSTEP
+<span class="ln">42</span>      COMMON/ROTEN/DEROT(JSON)
+<span class="ln">43</span>      COMMON/SOUND/GAM1(JSON),LSOUND
+<span class="ln">44</span>      COMMON/TEMP2/VES(JSON),VES0(JSON),VSS(JSON),VSS0(JSON),
+<span class="ln">45</span>     *     HLE(JSON),VGSF(JSON),VGSF0(JSON),VMU(JSON)
+<span class="ln">46</span>      SAVE
+<span class="ln">47</span>C
+<span class="ln">48</span>C
+<span class="ln">49</span>C STITCH: and alternate file format for .store that provides profiles for each
+<span class="ln">50</span>C desired model. Stitches the envelope and atmosphere solutions onto the interior
+<span class="ln">51</span>C when LSTENV and LSTATM are true. Will not provide atmosphere information when
+<span class="ln">52</span>C atmosphere tables are used.
+<span class="ln">53</span>C
+<span class="ln">54</span>C The output columns in the new .store format are:
+<span class="ln">55</span>C 1 MODEL, 2 SHELL, 3 log(mass[g]), 4 log(r[cm]), 5 L/Lsun, 6 log(P[cgs]), 7 log(T[K])&#x27;,
+<span class="ln">56</span>C 8 log(DENSITY[cgs]),9 OMEGA(rad/s),10 CONVECTIVE?, 11 INTERIOR_POINT?, 12 ENVLELOPE_PT?
+<span class="ln">57</span>C 13 ATMOSPHERE_POINT?, 14 H1(mass frac), 15 He4(mass frac),16 METALS(mass frac),
+<span class="ln">58</span>C 17 He3(mass frac), 18 C12(mass frac), 19 C13(mass frac), 20 N14(mass frac),
+<span class="ln">59</span>C 21 N15(mass frac), 22 O16(mass frac), 23 O17(mass frac), 24 O18(mass frac),
+<span class="ln">60</span>C 25 H2(mass frac), 26 Li6(mass frac),27 Li7(mass frac),28 Be9(mass frac),29 OPACITY[cgs]
+<span class="ln">61</span>C 30 GRAVITY(cgs), 31 DELR(Rad. temp. grad), 32 DEL(actual temp grad),
+<span class="ln">62</span>C 33 DELA(adiabatic temp grad), 34 CONVECTIVE _VELOCITY[cm/s],35 GAM1(adiabatic exponent),
+<span class="ln">63</span>C 36 HII, 37 HEII, 38 HEIII, 39 BETA, 40 ETA, 41 PPI, 42 PPII, 43 PPIII, 44, CNO, 45 3HE
+<span class="ln">64</span>C 46 E_NUC,47 E_NEU,48 E_GRAV,49 Cp,50 dlnrho/dlnT,51 A, 52 RP/RE, 53 FP, 54 FT, 55 J/M,
+<span class="ln">65</span>C 56 MOMENT, 57 DEL_KE, 58 V_ES, 59 V_GSF, 60 V_SS, 61 VTOT   &#x27;
+<span class="ln">66</span>C
+<span class="ln">67</span>C ****************************  WRITE OUT INTERIOR INFORMATION   **********************
+<span class="ln">68</span>
+<span class="ln">69</span>      CG=DEXP(CLN*CGL)
+<span class="ln">70</span>      DO I = 1,M
+<span class="ln">71</span>            SG = DEXP(CLN*(CGL - 2.0D0*HR(I)))*HS1(I)
+<span class="ln">72</span>C write out the basic info
+<span class="ln">73</span>            WRITE(ISTOR,62,ADVANCE=&#x27;no&#x27;) MODEL,I,HS(I),HR(I),HL(I),HP(I),
+<span class="ln">74</span>     *         HT(I),HD(I),OMEGA(I),LC(I),.TRUE.,.FALSE.,.FALSE.,(HCOMP(J,I),J=1,15)
+<span class="ln">75</span>C write out additional physics if desired
+<span class="ln">76</span>            WRITE(ISTOR,63,ADVANCE=&#x27;no&#x27;) SO(I),SG,SDEL(1,I),SDEL(2,I),
+<span class="ln">77</span>     *           SDEL(3,I),SVEL(I),GAM1(I),SFXION(1,I),SFXION(2,I),SFXION(3,I),
+<span class="ln">78</span>     *           EBETAS(I),SETA(I),(SEG(K,I),K=1,5),SESUM(I),SEG(6,I),SEG(7,I),
+<span class="ln">79</span>     *           SCP(I),PQDT(I)
+<span class="ln">80</span>C write out additional rotation info if rotation is on
+<span class="ln">81</span>            IF(LROT)THEN
+<span class="ln">82</span>              FM = DEXP(CLN*HS(I))
+<span class="ln">83</span>              DUMA = CC13*OMEGA(I)**2/(CG*FM)*5.D0/(2.D0+ETA2(I))
+<span class="ln">84</span>              A = DUMA * R0(I)**3
+<span class="ln">85</span>              RPOLEQ = (1.0D0 - A)/(1.0D0 + 0.5D0*A)
+<span class="ln">86</span>              VTOT = VES(I)+VGSF(I)+VSS(I)
+<span class="ln">87</span>              WRITE(ISTOR,64) A,RPOLEQ,FP(I),FT(I),HJM(I),HI(I),DEROT(I),
+<span class="ln">88</span>     *            VES(I),VGSF(I),VSS(I),VTOT
+<span class="ln">89</span>            ELSE
+<span class="ln">90</span>               WRITE(ISTOR,64) 0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+<span class="ln">91</span>            ENDIF
+<span class="ln">92</span>         ENDDO
+<span class="ln">93</span>
+<span class="ln">94</span>
+<span class="ln">95</span>C **************************   WRITE OUT ENVELOPE INFORMATION   **********************
+<span class="ln">96</span>
+<span class="ln">97</span>      IF(LSTENV)THEN ! only provide an envelope if asked to do so
+<span class="ln">98</span>C Begin by &quot;dropping a sinkline&quot; with the envelope integrator
+<span class="ln">99</span>      ABEG0 = ATMBEG
+<span class="ln">100</span>      AMIN0 = ATMMIN
+<span class="ln">101</span>      AMAX0 = ATMMAX
+<span class="ln">102</span>      EBEG0 = ENVBEG
+<span class="ln">103</span>      EMIN0 = ENVMIN
+<span class="ln">104</span>      EMAX0 = ENVMAX
+<span class="ln">105</span>      ATMBEG = ATMSTP
+<span class="ln">106</span>      ATMMIN = ATMSTP
+<span class="ln">107</span>      ATMMAX = ATMSTP
+<span class="ln">108</span>      ENVBEG = ENVSTP
+<span class="ln">109</span>      ENVMIN = ENVSTP
+<span class="ln">110</span>      ENVMAX = ENVSTP
+<span class="ln">111</span>      IDUM = 0
+<span class="ln">112</span>      B = DEXP(CLN*BL)
+<span class="ln">113</span>      FPL = FP(M)
+<span class="ln">114</span>      FTL = FT(M)
+<span class="ln">115</span>      KATM = 0
+<span class="ln">116</span>      KENV = 0
+<span class="ln">117</span>      KSAHA = 0
+<span class="ln">118</span>      IXX=0
+<span class="ln">119</span>      LPRT=.TRUE.
+<span class="ln">120</span>      LSBC0 = .FALSE.
+<span class="ln">121</span>      X = HCOMP(1,M)
+<span class="ln">122</span>      Z = HCOMP(3,M)
+<span class="ln">123</span>      RL = 0.5D0*(BL + CLSUNL - 4.0D0*TEFFL - C4PIL - CSIGL)
+<span class="ln">124</span>      GL = CGL + HSTOT - RL - RL
+<span class="ln">125</span>      PLIM = HP(M)
+<span class="ln">126</span>C G Somers 10/14, FOR SPOTTED RUNS, FIND THE
+<span class="ln">127</span>C PRESSURE AT THE AMBIENT TEMPERATURE ATEFFL
+<span class="ln">128</span>      IF(LC(M).AND.SPOTF.NE.0.0.AND.SPOTX.NE.1.0)THEN
+<span class="ln">129</span>          ATEFFL = TEFFL - 0.25*LOG10(SPOTF*SPOTX**4.0+1.0-SPOTF)
+<span class="ln">130</span>      ELSE
+<span class="ln">131</span>          ATEFFL = TEFFL
+<span class="ln">132</span>      ENDIF
+<span class="ln">133</span>      CALL <a href="../files/envint.f.html#def-ENVINT" title="ENVINT in envint.f">ENVINT</a>(B,FPL,FTL,GL,HSTOT,IXX,LPRT,LSBC0,
+<span class="ln">134</span>     *   PLIM,RL,ATEFFL,X,Z,DUM1,IDUM,KATM,KENV,KSAHA,
+<span class="ln">135</span>     *   DUM2,DUM3,DUM4,LPULPT)
+<span class="ln">136</span>
+<span class="ln">137</span>C DEFINE SOME ARRAYS WE NEED
+<span class="ln">138</span>      DO I=1,NUMENV
+<span class="ln">139</span>          ENVS1(I) = DEXP(CLN*(ENVS(I)+HSTOT))
+<span class="ln">140</span>      ENDDO
+<span class="ln">141</span>         DO I=M+1,M+NUMENV
+<span class="ln">142</span>            SG = DEXP(CLN*(CGL - 2.0D0*ENVR(I-M)))*ENVS1(I-M)
+<span class="ln">143</span>C write out the basic info. Omega and abundances take value of last interior point.
+<span class="ln">144</span>            WRITE(ISTOR,62,ADVANCE=&#x27;no&#x27;) MODEL,I,ENVS(I-M)+HSTOT,ENVR(I-M),ENVL(I-M),
+<span class="ln">145</span>     *      ENVP(I-M),ENVT(I-M),ENVD(I-M),OMEGA(M),LCENV(I-M),.FALSE.,.TRUE.,.FALSE.,
+<span class="ln">146</span>     *      (HCOMP(J,M),J=1,15)
+<span class="ln">147</span>C write out additional physics
+<span class="ln">148</span>               WRITE(ISTOR,63,ADVANCE=&#x27;no&#x27;) ENVO(I-M),SG,EDELS(1,I-M),EDELS(2,I-M),
+<span class="ln">149</span>     *           EDELS(3,I-M),EVELS(I-M),EGAM1(I-M),EFXIONS(1,I-M),EFXIONS(2,I-M),
+<span class="ln">150</span>     *           EFXIONS(3,I-M),EBETAS(I-M),0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,
+<span class="ln">151</span>     *           EQCP(I-M),EQDT(I-M)
+<span class="ln">152</span>C             zero out rotation columns for envelope
+<span class="ln">153</span>               WRITE(ISTOR,64) 0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+<span class="ln">154</span>         ENDDO
+<span class="ln">155</span>       ENDIF
+<span class="ln">156</span>
+<span class="ln">157</span>
+<span class="ln">158</span>
+<span class="ln">159</span>C *************************** WRITE OUT ATMOSPHERE INFORMATION  ************************
+<span class="ln">160</span>C Finish with the atmosphere, if the atmosphere was computed
+<span class="ln">161</span>       IF(LSTATM)THEN
+<span class="ln">162</span>            DO I=NUMATM,1,-1
+<span class="ln">163</span>C write out the basic info. Omega and abundances take value of last interior point.
+<span class="ln">164</span>            RAD = DLOG10(DEXP(CLN*ENVR(NUMENV)) + ATMOR(I))
+<span class="ln">165</span>            WRITE(ISTOR,62,ADVANCE=&#x27;no&#x27;) MODEL,NUMATM-I+M+NUMENV,HSTOT,RAD,B,
+<span class="ln">166</span>     *      ATMOP(I),ATMOT(I),ATMOD(I),OMEGA(M),
+<span class="ln">167</span>     *      .FALSE.,.FALSE.,.FALSE.,.TRUE.,(HCOMP(J,M),J=1,15)
+<span class="ln">168</span>C write out additional physics
+<span class="ln">169</span>            WRITE(ISTOR,63,ADVANCE=&#x27;no&#x27;) ATMOO(I),SG,ADELS(1,I),
+<span class="ln">170</span>     *           ADELS(2,I),ADELS(3,I),0.0,AGAM1(I),
+<span class="ln">171</span>     *           AFXIONS(1,I),AFXIONS(2,I),
+<span class="ln">172</span>     *           AFXIONS(3,I),ABETAS(I),0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,
+<span class="ln">173</span>     *           ATMOCP(I),AQDT(I)
+<span class="ln">174</span>C  zero placeholders for rotation output
+<span class="ln">175</span>            WRITE(ISTOR,64) 0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+<span class="ln">176</span>         ENDDO
+<span class="ln">177</span>       ENDIF
+<span class="ln">178</span>
+<span class="ln">179</span>
+<span class="ln">180</span>
+<span class="ln">181</span>C **************************    Output format codes   ******************************
+<span class="ln">182</span>
+<span class="ln">183</span> 62   FORMAT(I6,1X,I6,0P2F18.14,1PE24.16,0P3F18.14,1PE24.16,1X,L1,1X,L1,1X,L1,1X,L1,
+<span class="ln">184</span>     &amp;     3(0PF12.9),12(0PE16.8),2X)
+<span class="ln">185</span>
+<span class="ln">186</span> 63   FORMAT(1PE10.4,1PE11.3,E12.4,E12.4,E12.4,1PE12.4,0PF9.5,F9.5,F9.5,F9.5,
+<span class="ln">187</span>CC     &amp;     F9.5,F9.5,F9.5,F9.5,F9.5,F9.5,F9.5,E13.5,E13.5,E13.5)
+<span class="ln">188</span>C     &amp;     F9.5,F9.5,E12.4,E12.4,E12.4,E12.4,E12.4,E13.5,E13.5,E13.5,E13.5)
+<span class="ln">189</span>     &amp;  F9.5,F9.5,E12.4,E12.4,E12.4,E12.4,E12.4,E13.5,E13.5,E13.5,E13.5,E13.5,E13.5,E13.5,
+<span class="ln">190</span>     &amp;  E13.5)
+<span class="ln">191</span> 64   FORMAT(E14.6,E14.6,E14.6,E14.6,E14.6,E14.6,E14.6,E11.3,E11.3,E11.3,E11.3)
+<span class="ln">192</span>
+<span class="ln">193</span>
+<span class="ln">194</span>
+<span class="ln">195</span>      RETURN
+<span class="ln">196</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing.</strong> Question 1: besides STARIN, <a href="../files/wrtmod.f.html#def-WRTMOD">WRTMOD</a> and <a href="../files/getnewenv.f.html#def-GETNEWENV">GETNEWENV</a> also restore the integration steps they change; only CALCAD and STITCH do not. <strong>Fix:</strong> add.</li>
+<li><strong>Missing.</strong> Question 5: with <code>LSTATM</code> but not <code>LSTENV</code>, the atmosphere's luminosity column writes <code>B</code>, which is set only in the envelope branch (a value from an earlier call, or undefined). <strong>Fix:</strong> add to question 5.</li>
+</ol>
+<p>Revised: questions 1 and 5 extended.</p></div></details>
+</main></body></html>

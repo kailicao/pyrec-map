@@ -1,0 +1,230 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>mixcom.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ mixcom.f</span></header><main>
+<h1>mixcom.f</h1>
+<p class='muted'>169 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/mixcom.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Solves the diffusion equation for composition across one unstable region, on the equally spaced grid in the coordinate $\chi$ that <a href="../files/mixgrid.f.html#def-MIXGRID">MIXGRID</a> and <a href="../files/getgrid.f.html#def-GETGRID">GETGRID</a> have set up, and applies the change to the model.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> <code>DT</code> (s); <code>ECOD2</code> and <code>EM</code> on the equal grid, from <code>MIXGRID</code>; the shell masses <code>HS2</code>; the region <code>IBEG..IEND</code>; the convection flags <code>LCZ</code>; <code>LOK</code>; the species range <code>JBEG..JEND</code>; and the grid itself in <code>/EGRID/</code> (<code>CHI</code> at the model points, <code>ECHI</code> at the grid points, <code>DCHI</code>, <code>NTOT</code>).</li>
+<li><strong>Who calls it:</strong> only <a href="../files/ndifcom.f.html#def-NDIFCOM">NDIFCOM</a>.</li>
+<li><strong>What it calls:</strong> <a href="../files/osplin.f.html#def-OSPLIN">OSPLIN</a> (interpolation, both ways), <a href="../files/ccoeft.f.html#def-CCOEFT">CCOEFT</a> (the tridiagonal coefficients, in <code>/TRIDI/</code>) and <a href="../files/ctridi.f.html#def-CTRIDI">CTRIDI</a> (the solve, result <code>U</code> in <code>/TRIDI/</code>).</li>
+<li><strong>Output:</strong> <code>HCOMP</code>, in place.</li>
+<li><strong>COMMON blocks:</strong> <code>/EGRID/</code> (shared with GETGRID, MIXGRID, ROTGRID, EQ2MOD, CHECKJ, SECULR), <code>/SPLIN/</code> (scratch arrays shared with MIXGRID, ROTGRID, EQ2MOD), <code>/TRIDI/</code> (with CCOEFT, CTRIDI, DCOEFT, GETQUA, TRIDIA).</li>
+</ul>
+<p><strong>The method.</strong> For each species $k$ in <code>JBEG..JEND</code> (except ⁴He, row 2, which follows from closure) that varies by more than $10^{-14}$ over the region:</p>
+<ol>
+<li>Interpolate $X_k$ from the model points ($\chi$ = <code>CHI</code>) to the grid points (<code>ECHI</code>) with <code>OSPLIN</code>.</li>
+<li>
+<p>Solve, implicitly, with $\Delta\chi$ = <code>DCHI</code>, $\Delta M_i$ = <code>EM(I)</code> and $\mathcal{D}$ = <code>ECOD2</code> (<code>COD2</code> times $\rho r^2\, d\chi/dr$, see <code>MIXGRID</code>):
+$$X_i^{n+1} - \frac{\Delta t}{\Delta\chi\,\Delta M_i}\left[\mathcal{D}_{i+1}\,(X^{n+1}_{i+1} - X^{n+1}_i) - \mathcal{D}_i\,(X^{n+1}_i - X^{n+1}_{i-1})\right] = X_i^n,$$
+with no flux through the outer edges (<code>CCOEFT</code>, <code>CTRIDI</code>).</p>
+</li>
+<li>
+<p>Interpolate the <em>change</em> $X^{n+1}-X^n$ back to the model points and add it (the comment explains: extrapolating the new abundances past the last grid points "can lead to serious errors").</p>
+</li>
+<li>A convection zone adjoining the region below or above takes the abundance of the region's edge point.</li>
+</ol>
+<p>Finally, before the last iteration (<code>LOK = F</code>), $Y = 1 - X - Z - X_{^3\mathrm{He}}$ over the region and the adjoining convection zones.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>I1</code> not set.</strong> If the region's top point <code>IEND</code> is not convective, or is the last point <code>M</code>, <code>I1</code> is never assigned in this call: it keeps its value from an earlier call (<code>SAVE</code>), or is undefined on the first. <code>I1</code> bounds the loops that sum the species mass, update the upper convection zone and recompute helium. Should there be <code>ELSE I1 = IEND</code>, as there is <code>I0 = IBEG</code> for the bottom?</li>
+<li><strong>The conservation check is off.</strong> <code>DCOMP</code>, <code>DCOMP2</code>, <code>SUMSPEC</code> and <code>SUMSPEC2</code> are computed but only used in a commented-out check that would rescale the species to conserve its mass. Is mass conservation verified elsewhere?</li>
+<li><strong>Helium on the final call.</strong> Helium is recomputed only when <code>LOK</code> is false. On SECULR's final call (<code>JBEG = 5</code>) $X$, $Z$ and ³He do not change, so the closure holds. But <a href="../files/bursmix.f.html#def-BURSMIX">BURSMIX</a> passes rows 4 to 11 (or 15), so ³He is mixed; if <code>LOK</code> is true there, $Y$ is not recomputed and $X+Y+Z+X_{^3\mathrm{He}}$ may drift from 1. Is it restored elsewhere?</li>
+<li><strong>The inner convection zone's change.</strong> <code>DCOMP2</code> adds <code>YVAL(1)*HS2(I)</code> for the inner zone, but the zone's abundance is set to that of <code>IBEG</code>, not changed by <code>YVAL(1)</code>. (It matters only for the disabled check.)</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MIXCOM'>MIXCOM</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MIXCOM'><h3><span class='kind'>subroutine</span>MIXCOM</h3>
+<p class='muted'>lines 2–169 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/mixcom.f#L2-L169'>GitHub</a></p>
+<pre>SUBROUTINE MIXCOM(DT,ECOD2,EM,HS2,IBEG,IEND,LCZ,LOK,M,HCOMP,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-EGRID'>/EGRID/</a>, <a href='../commons.html#c-SPLIN'>/SPLIN/</a>, <a href='../commons.html#c-TRIDI'>/TRIDI/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/ccoeft.f.html#def-CCOEFT'>CCOEFT</a> <span class='muted'>(ccoeft.f)</span></li>
+<li><a href='../files/ctridi.f.html#def-CTRIDI'>CTRIDI</a> <span class='muted'>(ctridi.f)</span></li>
+<li><a href='../files/osplin.f.html#def-OSPLIN'>OSPLIN</a> <span class='muted'>(osplin.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/ndifcom.f.html#def-NDIFCOM'>NDIFCOM</a> <span class='muted'>(ndifcom.f)</span> ×2</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE MIXCOM(DT,ECOD2,EM,HS2,IBEG,IEND,LCZ,LOK,M,HCOMP,
+<span class="ln">3</span>     *           JBEG,JEND)
+<span class="ln">4</span>      PARAMETER (JSON=5000)
+<span class="ln">5</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">6</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">7</span>      COMMON/EGRID/CHI(JSON),ECHI(JSON),ES1(JSON),DCHI,NTOT
+<span class="ln">8</span>      COMMON/SPLIN/XVAL(JSON),YVAL(JSON),XTAB(JSON),YTAB(JSON)
+<span class="ln">9</span>      COMMON/TRIDI/A(JSON),B(JSON),C(JSON),D(JSON),U(JSON),GAMA(JSON)
+<span class="ln">10</span>      DIMENSION ECOD2(JSON),EM(JSON),HCOMP(15,JSON),HS2(JSON),LCZ(JSON)
+<span class="ln">11</span>      DIMENSION ECOMP(JSON),ID(15)
+<span class="ln">12</span>      SAVE
+<span class="ln">13</span>C  DIFCOM CALCULATES THE DIFFUSION OF COMPOSITION DUE TO ANGULAR MOMENTUM
+<span class="ln">14</span>C  TRANSPORT.  THIS IS DONE BY TRANSFORMING TO AN EQUALLY SPACED GRID
+<span class="ln">15</span>C  WHICH WAS PREVIOUSLY DEFINED AND THEN TRANSFORMING BACK.
+<span class="ln">16</span>C
+<span class="ln">17</span>C  INPUT VARIABLES:
+<span class="ln">18</span>C  DT : DIFFUSION TIMESTEP(SEC).
+<span class="ln">19</span>C  ECOD2 : DIFFUSION COEFFICIENTS FOR COMPOSITION TRANSPORT AT THE EQUALLY
+<span class="ln">20</span>C          SPACED GRID POINTS.
+<span class="ln">21</span>C  EM : MASSES OF THE EQUALLY SPACED GRID POINTS(GM).
+<span class="ln">22</span>C     NOTE: FOR CONVECTIVE BOUNDARIES THE MASS OF THE LAST GRID POINT IS
+<span class="ln">23</span>C           THE MASS OF THE ENTIRE CONVECTION ZONE.
+<span class="ln">24</span>C  HCOMP : ARRAY OF MASS FRACTION OF ALL OF THE SPECIES AT THE ORIGINAL
+<span class="ln">25</span>C          MODEL POINTS.
+<span class="ln">26</span>C  HS2 : MASSES OF THE ORIGINAL MODEL POINTS(UNLOGGED).
+<span class="ln">27</span>C  IBEG,IEND :THE FIRST/LAST UNSTABLE POINTS IN THE REGION.
+<span class="ln">28</span>C     NOTE: FOR CONVECTIVE BOUNDARIES THESE ARE ONLY THE FIRST CONVECTIVE
+<span class="ln">29</span>C           POINTS ADJACENT TO AN UNSTABLE RADIATIVE REGION.
+<span class="ln">30</span>C  LCZ : FLAG WHICH TELLS WHICH OF THE ORIGINAL MODEL POINTS ARE
+<span class="ln">31</span>C        CONVECTIVE FOR ANGULAR MOMENTUM TRANSPORT PURPOSES(I.E. INCLUDES
+<span class="ln">32</span>C        OVERSHOOT REGIONS). LCZ=T IF CONVECTIVE.
+<span class="ln">33</span>C  M : NUMBER OF MODEL POINTS.
+<span class="ln">34</span>C
+<span class="ln">35</span>C  OUTPUT VARIABLES:
+<span class="ln">36</span>C  HCOMP IS UPDATED IN DIFCOM TO GIVE THE NEW RUN OF COMPOSITION AFTER
+<span class="ln">37</span>C  ANGULAR MOMENTUM TRANSPORT.
+<span class="ln">38</span>C
+<span class="ln">39</span>C  BEFORE THE LAST ITERATION(LOK=F),ONLY DIFFUSION OF H,HE4,HE3 CALCULATED
+<span class="ln">40</span>C  TO CALCULATE CHANGE IN MU GRADIENTS CAUSED BY DIFFUSION.
+<span class="ln">41</span>C  THIS ROUTINE WILL THEREFORE BE CALLED EITHER TO MIX THE OTHER SPECIES
+<span class="ln">42</span>C  OR JUST THE FIRST 4 DEPENDING ON LOK.
+<span class="ln">43</span>C  DETERMINE WHICH SPECIES VARY OVER THE UNSTABLE REGION.
+<span class="ln">44</span>      NSPEC = 0
+<span class="ln">45</span>      DO J = JBEG, JEND
+<span class="ln">46</span>         TEST = HCOMP(J,IBEG)
+<span class="ln">47</span>C  ABUNDANCE 2(HE4) IS DEFINED AS 1-X-Z-HE3 SO IT IS NOT SOLVED FOR.
+<span class="ln">48</span>         IF(J.NE.2)THEN
+<span class="ln">49</span>            DO I = IBEG+1,IEND
+<span class="ln">50</span>               IF(DABS(HCOMP(J,I)-TEST).GT.1.0D-14) THEN
+<span class="ln">51</span>                  NSPEC = NSPEC + 1
+<span class="ln">52</span>                  ID(NSPEC) = J
+<span class="ln">53</span>                  GOTO 20
+<span class="ln">54</span>               ENDIF
+<span class="ln">55</span>            END DO
+<span class="ln">56</span>         ENDIF
+<span class="ln">57</span>   20    CONTINUE
+<span class="ln">58</span>      END DO
+<span class="ln">59</span>      IF(NSPEC.EQ.0) GOTO 200
+<span class="ln">60</span>C  NOW SOLVE FOR DIFFUSION OF ALL SPECIES THAT VARY OVER THE
+<span class="ln">61</span>C  UNSTABLE REGION USING THE SAME DIFFUSION COEFFICIENTS.
+<span class="ln">62</span>      NTAB = IEND - IBEG + 1
+<span class="ln">63</span>C  FIND RUN OF COMPOSITION AT THE EQUALLY SPACED GRID POINTS AT THE
+<span class="ln">64</span>C  START OF THE DIFFUSION TIMESTEP.  THIS IS DONE USING AN OSCULATORY
+<span class="ln">65</span>C  SPLINE.
+<span class="ln">66</span>      DO N = 1,NSPEC
+<span class="ln">67</span>         DO I = 1,NTAB
+<span class="ln">68</span>            II = I + IBEG - 1
+<span class="ln">69</span>            XTAB(I) = CHI(I)
+<span class="ln">70</span>            YTAB(I) = HCOMP(ID(N),II)
+<span class="ln">71</span>         END DO
+<span class="ln">72</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(ECHI,ECOMP,XTAB,YTAB,NTAB,NTOT)
+<span class="ln">73</span>C  SET UP DIFFUSION EQUATION ARRAYS TO SOLVE FOR COMP AT END OF TSTEP
+<span class="ln">74</span>         CALL <a href="../files/ccoeft.f.html#def-CCOEFT" title="CCOEFT in ccoeft.f">CCOEFT</a>(ECOD2,DCHI,DT,ECOMP,EM,NTOT)
+<span class="ln">75</span>C  SOLVE MATRIX FOR THE RUN OF COMP AT TIME N+1 AT THE NEW GRID.
+<span class="ln">76</span>         CALL <a href="../files/ctridi.f.html#def-CTRIDI" title="CTRIDI in ctridi.f">CTRIDI</a>(NTOT)
+<span class="ln">77</span>C  TRANSFORM BACK TO THE ORIGINAL GRID AND UPDATE HCOMP IN THE
+<span class="ln">78</span>C  DIFFUSED REGION. U IS THE NEW RUN OF COMPOSITION IN THE REGION AT THE
+<span class="ln">79</span>C  EQUALLY SPACED GRID POINTS.
+<span class="ln">80</span>C  FOR THE BOUNDARY POINTS IN THE MODEL,EXTRAPOLATING U PAST THE
+<span class="ln">81</span>C  LAST EQUALLY SPACED GRID POINTS CAN LEAD TO SERIOUS ERRORS.
+<span class="ln">82</span>C  THEREFORE ADD THE *CHANGE* IN COMPOSITION AT THE EQUALLY SPACED GRID
+<span class="ln">83</span>C  POINTS TO HCOMP AND DO NOT REPLACE HCOMP WITH U.
+<span class="ln">84</span>         DCOMP = 0.0D0
+<span class="ln">85</span>         DO I = 1,NTOT
+<span class="ln">86</span>            XTAB(I) = ECHI(I)
+<span class="ln">87</span>            YTAB(I) = U(I)-ECOMP(I)
+<span class="ln">88</span>            DCOMP = DCOMP + YTAB(I)*EM(I)
+<span class="ln">89</span>         END DO
+<span class="ln">90</span>         DO I = 1,NTAB
+<span class="ln">91</span>            XVAL(I) = CHI(I)
+<span class="ln">92</span>         END DO
+<span class="ln">93</span>C  USE YVAL AS DUMMY ARRAY FOR THE NEW RUN OF COMP AT THE ORIGINAL
+<span class="ln">94</span>C  POINT GRID.
+<span class="ln">95</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(XVAL,YVAL,XTAB,YTAB,NTOT,NTAB)
+<span class="ln">96</span>C CHECK FOR LOWER CONVECTION ZONE
+<span class="ln">97</span>         IF(LCZ(IBEG).AND.IBEG.GT.1)THEN
+<span class="ln">98</span>            DO I = IBEG-1,1,-1
+<span class="ln">99</span>               IF(.NOT.LCZ(I))THEN
+<span class="ln">100</span>                  I0 = I + 1
+<span class="ln">101</span>                  GOTO 90
+<span class="ln">102</span>               ENDIF
+<span class="ln">103</span>            END DO
+<span class="ln">104</span>            I0 = 1
+<span class="ln">105</span>   90       CONTINUE
+<span class="ln">106</span>         ELSE
+<span class="ln">107</span>            I0 = IBEG
+<span class="ln">108</span>         ENDIF
+<span class="ln">109</span>C CHECK FOR UPPER CONVECTION ZONE.
+<span class="ln">110</span>         IF(LCZ(IEND).AND.IEND.LT.M)THEN
+<span class="ln">111</span>            DO I = IEND+1,M
+<span class="ln">112</span>               IF(.NOT.LCZ(I))THEN
+<span class="ln">113</span>                  I1 = I - 1
+<span class="ln">114</span>                  GOTO 97
+<span class="ln">115</span>               ENDIF
+<span class="ln">116</span>            END DO
+<span class="ln">117</span>            I1 = M
+<span class="ln">118</span>   97       CONTINUE
+<span class="ln">119</span>         ENDIF
+<span class="ln">120</span>         DCOMP2 = 0.0D0
+<span class="ln">121</span>C COMPUTE SUM OF SPECIES MASS
+<span class="ln">122</span>         SUMSPEC = 0.0D0
+<span class="ln">123</span>         DO I = I0,I1
+<span class="ln">124</span>            SUMSPEC = SUMSPEC + HS2(I)*HCOMP(ID(N),I)
+<span class="ln">125</span>         END DO
+<span class="ln">126</span>C UPDATE COMPOSITION ARRAY.
+<span class="ln">127</span>         SUMSPEC2 = 0.0D0
+<span class="ln">128</span>         DO I = 1,NTAB
+<span class="ln">129</span>            J = IBEG+I-1
+<span class="ln">130</span>            HCOMP(ID(N),J) = HCOMP(ID(N),J)+YVAL(I)
+<span class="ln">131</span>            DCOMP2 = DCOMP2 + YVAL(I)*HS2(J)
+<span class="ln">132</span>            SUMSPEC2 = SUMSPEC2 + HS2(J)*HCOMP(ID(N),J)
+<span class="ln">133</span>         END DO
+<span class="ln">134</span>C UPDATE INNER CZ COMPOSITION IF APPLICABLE.
+<span class="ln">135</span>         IF(I0.LT.IBEG)THEN
+<span class="ln">136</span>            DO I = IBEG-1,I0,-1
+<span class="ln">137</span>               HCOMP(ID(N),I)=HCOMP(ID(N),IBEG)
+<span class="ln">138</span>               SUMSPEC2 = SUMSPEC2 + HS2(I)*HCOMP(ID(N),I)
+<span class="ln">139</span>               DCOMP2 = DCOMP2 + YVAL(1)*HS2(I)
+<span class="ln">140</span>            END DO
+<span class="ln">141</span>         ENDIF
+<span class="ln">142</span>C UPDATE OUTER CZ COMPOSITION IF APPLICABLE.
+<span class="ln">143</span>         IF(IEND.LT.I1)THEN
+<span class="ln">144</span>            DO I = IEND+1,I1
+<span class="ln">145</span>               HCOMP(ID(N),I)=HCOMP(ID(N),IEND)
+<span class="ln">146</span>               SUMSPEC2 = SUMSPEC2 + HS2(I)*HCOMP(ID(N),I)
+<span class="ln">147</span>               DCOMP2 = DCOMP2 + YVAL(NTAB)*HS2(I)
+<span class="ln">148</span>            END DO
+<span class="ln">149</span>         ENDIF
+<span class="ln">150</span>C CHECK FOR CONSERVATION OF SPECIES
+<span class="ln">151</span>c         TEST = ABS(SUMSPEC-SUMSPEC2)
+<span class="ln">152</span>c         WRITE(*,911)ID(N),DCOMP,DCOMP2,SUMSPEC
+<span class="ln">153</span>c 911     FORMAT(I5,1P3E10.2)
+<span class="ln">154</span>c         IF(TEST.GT.1.0D-10*SUMSPEC)THEN
+<span class="ln">155</span>c            RATIO = SUMSPEC/SUMSPEC2
+<span class="ln">156</span>c            DO I = I0,I1
+<span class="ln">157</span>c               HCOMP(ID(N),I)=RATIO*HCOMP(ID(N),I)
+<span class="ln">158</span>c            END DO
+<span class="ln">159</span>c         ENDIF
+<span class="ln">160</span>      END DO
+<span class="ln">161</span>C  ADJUST HE4 FOR CHANGES IN X, Z, AND HE3.
+<span class="ln">162</span>      IF(.NOT.LOK)THEN
+<span class="ln">163</span>         DO I = I0,I1
+<span class="ln">164</span>            HCOMP(2,I) = 1.0D0 - HCOMP(1,I) - HCOMP(3,I) - HCOMP(4,I)
+<span class="ln">165</span>         END DO
+<span class="ln">166</span>      ENDIF
+<span class="ln">167</span>  200 CONTINUE
+<span class="ln">168</span>      RETURN
+<span class="ln">169</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "$\mathcal{D}$ = <code>ECOD2</code> (a coefficient that includes $4\pi\rho r^2\, d\chi/dr$)": MIXGRID multiplies <code>COD2</code> by $\rho r^2\, d\chi/dr$, without $4\pi$. Fix: correct.</li>
+<li><strong>Wrong.</strong> Question 3 says that on the final call "heavier species (including $Z$) are mixed". The callers pass <code>JBEG = 5</code> on SECULR's final call (rows 5–11 or 5–15, not $Z$, row 3) and <code>JBEG = 4</code> in BURSMIX. Fix: rewrite the question: on SECULR's final call $X$, $Z$ and ³He do not change, so closure holds; in BURSMIX ³He (row 4) is mixed, and $Y$ is recomputed only if <code>LOK</code> is false.</li>
+<li><strong>Missing.</strong> Question 1: <code>I1</code> is also not set when <code>IEND = M</code>. Fix: add.</li>
+</ol>
+<p>Revised: <code>ECOD2</code> corrected; questions 1 and 3 rewritten.</p></div></details>
+</main></body></html>

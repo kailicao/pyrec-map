@@ -1,0 +1,345 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>setup_grsett.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ setup_grsett.f</span></header><main>
+<h1>setup_grsett.f</h1>
+<p class='muted'>283 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/setup_grsett.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Prepares the gravitational settling (microscopic diffusion) of helium, and optionally of metals, for the older settling solver: it finds the range of shells where settling is computed, converts the model to the units of Bahcall and Loeb, and computes the diffusion coefficients and their derivatives with respect to $X$.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/grsett.f.html#def-GRSETT"><code>GRSETT</code></a>, the Bahcall–Loeb settling solver (used when <code>LNEWDIF</code> is false; see <a href="../files/rotmix.f.html#def-ROTMIX"><code>ROTMIX</code></a> and <a href="../files/mix.f.html#def-MIX"><code>MIX</code></a>). The newer path is <a href="../files/microdiff_setup.f.html#def-MICRODIFF_SETUP"><code>MICRODIFF_SETUP</code></a>.</li>
+<li><strong>Inputs:</strong> the step <code>DT</code> (s), $d\ln P/dr$ (<code>HQPR</code>), $\log r$, $\log\rho$, $\log T$ (<code>HR</code>, <code>HD</code>, <code>HT</code>), the enclosed masses <code>HS1</code> (g), the total mass <code>STOT</code>, the convection flags <code>LC</code> and <code>HCOMP</code>; from COMMON, <code>SDEL(2,·)</code> (<code>/SCRTCH/</code>, which <code>ROTMIX</code> loads with the gradient <code>DELM</code>), <code>ILAMBDA</code> (<code>/GRAVST/</code>), <code>XMIN</code>, <code>YMIN</code>, <code>LTHOULFIT</code> (<code>/GRAVS2/</code>), <code>FGRY</code>, <code>FGRZ</code>, <code>LTHOUL</code>, <code>LDIFZ</code> (<code>/GRAVS3/</code>), and <code>CSTMIXING</code>, <code>CSTDIFFMIX</code> (<code>/CMIXING/</code>).</li>
+<li><strong>What it calls:</strong> <a href="../files/thdiff.f.html#def-THDIFF"><code>THDIFF</code></a>, the full diffusion coefficients of Thoul et al., when <code>LTHOUL</code> is true and <code>LTHOULFIT</code> false.</li>
+<li><strong>Outputs:</strong> <code>IBEGIN</code>, <code>IEND</code> (the range), <code>LALLCZ</code> (true when settling is skipped), <code>HRU</code>, <code>HTU</code> (radius and temperature in Bahcall–Loeb units), <code>HQPR</code>, <code>HS1</code>, <code>DT</code>, <code>STOT</code> converted in place, and the coefficients <code>COD1</code>, <code>COD2</code>, <code>QCOD1X</code>, <code>QCOD2X</code>; for metals, <code>COD1Z</code>, <code>COD2Z</code>, <code>QCOD1Z</code>, <code>QCOD2Z</code> in <code>/GRAVSZ/</code>. The conversion factors go to <code>/CONFAC/</code> (<code>CON_RAD</code>, <code>CON_MASS</code>, <code>CON_TEMP</code>, <code>CON_TIME</code>), shared with <a href="../files/equal_to_model.f.html#def-EQUAL_TO_MODEL"><code>EQUAL_TO_MODEL</code></a> and the <code>MICRODIFF</code> routines.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Range.</strong> <code>IBEGIN</code> is the first shell above a convective core with $X &gt;$ <code>XMIN</code>; <code>IEND</code> is the last shell below a convective envelope. The helium check only tests that some shell at or below <code>IEND</code> has $Y &gt;$ <code>YMIN</code>; it does not move <code>IEND</code> (question 7). A fully convective model, or one with no shell above either limit, is skipped (<code>LALLCZ</code>), with a message. The coefficients below are computed for every shell, 1 to <code>M</code>, not only within the range.</li>
+<li><strong>Units</strong> (Bahcall and Loeb): $r$ in $R_\odot$ (6.9598×10$^{10}$ cm), $T$ in $10^7$ K, masses multiplied by <code>CON_MASS</code> $=10^{-2}/R_\odot^3$ ($R_\odot$ in cm), time in $2.7\times10^{13}$ yr ("includes factor of 2.2 from ln lambda").</li>
+<li><strong>Coulomb logarithm</strong> $\ln\Lambda$, by <code>ILAMBDA</code>: 2.2 (default); Noerdlinger (1977), $\ln\Lambda = -19.7 - \tfrac12\ln\frac{4}{3X+1} - \tfrac12\ln\rho + \tfrac32\ln T$; Loeb (1989), $\ln\Lambda = -19.105747 - \tfrac12\ln\rho + \tfrac32\ln T$; or (4) a separate value for each pair of species from the Debye length or interionic distance, $\ln\Lambda_{ij} = 0.81245\,\ln\bigl(1 + 0.18769\,x_{ij}^{1.2}\bigr)$. Option 4 reaches only <code>THDIFF</code> (helium with <code>LTHOUL</code> true and <code>LTHOULFIT</code> false); <code>FAC</code> below, and the metals' factor, then use the default 2.2.</li>
+<li><strong>Helium coefficients.</strong> The equation, in the comment's words, is
+   $$\frac{\partial X}{\partial t} = \frac{1}{\rho r^2}\frac{\partial}{\partial r}\Bigl(D_1 + D_2\frac{\partial X}{\partial r}\Bigr),$$
+   with $F = f_Y\,r^2 T^{5/2}/\ln\Lambda$ (<code>FAC</code>, $f_Y$ = <code>FGRY</code>). Without <code>LTHOUL</code> (Bahcall and Loeb):
+   $$D_1 = F\,\frac{d\ln P}{dr}\,X(1-X-Z)\left[\frac54 + \nabla\,\frac{6(X+0.32)}{5.4+6.3X-4.5X^2}\right],\qquad D_2 = F\,\frac{X+3}{(X+1)(5X+3)},$$
+   with $\nabla$ = <code>SDEL(2,I)</code> and $Z$ = <code>HCOMP(3)</code> + <code>HCOMP(4)</code>. With <code>LTHOUL</code> (Thoul et al.): $D_1 = c\,F\,\frac{d\ln P}{dr}\,X\,(A_P + A_T)$ and $D_2 = c\,F\,A_C$, where $A_P$, $A_T$ come from <code>THDIFF</code> or from the quadratic fits in $X$ (<code>LTHOULFIT</code>), $A_C = 1.15 - 1.42X + 0.647X^2$, and $c$ = <code>CSTMIXING</code> ("FD 10/09, mimic mixing to reduce settling"). <code>QCOD1X</code>, <code>QCOD2X</code> are the derivatives with respect to $X$; with <code>ILAMBDA = 2</code>, <code>QCOD1X</code> gets an extra term from the $X$-dependence of $\ln\Lambda$.</li>
+<li><strong>Metals</strong> (with <code>LDIFZ</code> and <code>LTHOUL</code>): the same form with Thoul's coefficients for fully ionized iron, $f_Z$ = <code>FGRZ</code>, and the factor <code>CSTDIFFMIX</code> on $D_1$.</li>
+</ol></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>$+0.32$ or $-0.32$?</strong> The comment writes the thermal term as <code>DEL*6*(X-0.32)/(5.4+6.3X-4.5X**2)</code>; the code uses <code>(X+0.32D0)</code>. Which is Bahcall and Loeb's?</li>
+<li><strong>$\ln\Lambda$ counted twice?</strong> <code>CON_TIME</code> "includes factor of 2.2 from ln lambda", and <code>FAC</code> also divides by $\ln\Lambda$, which is 2.2 by default. Does the time unit already absorb the 2.2, so that dividing again gives a factor $1/2.2$ too many? Or is the comment about the unit's history only?</li>
+<li><strong>Derivatives without the mixing factors.</strong> <code>COD1</code>, <code>COD2</code> are multiplied by <code>CSTMIXING</code> (and <code>COD1Z</code> by <code>CSTDIFFMIX</code> too), but <code>QCOD1X</code>, <code>QCOD2X</code> are not, and <code>QCOD1Z</code> lacks <code>CSTDIFFMIX</code>. When these factors differ from 1, the derivatives no longer match the coefficients. Should they be scaled the same way?</li>
+<li><strong>Derivatives from the fits, coefficients from <code>THDIFF</code>.</strong> With <code>LTHOUL</code> and not <code>LTHOULFIT</code>, $A_P$ and $A_T$ come from <code>THDIFF</code>, but their $X$-derivatives (<code>QAPX</code>, <code>QATX</code>) and $A_C$ always come from the quadratic fits. Intended as an approximation?</li>
+<li><strong>Metal coefficients only with <code>LTHOUL</code>.</strong> With <code>LDIFZ</code> true and <code>LTHOUL</code> false, <code>COD1Z</code> and the others are not set and keep earlier values. Should this combination be refused?</li>
+<li><strong>Comment.</strong> The comment before the helium check's exit says "HYDROGEN-FREE MODEL"; the test is on helium (<code>YMIN</code>), and the printed message says so.</li>
+<li><strong><code>IEND</code> not reset.</strong> After label 47, the shell found with $Y &gt;$ <code>YMIN</code> is not stored: unlike the hydrogen check (<code>IBEGIN = I</code>), there is no <code>IEND = I</code>. Is that line missing, so that a helium-poor surface is never excluded?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-SETUP_GRSETT'>SETUP_GRSETT</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-SETUP_GRSETT'><h3><span class='kind'>subroutine</span>SETUP_GRSETT</h3>
+<p class='muted'>lines 2–283 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/setup_grsett.f#L2-L283'>GitHub</a></p>
+<pre>SUBROUTINE SETUP_GRSETT(DT,HQPR,HR,HD,HS1,HT,LC,M,STOT,COD1,COD2,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CMIXING'>/CMIXING/</a>, <a href='../commons.html#c-CONFAC'>/CONFAC/</a>, <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST3'>/CONST3/</a>, <a href='../commons.html#c-GRAVS2'>/GRAVS2/</a>, <a href='../commons.html#c-GRAVS3'>/GRAVS3/</a>, <a href='../commons.html#c-GRAVST'>/GRAVST/</a>, <a href='../commons.html#c-GRAVSZ'>/GRAVSZ/</a>, <a href='../commons.html#c-GSCOF'>/GSCOF/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-SCRTCH'>/SCRTCH/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/thdiff.f.html#def-THDIFF'>THDIFF</a> <span class='muted'>(thdiff.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/grsett.f.html#def-GRSETT'>GRSETT</a> <span class='muted'>(grsett.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE SETUP_GRSETT(DT,HQPR,HR,HD,HS1,HT,LC,M,STOT,COD1,COD2,
+<span class="ln">3</span>     *             HCOMP,HRU,HTU,IBEGIN,IEND,LALLCZ,QCOD1X,QCOD2X)
+<span class="ln">4</span>
+<span class="ln">5</span>      PARAMETER (JSON=5000)
+<span class="ln">6</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">7</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">8</span>
+<span class="ln">9</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">10</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">11</span>      COMMON/CONST1/CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">12</span>      COMMON/CONST3/CDELRL,CMIXL,CMIXL2,CMIXL3,CLNDP,CSECYR
+<span class="ln">13</span>      COMMON/CONFAC/CON_RAD,CON_MASS,CON_TEMP,CON_TIME
+<span class="ln">14</span>      COMMON/GRAVS2/DT_GS,XMIN,YMIN,LTHOULFIT
+<span class="ln">15</span>      COMMON/SCRTCH/SESUM(JSON),SEG(7,JSON),SBETA(JSON),SETA(JSON),
+<span class="ln">16</span>     *LOCONS(JSON),SO(JSON),SDEL(3,JSON),SFXION(3,JSON),SVEL(JSON),SCP(JSON)
+<span class="ln">17</span>      COMMON/GRAVST/GRTOL,ILAMBDA,NITER_GS,LDIFY
+<span class="ln">18</span>      COMMON/GRAVS3/FGRY,FGRZ,LTHOUL,LDIFZ
+<span class="ln">19</span>C MHP 3/94 ADDED METAL DIFFUSION
+<span class="ln">20</span>      COMMON/GRAVSZ/COD1Z(JSON),COD2Z(JSON),QCOD1Z(JSON),QCOD2Z(JSON)
+<span class="ln">21</span>C MHP 8/94 ADDED I/O FOR DIFFUSION
+<span class="ln">22</span>      COMMON/GSCOF/APP(JSON),ATP(JSON),APZP(JSON),ATZP(JSON)
+<span class="ln">23</span>C      COMMON/GSCOF2/TAPP(JSON),TATP(JSON),TCLP(JSON),TAPZP(JSON),
+<span class="ln">24</span>C     *              TATZP(JSON)
+<span class="ln">25</span>CFD 10/09 ADDED COMMON BLOCK FOR EXTRA MIXING. IT MIMIC SOME MIXING BY AFFECTING
+<span class="ln">26</span>C        THE SETTLING COEFFICIENT DIRECTLY (in setup_grsett.f)
+<span class="ln">27</span>      COMMON/CMIXING/CSTMIXING, CSTDIFFMIX
+<span class="ln">28</span>C
+<span class="ln">29</span>      DIMENSION HQPR(JSON),HR(JSON),HS1(JSON),HT(JSON),LC(JSON),
+<span class="ln">30</span>     *          HRU(JSON),HTU(JSON),COD1(JSON),COD2(JSON),QCOD1X(JSON),
+<span class="ln">31</span>     *          QCOD2X(JSON),HCOMP(15,JSON),HD(JSON)
+<span class="ln">32</span>C MHP 8/94 ADDED ATOMIC WEIGHTS AND CHARGES FOR H,HE,FE,ELECTRONS -
+<span class="ln">33</span>C     NEEDED FOR FULL THOUL COEFFICIENTS
+<span class="ln">34</span>      DIMENSION ATOMWT(4),ZSPEC(4),TAP(4),TAT(4),TAC(4,4),
+<span class="ln">35</span>     *          TCL(4,4),XFRAC(4)
+<span class="ln">36</span>c     additional variables to be declared for variable ln lambda
+<span class="ln">37</span>c     intermediate variables:
+<span class="ln">38</span>      REAL*8 ZXA,AC,NI,CZ,XIJ,NE,AO,LAMBDAD,LAMBDA,C(4)
+<span class="ln">39</span>      REAL*8 LN_LAMBDA
+<span class="ln">40</span>      DATA ATOMWT/1.008D0,4.004D0,55.86D0,5.486D-4/
+<span class="ln">41</span>      DATA ZSPEC/1.0D0,2.0D0,26.0D0,-1.0D0/
+<span class="ln">42</span>      DATA NSPEC/4/
+<span class="ln">43</span>      SAVE
+<span class="ln">44</span>
+<span class="ln">45</span>
+<span class="ln">46</span>C     OUTPUT VARIABLES :
+<span class="ln">47</span>C
+<span class="ln">48</span>C     HRU - VECTOR OF UNLOGGED RADII IN BAHCALL AND LOEB UNITS.
+<span class="ln">49</span>C     HTU - VECTOR OF UNLOGGED TEMPERATURES IN BAHCALL AND LOEB UNITS.
+<span class="ln">50</span>C     IBEGIN - FIRST ZONE FOR DIFFUSION PURPOSES (EITHER THE FIRST MODEL POINT
+<span class="ln">51</span>C          OR THE OUTERMOST POINT OF A CENTRAL CONVECTION ZONE).
+<span class="ln">52</span>C     IEND - LAST ZONE FOR DIFFUSION PURPOSES (EITHER THE LAST MODEL POINT OR
+<span class="ln">53</span>C        THE INNERMOST POINT OF A SURFACE CONVECTION ZONE).
+<span class="ln">54</span>C     THE VECTORS HQPR AND HS1, AND THE SCALARS DT AND STOT, ARE ALSO CONVERTED
+<span class="ln">55</span>C     TO BAHCALL AND LOEB UNITS.
+<span class="ln">56</span>C     CONSTANTS DEFINED :
+<span class="ln">57</span>C     CLN = CONVERSION FACTOR FROM LN TO LOG10
+<span class="ln">58</span>C     CRSUN_BAH = SOLAR RADIUS (CM)
+<span class="ln">59</span>C     CSECYR_BAH = NUMBER OF SECONDS IN A YEAR.
+<span class="ln">60</span>      CRSUN_BAH=6.9598D10
+<span class="ln">61</span>      CSECYR_BAH=3.1558D7
+<span class="ln">62</span>C     LALLCZ=T FOR FULLY CONVECTIVE MODEL(AND IF TRUE, DIFFUSION IS SKIPPED).
+<span class="ln">63</span>      LALLCZ=.FALSE.
+<span class="ln">64</span>C     CHECK FOR CONVECTIVE CORE.
+<span class="ln">65</span>      IF(LC(1))THEN
+<span class="ln">66</span>         DO 10 I=2,M
+<span class="ln">67</span>            IF(.NOT.LC(I))GOTO 20
+<span class="ln">68</span>   10    CONTINUE
+<span class="ln">69</span>C        DIFFUSION NOT COMPUTED FOR FULLY CONVECTIVE MODELS.
+<span class="ln">70</span>         LALLCZ=.TRUE.
+<span class="ln">71</span>         WRITE(ISHORT,15)
+<span class="ln">72</span>   15    FORMAT(1X,&#x27; FULLY CONVECTIVE MODEL - NO SETTLING&#x27;)
+<span class="ln">73</span>         GOTO 9999
+<span class="ln">74</span>   20    CONTINUE
+<span class="ln">75</span>C        COMPUTE OVERSHOOT (TO BE ADDED).
+<span class="ln">76</span>         IBEGIN = I-1
+<span class="ln">77</span>      ELSE
+<span class="ln">78</span>         IBEGIN = 1
+<span class="ln">79</span>      ENDIF
+<span class="ln">80</span>C MHP 6/90 CHECK FOR HYDROGEN-EXHAUSTED CORE.
+<span class="ln">81</span>      DO 23 I = IBEGIN,M
+<span class="ln">82</span>         IF(HCOMP(1,I).GT.XMIN)GOTO 25
+<span class="ln">83</span>   23 CONTINUE
+<span class="ln">84</span>C     HYDROGEN-FREE MODEL - EXIT.
+<span class="ln">85</span>      WRITE(ISHORT,16)XMIN
+<span class="ln">86</span>   16 FORMAT(1X,&#x27;X BELOW &#x27;,F9.6,&#x27; IN WHOLE MODEL-NO SETTLING&#x27;)
+<span class="ln">87</span>      LALLCZ = .TRUE.
+<span class="ln">88</span>      GOTO 9999
+<span class="ln">89</span>   25 CONTINUE
+<span class="ln">90</span>      IBEGIN = I
+<span class="ln">91</span>C     CHECK FOR CONVECTIVE ENVELOPE.
+<span class="ln">92</span>      IF(LC(M))THEN
+<span class="ln">93</span>         DO 30 I=M-1,2,-1
+<span class="ln">94</span>            IF(.NOT.LC(I))GOTO 40
+<span class="ln">95</span>   30    CONTINUE
+<span class="ln">96</span>   40    CONTINUE
+<span class="ln">97</span>C        COMPUTE OVERSHOOT (TO BE ADDED).
+<span class="ln">98</span>         IEND = I+1
+<span class="ln">99</span>      ELSE
+<span class="ln">100</span>         IEND = M
+<span class="ln">101</span>      ENDIF
+<span class="ln">102</span>C     CHECK FOR HELIUM-EXHAUSTED SURFACE.
+<span class="ln">103</span>C     OUTER POINT IS SET WHEREVER Y&gt;YMIN.
+<span class="ln">104</span>      DO 45 I=IEND,1,-1
+<span class="ln">105</span>         IF(HCOMP(2,I).GT.YMIN) GOTO 47
+<span class="ln">106</span>   45 CONTINUE
+<span class="ln">107</span>C     HYDROGEN-FREE MODEL - EXIT.
+<span class="ln">108</span>      WRITE(ISHORT,17)YMIN
+<span class="ln">109</span>   17 FORMAT(1X,&#x27;Y BELOW &#x27;,F9.6,&#x27; IN WHOLE MODEL-NO SETTLING&#x27;)
+<span class="ln">110</span>      LALLCZ = .TRUE.
+<span class="ln">111</span>      GOTO 9999
+<span class="ln">112</span>   47 CONTINUE
+<span class="ln">113</span>      IEND = I
+<span class="ln">114</span>C     CON_MASS=CONVERSION FACTOR FOR MASS.
+<span class="ln">115</span>C     CON_RADIUS=CONVERSION FACTOR FOR RADIUS.
+<span class="ln">116</span>C     CON_TEMP=CONVERSION FACOTR FOR TEMPERATURE.
+<span class="ln">117</span>C     CON_TIME=CONVERSION FACTOR FOR TIME.
+<span class="ln">118</span>      CON_RAD=1.0D0/CRSUN_BAH
+<span class="ln">119</span>      CON_MASS=1.0D-2*CON_RAD**3
+<span class="ln">120</span>      CON_TEMP=1.0D-7
+<span class="ln">121</span>C     INCLUDES FACTOR OF 2.2 FROM LN LAMBDA
+<span class="ln">122</span>      CON_TIME=2.7D13*CSECYR_BAH
+<span class="ln">123</span>C     CONVERT LOG(RADIUS) AND LOG(TEMPERATURE) TO NATURAL UNITS.
+<span class="ln">124</span>C     ALSO CONVERT NATURAL UNITS TO BAHCALL AND LOEB UNITS.
+<span class="ln">125</span>      DO 50 I=1,M
+<span class="ln">126</span>
+<span class="ln">127</span>         HRU(I)=EXP(CLN*HR(I))*CON_RAD
+<span class="ln">128</span>         HTU(I)=EXP(CLN*HT(I))*CON_TEMP
+<span class="ln">129</span>         HS1(I)=HS1(I)*CON_MASS
+<span class="ln">130</span>         HQPR(I)=HQPR(I)/CON_RAD
+<span class="ln">131</span>C        SDEL(2,I)=0.4D0   !COMMENT OUT IN REAL CODE
+<span class="ln">132</span>   50 CONTINUE
+<span class="ln">133</span>      DT=DT/CON_TIME
+<span class="ln">134</span>      STOT=STOT*CON_MASS
+<span class="ln">135</span>C     SET UP DIFFUSION COEFFICIENTS.
+<span class="ln">136</span>C     MODIFIED BY BC MAY/90 -- VALID FOR ALL X WITH VARIABLE LN LAMBDA
+<span class="ln">137</span>C     GENERAL EQUATION IS
+<span class="ln">138</span>C     DX/DT = (D/DR(D1)+D/DR(D2 DX/DR))/(RHO*R**2), WHERE
+<span class="ln">139</span>C     D1 = R**2/LN LAMBDA  * X  * T**5/2 * (DLNP/DR) * (1-X) *
+<span class="ln">140</span>C          [5/4 + DEL*6*(X-0.32)/(5.4+6.3X-4.5X**2)]
+<span class="ln">141</span>C     D2 = R**2/LN LAMBDA * T**5/2 * (X+3)/(X+1)/(3+5X)
+<span class="ln">142</span>      DO 60 I = 1,M
+<span class="ln">143</span>
+<span class="ln">144</span>         X = HCOMP(1,I)
+<span class="ln">145</span>C MHP 10/02 INITIALIZED X - WAS NOT DONE PRIOR TO USAGE IN SHELL 1
+<span class="ln">146</span>         IF(ILAMBDA.EQ.2)THEN
+<span class="ln">147</span>C           Noerdlinger&#x27;s formula (1977 A&amp;A 57,407) for LN LAMBDA:
+<span class="ln">148</span>C           Ln Lambda = -19.7 - ln[4/(3*X + 1)]/2 - ln(rho)/2 + 1.5*ln(T)
+<span class="ln">149</span>            LN_LAMBDA=-1.97D1 - 0.5D0*LOG(1.0D0/(0.75D0*X+0.25D0))
+<span class="ln">150</span>     *                -0.5D0*HD(I)*CLN + 1.5D0*HT(I)*CLN
+<span class="ln">151</span>         ELSE IF(ILAMBDA.EQ.3)THEN
+<span class="ln">152</span>C           Loeb&#x27;s formula (1989 Phys. Rev. D 39, 1009) for LN LAMBDA
+<span class="ln">153</span>C           ln lambda = -19.105747 - ln(rho)/2 + 1.5*ln(T)
+<span class="ln">154</span>            LN_LAMBDA=-1.9105747D1-0.50D0*HD(I)*CLN+1.5D0*HT(I)*CLN
+<span class="ln">155</span>         ELSE
+<span class="ln">156</span>            LN_LAMBDA = 2.2D0
+<span class="ln">157</span>         END IF
+<span class="ln">158</span>C
+<span class="ln">159</span>         FAC=FGRY*HRU(I)**2*HTU(I)**2.5D0/LN_LAMBDA
+<span class="ln">160</span>C         X = HCOMP(1,I)
+<span class="ln">161</span>         Z = HCOMP(3,I) + HCOMP(4,I)
+<span class="ln">162</span>         ZZ = HCOMP(3,I)
+<span class="ln">163</span>         X2 = X*X
+<span class="ln">164</span>         IF(.NOT.LTHOUL)THEN
+<span class="ln">165</span>            XZ = X*Z
+<span class="ln">166</span>            X3 = X2*X
+<span class="ln">167</span>            FAC2=5.4D0+6.3D0*X-4.5D0*X2
+<span class="ln">168</span>            COD1(I)=FAC*HQPR(I)*(X - X2 - XZ)*(1.25D0+
+<span class="ln">169</span>     *           SDEL(2,I)*6.0D0*(X+0.32D0)/FAC2)
+<span class="ln">170</span>            COD2(I)=FAC*(X+3.0D0)/(5.0D0*X2 + 8.0D0*X + 3.0D0)
+<span class="ln">171</span>            QCOD1X(I)=FAC*HQPR(I)*( (1.0D0-2.0D0*X-Z)*(1.25D0+
+<span class="ln">172</span>     *      (6.0D0*SDEL(2,I)*(X+0.32D0))/FAC2)+(X-X2-XZ)*6.0D0*
+<span class="ln">173</span>     *          SDEL(2,I)*(3.384D0+2.88D0*X+4.5D0*X2)/FAC2**2 )
+<span class="ln">174</span>            QCOD2X(I)=-FAC*(5.0D0*X2 + 3.0D1*X + 2.1D1)/
+<span class="ln">175</span>     *              (5.0D0*X2 + 8.0D0*X + 3.0D0)**2
+<span class="ln">176</span>         ELSE
+<span class="ln">177</span>            XFRAC(1) = HCOMP(1,I)
+<span class="ln">178</span>            XFRAC(2) = HCOMP(2,I)
+<span class="ln">179</span>            XFRAC(3) = HCOMP(3,I)
+<span class="ln">180</span>            IF(.NOT.LTHOULFIT)THEN
+<span class="ln">181</span>               IF(ILAMBDA.EQ.4)THEN
+<span class="ln">182</span>                  RHO = EXP(CLN*HD(I))
+<span class="ln">183</span>                  T = EXP(CLN*HT(I))
+<span class="ln">184</span>c                 calculate concentrations from mass fractions:
+<span class="ln">185</span>                  ZXA=0.D0
+<span class="ln">186</span>                  DO II=1,NSPEC-1
+<span class="ln">187</span>                   ZXA=ZXA+ZSPEC(II)*XFRAC(II)/ATOMWT(II)
+<span class="ln">188</span>                  ENDDO
+<span class="ln">189</span>                  DO II=1,NSPEC-1
+<span class="ln">190</span>                     C(II)=XFRAC(II)/(ATOMWT(II)*ZXA)
+<span class="ln">191</span>                  ENDDO
+<span class="ln">192</span>                  C(NSPEC)=1.D0
+<span class="ln">193</span>c                 calculate density of electrons (NE) from mass density (RHO):
+<span class="ln">194</span>                  AC=0.D0
+<span class="ln">195</span>                  DO II=1,NSPEC
+<span class="ln">196</span>                   AC=AC+ATOMWT(II)*C(II)
+<span class="ln">197</span>                  ENDDO
+<span class="ln">198</span>                  NE=RHO/(1.6726D-24*AC)
+<span class="ln">199</span>c                 calculate interionic distance (AO):
+<span class="ln">200</span>                  NI=0.D0
+<span class="ln">201</span>                  DO II=1,NSPEC-1
+<span class="ln">202</span>                     NI=NI+C(II)*NE
+<span class="ln">203</span>                  ENDDO
+<span class="ln">204</span>                  AO=(0.23873D0/NI)**CC13
+<span class="ln">205</span>c                 calculate Debye length (LAMBDAD):
+<span class="ln">206</span>                  CZ=0.D0
+<span class="ln">207</span>                  DO II=1,NSPEC
+<span class="ln">208</span>                   CZ=CZ+C(II)*ZSPEC(II)**2
+<span class="ln">209</span>                  ENDDO
+<span class="ln">210</span>                  LAMBDAD=6.9010D0*SQRT(T/(NE*CZ))
+<span class="ln">211</span>c                 calculate LAMBDA to use in Coulomb logarithm:
+<span class="ln">212</span>                  LAMBDA=MAX(LAMBDAD,AO)
+<span class="ln">213</span>c                 calculate Coulomb logarithms:
+<span class="ln">214</span>                  DO II=1,NSPEC
+<span class="ln">215</span>                   DO JJ=1,NSPEC
+<span class="ln">216</span>                      XIJ=2.3939D3*T*LAMBDA/ABS(ZSPEC(II)*ZSPEC(JJ))
+<span class="ln">217</span>                      TCL(II,JJ)=0.81245D0
+<span class="ln">218</span>     *                       *LOG(1.D0+0.18769D0*XIJ**1.2D0)
+<span class="ln">219</span>                   ENDDO
+<span class="ln">220</span>                  ENDDO
+<span class="ln">221</span>               ELSE
+<span class="ln">222</span>                  DO II = 1,NSPEC
+<span class="ln">223</span>                     DO JJ = 1,NSPEC
+<span class="ln">224</span>                        TCL(II,JJ) = LN_LAMBDA
+<span class="ln">225</span>                     END DO
+<span class="ln">226</span>                  END DO
+<span class="ln">227</span>               ENDIF
+<span class="ln">228</span>               CALL <a href="../files/thdiff.f.html#def-THDIFF" title="THDIFF in thdiff.f">THDIFF</a>(NSPEC,ATOMWT,ZSPEC,XFRAC,TCL,TAP,TAT,TAC)
+<span class="ln">229</span>               AP = -TAP(1)
+<span class="ln">230</span>               AT = -SDEL(2,I)*TAT(1)
+<span class="ln">231</span>            ELSE
+<span class="ln">232</span>               AP = 1.58D0 - 2.42D0*X + 0.844D0*X2
+<span class="ln">233</span>               AT = SDEL(2,I)*(1.90D0 - 2.69D0*X + 0.805D0*X2)
+<span class="ln">234</span>            ENDIF
+<span class="ln">235</span>            AC = 1.15D0 - 1.42D0*X + 0.647D0*X2
+<span class="ln">236</span>            QAPX = -2.42D0 + 1.688D0*X
+<span class="ln">237</span>            QATX = SDEL(2,I)*(-2.69D0 + 1.61D0*X)
+<span class="ln">238</span>            QACX = -1.42D0 + 1.294D0*X
+<span class="ln">239</span>CFD 10/09 Mimic Mixing to reduce settling.
+<span class="ln">240</span>C            COD1(I) = FAC*HQPR(I)*X*(AP+AT)
+<span class="ln">241</span>            COD1(I) = CSTMIXING*FAC*HQPR(I)*X*(AP+AT)
+<span class="ln">242</span>            COD2(I) = CSTMIXING*FAC*AC
+<span class="ln">243</span>            QCOD1X(I) = FAC*HQPR(I)*(AP+AT+X*(QAPX+QATX))
+<span class="ln">244</span>            QCOD2X(I) = FAC*QACX
+<span class="ln">245</span>         ENDIF
+<span class="ln">246</span>C        METAL DIFFUSION, USING THE THOUL ET AL. COEFFICIENTS FOR FULLY
+<span class="ln">247</span>C        IONIZED IRON.
+<span class="ln">248</span>         IF(LDIFZ)THEN
+<span class="ln">249</span>
+<span class="ln">250</span>            FAC=FGRZ*HRU(I)**2*HTU(I)**2.5D0/LN_LAMBDA
+<span class="ln">251</span>            IF(LTHOUL)THEN
+<span class="ln">252</span>               IF(LTHOULFIT)THEN
+<span class="ln">253</span>                  AP = -0.157D0 -0.511D0*X + 0.389D0*X2
+<span class="ln">254</span>                  AT = SDEL(2,I)*(-1.36D0 - 1.42D0*X + 0.549D0*X2)
+<span class="ln">255</span>               ELSE
+<span class="ln">256</span>                  AP = -TAP(3)
+<span class="ln">257</span>                  AT = -SDEL(2,I)*TAT(3)
+<span class="ln">258</span>               ENDIF
+<span class="ln">259</span>               AH = -0.0375D0 -0.193D0*X + 0.107D0*X2
+<span class="ln">260</span>CFD 10/09 Mimic Mixing to reduce settling (cstmixing)
+<span class="ln">261</span>C         and add the uncertainties of differential mixing (cstdiffmix).
+<span class="ln">262</span>C
+<span class="ln">263</span>C old ver      COD1Z(I) = FAC*HQPR(I)*ZZ*(AP+AT)
+<span class="ln">264</span>               COD1Z(I) = CSTDIFFMIX*CSTMIXING*FAC*HQPR(I)*ZZ*(AP+AT)
+<span class="ln">265</span>C              POSITIVE DIFFUSION COEFFICIENTS NEEDED!
+<span class="ln">266</span>C old ver.     COD2Z(I) = ABS(FAC*AH)
+<span class="ln">267</span>C old ver.     QCOD1Z(I) = FAC*HQPR(I)*(AP+AT)
+<span class="ln">268</span>               COD2Z(I) = CSTMIXING*ABS(FAC*AH)
+<span class="ln">269</span>               QCOD1Z(I) = CSTMIXING*FAC*HQPR(I)*(AP+AT)
+<span class="ln">270</span>               QCOD2Z(I) = 0.0D0
+<span class="ln">271</span>            ENDIF
+<span class="ln">272</span>         ENDIF
+<span class="ln">273</span>C
+<span class="ln">274</span>C If using Noerdlinger&#x27;s formula for LN LAMBDA, have a new term
+<span class="ln">275</span>C in D(D1)/DX
+<span class="ln">276</span>         IF(ILAMBDA.EQ.2)  THEN
+<span class="ln">277</span>           QCOD1X(I)=QCOD1X(I) + COD1(I)*1.5D0/
+<span class="ln">278</span>     *     (LN_LAMBDA*(3.0D0*X+1.0D0))
+<span class="ln">279</span>       END IF
+<span class="ln">280</span>   60 CONTINUE
+<span class="ln">281</span> 9999 CONTINUE
+<span class="ln">282</span>      RETURN
+<span class="ln">283</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ul>
+<li><strong>Wrong.</strong> "ends below a convective envelope, at the last shell with $Y &gt;$ <code>YMIN</code>": the helium loop (labels 45–47) only checks that some shell at or below <code>IEND</code> has $Y &gt;$ <code>YMIN</code>; unlike the hydrogen check (<code>IBEGIN = I</code>), it never resets <code>IEND</code>. Fix: say so, and ask whether <code>IEND = I</code> is missing after label 47.</li>
+<li><strong>Missing.</strong> The coefficient loop (label 60) runs over all shells 1 to <code>M</code>, not only <code>IBEGIN</code>–<code>IEND</code>. Fix: add a sentence.</li>
+<li><strong>Missing.</strong> With <code>ILAMBDA = 4</code>, $\ln\Lambda_{ij}$ goes only to <code>THDIFF</code> (helium, <code>LTHOUL</code> true, <code>LTHOULFIT</code> false); <code>FAC</code> and the metals' factor still divide by the default 2.2. With <code>ILAMBDA = 2</code>, <code>QCOD1X</code> gets an extra term from $d\ln\Lambda/dX$. Fix: add both.</li>
+<li><strong>Unclear.</strong> "mass in $10^{-2}R_\odot^{-3}$ g units": the code multiplies masses by <code>CON_MASS</code> $=10^{-2}/R_\odot^3$ ($R_\odot$ in cm). Fix: say that.</li>
+<li><strong>Unclear.</strong> Question 6 says the check "prints" the comment's words; the comment is not printed (the message is "Y BELOW … IN WHOLE MODEL-NO SETTLING"). Fix: reword.</li>
+<li>Checked and confirmed: the call from <code>GRSETT</code>, the COMMON blocks, the unit factors, the Noerdlinger and Loeb formulas, $D_1$, $D_2$ (<code>5X²+8X+3</code> = $(X+1)(5X+3)$), the Thoul fits, questions 1–5.</li>
+</ul>
+<p>Revised: the range (the helium check does not move <code>IEND</code>; question 7 added), the loop over all shells, options 2 and 4 of $\ln\Lambda$, the mass unit and question 6 reworded.</p></div></details>
+</main></body></html>

@@ -1,0 +1,175 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>ll4th.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ ll4th.f</span></header><main>
+<h1>ll4th.f</h1>
+<p class='muted'>116 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/ll4th.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>LL4TH</code> builds the "4th table" of the Livermore (LL) opacity tables: a table at the surface composition, interpolated once in $X$ from the stored tables, so that the many opacity calls in the envelope and atmosphere need not interpolate in $X$ each time (its comment). It stores, for each temperature, the spline coefficients of $\log\kappa$ against the density variable.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/setupopac.f.html#def-SETUPOPAC"><code>SETUPOPAC</code></a> at set-up, and <a href="../files/surfopac.f.html#def-SURFOPAC"><code>SURFOPAC</code></a> (when <code>LOPAL92</code> is set), which <a href="../files/starin.f.html#def-STARIN"><code>STARIN</code></a> calls for the starting model and <a href="../files/hpoint.f.html#def-HPOINT"><code>HPOINT</code></a> when the surface $X$ changes.</li>
+<li><strong>Input:</strong> <code>X</code>, the surface hydrogen abundance. The tables: grids in COMMON <code>GLLOT</code> (<code>GRIDT</code>, <code>GRIDX</code>, <code>GRHOT3</code>; the density variable is $\rho/T_6^3$ by its name) and the per-composition spline coefficients in <code>LINTPL</code> (<code>CFORD</code>, <code>NDS</code>, <code>NDD</code>), with second-$Z$ copies <code>GLLOT2</code>, <code>LINTPL2</code>; filled by <a href="../files/setllo.f.html#def-SETLLO"><code>SETLLO</code></a> and <a href="../files/yllo3d.f.html"><code>yllo3d.f</code></a>.</li>
+<li><strong>Output:</strong> COMMON <code>LLOT4</code> (<code>XENV4</code>, <code>ZENV4</code>, the coefficients <code>CFORD4</code>, the $X$ index <code>KIPM1</code>) and, with two metallicities (<code>L2Z</code>), <code>LLOT42</code>; read by <a href="../files/yllo2d.f.html#def-YLLO2D"><code>YLLO2D</code></a>, <a href="../files/yllo3d.f.html"><code>YLLO3D</code></a> and their <code>2</code> versions.</li>
+<li><strong>Calls:</strong> <a href="../files/findex.f.html#def-FINDEX"><code>FINDEX</code></a>, <a href="../files/yllo2d.f.html#def-YLLO2D"><code>YLLO2D</code></a> and <a href="../files/yllo2d2.f.html#def-YLLO2D2"><code>YLLO2D2</code></a> (values at a grid node of one composition), <a href="../files/ysplin.f.html#def-YSPLIN"><code>YSPLIN</code></a> (spline coefficients).</li>
+<li><strong>COMMON blocks:</strong> <code>LLOT4</code>, <code>LLOT42</code>, <code>GLLOT</code>, <code>GLLOT2</code>, <code>LLOT</code>, <code>LLOT2</code>, <code>LINTPL</code>, <code>LINTPL2</code>, and <code>NEWOPAC</code> (the opacity switches and table metallicities, shared with 17 other units).</li>
+</ul>
+<p><strong>The method.</strong> Find the $X$ interval $[X_1, X_2]$ (index clamped to 1 or 2 of the three $X$ values). For each temperature row and each density node, interpolate linearly in $X$:</p>
+<p>$$\log\kappa = \log\kappa(X_1) + \frac{X - X_1}{X_2 - X_1}\,\big(\log\kappa(X_2) - \log\kappa(X_1)\big),$$</p>
+<p>then fit a spline in the density variable along the row (<code>YSPLIN</code>) and store its coefficients. Repeat for the second-$Z$ tables when <code>L2Z</code> is set. <code>ZENV4</code> is set to the table metallicity <code>ZOPAL1</code>, not to the surface $Z$.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Leftovers.</strong> <code>OF</code>, the derivatives <code>QOD0</code>, <code>QOT0</code>, <code>QOD1</code>, <code>QOT1</code>, and the comment "conversion from the derivative with constant RHOT3 to constant RHO" have no code behind them. Was a derivative step dropped?</li>
+<li><strong>Strict shape check.</strong> It stops (<code>STOP ' LL4TH NDSS '</code>) unless every row starts at the first density node. Is that guaranteed for all LL tables?</li>
+<li><strong>Extrapolation in X.</strong> With only three $X$ values, an $X$ outside the grid is extrapolated linearly without a warning.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+LL4TH
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+THIS IS THE 4TH TABLE OF THE LAWRENCE LIVERMORE OPACITY TABLES.
+IT CONTAINS THE OPACITIES FOR THE SURFACE ABUNDANCES OF X AND Z, AND
+IS USED TO AVOID MANY INTERPOLATIONS TO THE SAME X.</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-LL4TH'>LL4TH</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-LL4TH'><h3><span class='kind'>subroutine</span>LL4TH</h3>
+<p class='muted'>lines 9–116 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/ll4th.f#L9-L116'>GitHub</a></p>
+<pre>SUBROUTINE LL4TH(X)</pre>
+<div class='notes'><p>The surface-composition opacity table: linear in $X$, then splines in density along each temperature row (above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+LL4TH
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+THIS IS THE 4TH TABLE OF THE LAWRENCE LIVERMORE OPACITY TABLES.
+IT CONTAINS THE OPACITIES FOR THE SURFACE ABUNDANCES OF X AND Z, AND
+IS USED TO AVOID MANY INTERPOLATIONS TO THE SAME X.</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-GLLOT'>/GLLOT/</a>, <a href='../commons.html#c-GLLOT2'>/GLLOT2/</a>, <a href='../commons.html#c-LINTPL'>/LINTPL/</a>, <a href='../commons.html#c-LINTPL2'>/LINTPL2/</a>, <a href='../commons.html#c-LLOT'>/LLOT/</a>, <a href='../commons.html#c-LLOT2'>/LLOT2/</a>, <a href='../commons.html#c-LLOT4'>/LLOT4/</a>, <a href='../commons.html#c-LLOT42'>/LLOT42/</a>, <a href='../commons.html#c-NEWOPAC'>/NEWOPAC/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/findex.f.html#def-FINDEX'>FINDEX</a> <span class='muted'>(findex.f)</span> ×2</li>
+<li><a href='../files/yllo2d.f.html#def-YLLO2D'>YLLO2D</a> <span class='muted'>(yllo2d.f)</span> ×2</li>
+<li><a href='../files/yllo2d2.f.html#def-YLLO2D2'>YLLO2D2</a> <span class='muted'>(yllo2d2.f)</span> ×2</li>
+<li><a href='../files/ysplin.f.html#def-YSPLIN'>YSPLIN</a> <span class='muted'>(ysplin.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/setupopac.f.html#def-SETUPOPAC'>SETUPOPAC</a> <span class='muted'>(setupopac.f)</span></li>
+<li><a href='../files/surfopac.f.html#def-SURFOPAC'>SURFOPAC</a> <span class='muted'>(surfopac.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">9</span>      SUBROUTINE LL4TH(X)
+<span class="ln">10</span>
+<span class="ln">11</span>      PARAMETER (NUMT=50)
+<span class="ln">12</span>      PARAMETER (NUMD=17)
+<span class="ln">13</span>      PARAMETER (NUMX=3)
+<span class="ln">14</span>      PARAMETER (NUMXT=NUMT*NUMX)
+<span class="ln">15</span>      PARAMETER (NUM4D=4*NUMD)
+<span class="ln">16</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">17</span>      IMPLICIT LOGICAL*4 (L)
+<span class="ln">18</span>C MHP 10/02 made array dimensions consistent
+<span class="ln">19</span>      PARAMETER (NP=100)
+<span class="ln">20</span>      DIMENSION C(4,NP)
+<span class="ln">21</span>C      DIMENSION C(4,NUMD)
+<span class="ln">22</span>C     OUTPUT OF LL4TH
+<span class="ln">23</span>      COMMON /LLOT4/XENV4,ZENV4,CFORD4(NUMT,NUM4D),KIPM1
+<span class="ln">24</span>      COMMON /LLOT42/XENV42,ZENV42,CFORD42(NUMT,NUM4D),KIPM12
+<span class="ln">25</span>C     GRIDS
+<span class="ln">26</span>      COMMON /GLLOT/GRIDT(NUMT),GRIDX(NUMX),GRHOT3(NUMD)
+<span class="ln">27</span>      COMMON /GLLOT2/GRIDT2(NUMT),GRIDX2(NUMX),GRHOT32(NUMD)
+<span class="ln">28</span>C     LL OPACITY TABLES
+<span class="ln">29</span>      COMMON /LLOT/OPACITY(NUMXT,NUMD),NUMXM,NUMTM
+<span class="ln">30</span>      COMMON /LLOT2/OPACITY2(NUMXT,NUMD),NUMXM2,NUMTM2
+<span class="ln">31</span>C     THE SPLINE COEFFICIENTS AND THE SHAPE OF THE LL TABLE.
+<span class="ln">32</span>      COMMON /LINTPL/ CFORD(NUMXT,NUM4D),NDS(NUMXT),NDD(NUMXT)
+<span class="ln">33</span>      COMMON /LINTPL2/ CFORD2(NUMXT,NUM4D),NDS2(NUMXT),NDD2(NUMXT)
+<span class="ln">34</span>C OPACITY COMMON BLOCKS - modified 3/09
+<span class="ln">35</span>      COMMON /NEWOPAC/ZLAOL1,ZLAOL2,ZOPAL1,ZOPAL2, ZOPAL951,
+<span class="ln">36</span>     +       ZALEX1, ZKUR1, ZKUR2,TMOLMIN,TMOLMAX,LALEX06,
+<span class="ln">37</span>     +       LLAOL89,LOPAL92,LOPAL95,LKUR90,LALEX95,L2Z
+<span class="ln">38</span>      SAVE
+<span class="ln">39</span>
+<span class="ln">40</span>C     KEEP THE COMPOSITION OF THE 4TH TABLE.
+<span class="ln">41</span>      XENV4=X
+<span class="ln">42</span>      ZENV4=ZOPAL1
+<span class="ln">43</span>      CALL <a href="../files/findex.f.html#def-FINDEX" title="FINDEX in findex.f">FINDEX</a>(GRIDX,NUMX,X,M1)
+<span class="ln">44</span>      IF(M1.LT.0)M1=-M1
+<span class="ln">45</span>      IF(M1.GE.3)M1=2
+<span class="ln">46</span>      IF(M1.LE.0)STOP &#x27; ERROR IN X GRID&#x27;
+<span class="ln">47</span>      KIPM1=M1
+<span class="ln">48</span>      DO IM2=1,NUMTM
+<span class="ln">49</span>         M1=KIPM1
+<span class="ln">50</span>         T6=GRIDT(IM2)
+<span class="ln">51</span>         M2=IM2
+<span class="ln">52</span>         INDEX1=IM2+(M1-1)*NUMTM
+<span class="ln">53</span>         NDSS=NDS(INDEX1)
+<span class="ln">54</span>         IF(NDSS.NE.1)STOP &#x27; LL4TH NDSS &#x27;
+<span class="ln">55</span>         NDF=NDSS+NDD(INDEX1)-1
+<span class="ln">56</span>         DO IM3=NDSS,NDF
+<span class="ln">57</span>            RHOT3=GRHOT3(IM3)
+<span class="ln">58</span>            CALL <a href="../files/yllo2d.f.html#def-YLLO2D" title="YLLO2D in yllo2d.f">YLLO2D</a>(T6,RHOT3,M1,M2,M3,O0,OL0,QOD0,QOT0)
+<span class="ln">59</span>            CALL <a href="../files/yllo2d.f.html#def-YLLO2D" title="YLLO2D in yllo2d.f">YLLO2D</a>(T6,RHOT3,M1+1,M2,M3,O1,OL1,QOD1,QOT1)
+<span class="ln">60</span>            GRDNT=(X-GRIDX(M1))/(GRIDX(M1+1)-GRIDX(M1))
+<span class="ln">61</span>            OLF=(OL1-OL0)*GRDNT+OL0
+<span class="ln">62</span>            OF=10.0D0**OLF
+<span class="ln">63</span>C     CONVERSION FROM THE DERIVATIVE WITH CONSTANT RHOT3 TO CONSTANT RHO
+<span class="ln">64</span>            C(1,IM3)=OLF
+<span class="ln">65</span>         END DO
+<span class="ln">66</span>         CALL <a href="../files/ysplin.f.html#def-YSPLIN" title="YSPLIN in ysplin.f">YSPLIN</a>(GRHOT3,C,NDF)
+<span class="ln">67</span>         DO J=1,NDF
+<span class="ln">68</span>            DO I=1,4
+<span class="ln">69</span>               INDEX2=I+(J-1)*4
+<span class="ln">70</span>               CFORD4(IM2,INDEX2)=C(I,J)
+<span class="ln">71</span>            END DO
+<span class="ln">72</span>         END DO
+<span class="ln">73</span>      END DO
+<span class="ln">74</span>
+<span class="ln">75</span>
+<span class="ln">76</span>
+<span class="ln">77</span>      IF (L2Z) THEN
+<span class="ln">78</span>         XENV42=X
+<span class="ln">79</span>         ZENV42=ZOPAL2
+<span class="ln">80</span>         CALL <a href="../files/findex.f.html#def-FINDEX" title="FINDEX in findex.f">FINDEX</a>(GRIDX2,NUMX,X,M1)
+<span class="ln">81</span>         IF(M1.LT.0)M1=-M1
+<span class="ln">82</span>         IF(M1.GE.3)M1=2
+<span class="ln">83</span>         IF(M1.LE.0)STOP &#x27; ERROR IN X GRID&#x27;
+<span class="ln">84</span>         KIPM12=M1
+<span class="ln">85</span>         DO IM2=1,NUMTM2
+<span class="ln">86</span>            M1=KIPM12
+<span class="ln">87</span>            T6=GRIDT2(IM2)
+<span class="ln">88</span>            M2=IM2
+<span class="ln">89</span>            INDEX1=IM2+(M1-1)*NUMTM2
+<span class="ln">90</span>            NDSS=NDS2(INDEX1)
+<span class="ln">91</span>            IF(NDSS.NE.1)STOP &#x27; LL4TH Z1 CHECK NDSS &#x27;
+<span class="ln">92</span>            NDF=NDSS+NDD2(INDEX1)-1
+<span class="ln">93</span>            DO IM3=NDSS,NDF
+<span class="ln">94</span>               RHOT3=GRHOT32(IM3)
+<span class="ln">95</span>               CALL <a href="../files/yllo2d2.f.html#def-YLLO2D2" title="YLLO2D2 in yllo2d2.f">YLLO2D2</a>(T6,RHOT3,M1,M2,M3,O0,OL0,QOD0,QOT0)
+<span class="ln">96</span>               CALL <a href="../files/yllo2d2.f.html#def-YLLO2D2" title="YLLO2D2 in yllo2d2.f">YLLO2D2</a>(T6,RHOT3,M1+1,M2,M3,O1,OL1,QOD1,QOT1)
+<span class="ln">97</span>               GRDNT=(X-GRIDX2(M1))/(GRIDX2(M1+1)-GRIDX2(M1))
+<span class="ln">98</span>               OLF=(OL1-OL0)*GRDNT+OL0
+<span class="ln">99</span>               OF=10.0D0**OLF
+<span class="ln">100</span>C CONVERSION FROM THE DERIVATIVE WITH CONSTANT RHOT3 TO CONSTANT RHO
+<span class="ln">101</span>               C(1,IM3)=OLF
+<span class="ln">102</span>            END DO
+<span class="ln">103</span>            CALL <a href="../files/ysplin.f.html#def-YSPLIN" title="YSPLIN in ysplin.f">YSPLIN</a>(GRHOT32,C,NDF)
+<span class="ln">104</span>            DO J=1,NDF
+<span class="ln">105</span>               DO I=1,4
+<span class="ln">106</span>                  INDEX2=I+(J-1)*4
+<span class="ln">107</span>                  CFORD42(IM2,INDEX2)=C(I,J)
+<span class="ln">108</span>               END DO
+<span class="ln">109</span>            END DO
+<span class="ln">110</span>         END DO
+<span class="ln">111</span>      END IF
+<span class="ln">112</span>
+<span class="ln">113</span>
+<span class="ln">114</span>
+<span class="ln">115</span>      RETURN
+<span class="ln">116</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing.</strong> Callers: <code>SURFOPAC</code> calls <code>LL4TH</code> only when <code>LOPAL92</code> is set, and is itself called by <code>STARIN</code> as well as <code>HPOINT</code> (when the surface $X$ changes by more than $10^{-8}$). Fix.</li>
+<li><strong>Unclear.</strong> "<code>NEWOPAC</code> … shared by 17 units": 18 units declare it, so 17 others. Fix.</li>
+</ol>
+<p>Checked otherwise: the $X$ index and clamp, the linear interpolation in $X$, the <code>NDSS</code> check, the spline per row, <code>ZENV4</code> = <code>ZOPAL1</code> (and <code>ZENV42</code> = <code>ZOPAL2</code>), the readers of <code>LLOT4</code>/<code>LLOT42</code> (<code>YLLO2D</code>, <code>YLLO3D</code> and their <code>2</code> versions). Questions are real.</p>
+<p>Revised: findings 1–2 applied.</p></div></details>
+</main></body></html>

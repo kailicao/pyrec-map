@@ -1,0 +1,192 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>oeqos01.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ oeqos01.f</span></header><main>
+<h1>oeqos01.f</h1>
+<p class='muted'>111 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/oeqos01.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> The interface to the 2001 OPAL equation of state ("LLP, August 10, 2003"), with the same arguments and outputs as <a href="../files/oeqos.f.html#def-OEQOS">OEQOS</a> (the original OPAL tables) and <a href="../files/oeqos06.f.html#def-OEQOS06">OEQOS06</a> (the 2006 tables).</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> <code>T10</code> $=\log T$, <code>P10</code> $=\log P$, <code>XC</code>, <code>Z</code>; the tables read by <a href="../files/readcoeos01.f.html#def-READCOEOS01">READCOEOS01</a>.</li>
+<li><strong>Who calls it:</strong> <a href="../files/eqstat2.f.html#def-EQSTAT2">EQSTAT2</a>.</li>
+<li><strong>What it calls:</strong> <a href="../files/rhoofp01.f.html#def-RHOOFP01">RHOOFP01</a>, <a href="../files/esac01.f.html#def-ESAC01">ESAC01</a> (<code>IORDER = 9</code>, "all 1st and 2nd order data") and <a href="../files/mu.f.html#def-MU">MU</a>.</li>
+<li><strong>Outputs:</strong> as <code>OEQOS</code>.</li>
+<li><strong>COMMON blocks:</strong> <code>/EEOS/</code> (the result <code>EOS(10)</code>; shared with ESAC01, RADSUB01, READCOEOS01, RHOOFP01, T6RINTEOS01), <code>/CONST2/</code>, <code>/LUOUT/</code>; <code>/COMP/</code>, <code>/CTLIM/</code>, <code>/CONST1/</code>, <code>/CCOUT2/</code> are declared but not used.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Density.</strong> From $T$ and $P$ (given as logs <code>T10</code>, <code>P10</code>), with $T_6 = T/10^6$ K and $P_{12} = P/10^{12}$ dyn cm⁻², the table routine finds $\rho(P, T, X)$ (<code>RHOOFP…</code>), with radiation included (<code>IRAD = 1</code>). A value $\le -998$ means failure.</li>
+<li>
+<p><strong>Thermodynamics.</strong> The table routine <code>ESAC…</code> fills the array <code>EOS</code> at $(X, T_6, \rho)$. From it:
+$$\texttt{QDP} = \left(\frac{\partial\ln\rho}{\partial\ln P}\right)_T = \frac{1}{\chi_\rho},\qquad \texttt{QDT} = \left(\frac{\partial\ln\rho}{\partial\ln T}\right)_P = -\frac{\chi_T}{\chi_\rho},$$
+$$c_P = 10^{6}\,\frac{c_V\,\Gamma_1}{\chi_\rho}\ \ (\texttt{QCP};\ c_V\ \text{per}\ 10^6\ \mathrm{K}\ \text{in the table}),\qquad \nabla_\mathrm{ad} = \frac{\Gamma_2 - 1}{\Gamma_2}\ \ (\texttt{DELA}),$$
+where $\chi_\rho = (\partial\ln P/\partial\ln\rho)_T$, $\chi_T = (\partial\ln P/\partial\ln T)_\rho$.</p>
+</li>
+<li>
+<p><strong>Radiation.</strong> $1-\beta = aT^4/(3P)$, coded as <code>BETA14</code> $= 2.521971383\times10^{-3}\,T_6^4/P_{12}$; <code>BETA</code> $=\beta$, <code>BETAI</code> $= 1/\beta$.</p>
+</li>
+<li><strong>Mean molecular weight.</strong> <code>RMU</code> $= \beta P/(\rho T)$; <a href="../files/mu.f.html#def-MU">MU</a> gives the ion and electron terms <code>AMU</code> and <code>EMU</code>; if <code>EMU</code> $\le 0$, it is set to zero and <code>AMU</code> $=$ <code>RMU</code>$/\mathcal{R}$.</li>
+</ol>
+<p>The alternate return (<code>RETURN 1</code>) tells the caller to fall back on another equation of state when the point is outside the table or the table fails.</p>
+<p><strong>Indices.</strong> In this version the entries of <code>EOS</code> sit one place lower than in the other two: $\chi_\rho$ is <code>EOS(5)</code>, $\chi_T$ <code>EOS(6)</code>, $c_V$ <code>EOS(4)</code>, $\Gamma_1$ <code>EOS(7)</code> and $\Gamma_2/(\Gamma_2-1)$ <code>EOS(8)</code>; the lines with the other indices are kept as comments. <a href="../files/esac01.f.html#def-ESAC01">ESAC01</a>'s header documents this order (its list has no $dE/d\rho$ entry, which is <code>EOS(4)</code> in <a href="../files/esac.f.html#def-ESAC">ESAC</a> and <a href="../files/esac06.f.html#def-ESAC06">ESAC06</a>).</p>
+<p><strong>Range.</strong> $0.002 \le T_6 \le 100$.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused argument <code>ZTAB</code> removed from the calls to <code>RHOOFP01</code> and <code>ESAC01</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The shifted indices.</strong> <code>OEQOS01</code> reads <code>EOS(4)</code>–<code>EOS(8)</code> where <code>OEQOS</code> and <code>OEQOS06</code> read <code>EOS(5)</code>–<code>EOS(9)</code>, as <code>ESAC01</code>'s header documents for the 2001 tables. Has this order been checked against the 2001 tables' own documentation?</li>
+<li><strong>The pressure check.</strong> The check that the table reproduces the input pressure, a hard stop in <code>OEQOS</code>, is commented out here. Intended?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+2001 OPAL Equation of State
+
+LLP   August 10, 2003
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+Routines associated with 2001 OPAL EOS
+
+SUBROUTINE OEOS01
+SUBROUTINE ESAC01
+SUBROUTINE T6RINTEOS01
+SUBROUTINE READCOEOS01
+FUNCTION QUADEOS01
+FUNCTION GMASS01
+SUBROUTINE RADSUB01
+FUNCTION RHOOFP01
+SUBROUTINE EQBOUND01
+SUBROUTINE MU is also used
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+OEQOS01
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-OEQOS01'>OEQOS01</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-OEQOS01'><h3><span class='kind'>subroutine</span>OEQOS01</h3>
+<p class='muted'>lines 30–111 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/oeqos01.f#L30-L111'>GitHub</a></p>
+<pre>SUBROUTINE OEQOS01(T10,T,P10,P,D10,D,XC,Z,BETA,BETAI,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+2001 OPAL Equation of State
+
+LLP   August 10, 2003
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+Routines associated with 2001 OPAL EOS
+
+SUBROUTINE OEOS01
+SUBROUTINE ESAC01
+SUBROUTINE T6RINTEOS01
+SUBROUTINE READCOEOS01
+FUNCTION QUADEOS01
+FUNCTION GMASS01
+SUBROUTINE RADSUB01
+FUNCTION RHOOFP01
+SUBROUTINE EQBOUND01
+SUBROUTINE MU is also used
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+OEQOS01
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CCOUT2'>/CCOUT2/</a>, <a href='../commons.html#c-COMP'>/COMP/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-CTLIM'>/CTLIM/</a>, <a href='../commons.html#c-EEOS'>/EEOS/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/esac01.f.html#def-ESAC01'>ESAC01</a> <span class='muted'>(esac01.f)</span></li>
+<li><a href='../files/mu.f.html#def-MU'>MU</a> <span class='muted'>(mu.f)</span></li>
+<li><a href='../files/rhoofp01.f.html#def-RHOOFP01'>RHOOFP01</a> <span class='muted'>(rhoofp01.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/eqstat2.f.html#def-EQSTAT2'>EQSTAT2</a> <span class='muted'>(eqstat2.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">30</span>      SUBROUTINE OEQOS01(T10,T,P10,P,D10,D,XC,Z,BETA,BETAI,
+<span class="ln">31</span>     1 BETA14,RMU,AMU,EMU,QDT,QDP,QCP,DELA,*)
+<span class="ln">32</span>
+<span class="ln">33</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">34</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">35</span>
+<span class="ln">36</span>      parameter (mx=5,mv=10,nr=169,nt=191)
+<span class="ln">37</span>      PARAMETER ( IVARX = 25 )
+<span class="ln">38</span>      PARAMETER (CNVS = 0.434294481D0 )
+<span class="ln">39</span>      PARAMETER (ZERO = 0.0D0)
+<span class="ln">40</span>
+<span class="ln">41</span>C       DIMENSION ATOMWT(4)
+<span class="ln">42</span>      COMMON/COMP/XENV,ZENV,ZENVM,AMUENV,FXENV(12),XNEW,ZNEW,STOTAL,
+<span class="ln">43</span>     *     SENV
+<span class="ln">44</span>      COMMON/CTLIM/ATIME(14),TCUT(5),TSCUT,TENV0,TENV1,TENV,TGCUT
+<span class="ln">45</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">46</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">47</span>      COMMON/CCOUT2/LDEBUG,LCORR,LMILNE,LTRACK,LSTPCH
+<span class="ln">48</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">49</span>
+<span class="ln">50</span>      common/eeos/esact,eos(mv)
+<span class="ln">51</span>
+<span class="ln">52</span>C       DATA NZP1/12/
+<span class="ln">53</span>C       DATA ATOMWT/0.9921D0,0.24975D0,0.08322D0,0.4995D0/
+<span class="ln">54</span>
+<span class="ln">55</span>      SAVE
+<span class="ln">56</span>C
+<span class="ln">57</span>      iorder=9  ! gives all 1st and 2nd order data. See instructions
+<span class="ln">58</span>c                  in esac01.
+<span class="ln">59</span>c     NOTE: irad=0 does not add radiation; irad=1 adds radiation
+<span class="ln">60</span>      irad=1     ! does add radiation  corrections
+<span class="ln">61</span>
+<span class="ln">62</span>      T=10.0D0**T10
+<span class="ln">63</span>      P=10.0D0**P10
+<span class="ln">64</span>      T6=T/1.0D6
+<span class="ln">65</span>      P12=P/1.0D12
+<span class="ln">66</span>      IF(T6.LT.0.0020D0.OR.T6.GT.100.0D0)RETURN 1
+<span class="ln">67</span>      X=XC
+<span class="ln">68</span>      ZTAB=Z
+<span class="ln">69</span>
+<span class="ln">70</span>C       R=RHOOFP01(X,ZTAB,T6,P12,IRAD)  ! KC 2025-05-31
+<span class="ln">71</span>      R=<a href="../files/rhoofp01.f.html#def-RHOOFP01" title="RHOOFP01 in rhoofp01.f">RHOOFP01</a>(X,T6,P12,IRAD)
+<span class="ln">72</span>      IF(R.LE.-998.0D0)THEN
+<span class="ln">73</span>         RETURN 1
+<span class="ln">74</span>      ENDIF
+<span class="ln">75</span>      D=R
+<span class="ln">76</span>      D10=DLOG10(D)
+<span class="ln">77</span>
+<span class="ln">78</span>C       CALL ESAC01(X,ZTAB,T6,R,IORDER,IRAD,*999)  ! KC 2025-05-31
+<span class="ln">79</span>      CALL <a href="../files/esac01.f.html#def-ESAC01" title="ESAC01 in esac01.f">ESAC01</a>(X,T6,R,IORDER,IRAD,*999)
+<span class="ln">80</span>
+<span class="ln">81</span>c      IF(ABS((P12-EOS(1))/P12).GT.0.5D-6)THEN
+<span class="ln">82</span>c         WRITE(ISHORT,*)&#x27;***** RUN TERMINATED --ERROR IN OEQOS01 PTOT&#x27;
+<span class="ln">83</span>c         WRITE(ISHORT,*) &#x27;P12,EOS(1) Differ: P12,EOS(1),T6,R,X,ZTAB=&#x27;,
+<span class="ln">84</span>c     *         P12,EOS(1),T6,R,X,ZTAB
+<span class="ln">85</span>c         STOP &#x27; ERROR IN OEQOS01 PTOT&#x27;
+<span class="ln">86</span>c      ENDIF
+<span class="ln">87</span>C      QDP=1.0D0/EOS(6)
+<span class="ln">88</span>      QDP=1.0D0/EOS(5)
+<span class="ln">89</span>C      QDT= -EOS(7)/ EOS(6)
+<span class="ln">90</span>      QDT= -EOS(6)/ EOS(5)
+<span class="ln">91</span>
+<span class="ln">92</span>C      QCP=1.0D6*EOS(5)*EOS(8)/EOS(6)
+<span class="ln">93</span>      QCP=1.0D6*EOS(4)*EOS(7)/EOS(5)
+<span class="ln">94</span>C      DELA=1.0D0/EOS(9)
+<span class="ln">95</span>      DELA=1.0D0/EOS(8)
+<span class="ln">96</span>
+<span class="ln">97</span>      BETA14=(2.521971383D-3*T6*T6)*(T6*T6/P12)
+<span class="ln">98</span>      BETA=1.0D0-BETA14
+<span class="ln">99</span>      BETAI=1.0D0/BETA
+<span class="ln">100</span>      RMU=P*BETA/(D*T)
+<span class="ln">101</span>      CALL <a href="../files/mu.f.html#def-MU" title="MU in mu.f">MU</a>(T,P,D,XC,Z,RMU2,AMU,EMU,BETA)
+<span class="ln">102</span>      IF(EMU.LE.0.0D0)THEN
+<span class="ln">103</span>      EMU=0.0D0
+<span class="ln">104</span>      AMU=RMU/CGAS-EMU
+<span class="ln">105</span>      ENDIF
+<span class="ln">106</span>
+<span class="ln">107</span>      RETURN
+<span class="ln">108</span>  999 WRITE(ISHORT, *)&#x27;WARNNING... OPAL TBL FAIL&#x27;
+<span class="ln">109</span>
+<span class="ln">110</span>      RETURN 1
+<span class="ln">111</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Unclear (question settled in part by the code).</strong> Question 1 asks whether the shifted indices come from ESAC01 storing its results differently: ESAC01's header lists them in that order (no $dE/d\rho$ entry). Fix: state it, and narrow the question.</li>
+</ol>
+<p>Revised: the Indices paragraph cites ESAC01's header; question 1 narrowed.</p></div></details>
+</main></body></html>

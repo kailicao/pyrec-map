@@ -1,0 +1,175 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>equal_to_model.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ equal_to_model.f</span></header><main>
+<h1>equal_to_model.f</h1>
+<p class='muted'>121 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/equal_to_model.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>EQUAL_TO_MODEL</code> ends a step of gravitational settling (microscopic diffusion): the diffusion equations are solved on an equally spaced grid in radius, and this routine applies the resulting changes in hydrogen (and, with metal diffusion, in $Z$) to the model's own points. It then converts the model's arrays back from the dimensionless units used by the diffusion solver.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../files/grsett.f.html#def-GRSETT">GRSETT</a>, at the end of the settling step; <a href="../files/model_to_equal.f.html#def-MODEL_TO_EQUAL">MODEL_TO_EQUAL</a> does the opposite transformation at its start. <a href="../files/microdiff_etm.f.html#def-MICRODIFF_ETM">MICRODIFF_ETM</a> has the same unit conversion for the newer diffusion scheme.</li>
+<li><strong>Inputs:</strong> the equally spaced radii <code>ER</code> (<code>NPT</code> points) and the changes <code>EX</code> in $X$ on them; the range <code>IBEGIN..IEND</code> of model points inside the grid; the model arrays <code>HCOMP</code>, <code>HRU</code> (radius), <code>HTU</code> (temperature), <code>HS1</code> (mass), <code>HQPR</code>, the time step <code>DT</code> and the total mass <code>STOT</code>, all in the solver's units.</li>
+<li><strong>What it calls:</strong> <a href="../files/intrp2.f.html#def-INTRP2">INTRP2</a>, four-point Lagrange weights.</li>
+<li><strong>Outputs:</strong> <code>HCOMP</code> updated, and <code>HRU</code>, <code>HTU</code>, <code>HS1</code>, <code>HQPR</code>, <code>DT</code>, <code>STOT</code> back in physical units.</li>
+<li><strong>COMMON blocks:</strong> <code>/CONFAC/</code> holds the conversion factors <code>CON_RAD</code>, <code>CON_MASS</code>, <code>CON_TEMP</code>, <code>CON_TIME</code>, set by <a href="../files/microdiff_setup.f.html#def-MICRODIFF_SETUP">MICRODIFF_SETUP</a> and <code>SETUP_GRSETT</code>; <code>/GRAVEZ/</code> holds the change in $Z$ on the grid, <code>EZ</code> (with <code>GRSETT</code>, <code>MODEL_TO_EQUAL</code> and the Lax–Wendroff routines); <code>/GRAVS3/</code> gives the flag <code>LDIFZ</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>
+<p><strong>Inside the grid</strong> (<code>IBEGIN</code> &lt; $i$ &lt; <code>IEND</code>): for each model point, find the four grid points around its radius, get Lagrange weights $b_k$, and
+$$\Delta X_i = \sum_{k=1}^{4} b_k\,\Delta X(r_k), \qquad X_i \leftarrow \min(X_i + \Delta X_i,\; 1 - Z_i - X_{3,i}),$$
+where $X_3$ is $^3$He (<code>HCOMP(4,·)</code>). With metal diffusion, $Z$ changes the same way, and every metal species (rows 5–11) is scaled by $Z_\mathrm{new}/Z_\mathrm{old}$. Helium takes the rest: $Y = 1 - X - Z - X_3$.</p>
+</li>
+<li>
+<p><strong>Below the grid</strong> ($i \le$ <code>IBEGIN</code>) the change at the first grid point is applied; <strong>above it</strong> ($i \ge$ <code>IEND</code>), the change at the last. The comment explains the guards: "because metals sink, and hydrogen rises, the failsafes are opposite" ($X \ge 0$ and $Z \le Z_\mathrm{max}$ below; $X \le X_\mathrm{max}$ and $Z \ge 0$ above).</p>
+</li>
+<li><strong>Units:</strong> $r \leftarrow r/c_r$, $T \leftarrow T/c_T$, $m \leftarrow m/c_m$, <code>HQPR</code> $\leftarrow$ <code>HQPR</code>$\cdot c_r$, $\Delta t \leftarrow \Delta t\,c_t$, $M \leftarrow M/c_m$.</li>
+</ol></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Division by $Z$.</strong> The metal scaling divides by <code>HCOMP(3,I)</code>; a shell with $Z = 0$ would give a division by zero. Can $Z$ be zero here (for example in Population III models)?</li>
+<li><strong>A leftover check.</strong> <code>IF (J .EQ. 0) PRINT*, 'line 47 etm'</code> can never be true (<code>J</code> starts at <code>JMIN</code> ≥ 2). Remove?</li>
+<li><strong>Unused COMMON entries.</strong> Of <code>/GRAVEZ/</code>, only <code>EZ</code> is used. Fine as is, or should the routine receive <code>EZ</code> as an argument?</li>
+<li><strong>Edge points.</strong> The model points <code>IBEGIN</code> and <code>IEND</code> themselves get the first and last grid values (steps 2), not an interpolated one. Is that consistent with how <code>MODEL_TO_EQUAL</code> placed the grid?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-EQUAL_TO_MODEL'>EQUAL_TO_MODEL</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-EQUAL_TO_MODEL'><h3><span class='kind'>subroutine</span>EQUAL_TO_MODEL</h3>
+<p class='muted'>lines 2–121 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/equal_to_model.f#L2-L121'>GitHub</a></p>
+<pre>SUBROUTINE EQUAL_TO_MODEL(DT,ER,EX,IBEGIN,IEND,NPT,HCOMP,HQPR,</pre>
+<div class='notes'><p>Interpolates the settling changes in $X$ (and $Z$) from the equally spaced grid to the model points with four-point Lagrange weights, enforces the composition limits, and converts the model back to physical units.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONFAC'>/CONFAC/</a>, <a href='../commons.html#c-GRAVEZ'>/GRAVEZ/</a>, <a href='../commons.html#c-GRAVS3'>/GRAVS3/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/intrp2.f.html#def-INTRP2'>INTRP2</a> <span class='muted'>(intrp2.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/grsett.f.html#def-GRSETT'>GRSETT</a> <span class='muted'>(grsett.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE EQUAL_TO_MODEL(DT,ER,EX,IBEGIN,IEND,NPT,HCOMP,HQPR,
+<span class="ln">3</span>     *                          HRU,HS1,HTU,M,STOT)
+<span class="ln">4</span>      PARAMETER (JSON=5000)
+<span class="ln">5</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">6</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">7</span>      COMMON/CONFAC/CON_RAD,CON_MASS,CON_TEMP,CON_TIME
+<span class="ln">8</span>C MHP 3/94 ADDED METAL DIFFUSION
+<span class="ln">9</span>      COMMON/GRAVS3/FGRY,FGRZ,LTHOUL,LDIFZ
+<span class="ln">10</span>      COMMON/GRAVEZ/ECOD1Z(JSON),ECOD1Z_H(JSON),ECOD2Z_H(JSON),
+<span class="ln">11</span>     *              EQCOD1Z_H(JSON),EQCOD2Z_H(JSON),EZ(JSON),
+<span class="ln">12</span>     *              EZ_H(JSON)
+<span class="ln">13</span>      DIMENSION ER(JSON),EX(JSON),HCOMP(15,JSON),HQPR(JSON),HRU(JSON),
+<span class="ln">14</span>     *          HS1(JSON),HTU(JSON),TABLER(4),FACINTERP(4)
+<span class="ln">15</span>      SAVE
+<span class="ln">16</span>C  TRANSFORM BACK TO ORIGINAL GRID OF MODEL POINTS FROM EQUALLY
+<span class="ln">17</span>C  SPACED GRID.
+<span class="ln">18</span>      XMINIM = 0.0D0
+<span class="ln">19</span>      DO 10 I = IBEGIN,1,-1
+<span class="ln">20</span>         HCOMP(1,I)=MAX(HCOMP(1,I) + EX(1),XMINIM)
+<span class="ln">21</span>   10 CONTINUE
+<span class="ln">22</span>C MHP 3/94 ADDED METAL DIFFUSION
+<span class="ln">23</span>C NOTE THAT BECAUSE METALS SINK, AND HYDROGEN RISES, THE FAILSAFES
+<span class="ln">24</span>C ARE OPPOSITE (GUARDING AGAINST NEGATIVE X AND Z&gt;1 RESPECTIVELY).
+<span class="ln">25</span>      IF(LDIFZ)THEN
+<span class="ln">26</span>         DO I = IBEGIN,1,-1
+<span class="ln">27</span>            ZMAX = 1.0D0 - HCOMP(1,I) - HCOMP(4,I)
+<span class="ln">28</span>            ZZ=MIN(HCOMP(3,I)+EZ(1),ZMAX)
+<span class="ln">29</span>            ZZ2 = ZZ/HCOMP(3,I)
+<span class="ln">30</span>            HCOMP(3,I) = ZZ
+<span class="ln">31</span>            DO J = 5,11
+<span class="ln">32</span>               HCOMP(J,I) = ZZ2*HCOMP(J,I)
+<span class="ln">33</span>            END DO
+<span class="ln">34</span>            HCOMP(2,I)=1.0D0-HCOMP(1,I)-HCOMP(3,I)-HCOMP(4,I)
+<span class="ln">35</span>         END DO
+<span class="ln">36</span>      ELSE
+<span class="ln">37</span>         DO I = IBEGIN,1,-1
+<span class="ln">38</span>            HCOMP(2,I)=1.0D0-HCOMP(1,I)-HCOMP(3,I)-HCOMP(4,I)
+<span class="ln">39</span>         END DO
+<span class="ln">40</span>      ENDIF
+<span class="ln">41</span>      JMIN=2
+<span class="ln">42</span>      DO 20 I=IBEGIN+1,IEND-1
+<span class="ln">43</span>         DO 30 J=JMIN,NPT
+<span class="ln">44</span>
+<span class="ln">45</span>C  FIND EQUALLY SPACED GRID POINTS CLOSEST TO THE MODEL POINT.
+<span class="ln">46</span>            IF (J .EQ. 0) PRINT*, &#x27;line 47 etm&#x27;
+<span class="ln">47</span>            IF(ER(J).GE.HRU(I))THEN
+<span class="ln">48</span>
+<span class="ln">49</span>C  ENSURE THAT FIRST INTERP. POINT NO LESS THAN FIRST EQUALLY SPACED POINT.
+<span class="ln">50</span>               K0 = MAX(J-2,1)
+<span class="ln">51</span>C  ENSURE THAT LAST INTERP. POINT NO GREATER THAN LAST EQUALLY SPACED POINT.
+<span class="ln">52</span>               K0 = MIN(K0,NPT-3)
+<span class="ln">53</span>C JVS fix for NPT = 3?
+<span class="ln">54</span>               IF (K0 .EQ. 0) K0=1
+<span class="ln">55</span>               JMIN=J
+<span class="ln">56</span>               GOTO 40
+<span class="ln">57</span>            ENDIF
+<span class="ln">58</span>   30    CONTINUE
+<span class="ln">59</span>         K0 = NPT-3
+<span class="ln">60</span>         JMIN=NPT
+<span class="ln">61</span>   40    CONTINUE
+<span class="ln">62</span>
+<span class="ln">63</span>         DO 50 K=1,4
+<span class="ln">64</span>            TABLER(K)=ER(K0+K-1)
+<span class="ln">65</span>   50    CONTINUE
+<span class="ln">66</span>         RADMOD=HRU(I)
+<span class="ln">67</span>C  FIND 4 POINT LAGRANGIAN INTERPOLATION FACTORS.
+<span class="ln">68</span>         CALL <a href="../files/intrp2.f.html#def-INTRP2" title="INTRP2 in intrp2.f">INTRP2</a>(TABLER,FACINTERP,RADMOD)
+<span class="ln">69</span>C  PERFORM 4 POINT LAGRANGIAN INTERPOLATION FOR CHANGE IN X.
+<span class="ln">70</span>         DXMOD = FACINTERP(1)*EX(K0)+FACINTERP(2)*EX(K0+1)+
+<span class="ln">71</span>     *             FACINTERP(3)*EX(K0+2)+FACINTERP(4)*EX(K0+3)
+<span class="ln">72</span>         XMAX = 1.0D0 - HCOMP(3,I) - HCOMP(4,I)
+<span class="ln">73</span>         HCOMP(1,I)=MIN(HCOMP(1,I) + DXMOD,XMAX)
+<span class="ln">74</span>C MHP 3/94 ADDED METAL DIFFUSION
+<span class="ln">75</span>         IF(LDIFZ)THEN
+<span class="ln">76</span>            ZMAX = 1.0D0 - HCOMP(1,I) - HCOMP(4,I)
+<span class="ln">77</span>            DZMOD = FACINTERP(1)*EZ(K0)+FACINTERP(2)*EZ(K0+1)+
+<span class="ln">78</span>     *             FACINTERP(3)*EZ(K0+2)+FACINTERP(4)*EZ(K0+3)
+<span class="ln">79</span>            ZZ = MIN(HCOMP(3,I)+DZMOD,ZMAX)
+<span class="ln">80</span>            ZZ2 = ZZ/HCOMP(3,I)
+<span class="ln">81</span>            HCOMP(3,I)=ZZ
+<span class="ln">82</span>            DO J = 5,11
+<span class="ln">83</span>               HCOMP(J,I) = ZZ2*HCOMP(J,I)
+<span class="ln">84</span>            END DO
+<span class="ln">85</span>            HCOMP(2,I)=1.0D0-HCOMP(1,I)-HCOMP(3,I)-HCOMP(4,I)
+<span class="ln">86</span>         ELSE
+<span class="ln">87</span>            HCOMP(2,I)=1.0D0-HCOMP(1,I)-HCOMP(3,I)-HCOMP(4,I)
+<span class="ln">88</span>         ENDIF
+<span class="ln">89</span>   20 CONTINUE
+<span class="ln">90</span>      DO 60 I = IEND,M
+<span class="ln">91</span>         XMAX = 1.0D0 - HCOMP(3,I) - HCOMP(4,I)
+<span class="ln">92</span>         HCOMP(1,I)=MIN(HCOMP(1,I) + EX(NPT),XMAX)
+<span class="ln">93</span>   60 CONTINUE
+<span class="ln">94</span>C MHP 3/94 ADDED METAL DIFFUSION
+<span class="ln">95</span>      IF(LDIFZ)THEN
+<span class="ln">96</span>         ZMIN = 0.0D0
+<span class="ln">97</span>         DO I = IEND,M
+<span class="ln">98</span>            ZZ = MAX(HCOMP(3,I)+EZ(NPT),ZMIN)
+<span class="ln">99</span>            ZZ2 = ZZ/HCOMP(3,I)
+<span class="ln">100</span>            HCOMP(3,I) = ZZ
+<span class="ln">101</span>            DO J = 5,11
+<span class="ln">102</span>               HCOMP(J,I) = ZZ2*HCOMP(J,I)
+<span class="ln">103</span>            END DO
+<span class="ln">104</span>            HCOMP(2,I)=1.0D0-HCOMP(1,I)-HCOMP(3,I)-HCOMP(4,I)
+<span class="ln">105</span>         END DO
+<span class="ln">106</span>      ELSE
+<span class="ln">107</span>         DO I = IEND,M
+<span class="ln">108</span>            HCOMP(2,I)=1.0D0-HCOMP(1,I)-HCOMP(3,I)-HCOMP(4,I)
+<span class="ln">109</span>         END DO
+<span class="ln">110</span>      ENDIF
+<span class="ln">111</span>      DO 70 I=1,M
+<span class="ln">112</span>
+<span class="ln">113</span>         HRU(I)=HRU(I)/CON_RAD
+<span class="ln">114</span>         HTU(I)=HTU(I)/CON_TEMP
+<span class="ln">115</span>         HS1(I)=HS1(I)/CON_MASS
+<span class="ln">116</span>         HQPR(I)=HQPR(I)*CON_RAD
+<span class="ln">117</span>   70 CONTINUE
+<span class="ln">118</span>      DT=DT*CON_TIME
+<span class="ln">119</span>      STOT=STOT/CON_MASS
+<span class="ln">120</span>      RETURN
+<span class="ln">121</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked against the code: the interpolation, the limits on each side (as the comment says), the metal scaling, the unit conversions, the callers and the COMMON blocks are right, and the four questions are real. Nothing to fix.</p>
+<p>No change.</p></div></details>
+</main></body></html>

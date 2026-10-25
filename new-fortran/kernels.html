@@ -1,0 +1,94 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Kernels and settings · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ New version (Fortran) / Kernels and settings</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='fortran.html'>Language and style</a></li><li><strong>Kernels and settings</strong></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><a href='timestep.html'>Time stepping</a></li><li><a href='composition.html'>Composition and settling</a></li><li><a href='rotation.html'>Rotation and mass loss</a></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><a href='common-map.html'>The COMMON-block map</a></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>Kernels and settings</h1>
+<p><em>In Python: <a href="../files/new/pyrec/kernels/__init__.py.html"><code>pyrec.kernels</code></a> and <a href="../files/new/pyrec/config/__init__.py.html"><code>pyrec.config</code></a>.</em></p>
+<h2>3.1 Kernels: <code>kinds</code>, <code>constants</code>, <code>numerics</code>, <code>odeint</code></h2>
+<p><strong>Responsibility:</strong> small, stateless numerical routines and named constants, free of any class state ("compute kernels are module-level functions; classes orchestrate").</p>
+<pre><code class="language-fortran">! kinds.f90
+integer, parameter :: dp = real64, sp = real32
+integer, parameter :: NSP = 15  !! Species in a composition column.
+integer, parameter :: I_H1 = 1, I_HE4 = 2, I_Z = 3, I_HE3 = 4, I_C12 = 5, &amp;
+    I_C13 = 6, I_N14 = 7, I_N15 = 8, I_O16 = 9, I_O17 = 10, I_O18 = 11, &amp;
+    I_H2 = 12, I_LI6 = 13, I_LI7 = 14, I_BE9 = 15  !! Rows of hcomp.
+
+! numerics.f90 (pure procedures)
+pure subroutine spline_coeffs(x, y, y2, yp1, ypn)
+    !! Second derivatives of a cubic spline through (x, y).
+    !! x, y : (n,); y2 : (n,), out; yp1, ypn : optional end slopes,
+    !! natural ends if absent.
+pure function spline_eval(x, y, y2, xi) result(yi)
+    !! Cubic spline at xi, from spline_coeffs.
+subroutine osplin_eval(xtab, ytab, xval, yval)
+    !! Shape-preserving quadratic spline (ACM 574) at the points xval.
+pure subroutine tridiag_solve(a, b, c, r, x, ierr)
+    !! Thomas algorithm, a_j x_{j-1} + b_j x_j + c_j x_{j+1} = r_j.
+    !! ierr = 1 on a zero pivot (no STOP).
+pure subroutine band_solve(abd, nlow, nup, b, ierr)
+    !! Banded system without pivoting (BANDW).
+subroutine lu_decompose(a, indx, d, ierr); subroutine lu_solve(a, indx, b)
+function lagrange_weights(x, xs) result(w)
+    !! Weights of n-point Lagrange interpolation (and derivative).
+pure function fermi_half_inv(f) result(eta)   !! IFERMI12.
+pure function fermi_mhalf(eta) result(f)      !! ZFERMIM12.
+
+! odeint.f90
+type, abstract :: OdeRhs
+    !! Right-hand side of an ODE system; holds what the derivative needs.
+contains
+    procedure(rhs_if), deferred :: deriv
+        !! (x, y(:), dydx(:)) The derivatives at x.
+end type
+subroutine bs_step(rhs, y, dydx, x, htry, eps, yscal, hdid, hnext, ierr)
+    !! One adaptive Bulirsch-Stoer step (BSSTEP with MMID, RATEXT).
+</code></pre>
+<p><strong>Replaces:</strong> the splines <a href="../files/splinc.f.html#def-SPLINC"><code>SPLINC</code></a>, <a href="../files/splinj.f.html#def-SPLINJ"><code>SPLINJ</code></a>, <a href="../files/splint.f.html#def-SPLINT"><code>SPLINT</code></a>, <a href="../files/splintd2.f.html#def-SPLINTD2"><code>SPLINTD2</code></a>, <a href="../files/cspline.f.html#def-CSPLINE"><code>CSPLINE</code></a>, <a href="../files/kspline.f.html#def-KSPLINE"><code>KSPLINE</code></a>, <a href="../files/ksplint.f.html#def-KSPLINT"><code>KSPLINT</code></a>, <a href="../files/ysplin.f.html#def-YSPLIN"><code>YSPLIN</code></a>, <a href="../files/intpol.f.html#def-INTPOL"><code>INTPOL</code></a> (and the unused <a href="../files/splinnr.f.html"><code>splinnr</code></a>, <a href="../files/splnr.f.html"><code>splnr</code></a>); the shape-preserving splines <a href="../files/osplin.f.html#def-OSPLIN"><code>OSPLIN</code></a>, <a href="../files/meval.f.html#def-MEVAL"><code>MEVAL</code></a>, <a href="../files/slopes.f.html#def-SLOPES"><code>SLOPES</code></a>, <a href="../files/choose.f.html#def-CHOOSE"><code>CHOOSE</code></a>, <a href="../files/cases.f.html#def-CASES"><code>CASES</code></a>, <a href="../files/spline.f.html#def-SPLINE"><code>SPLINE</code></a>, <a href="../files/search.f.html#def-SEARCH"><code>SEARCH</code></a>; the solvers <a href="../files/tridia.f.html#def-TRIDIA"><code>TRIDIA</code></a>, <a href="../files/ctridi.f.html#def-CTRIDI"><code>CTRIDI</code></a>, <a href="../files/tridiag_gs.f.html#def-TRIDIAG_GS"><code>TRIDIAG_GS</code></a>, <a href="../files/bandw.f.html#def-BANDW"><code>BANDW</code></a>, <a href="../files/simeqc.f.html#def-SIMEQC"><code>SIMEQC</code></a>, <a href="../files/ludcmp.f.html#def-LUDCMP"><code>LUDCMP</code></a>, <a href="../files/lubksb.f.html#def-LUBKSB"><code>LUBKSB</code></a>; interpolation <a href="../files/interp.f.html#def-INTERP"><code>INTERP</code></a>, <a href="../files/intrp2.f.html#def-INTRP2"><code>INTRP2</code></a>, <a href="../files/inter3.f.html#def-INTER3"><code>INTER3</code></a>, <a href="../files/quint.f.html#def-QUINT"><code>QUINT</code></a>, <a href="../files/polint.f.html#def-POLINT"><code>POLINT</code></a>, <a href="../files/lir.f.html#def-LIR"><code>LIR</code></a>, <a href="../files/xrng4.f.html#def-XRNG4"><code>XRNG4</code></a>, <a href="../files/locate.f.html#def-LOCATE"><code>LOCATE</code></a>, <a href="../files/findex.f.html#def-FINDEX"><code>FINDEX</code></a>; quadrature <a href="../files/boole.f.html#def-BOOLE"><code>BOOLE</code></a>, <a href="../files/trapzd.f.html#def-TRAPZD"><code>TRAPZD</code></a>, <a href="../files/qgauss.f.html#def-QGAUSS"><code>QGAUSS</code></a>; <a href="../files/ifermi12.f.html#def-IFERMI12"><code>IFERMI12</code></a>, <a href="../files/zfermim12.f.html#def-ZFERMIM12"><code>ZFERMIM12</code></a>, <a href="../files/zero.f.html#def-ZERO"><code>ZERO</code></a>; <a href="../files/bsstep.f.html#def-BSSTEP"><code>BSSTEP</code></a>, <a href="../files/mmid.f.html#def-MMID"><code>MMID</code></a>, <a href="../files/ratext.f.html#def-RATEXT"><code>RATEXT</code></a>. The constants of <a href="../files/setups.f.html#def-SETUPS"><code>SETUPS</code></a> (<code>/CONST/</code>, <code>/CONST1/</code>, <code>/CONST2/</code>, the constants of <code>/CONST3/</code>) and <code>/CONFAC/</code> become named parameters in <code>constants.f90</code>, each with its unit and source; the mixing length of <code>/CONST3/</code> is a setting (Section 3.2).</p>
+<p>Where today's duplicates differ (the fixed size 5000 of <code>SPLINTD2</code> against the adjustable size of <code>SPLINT</code>; single against double precision), one routine serves both; the merge is checked against the benchmarks (<a href="overview.html">Section 7</a>). <code>OdeRhs</code> carries the state that <code>QATM</code> and <code>QENV</code> now read from COMMON, so the derivative routine no longer needs a fixed argument list (the reason the development branch must keep <code>/QENVMIX/</code>, <a href="overview.html">Section 7.3</a>).</p>
+<h2>3.2 Settings: <code>Config</code>, <code>KindCard</code></h2>
+<p><strong><code>Config</code>. Responsibility:</strong> the single source of a job's settings, read once from the two namelists, checked, with derived values recomputed in one place; children reach it through their parent (<code>self%cfg</code>), never copy it.</p>
+<pre><code class="language-fortran">type :: Config
+    !! Every setting of a job. Defaults are the type's initial values.
+    type(IoConfig) :: io            !! Units, file names, output switches.
+    type(NumericsConfig) :: num     !! HTOLER, HPTTOL, ATIME, NITER1-4, ...
+    type(CompositionConfig) :: comp !! Mixtures, isotopes, LEXCOM.
+    type(ConvectionConfig) :: conv  !! CMIXL, overshoot, semiconvection.
+    type(EosConfig) :: eos          !! LOPALE*, LSCV, LMHD, LDH.
+    type(OpacityConfig) :: opac     !! Table flags, their Z, ramps.
+    type(NuclearConfig) :: nuc      !! SSTANDARD, S-factor derivatives.
+    type(SettlingConfig) :: sett    !! LDIFY, LDIFZ, LNEWDIF, ...
+    type(RotationConfig) :: rot     !! LROT, LINSTB, wind law, disk.
+    type(SurfaceConfig) :: surf     !! KTTAU, Allard options, spots.
+    type(MassLossConfig) :: mloss   !! DMDT0, Reimers, accretion.
+    type(KindCard), allocatable :: cards(:)  !! (NUMRUN,) Run cards.
+    character(len=:), allocatable :: input_dir  !! Tables; from YREC_INPUT.
+contains
+    procedure :: read_namelists
+        !! (file_control, file_physics, ierr) Read both namelists, map the
+        !! newer names onto the older vectors (REMAP), then derive.
+    procedure :: derive
+        !! (ierr) Recompute every derived setting: one OPAL EOS, one low-T
+        !! table, wind exponents, settling switches, TENV, Li/Be factors.
+        !! ierr names the setting that failed (&quot;LSEMIC: not with overshoot&quot;).
+    procedure :: write_namelists
+        !! (unit) Every entry, defaults included, into the output.
+    procedure :: summary
+        !! (log) The table of standard and current values (.short file).
+end type
+
+type :: KindCard
+    !! One run card: what to do with the starting model.
+    integer :: kind = 1             !! 1 evolve, 2 rescale and relax, 3 both.
+    integer :: nmodels = 0          !! NMODLS.
+    logical :: read_model = .false. !! LFIRST: read from file, else keep.
+    real(dp) :: rescale(4) = -1     !! RESCAL: mass, X, Z, core mass.
+    real(dp) :: end_age = 0         !! [yr], ENDAGE; 0: none.
+    real(dp) :: fixed_dt = 0        !! [yr], SETDT; 0: from TimeStepper.
+    real(dp) :: end_dcen = 0, end_xcen = 0, end_ycen = 0  !! Stop criteria.
+    real(dp) :: x = -1, z = -1, cmixl = -1  !! XENV0A, ZENV0A, CMIXLA.
+    logical :: zramp = .false., core = .false., he_flash = .false.
+end type
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../files/parmin.f.html#def-PARMIN"><code>PARMIN</code></a> (defaults, namelists, derived settings, run cards, summary; it no longer opens files, which <code>Logger</code> and the writers do), <a href="../files/remap.f.html#def-REMAP"><code>REMAP</code></a>, and the parameter blocks listed in <a href="common-map.html">Section 6.4</a>. Opening the right files moves to the writers that use them. The namelist dump goes after the <code>.short</code> file is opened (PARMIN question 1); the "standard" column of the summary is generated from the defaults (question 4). Namelist entries that are read and never used (question 6: <code>LPMM</code>, <code>PMMWMAX</code>, <code>LSOLWIND</code>, <code>ZOPAL952</code>, <code>ZALEX2</code>) are still accepted, with a warning, so old namelists run; on a development base this is moot for <code>LPMM</code> and <code>PMMWMAX</code>, which development has removed from the namelists, with a test that guards against their return.</p>
+<p>This follows Known improvements ("Hold settings in an object ... with derived values ... recomputed by one <code>configure()</code>"): YREC already has a second user and many configurations, so the trigger has arrived. Fortran has no <code>__slots__</code>; a namelist already rejects a misspelled entry, which is the same protection.</p>
+
+</main></body></html>

@@ -1,0 +1,195 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>gtlaol.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ gtlaol.f</span></header><main>
+<h1>gtlaol.f</h1>
+<p class='muted'>131 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/gtlaol.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>GTLAOL</code> returns the opacity from the Livermore (LAOL) opacity tables at a given density, temperature and hydrogen abundance, with its logarithmic derivatives in density and temperature.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../files/getopac.f.html#def-GETOPAC"><code>GETOPAC</code></a>, the opacity driver, when the run uses the LAOL tables (<code>LLAOL89</code>): directly, and as the X-dependent table when interpolating to a pure-metal table (with <a href="../files/gtpurz.f.html#def-GTPURZ"><code>GTPURZ</code></a>). With two metallicities (<code>L2Z</code>), <code>GETOPAC</code> also calls <a href="../files/gtlaol2.f.html#def-GTLAOL2"><code>GTLAOL2</code></a> and interpolates linearly in $Z$.</li>
+<li><strong>Inputs:</strong> <code>DL</code> = $\log\rho$, <code>TL</code> = $\log T$, <code>X</code>; the tables in COMMON: <code>NWLAOL</code> (the grids <code>OXA</code> in $X$ and <code>OT</code> in $\log T$, their sizes, and the tolerance <code>TOLLAOL</code>), filled by <a href="../files/rdlaol.f.html#def-RDLAOL"><code>RDLAOL</code></a>, and <code>SLAOL</code> (for each $X$ and $T$ the run of $\log\kappa$ against $\log\rho$, <code>SLAOLL</code>, <code>SRHOL</code>, with its spline second derivatives <code>SDORL</code> and the number of points <code>NUMRS</code>), prepared by <a href="../files/sulaol.f.html#def-SULAOL"><code>SULAOL</code></a>.</li>
+<li><strong>Outputs:</strong> <code>O</code> = $\kappa$, <code>OL</code> = $\log\kappa$, <code>QOD</code> $\approx \partial\log\kappa/\partial\log\rho$, <code>QOT</code> $\approx \partial\log\kappa/\partial\log T$.</li>
+<li><strong>Calls:</strong> <a href="../files/locate.f.html#def-LOCATE"><code>LOCATE</code></a> (bisection in a grid), <a href="../files/xrng4.f.html#def-XRNG4"><code>XRNG4</code></a> (the four grid points around an index), and the spline pair <a href="../files/cspline.f.html#def-CSPLINE"><code>CSPLINE</code></a> / <a href="../files/splint.f.html#def-SPLINT"><code>SPLINT</code></a>.</li>
+<li><strong>COMMON blocks:</strong> <code>LUOUT</code> (the output units), <code>NWLAOL</code> (shared with 16 units: the readers, <code>GETOPAC</code>, <code>ENVINT</code>, <code>PARMIN</code>, <code>PUTSTORE</code>, …), <code>SLAOL</code> (with <code>GTLAOL2</code>, <code>GTPURZ</code>, <code>SULAOL</code>).</li>
+</ul>
+<p><strong>The method.</strong> As its comment says: (1) cubic spline in density, (2) cubic spline in temperature, (3) linear in composition.</p>
+<ol>
+<li>For the two tabulated $X$ values bracketing <code>X</code> (index clamped to the grid) and for the four temperatures around $\log T$, it evaluates the density spline at $\log\rho$. Just outside a row's density range, within a margin $\delta$, it extrapolates linearly from the two end points; the slope of the bracketing interval is kept as $\partial\log\kappa/\partial\log\rho$.</li>
+<li>Through the (at least four) values at the different temperatures, it fits a natural cubic spline and evaluates it at $\log T$. The temperature derivative is the chord slope of the bracketing interval, and the density derivative is interpolated linearly in $T$.</li>
+<li>
+<p>It interpolates $\log\kappa$ and both derivatives linearly in $X$:
+$$\log\kappa = \log\kappa_1 + \frac{\log\kappa_2-\log\kappa_1}{X_2-X_1}\,(X-X_1).$$</p>
+</li>
+<li>
+<p>It caps $\log\kappa$ at 35.</p>
+</li>
+</ol>
+<p>The margin is $\delta = \ln(\texttt{TOLLAOL})$, the natural log, applied in $\log_{10}\rho$. <code>TOLLAOL</code> is read in <code>PARMIN</code>'s namelist; no file in <code>src/</code> gives it a value, so it must be set there (with <code>TOLLAOL</code> = 10, for example, $\delta \approx 2.30$).</p>
+<p><strong>Design.</strong> It stops the run (<code>STOP</code>) when a temperature row has fewer than 4 density points, or fewer than 4 temperatures are usable, or fewer than 2 compositions. Points outside the margin are dropped silently, which can lead to the "outside the table" stop.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The extrapolation margin.</strong> <code>TOLL = LOG(TOLLAOL)</code> is a natural log but is compared with $\log_{10}\rho$ (a value of 10 gives 2.3 dex, not 1). Was $\log_{10}$ meant? And <code>TOLLAOL</code> has no default in the code: if the namelist leaves it at zero, <code>LOG(0)</code> fails or gives $-\infty$. Should it get a default?</li>
+<li><strong>Derivatives are chord slopes.</strong> <code>QOD</code> and <code>QOT</code> are slopes of the bracketing intervals, not the spline derivatives, so they are discontinuous at grid points and not consistent with $\kappa$. Is this accurate enough for the Henyey iteration?</li>
+<li><strong>Extrapolation in X.</strong> When <code>X</code> lies outside the composition grid the index is clamped and the linear formula extrapolates without a warning.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+GET LAOL OPACITY
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-GTLAOL'>GTLAOL</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-GTLAOL'><h3><span class='kind'>subroutine</span>GTLAOL</h3>
+<p class='muted'>lines 6–131 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/gtlaol.f#L6-L131'>GitHub</a></p>
+<pre>SUBROUTINE GTLAOL(DL,TL,X,O,OL, QOD, QOT)</pre>
+<div class='notes'><p>Spline in $\rho$, spline in $T$, linear in $X$ (above); returns $\kappa$, $\log\kappa$ and approximate derivatives.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+GET LAOL OPACITY
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-NWLAOL'>/NWLAOL/</a>, <a href='../commons.html#c-SLAOL'>/SLAOL/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/cspline.f.html#def-CSPLINE'>CSPLINE</a> <span class='muted'>(cspline.f)</span></li>
+<li><a href='../files/locate.f.html#def-LOCATE'>LOCATE</a> <span class='muted'>(locate.f)</span> ×2</li>
+<li><a href='../files/splint.f.html#def-SPLINT'>SPLINT</a> <span class='muted'>(splint.f)</span> ×2</li>
+<li><a href='../files/xrng4.f.html#def-XRNG4'>XRNG4</a> <span class='muted'>(xrng4.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span> ×2</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE GTLAOL(DL,TL,X,O,OL, QOD, QOT)
+<span class="ln">7</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">8</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">9</span>      REAL*8 DL,TL,X,O,OL,QOD,QOT
+<span class="ln">10</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">11</span>C      CHARACTER*256 FLAOL, FPUREZ
+<span class="ln">12</span>      DIMENSION TOP(104),TR(104),TDOR(104), DODR(52), DODRX(4)
+<span class="ln">13</span>      DIMENSION TOP1(52),TT(52), TDOT(52), DODTX(4)
+<span class="ln">14</span>      DIMENSION TOP2(4),XX(4)
+<span class="ln">15</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">16</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">17</span>      COMMON/NWLAOL/OLAOL(12,104,52), OXA(12), OT(52), ORHO(104),
+<span class="ln">18</span>     *  TOLLAOL,IOLAOL, NUMOFXYZ, NUMRHO, NUMT, LLAOL, LPUREZ,
+<span class="ln">19</span>     *  IOPUREZ
+<span class="ln">20</span>      COMMON/SLAOL/SLAOLL(12,104,52),SRHOL(12,104,52),
+<span class="ln">21</span>     *  SDORL(12,104,52), NUMRS(12,52)
+<span class="ln">22</span>      SAVE
+<span class="ln">23</span>C
+<span class="ln">24</span>C     1. CUBIC SPLINE INTERPOLATE IN DENSITY
+<span class="ln">25</span>C     2. CUBIC SPLINE INTERPOLATE IN TEMPERATURE
+<span class="ln">26</span>C     3. LINEAR INTERPOLATE IN COMPOSITION
+<span class="ln">27</span>C     IF WITHIN TOLLAOL OF EDGE THEN LINEAR EXTRAPOLATE
+<span class="ln">28</span>C
+<span class="ln">29</span>C     TOLLAOL PERMITS SOME EXTRAPLOATION BEYOND TABLE EDGE.
+<span class="ln">30</span>      TOLL = LOG(TOLLAOL)
+<span class="ln">31</span>C     FACTOR = 3.0E-1
+<span class="ln">32</span>      RX = X
+<span class="ln">33</span>      RTL = TL
+<span class="ln">34</span>C     RTL1 = TL+FACTOR
+<span class="ln">35</span>C     RTL2 = TL-FACTOR
+<span class="ln">36</span>      RDL = DL
+<span class="ln">37</span>      CALL <a href="../files/locate.f.html#def-LOCATE" title="LOCATE in locate.f">LOCATE</a>(OT,NUMT,RTL,JT)
+<span class="ln">38</span>      CALL <a href="../files/locate.f.html#def-LOCATE" title="LOCATE in locate.f">LOCATE</a>(OXA,NUMOFXYZ,RX,JX)
+<span class="ln">39</span>      IF (JX .EQ. NUMOFXYZ) THEN
+<span class="ln">40</span>          JX = NUMOFXYZ-1
+<span class="ln">41</span>      END IF
+<span class="ln">42</span>      IF (JX .EQ. 0) THEN
+<span class="ln">43</span>          JX = 1
+<span class="ln">44</span>      END IF
+<span class="ln">45</span>      NUMXS = 0
+<span class="ln">46</span>      JXP1 = JX + 1
+<span class="ln">47</span>      DO IX=JX, JXP1
+<span class="ln">48</span>         NUMTS = 0
+<span class="ln">49</span>C        GET RANGE OF FOUR TT SURROUNDING T
+<span class="ln">50</span>         CALL <a href="../files/xrng4.f.html#def-XRNG4" title="XRNG4 in xrng4.f">XRNG4</a>(JT,NUMT,JT1,JT2)
+<span class="ln">51</span>         DO IT=JT1, JT2
+<span class="ln">52</span>            NUMS = NUMRS(IX,IT)
+<span class="ln">53</span>            IF(NUMS .GE. 4) THEN
+<span class="ln">54</span>               DO IR=1, NUMS
+<span class="ln">55</span>                  TOP(IR) = SLAOLL(IX,IR,IT)
+<span class="ln">56</span>                  TR(IR) = SRHOL(IX,IR,IT)
+<span class="ln">57</span>                  TDOR(IR) = SDORL(IX,IR,IT)
+<span class="ln">58</span>               END DO
+<span class="ln">59</span>               IF (RDL.GT.TR(1) .AND. RDL.LT.TR(NUMS)) THEN
+<span class="ln">60</span>                  CALL <a href="../files/splint.f.html#def-SPLINT" title="SPLINT in splint.f">SPLINT</a>(TR,TOP,NUMS,TDOR,RDL, ROL, KLO, KHI)
+<span class="ln">61</span>                  NUMTS = NUMTS+1
+<span class="ln">62</span>                  TOP1(NUMTS) = ROL
+<span class="ln">63</span>                  TT(NUMTS) = OT(IT)
+<span class="ln">64</span>                  DODR(NUMTS)=(TOP(KHI)-TOP(KLO))/(TR(KHI)-TR(KLO))
+<span class="ln">65</span>               ELSE IF (RDL.GT.TR(1)-TOLL .AND. RDL.LE.TR(1)) THEN
+<span class="ln">66</span>C                 PUT LINEAR EXTRAPOLATION ROUTINES HERE
+<span class="ln">67</span>                  SLOPE = (TOP(2)-TOP(1))/(TR(2)-TR(1))
+<span class="ln">68</span>                  ROL = TOP(1)+SLOPE*(RDL-TR(1))
+<span class="ln">69</span>C                 CALL SPLINT(TR,TOP,NUMS,TDOR,RDL, ROL1, KLO, KHI)
+<span class="ln">70</span>                  NUMTS = NUMTS+1
+<span class="ln">71</span>                  TOP1(NUMTS) = ROL
+<span class="ln">72</span>                  TT(NUMTS) = OT(IT)
+<span class="ln">73</span>                  DODR(NUMTS) = SLOPE
+<span class="ln">74</span>               ELSE IF (RDL.GE.TR(NUMS) .AND.
+<span class="ln">75</span>     *                  RDL.LT.TR(NUMS)+TOLL) THEN
+<span class="ln">76</span>C                 PUT LINEAR EXTRAPOLATION ROUTINES HERE
+<span class="ln">77</span>                  SLOPE = (TOP(NUMS-1)-TOP(NUMS))/
+<span class="ln">78</span>     *                    (TR(NUMS-1)-TR(NUMS))
+<span class="ln">79</span>                  ROL = TOP(NUMS)+SLOPE*(RDL-TR(NUMS))
+<span class="ln">80</span>C                 CALL SPLINT(TR,TOP,NUMS,TDOR,RDL, ROL1, KLO, KHI)
+<span class="ln">81</span>                  NUMTS = NUMTS+1
+<span class="ln">82</span>                  TOP1(NUMTS) = ROL
+<span class="ln">83</span>                  TT(NUMTS) = OT(IT)
+<span class="ln">84</span>                  DODR(NUMTS) = SLOPE
+<span class="ln">85</span>               END IF
+<span class="ln">86</span>            ELSE
+<span class="ln">87</span>               WRITE(ISHORT,120)DL,TL
+<span class="ln">88</span>  120          FORMAT(&#x27; OUTSIDE OPACITY TABLE, IN DENSITY.  &#x27;,
+<span class="ln">89</span>     *        &#x27;LOG(RHO)=&#x27;,1PE12.3, &#x27; LOG(T)=&#x27;, 1PE12.3)
+<span class="ln">90</span>               STOP
+<span class="ln">91</span>            END IF
+<span class="ln">92</span>         END DO
+<span class="ln">93</span>         IF(NUMTS .GE. 4) THEN
+<span class="ln">94</span>            CALL <a href="../files/cspline.f.html#def-CSPLINE" title="CSPLINE in cspline.f">CSPLINE</a>(TT,TOP1,NUMTS,1.0D30,1.0D30,TDOT)
+<span class="ln">95</span>            CALL <a href="../files/splint.f.html#def-SPLINT" title="SPLINT in splint.f">SPLINT</a>(TT,TOP1,NUMTS,TDOT,RTL, ROL, KLO, KHI)
+<span class="ln">96</span>            NUMXS = NUMXS + 1
+<span class="ln">97</span>            TOP2(NUMXS) = ROL
+<span class="ln">98</span>            SLOPE=(DODR(KHI)-DODR(KLO))/(TT(KHI)-TT(KLO))
+<span class="ln">99</span>            DODRX(NUMXS)=DODR(KLO)+SLOPE*(RTL-TT(KLO))
+<span class="ln">100</span>            DODTX(NUMXS) = (TOP1(KHI)-TOP1(KLO))/(TT(KHI)-TT(KLO))
+<span class="ln">101</span>            XX(NUMXS) = OXA(IX)
+<span class="ln">102</span>         ELSE
+<span class="ln">103</span>            WRITE(ISHORT,121)DL,TL
+<span class="ln">104</span>  121       FORMAT(&#x27; OUTSIDE OPACITY TABLE, IN TEMPERATURE.  &#x27;,
+<span class="ln">105</span>     *     &#x27;LOG(RHO)=&#x27;,1PE12.3, &#x27; LOG(T)=&#x27;, 1PE12.3)
+<span class="ln">106</span>            STOP
+<span class="ln">107</span>         END IF
+<span class="ln">108</span>      END DO
+<span class="ln">109</span>      IF (NUMXS .GE. 2) THEN
+<span class="ln">110</span>         SLOPE = (TOP2(2)-TOP2(1))/(XX(2)-XX(1))
+<span class="ln">111</span>         ROL = TOP2(1)+SLOPE*(X-XX(1))
+<span class="ln">112</span>C        SLOPE = (QOT2-QOT1)/(XX(2)-XX(1))
+<span class="ln">113</span>         SLOPE = (DODTX(2)-DODTX(1))/(XX(2)-XX(1))
+<span class="ln">114</span>         QOT = DODTX(1) + SLOPE*(X-XX(1))
+<span class="ln">115</span>         SLOPE = (DODRX(2)-DODRX(1))/(XX(2)-XX(1))
+<span class="ln">116</span>         QOD = DODRX(1)+SLOPE*(X-XX(1))
+<span class="ln">117</span>         IF(ROL .GT. 35) THEN
+<span class="ln">118</span>            O = 1.0D35
+<span class="ln">119</span>            OL = 35.0D0
+<span class="ln">120</span>         ELSE
+<span class="ln">121</span>            O = 10.0D0**ROL
+<span class="ln">122</span>            OL = ROL
+<span class="ln">123</span>         END IF
+<span class="ln">124</span>      ELSE
+<span class="ln">125</span>         WRITE(ISHORT,122)DL,TL
+<span class="ln">126</span>  122    FORMAT(&#x27; OUTSIDE OPACITY TABLE.  &#x27;,
+<span class="ln">127</span>     *  &#x27;LOG(RHO)=&#x27;,1PE12.3, &#x27; LOG(T)=&#x27;, 1PE12.3)
+<span class="ln">128</span>          STOP
+<span class="ln">129</span>      END IF
+<span class="ln">130</span>      RETURN
+<span class="ln">131</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "<code>TOLLAOL</code> is 10 by default (<code>PARMIN</code>), so $\delta \approx 2.30$". <code>TOLLAOL</code> is only a namelist variable read by <code>PARMIN</code>; no file in <code>src/</code> (nor the docs or examples) gives it a value. Fix: say it has no default in the code, so it must be set in the namelist; if left at zero, <code>LOG(0)</code> would make the margin $-\infty$ (or fail). Rephrase question 1 accordingly.</li>
+</ol>
+<p>Revised: <code>TOLLAOL</code> has no default in the code; method and question 1 rephrased.</p></div></details>
+</main></body></html>

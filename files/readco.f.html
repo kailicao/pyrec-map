@@ -1,0 +1,170 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>readco.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ readco.f</span></header><main>
+<h1>readco.f</h1>
+<p class='muted'>124 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/readco.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Reads the OPAL equation-of-state tables (the original 1990s version, "YCK 2/95 OPAL EOS"), for five hydrogen abundances, into memory. The versions for the 2001 and 2006 tables are <a href="../files/readcoeos01.f.html#def-READCOEOS01"><code>READCOEOS01</code></a> and <a href="../files/readcoeos06.f.html#def-READCOEOS06"><code>READCOEOS06</code></a>.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/esac.f.html#def-ESAC"><code>ESAC</code></a>, once, on its first call (guarded by <code>ITIME</code> in <code>/LREADCO/</code>), after setting <code>XX</code> and the index map.</li>
+<li><strong>Input:</strong> the table file, already opened on unit <code>IOPALE</code> (49) by <a href="../files/parmin.f.html#def-PARMIN"><code>PARMIN</code></a> ("MHP 8/25 Moved opening of file to parmin"). <code>READCO</code> closes it at the end.</li>
+<li><strong>Outputs, through COMMON:</strong></li>
+<li><code>/A/</code>: the tables <code>XZ(MX, MV, NT, NR)</code> (5 compositions × 10 quantities × 56 temperatures × 77 densities), the grids <code>T6LIST</code>, <code>T6A</code>, <code>RHO</code>, and the inverse spacings <code>DFS</code>, <code>DFSR</code>, <code>DFSX</code> used by the interpolation; shared with <code>ESAC</code>, <a href="../files/rhoofp.f.html#def-RHOOFP"><code>RHOOFP</code></a>, <a href="../files/t6rinterp.f.html#def-T6RINTERP"><code>T6RINTERP</code></a>, <a href="../files/eqbound.f.html#def-EQBOUND"><code>EQBOUND</code></a> and <code>BLOCK_DATA</code>.</li>
+<li><code>/B/</code>: <code>ZZ</code> (the table's $Z$, read here), and <code>IRI</code>, <code>INDEX</code>, <code>NTA</code> (set elsewhere, in <code>BLOCK_DATA</code>, used here to place each column and to know how many temperatures each density row has).</li>
+<li><code>/EEE/</code>: per composition, <code>MOLES</code>, <code>XIN</code>, <code>TMASS</code>, <code>FRAC</code>, <code>RHOGR</code>, <code>ALOGR</code>, <code>ICYCUSE</code>; only <code>READCO</code> declares it.</li>
+<li><code>/RMPOPEOS/</code>: <code>RMX(T)</code>, the highest table density at each temperature, for the ramp between OPAL and the other equations of state in <a href="../files/eqbound.f.html#def-EQBOUND"><code>EQBOUND</code></a> ("MHP 8/98").</li>
+<li><strong>Other COMMON:</strong> <code>/OPALEOS/</code> (the unit <code>IOPALE</code>), <code>/E/</code>, <code>/EE/</code> (<code>XX</code>, the hydrogen abundances), <code>/AA/</code>, <code>/LUOUT/</code>.</li>
+</ul>
+<p><strong>The method.</strong> On the first call, all of <code>XZ</code> is set to $10^{35}$ (a marker for "no data"). Then for each of the five compositions: a header ($X$, $Z$, <code>MOLES</code>, <code>TMASS</code>, six fractions <code>FRAC</code>), and for each of the 77 densities a header (checked against the density's number), followed by <code>ICYCUSE</code> temperature rows, of which the first <code>NTA(JCS)</code> are kept: $T_6$, $\log R$ and ten quantities, stored as <code>XZ(M, INDEX(IV), I, JCS)</code>. Afterwards the grids are taken from the first composition, and the inverse spacings computed:</p>
+<p>$$\texttt{DFS}(i) = \frac{1}{T_{6,i} - T_{6,i-1}},\qquad \texttt{DFSR}(i) = \frac{1}{\rho_i - \rho_{i-1}},\qquad \texttt{DFSX}(i) = \frac{1}{X_i - X_{i-1}} .$$</p>
+<p>Here <code>RHO</code> holds the table's density variable read as <code>RHOGR</code>, which by the header names is probably $\rho$ in g cm$^{-3}$; the code does not say.</p>
+<p><strong>Design.</strong> The temperature list stops at the first zero (<code>NTUSE</code>), but <code>NTUSE</code> is not used afterwards, and <code>DFS</code> is computed over all <code>NT</code> points. The ramp's edge <code>KRA</code> is a hard-coded <code>DATA</code> list of 56 density indices.</p>
+<p><strong>KC's changes.</strong> Three <code>DO</code> loops that ended on an assignment were rewritten to end on <code>CONTINUE</code> (KC 2025-05-30); the members of <code>/OPALEOS/</code> were reordered (KC 2025-05-30, with the file names then removed by MHP 8/25).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A zero temperature leaves <code>DFS</code> undefined.</strong> If <code>T6LIST(1,I)</code> is zero for some <code>I</code>, the loop jumps out, leaving <code>T6A</code> from <code>I</code> onward unset (zero), and then <code>DFS</code> divides by $T_{6,i} - T_{6,i-1}$ over all <code>NT</code> points, which can be zero or negative. In <a href="../files/readcoeos01.f.html#def-READCOEOS01"><code>READCOEOS01</code></a> a zero stops the run instead. Can the original tables have fewer than 56 temperatures?</li>
+<li><strong><code>ITIMECO</code> uninitialized.</strong> The local first-call flag <code>ITIMECO</code> is never initialized; it relies on the memory not happening to hold 12345678. Harmless in practice, since <code>ESAC</code> calls <code>READCO</code> once; is the flag still needed?</li>
+<li><strong><code>ZZ</code> per composition.</strong> <code>ZZ(M)</code> is read for each of the five tables, but nothing checks that the five agree or that they match the run's $Z$. Is that checked elsewhere?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+**********************************************************************</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-READCO'>READCO</a> <span class='muted'>subroutine · **********************************************************************</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-READCO'><h3><span class='kind'>subroutine</span>READCO</h3>
+<p class='muted'>lines 3–124 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/readco.f#L3-L124'>GitHub</a></p>
+<pre>SUBROUTINE READCO</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+**********************************************************************</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-A'>/A/</a>, <a href='../commons.html#c-AA'>/AA/</a>, <a href='../commons.html#c-B'>/B/</a>, <a href='../commons.html#c-E'>/E/</a>, <a href='../commons.html#c-EE'>/EE/</a>, <a href='../commons.html#c-EEE'>/EEE/</a>, <a href='../commons.html#c-LUOUT'>/LUOUT/</a>, <a href='../commons.html#c-OPALEOS'>/OPALEOS/</a>, <a href='../commons.html#c-RMPOPEOS'>/RMPOPEOS/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/esac.f.html#def-ESAC'>ESAC</a> <span class='muted'>(esac.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE READCO
+<span class="ln">4</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">5</span>C..... THE PURPOSE OF THIS SUBROUTINE IS TO READ THE DATA TABLES
+<span class="ln">6</span>      SAVE
+<span class="ln">7</span>      PARAMETER (MX=5,MV=10,NR=77,NT=56)
+<span class="ln">8</span>C YCK &gt;&gt;&gt;  2/95 OPAL EOS
+<span class="ln">9</span>      LOGICAL*4 LOPALE,lopale01,lopale06,LNumDeriv
+<span class="ln">10</span>      COMMON/LUOUT/ILAST,IDEBUG,ITRACK,ISHORT,IMILNE,IMODPT,ISTOR,IOWR
+<span class="ln">11</span>C MHP 8/25 Remove unused variables
+<span class="ln">12</span>C      CHARACTER*256 FOPALE,fopale01,fopale06
+<span class="ln">13</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">14</span>C       COMMON/OPALEOS/FOPALE,LOPALE,IOPALE,fopale01,lopale01,fopale06,
+<span class="ln">15</span>C      x     lopale06,LNumDeriv
+<span class="ln">16</span>C MHP 8/25 Remove file names from common blocks
+<span class="ln">17</span>      COMMON/OPALEOS/LOPALE,IOPALE,lopale01,lopale06,lNumDeriv
+<span class="ln">18</span>C &lt;&lt;&lt; YCK
+<span class="ln">19</span>      REAL*8 MOLES
+<span class="ln">20</span>      CHARACTER*1 BLANK
+<span class="ln">21</span>      COMMON/AA/ Q(4),H(4),XXH
+<span class="ln">22</span>      COMMON/A/  XZ(MX,MV,NT,NR),
+<span class="ln">23</span>     .T6LIST(NR,NT),RHO(NR),T6A(NT),ESK(NT,NR),ESK2(NT,NR),DFSX(MX),
+<span class="ln">24</span>     . DFS(NT),DFSR(NR),XA(MX),M,MF
+<span class="ln">25</span>      COMMON/B/ ZZ(MX),IRI(10),INDEX(10),NTA(NR)
+<span class="ln">26</span>      COMMON/E/ ESACT,EOS(MV)
+<span class="ln">27</span>      COMMON/EE/ EPL(MX,NT,NR),XX(MX)
+<span class="ln">28</span>      COMMON/EEE/MOLES(MX),XIN(MX),TMASS(MX), RHOGR(MX,NR),
+<span class="ln">29</span>     X FRAC(MX,6),ALOGR(NR,NT),ICYCUSE(MX,NR)
+<span class="ln">30</span>      COMMON/RMPOPEOS/RMX(NT),KRA(NT),KT
+<span class="ln">31</span>      DATA (KRA(I),I=1,NT)/7*77,2*76,2*74,2*72,2*70,68,67,66,65,64,
+<span class="ln">32</span>     X 63,61,60,59,58,57,55,54,53,52,51,2*49,48,2*47,46,2*45,
+<span class="ln">33</span>     X 15*44,2*37/
+<span class="ln">34</span>
+<span class="ln">35</span>      BLANK=&#x27; &#x27;
+<span class="ln">36</span>
+<span class="ln">37</span>        IF (ITIMECO .NE. 12345678) THEN
+<span class="ln">38</span>        DO I=1,MX
+<span class="ln">39</span>          DO J=1,MV
+<span class="ln">40</span>            DO K=1,NT
+<span class="ln">41</span>              DO L=1,NR
+<span class="ln">42</span>                XZ(I,J,K,L)=1.D+35
+<span class="ln">43</span>              ENDDO
+<span class="ln">44</span>            ENDDO
+<span class="ln">45</span>          ENDDO
+<span class="ln">46</span>        ENDDO
+<span class="ln">47</span>        ITIMECO=12345678
+<span class="ln">48</span>        ENDIF
+<span class="ln">49</span>
+<span class="ln">50</span>C..... READ  TABLES
+<span class="ln">51</span>C MHP 8/25 Moved opening of file to parmin
+<span class="ln">52</span>      DO 3 M=1,MX
+<span class="ln">53</span>
+<span class="ln">54</span>      READ (IOPALE,&#x27;(3X,F6.4,3X,F6.4,11X,F10.7,17X,F10.7)&#x27;)
+<span class="ln">55</span>     X  XIN(M),ZZ(M),MOLES(M),TMASS(M)
+<span class="ln">56</span>      READ (IOPALE,&#x27;(21X,E14.7,4X,E14.7,3X,E11.4,3X,E11.4,3X,E11.4,
+<span class="ln">57</span>     X 4X,E11.4)&#x27;) (FRAC(M,I),I=1,6)
+<span class="ln">58</span>      READ (IOPALE,&#x27;(A)&#x27;) BLANK
+<span class="ln">59</span>      DO 2 JCS=1,NR
+<span class="ln">60</span>      READ (IOPALE,&#x27;(2I5,2F12.7,17X,E15.7)&#x27;) NUMTOT,ICYCUSE(M,JCS)
+<span class="ln">61</span>     X  ,DUM,DUM,RHOGR(M,JCS)
+<span class="ln">62</span>      IF(NUMTOT .NE. JCS) THEN
+<span class="ln">63</span>         WRITE(ISHORT,&#x27;(&quot; DATA FILE INCORRECT: NUMTOT,JCS= &quot;,2I5)&#x27;)
+<span class="ln">64</span>     X     NUMTOT,JCS
+<span class="ln">65</span>         STOP
+<span class="ln">66</span>      ENDIF
+<span class="ln">67</span>      READ(IOPALE,&#x27;(A)&#x27;) BLANK
+<span class="ln">68</span>      READ(IOPALE,&#x27;(A)&#x27;) BLANK
+<span class="ln">69</span>      IF (ICYCUSE(M,JCS) .LT. NTA(JCS)) THEN
+<span class="ln">70</span>         WRITE(ISHORT,&#x27;(&quot;PROBLEM WITH DATA FILES: X=&quot;,F6.4,&quot; DENSITY=&quot;,
+<span class="ln">71</span>     X      E14.4)&#x27;) XIN(M), RHOGR(M,JCS)
+<span class="ln">72</span>         STOP
+<span class="ln">73</span>      ENDIF
+<span class="ln">74</span>      DO  I=1,ICYCUSE(M,JCS)
+<span class="ln">75</span>      IF (I .GT. NTA(JCS)) THEN
+<span class="ln">76</span>         READ (IOPALE,&#x27;(A)&#x27;) BLANK
+<span class="ln">77</span>         GO TO 4
+<span class="ln">78</span>      ENDIF
+<span class="ln">79</span>      READ (IOPALE,&#x27;(F8.4,1X,F6.2,3E13.5,E11.3,6F8.4)&#x27;)
+<span class="ln">80</span>     X T6LIST(JCS,I),ALOGR(JCS,I),(XZ(M,INDEX(IV),I,JCS),IV=1,10)
+<span class="ln">81</span>    4    CONTINUE
+<span class="ln">82</span>      ENDDO
+<span class="ln">83</span>      READ(IOPALE,&#x27;(A)&#x27;) BLANK
+<span class="ln">84</span>      READ(IOPALE,&#x27;(A)&#x27;) BLANK
+<span class="ln">85</span>      READ(IOPALE,&#x27;(A)&#x27;) BLANK
+<span class="ln">86</span>    2 CONTINUE
+<span class="ln">87</span>      READ(IOPALE,&#x27;(A)&#x27;) BLANK
+<span class="ln">88</span>    3 CONTINUE
+<span class="ln">89</span>
+<span class="ln">90</span>      DO 11 I=1,NT
+<span class="ln">91</span>        IF(T6LIST(1,I) .EQ. 0.0D0) THEN
+<span class="ln">92</span>          NTUSE=I
+<span class="ln">93</span>          GO TO 14
+<span class="ln">94</span>        ENDIF
+<span class="ln">95</span>C KC 2025-05-30 fixed &quot;DO termination statement which is not END DO or CONTINUE&quot;
+<span class="ln">96</span>C    11 T6A(I)=T6LIST(1,I)
+<span class="ln">97</span>        T6A(I)=T6LIST(1,I)
+<span class="ln">98</span>   11 CONTINUE
+<span class="ln">99</span>   14 DO 12 I=2,NT
+<span class="ln">100</span>C KC 2025-05-30 fixed &quot;DO termination statement which is not END DO or CONTINUE&quot;
+<span class="ln">101</span>C    12 DFS(I)=1.D0/(T6A(I)-T6A(I-1))
+<span class="ln">102</span>         DFS(I)=1.D0/(T6A(I)-T6A(I-1))
+<span class="ln">103</span>   12 CONTINUE
+<span class="ln">104</span>      RHO(1)=RHOGR(1,1)
+<span class="ln">105</span>      DO 13 I=2,NR
+<span class="ln">106</span>C KC 2025-05-30 fixed &quot;DO termination statement which is not END DO or CONTINUE&quot;
+<span class="ln">107</span>C       RHO(I)=RHOGR(1,I)
+<span class="ln">108</span>C    13 DFSR(I)=1.D0/(RHO(I)-RHO(I-1))
+<span class="ln">109</span>         RHO(I)=RHOGR(1,I)
+<span class="ln">110</span>         DFSR(I)=1.D0/(RHO(I)-RHO(I-1))
+<span class="ln">111</span>   13 CONTINUE
+<span class="ln">112</span>      DO I=2,MX
+<span class="ln">113</span>      DFSX(I)=1.D0/(XX(I)-XX(I-1))
+<span class="ln">114</span>      ENDDO
+<span class="ln">115</span>C
+<span class="ln">116</span>      CLOSE (IOPALE)
+<span class="ln">117</span>C  MHP 8/98 ADDED RAMP BETWEEN OPAL AND OTHER EOS
+<span class="ln">118</span>C  NEED EDGE OF TABLE AT HIGH RHO, FIXED T.
+<span class="ln">119</span>      KT = 1
+<span class="ln">120</span>      DO I = 1, NT
+<span class="ln">121</span>         RMX(I) = RHO(KRA(I))
+<span class="ln">122</span>      END DO
+<span class="ln">123</span>      RETURN
+<span class="ln">124</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings: the call from <code>ESAC</code> (guarded by <code>ITIME</code>), the unit 49 opened in <code>PARMIN</code>, the read layout, the inverse spacings and the questions hold.</p>
+<p>No change.</p></div></details>
+</main></body></html>

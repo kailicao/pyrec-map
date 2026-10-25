@@ -1,0 +1,165 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>qenv.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ qenv.f</span></header><main>
+<h1>qenv.f</h1>
+<p class='muted'>116 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/qenv.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> The right-hand side of the envelope integration: with $\log P$ as the independent variable, it returns the derivatives of $\log m$ (relative to the total), $\log T$ and $\log r$, from hydrostatic equilibrium, mass conservation and the temperature gradient.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> <code>X0</code> $=\log P$; <code>Y(1..3)</code> $= \log(m/M_\ast)$, $\log T$, $\log r$; the luminosity <code>B</code>, the distortion factors <code>FPL</code>, <code>FTL</code>, <code>TEFFL</code>, $X$, $Z$; <code>STOTAL</code> ($\log M_\ast$) from <code>/COMP/</code>; <code>LMHD</code>.</li>
+<li><strong>Who calls it:</strong> <a href="../files/envint.f.html#def-ENVINT">ENVINT</a>, directly and as the <code>EXTERNAL</code> derivative routine passed to <a href="../files/bsstep.f.html#def-BSSTEP">BSSTEP</a> and <a href="../files/mmid.f.html#def-MMID">MMID</a>.</li>
+<li><strong>What it calls:</strong> <a href="../files/meqos.f.html#def-MEQOS">MEQOS</a> or <a href="../files/eqstat.f.html#def-EQSTAT">EQSTAT</a>, <a href="../files/getopac.f.html#def-GETOPAC">GETOPAC</a>, and <a href="../files/tpgrad.f.html#def-TPGRAD">TPGRAD</a> (with <code>IOVIM = -1</code>, so no overshoot point is flagged).</li>
+<li><strong>Outputs:</strong> <code>DYDX(1..3)</code>; the counter <code>KENV</code>; the point's structure, gradients, $\beta$, convective velocity and ionization fractions in <code>/ENVPRT/</code> (always, since 07/02, 08/13 and 08/25), read by ENVINT, <a href="../files/getnewenv.f.html#def-GETNEWENV">GETNEWENV</a> and <a href="../files/starin.f.html#def-STARIN">STARIN</a>; and the quantities for pulsation output in <code>/PULSE2/</code> when saving.</li>
+</ul>
+<p><strong>The method.</strong> With $f_P$ = <code>FPL</code>,
+$$\frac{d\log m}{d\log P} = -\frac{4\pi r^4 P}{G m^2 f_P},\qquad \frac{d\log T}{d\log P} = \nabla,\qquad \frac{d\log r}{d\log P} = -\frac{r P}{G m \rho}\,f_P,$$
+with $\nabla$ from <code>TPGRAD</code>.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: unused arguments removed from the call to <code>MEQOS</code>; a never-executed <code>PRINT</code> keeps <code>GL</code> and <code>LOCOND</code> referenced, "for external procedure compatibility".</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The distortion factor in $d\log r/d\log P$.</strong> The interior equations in <a href="../files/coefft.f.html#def-COEFFT">COEFFT</a> have $d\log P/d\log m \propto f_P$ and $d\log r/d\log m$ without $f_P$; dividing gives $d\log r/d\log P \propto 1/f_P$. <code>QENV</code> divides by $f_P$ in $d\log m/d\log P$ (consistent) but <em>multiplies</em> by it in $d\log r/d\log P$. Is this a sign slip in the exponent of $f_P$, or does the envelope use a different form on purpose? (The effect is small where $f_P \approx 1$.)</li>
+<li><strong>Repeated assignments.</strong> <code>EFXION</code>, <code>QQDP</code>, <code>QQDT</code> and <code>QQCP</code> are now set both always and again inside <code>IF(LSAVE .OR. LPUMOD)</code>. The second set can go.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+QENV
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-QENV'>QENV</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-QENV'><h3><span class='kind'>subroutine</span>QENV</h3>
+<p class='muted'>lines 6–116 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/qenv.f#L6-L116'>GitHub</a></p>
+<pre>SUBROUTINE QENV(X0,Y,DYDX,B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+QENV
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-COMP'>/COMP/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-DPMIX'>/DPMIX/</a>, <a href='../commons.html#c-ENVPRT'>/ENVPRT/</a>, <a href='../commons.html#c-FLAG'>/FLAG/</a>, <a href='../commons.html#c-MHD'>/MHD/</a>, <a href='../commons.html#c-PULSE'>/PULSE/</a>, <a href='../commons.html#c-PULSE1'>/PULSE1/</a>, <a href='../commons.html#c-PULSE2'>/PULSE2/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/eqstat.f.html#def-EQSTAT'>EQSTAT</a> <span class='muted'>(eqstat.f)</span></li>
+<li><a href='../files/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span></li>
+<li><a href='../files/meqos.f.html#def-MEQOS'>MEQOS</a> <span class='muted'>(meqos.f)</span></li>
+<li><a href='../files/tpgrad.f.html#def-TPGRAD'>TPGRAD</a> <span class='muted'>(tpgrad.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span> ×2</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE QENV(X0,Y,DYDX,B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,
+<span class="ln">7</span>     *                LSAVE,RL,TEFFL,X,Z,KENV,KSAHA)
+<span class="ln">8</span>
+<span class="ln">9</span>      PARAMETER(JSON=5000)
+<span class="ln">10</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">11</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">12</span>
+<span class="ln">13</span>      DIMENSION Y(3),DYDX(3),FXION(3)
+<span class="ln">14</span>      COMMON/PULSE/XMSOL,LPULSE,IPVER
+<span class="ln">15</span>      COMMON/PULSE1/PQDP(JSON),PQED(JSON),PQET(JSON),
+<span class="ln">16</span>     *   PQOD(JSON), PQOT(JSON), PQCP(JSON), PRMU(JSON),
+<span class="ln">17</span>     *   PQDT(JSON),PEMU(JSON),LPUMOD
+<span class="ln">18</span>      COMMON/PULSE2/QQDP,QQED,QQET,QQOD,QQOT,QDEL,
+<span class="ln">19</span>     *      QDELA, QQCP, QRMU, QTL, QPL, QDL, QO, QOL,
+<span class="ln">20</span>     *      QT, QP, QQDT, QEMU, QD, QFS
+<span class="ln">21</span>      COMMON/COMP/XENV,ZENV,ZENVM,AMUENV,FXENV(12),XNEW,ZNEW,STOTAL,
+<span class="ln">22</span>     *            SENV
+<span class="ln">23</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">24</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">25</span>      COMMON/ENVPRT/EP,ET,ER,ES,ED,EO,EBETA,EDEL(3),EFXION(3),EVEL
+<span class="ln">26</span>      COMMON/FLAG/LEXCOM
+<span class="ln">27</span>      COMMON/MHD/LMHD,IOMHD1,IOMHD2,IOMHD3,IOMHD4,IOMHD5,IOMHD6,
+<span class="ln">28</span>     1           IOMHD7, IOMHD8
+<span class="ln">29</span>      COMMON/DPMIX/DPENV,ALPHAC,ALPHAE,ALPHAM,BETAC,IOV1,IOV2,
+<span class="ln">30</span>     *      IOVIM, LOVSTC, LOVSTE, LOVSTM, LSEMIC, LADOV, LOVMAX
+<span class="ln">31</span>      SAVE
+<span class="ln">32</span>
+<span class="ln">33</span>      PL = X0
+<span class="ln">34</span>      SL = Y(1) + STOTAL
+<span class="ln">35</span>      TL = Y(2)
+<span class="ln">36</span>      RL = Y(3)
+<span class="ln">37</span>      IF(LMHD)THEN
+<span class="ln">38</span>         CALL <a href="../files/meqos.f.html#def-MEQOS" title="MEQOS in meqos.f">MEQOS</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETA1,BETA14,FXION,RMU,
+<span class="ln">39</span>C      *   AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP,
+<span class="ln">40</span>C      *   LDERIV,LATMO,KSAHA)  ! KC 2025-05-31
+<span class="ln">41</span>     *   AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP)
+<span class="ln">42</span>      ELSE
+<span class="ln">43</span>         CALL <a href="../files/eqstat.f.html#def-EQSTAT" title="EQSTAT in eqstat.f">EQSTAT</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETA1,BETA14,FXION,RMU,
+<span class="ln">44</span>     *   AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP,
+<span class="ln">45</span>     *   LDERIV,LATMO,KSAHA)
+<span class="ln">46</span>      ENDIF
+<span class="ln">47</span>      CALL <a href="../files/getopac.f.html#def-GETOPAC" title="GETOPAC in getopac.f">GETOPAC</a>(DL, TL, X, Z, O, OL, QOD, QOT, FXION)
+<span class="ln">48</span>      IOVIM = -1
+<span class="ln">49</span>      CALL <a href="../files/tpgrad.f.html#def-TPGRAD" title="TPGRAD in tpgrad.f">TPGRAD</a>(TL,T,PL,P,D,RL,SL,B,O,QDT,QDP,QOT,QOD,QCP,DEL,
+<span class="ln">50</span>     *     DELR,DELA,QDTT,QDTP,QAT,QAP,QACT,QACP,QACR,QCPT,QCPP,VEL,
+<span class="ln">51</span>     *     LDERIV,LCONV,FPL,FTL,TEFFL)
+<span class="ln">52</span>      DYDX(1) = -DEXP(CLN*(C4PIL+4.0D0*RL+PL-CGL-SL-SL))/FPL
+<span class="ln">53</span>      DYDX(2) = DEL
+<span class="ln">54</span>      DYDX(3) = -DEXP(CLN*(PL+RL-CGL-SL-DL))*FPL
+<span class="ln">55</span>      KENV = KENV + 1
+<span class="ln">56</span>C 07/02 ALWAYS STORE THE BASIC STRUCTURE VARIABLES.
+<span class="ln">57</span>      EP = PL
+<span class="ln">58</span>      ET = TL
+<span class="ln">59</span>      ES = SL - STOTAL
+<span class="ln">60</span>      ER = RL
+<span class="ln">61</span>      ED = DL
+<span class="ln">62</span>      EVEL = VEL
+<span class="ln">63</span>C JVS 08/13 ALWAYS STORE GRADIENTS (FOR TRACKING CZ)
+<span class="ln">64</span>       EDEL(1) = DELR
+<span class="ln">65</span>       EDEL(2) = DELA
+<span class="ln">66</span>       EDEL(3) = DEL
+<span class="ln">67</span>       EBETA = BETA ! added 03/14
+<span class="ln">68</span>C JVS 08/25 ALSO ALWAYS SAVE ADDITIONAL INFO FOR PROFILE
+<span class="ln">69</span>      EFXION(1) = FXION(1)
+<span class="ln">70</span>      EFXION(2) = FXION(2)
+<span class="ln">71</span>      EFXION(3) = FXION(3)
+<span class="ln">72</span>      QQDP = QDP
+<span class="ln">73</span>      QQDT = QDT
+<span class="ln">74</span>      QQCP = QCP
+<span class="ln">75</span>
+<span class="ln">76</span>      IF(LSAVE .OR. LPUMOD) THEN
+<span class="ln">77</span>C       EP = PL
+<span class="ln">78</span>C       ET = TL
+<span class="ln">79</span>C       ES = SL - STOTAL
+<span class="ln">80</span>C       ER = RL
+<span class="ln">81</span>C       ED = DL
+<span class="ln">82</span>       EO = O
+<span class="ln">83</span>C       EBETA = BETA
+<span class="ln">84</span>C       EDEL(1) = DELR
+<span class="ln">85</span>C       EDEL(2) = DELA
+<span class="ln">86</span>C       EDEL(3) = DEL
+<span class="ln">87</span>       EFXION(1) = FXION(1)
+<span class="ln">88</span>       EFXION(2) = FXION(2)
+<span class="ln">89</span>       EFXION(3) = FXION(3)
+<span class="ln">90</span>C       EVEL = VEL
+<span class="ln">91</span>       QTL = TL
+<span class="ln">92</span>       QT = DEXP(CLN*TL)
+<span class="ln">93</span>       QPL = PL
+<span class="ln">94</span>       QP = DEXP(CLN*PL)
+<span class="ln">95</span>       QDL = DL
+<span class="ln">96</span>       QD = DEXP(CLN*DL)
+<span class="ln">97</span>       QO = O
+<span class="ln">98</span>       QOL = OL
+<span class="ln">99</span>       QFS = DEXP(CLN*(SL-STOTAL))
+<span class="ln">100</span>       QQDP = QDP
+<span class="ln">101</span>       QQED = 0.0D0
+<span class="ln">102</span>       QQOD = QOD
+<span class="ln">103</span>       QQOT = QOT
+<span class="ln">104</span>       QDEL = DEL
+<span class="ln">105</span>       QQDT = QDT
+<span class="ln">106</span>       QDELA = DELA
+<span class="ln">107</span>       QQCP = QCP
+<span class="ln">108</span>       QRMU = RMU
+<span class="ln">109</span>       QEMU = EMU
+<span class="ln">110</span>      ENDIF
+<span class="ln">111</span>
+<span class="ln">112</span>C KC 2025-05-31 THESE MUST BE RETAINED FOR EXTERNAL PROCEDURE COMPATIBILITY.
+<span class="ln">113</span>      IF (.FALSE.) PRINT *, GL, LOCOND
+<span class="ln">114</span>
+<span class="ln">115</span>      RETURN
+<span class="ln">116</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings (the three derivatives checked against lines 52–54, including $f_P$ in each; the <code>/ENVPRT/</code> readers).</p>
+<p>Revised: no change.</p></div></details>
+</main></body></html>

@@ -1,0 +1,162 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>codiff.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ codiff.f</span></header><main>
+<h1>codiff.f</h1>
+<p class='muted'>115 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/codiff.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file computes the diffusion coefficients for rotational mixing: one for angular-momentum transport (<code>COD</code>) and one for composition transport (<code>COD2</code>), from the characteristic velocities of the rotational instabilities, at each interface between shells.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>HRU</code> (the radius of each shell's midpoint, not logged) and <code>M</code>; the velocities <code>VES</code> (Eddington–Sweet circulation, probably), <code>VGSF</code> (Goldreich–Schubert–Fricke instability) and <code>VSS</code> (secular shear) in <code>/TEMP2/</code>, computed by <a href="../files/vcirc.f.html#def-VCIRC">VCIRC</a>; the multipliers <code>FW</code>, <code>FC</code> in <code>/VMULT/</code> and <code>FESC</code>, <code>FGSFC</code>, <code>FSSC</code> in <code>/VMULT2/</code>; the variable $f_c$, <code>VFC</code> and <code>LVFC</code>, in <code>/VARFC/</code>; the constant background coefficient <code>CODM</code>, <code>LCODM</code> in <code>/MAG/</code>; <code>LNOJ</code> in <code>/NOTRAN/</code>. All options are set in <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a>.</li>
+<li><strong>Who calls it:</strong> <a href="../files/seculr.f.html#def-SECULR">SECULR</a>.</li>
+<li><strong>Outputs:</strong> <code>COD</code>, <code>COD2</code> and <code>RMID</code> (arguments); <code>HLE</code> in <code>/TEMP2/</code>, set to zero.</li>
+<li><strong>COMMON blocks:</strong> <code>/INTVAR/</code>, <code>/MDPHY/</code>, <code>/ADVEC/</code> are included but not used.</li>
+</ul>
+<p><strong>The method.</strong> Element $i$ refers to the interface between shells $i-1$ and $i$, at $r_{\mathrm{mid},i} = \tfrac12(r_i + r_{i-1})$. With $v = v_\mathrm{ES} + v_\mathrm{GSF} + v_\mathrm{SS}$:
+$$D_J = 4\pi f_w\, v\, r_\mathrm{mid}, \qquad D_X = 4\pi f_w f_c \left(f_{ES}\,v_\mathrm{ES} + f_{GSF}\,v_\mathrm{GSF} + f_{SS}\,v_\mathrm{SS}\right) r_\mathrm{mid},$$
+or, with a variable $f_c$ (<code>LVFC</code>), $D_X = D_J\,f_c(r)$. With <code>LCODM</code>, a constant <code>CODM</code> is added to $D_J$ ($4\pi f_w\,\mathrm{CODM}$; "MHP 9/14", "MHP 8/13"). With <code>LNOJ</code>, $D_J = 0$: composition is mixed but angular momentum is not transported (MHP 9/93). So the coefficient is a velocity times a length, the radius, probably in cm$^2$ s$^{-1}$ before the factor $4\pi$.</p>
+<p><strong>KC's changes.</strong> 2025-05-30: the elements of <code>/MAG/</code> reordered. 2025-05-31: the unused arguments <code>DELTS</code>, <code>HV</code>, <code>IMIN</code>, <code>IMAX</code>, <code>LC</code>, <code>LCZ</code> removed.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The background coefficient and composition.</strong> <code>CODM</code> is added to $D_J$ only, never to $D_X$, in both branches. Is a constant background mixing of angular momentum without mixing of composition intended?</li>
+<li><strong>The length scale.</strong> The coefficient uses the radius $r$ as the length scale; the header says the routine "determines the run of characteristic velocity length scales", but <code>HLE</code> is set to zero (the line <code>HLE(I)=RMID(I)</code> is commented out). The only reader is <a href="../files/checkj.f.html#def-CHECKJ">CHECKJ</a>'s print (column "LENGTH"), which is switched off. Should <code>HLE</code> and that column be removed, or the length scale restored?</li>
+<li><strong>The $\mu$-gradient.</strong> <code>/VMULT/</code> holds <code>FMU</code> and <code>/TEMP2/</code> <code>VMU</code>, and <code>/VMULT2/</code> <code>IMU</code>, but they do not enter here. <a href="../files/vcirc.f.html#def-VCIRC">VCIRC</a> sets <code>VMU = 0</code>; its comment says the $\mu$ terms were replaced by $(\nabla + \nabla_\mu - \nabla_\mathrm{ad})$, and <code>IMU</code> is kept "for later use". <code>FMU</code> and <code>IMU</code> are still namelist inputs, unused. Should they be removed?</li>
+<li><strong><code>COD(1)</code>.</strong> No routine sets <code>COD(1)</code> or <code>COD2(1)</code>; the readers start at element 2 (MIXGRID from <code>COD2(IBEG+1)</code>). Worth a check that no reader ever reaches element 1.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+SUBROUTINE CODIFF(DELTS,HRU,HV,IMIN,IMAX,LC,LCZ,M,RMID,COD,COD2)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-CODIFF'>CODIFF</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-CODIFF'><h3><span class='kind'>subroutine</span>CODIFF</h3>
+<p class='muted'>lines 3–115 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/codiff.f#L3-L115'>GitHub</a></p>
+<pre>SUBROUTINE CODIFF(HRU,M,RMID,COD,COD2)</pre>
+<div class='notes'><p>Diffusion coefficients for angular momentum, $D_J = 4\pi f_w (v_\mathrm{ES} + v_\mathrm{GSF} + v_\mathrm{SS})\,r$, and for composition, $D_X$ (with the extra factors $f_c$ and per-mechanism weights), at the interfaces; options for a constant background and for no angular-momentum transport.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+SUBROUTINE CODIFF(DELTS,HRU,HV,IMIN,IMAX,LC,LCZ,M,RMID,COD,COD2)  ! KC 2025-05-31</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-ADVEC'>/ADVEC/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-INTVAR'>/INTVAR/</a>, <a href='../commons.html#c-MAG'>/MAG/</a>, <a href='../commons.html#c-MDPHY'>/MDPHY/</a>, <a href='../commons.html#c-NOTRAN'>/NOTRAN/</a>, <a href='../commons.html#c-TEMP2'>/TEMP2/</a>, <a href='../commons.html#c-VARFC'>/VARFC/</a>, <a href='../commons.html#c-VMULT'>/VMULT/</a>, <a href='../commons.html#c-VMULT2'>/VMULT2/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE CODIFF(HRU,M,RMID,COD,COD2)
+<span class="ln">4</span>
+<span class="ln">5</span>C 2/91 SUBROUTINE ALTERED TO ALLOW DIFFERENT FC&#x27;S FOR DIFFERENT
+<span class="ln">6</span>C      MECHANISMS (COMMON BLOCK VMULT2)
+<span class="ln">7</span>
+<span class="ln">8</span>      PARAMETER (JSON=5000)
+<span class="ln">9</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">10</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">11</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">12</span>      COMMON/INTVAR/ALM(JSON),DELAMI(JSON),DELMI(JSON),DM(JSON),
+<span class="ln">13</span>     *     EPSILM(JSON),HGM(JSON),HS3(JSON),PM(JSON),
+<span class="ln">14</span>     *     QDTMI(JSON),RM(JSON),TM(JSON)
+<span class="ln">15</span>      ! old version: COMMON/INTVR2/AMUM(JSON),THDIFM(JSON),VISCM(JSON),WM(JSON)
+<span class="ln">16</span>      !COMMON/INTVR2/AMUMI(JSON),THDIFMI(JSON),VISCMI(JSON),WM(JSON)
+<span class="ln">17</span>      COMMON/MDPHY/AMUM(JSON),CPM(JSON),DELM(JSON),DELAM(JSON),
+<span class="ln">18</span>     *             DELRM(JSON),ESUMM(JSON),OM(JSON),QDTM(JSON),
+<span class="ln">19</span>     *             THDIFM(JSON),VELM(JSON),VISCM(JSON),EPSM(JSON)
+<span class="ln">20</span>      COMMON/TEMP2/VES(JSON),VES0(JSON),VSS(JSON),VSS0(JSON),
+<span class="ln">21</span>     *     HLE(JSON),VGSF(JSON),VGSF0(JSON),VMU(JSON)
+<span class="ln">22</span>      COMMON/VMULT/FW,FC,FO,FES,FGSF,FMU,FSS,RCRIT
+<span class="ln">23</span>      COMMON/VMULT2/FESC,FSSC,FGSFC,IES,IGSF,IMU
+<span class="ln">24</span>      COMMON/ADVEC/FADV(JSON),FADV0(JSON)
+<span class="ln">25</span>      COMMON/VARFC/VFC(JSON),LVFC,LDIFAD
+<span class="ln">26</span>C MHP 9/93
+<span class="ln">27</span>      COMMON/NOTRAN/LNOJ
+<span class="ln">28</span>C       DIMENSION HRU(JSON),HV(JSON),COD(JSON),LC(JSON),LCZ(JSON),  ! KC 2025-05-31
+<span class="ln">29</span>      DIMENSION HRU(JSON),COD(JSON),RMID(JSON),COD2(JSON)
+<span class="ln">30</span>C MHP 02/12 PERMIT CONSTANT DIFFUSION COEFFICIENT
+<span class="ln">31</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">32</span>C       COMMON/MAG/LCODM,CODM
+<span class="ln">33</span>      COMMON/MAG/CODM,LCODM
+<span class="ln">34</span>      SAVE
+<span class="ln">35</span>
+<span class="ln">36</span>C  THIS SR DETERMINES THE RUN OF CHARACTERISTIC VELOCITY LENGTH
+<span class="ln">37</span>C  SCALES FOR THE DIFFUSION EQUATIONS.
+<span class="ln">38</span>C
+<span class="ln">39</span>C  INPUT VARIABLES
+<span class="ln">40</span>C
+<span class="ln">41</span>C       DECLARED:
+<span class="ln">42</span>C  HRU : RUN OF RADIUS (UNLOGGED) OF THE MIDPOINTS OF THE SHELLS.
+<span class="ln">43</span>C  M : NUMBER OF SHELLS.
+<span class="ln">44</span>C  HV : RUN OF CHARACTERISTIC DIFFUSION VELOCITIES.
+<span class="ln">45</span>C  LC : FLAG SET T IF ZONE IS CONVECTIVE.
+<span class="ln">46</span>C  LCZ : FLAG SET T IF ZONE IS CONVECTIVE FOR ANGULAR MOMENTUM
+<span class="ln">47</span>C        TRANSPORT PURPOSES(I.E. INCLUDES OVERSHOOT REGIONS).
+<span class="ln">48</span>C  M : NUMBER OF SHELLS.
+<span class="ln">49</span>C  FC,FO,FW : USER PARAMETERS.  THE DIFFUSION COEFFICIENTS
+<span class="ln">50</span>C  CAN BE MODIFIED BY THESE THREE PARAMETERS.
+<span class="ln">51</span>C  VELM : RUN OF CONVECTIVE VELOCITIES.
+<span class="ln">52</span>C
+<span class="ln">53</span>C  OUTPUT VARIABLES
+<span class="ln">54</span>C
+<span class="ln">55</span>C       DECLARED
+<span class="ln">56</span>C  COD : RUN OF DIFFUSION COEFFICENTS FOR ANGULAR MOMENTUM TRANSPORT.
+<span class="ln">57</span>C  COD2 : SAME, WITH RESPECT TO COMPOSITION TRANSPORT.
+<span class="ln">58</span>C  RMID : RMID(I) IS DEFINED AS THE AVERAGE OF HRU(I) AND HRU(I-1).
+<span class="ln">59</span>C       FROM COMMON BLOCKS:
+<span class="ln">60</span>C       IN COMMON BLOCKS
+<span class="ln">61</span>C  HLE : RUN OF CHARACTERSITIC VELOCITY LENGTH SCALES.
+<span class="ln">62</span>C
+<span class="ln">63</span>C  NOTE ON STORAGE: COD,V, AND HLE ARE CALCULATED AT THE MIDPOINT
+<span class="ln">64</span>C  BETWEEN MASS POINTS. ELEMENT I CONTAINS THE INFORMATION FOR THE
+<span class="ln">65</span>C  (I,I-1) INTERFACE.
+<span class="ln">66</span>
+<span class="ln">67</span>      HLE(1) = 0.0D0
+<span class="ln">68</span>      RMID(1) = 0.0D0
+<span class="ln">69</span>      DO I = 2,M
+<span class="ln">70</span>         HLE(I) = 0.0D0
+<span class="ln">71</span>         RMID(I) = 0.5D0*(HRU(I)+HRU(I-1))
+<span class="ln">72</span>      END DO
+<span class="ln">73</span>C MHP 9/14 ADDED LOOP TO ALLOW A CONSTANT BACKGROUND DIFFUSION COEFFICIENT
+<span class="ln">74</span>      CON1 = C4PI*FW
+<span class="ln">75</span>      IF(.NOT.LCODM)THEN
+<span class="ln">76</span>         IF(.NOT.LVFC) THEN
+<span class="ln">77</span>            CON2 = CON1*FC
+<span class="ln">78</span>            DO I = 2,M
+<span class="ln">79</span>               COD(I)=CON1*(VES(I)+VGSF(I)+VSS(I))*RMID(I)
+<span class="ln">80</span>               COD2(I)=CON2*(FESC*VES(I)+FGSFC*VGSF(I)+FSSC*VSS(I))
+<span class="ln">81</span>     *              *RMID(I)
+<span class="ln">82</span>C               HLE(I)=RMID(I)
+<span class="ln">83</span>            END DO
+<span class="ln">84</span>         ELSE
+<span class="ln">85</span>            DO I = 2,M
+<span class="ln">86</span>               COD(I) = CON1*(VES(I)+VGSF(I)+VSS(I))*RMID(I)
+<span class="ln">87</span>               COD2(I) = COD(I)*VFC(I)
+<span class="ln">88</span>C               HLE(I) = RMID(I)
+<span class="ln">89</span>            END DO
+<span class="ln">90</span>         ENDIF
+<span class="ln">91</span>      ELSE
+<span class="ln">92</span>         IF(.NOT.LVFC) THEN
+<span class="ln">93</span>            CON2 = CON1*FC
+<span class="ln">94</span>            DO I = 2,M
+<span class="ln">95</span>               COD(I)=CON1*(CODM+(VES(I)+VGSF(I)+VSS(I))*RMID(I))
+<span class="ln">96</span>               COD2(I)=CON2*(FESC*VES(I)+FGSFC*VGSF(I)+FSSC*VSS(I))
+<span class="ln">97</span>     *                 *RMID(I)
+<span class="ln">98</span>            END DO
+<span class="ln">99</span>         ELSE
+<span class="ln">100</span>            DO I = 2,M
+<span class="ln">101</span>               COD(I) = CON1*(VES(I)+VGSF(I)+VSS(I))*RMID(I)
+<span class="ln">102</span>               COD2(I) = COD(I)*VFC(I)
+<span class="ln">103</span>C MHP 8/13 ADD D.C. AFTER SCALE FACTOR FOR MIXING APPLIED
+<span class="ln">104</span>               COD(I) = COD(I)+CON1*CODM
+<span class="ln">105</span>            END DO
+<span class="ln">106</span>         ENDIF
+<span class="ln">107</span>      ENDIF
+<span class="ln">108</span>C OPTION TO SUPPRESS ANGULAR MOMENTUM TRANSPORT (BUT PERMIT MIXING).
+<span class="ln">109</span>      IF(LNOJ)THEN
+<span class="ln">110</span>         DO I = 2,M
+<span class="ln">111</span>            COD(I) = 0.0D0
+<span class="ln">112</span>         END DO
+<span class="ln">113</span>      ENDIF
+<span class="ln">114</span>      RETURN
+<span class="ln">115</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Settled. Question 2: CHECKJ's print reads <code>HLE</code> (column "LENGTH"), but that print is switched off. Fix: reword.</li>
+<li>Settled. Question 3: VCIRC sets <code>VMU = 0</code>; its comment says the $\mu$ terms were replaced by $(\nabla + \nabla_\mu - \nabla_\mathrm{ad})$ and <code>IMU</code> is kept "for later use". <code>FMU</code> and <code>IMU</code> are still namelist inputs, unused. Fix: state it; ask whether to remove them.</li>
+<li>Settled. Question 4: no routine sets <code>COD(1)</code> or <code>COD2(1)</code>; the readers start at element 2 (MIXGRID from <code>COD2(IBEG+1)</code>). Fix: reword as a check.</li>
+</ol>
+<p>Revised: questions 2, 3 and 4 reworded as settled.</p></div></details>
+</main></body></html>

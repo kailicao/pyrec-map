@@ -1,0 +1,302 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>rotgrid.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ rotgrid.f</span></header><main>
+<h1>rotgrid.f</h1>
+<p class='muted'>249 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/rotgrid.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> For the transport of angular momentum and the mixing it drives, maps one radiative region (shells <code>IBEG</code> to <code>IEND</code>) onto an auxiliary grid of points equally spaced in a mesh coordinate $\chi$, and computes there what the diffusion solver needs: each zone's mass, moment of inertia, angular momentum and angular velocity at the zone centers, and the diffusion coefficients, multiplied by the Jacobian of the change of variables, at the zone edges.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/seculr.f.html#def-SECULR"><code>SECULR</code></a> (the secular transport of angular momentum and composition), for each region it treats.</li>
+<li><strong>What it calls:</strong> <a href="../files/getgrid.f.html#def-GETGRID"><code>GETGRID</code></a>, which defines the coordinate $\chi$ (<code>CHI</code> at the model's shells, <code>ECHI</code> at the new points, spacing <code>DCHI</code>, <code>NTOT</code> points, and their masses <code>ES1</code>; all in <code>/EGRID/</code>), and <a href="../files/osplin.f.html#def-OSPLIN"><code>OSPLIN</code></a> for every interpolation, through the work arrays of <code>/SPLIN/</code>.</li>
+<li><strong>Inputs (arguments):</strong> the model's log density <code>HD</code>, log radius <code>HR</code> and radius <code>HRU</code>, log pressure <code>HP</code>, luminosity <code>HL</code>, log mass <code>HS</code>, masses <code>HS1</code> (enclosed) and <code>HS2</code> (of each shell), moments of inertia <code>HI</code>, specific angular momenta <code>HJMSAV</code>, angular velocities <code>WSAV</code>, the convection flags <code>LCZ</code>, and the diffusion coefficients <code>COD</code> (angular momentum) and <code>COD2</code> (composition). Also, from COMMON: the mesh tolerances <code>HPTTOL</code> (<code>/CTOL/</code>), the energy generation <code>EPSM</code> (<code>/MDPHY/</code>), and, with <code>LDIFAD</code> (<code>/VARFC/</code>), the advective and diffusive velocities <code>VESA</code>, <code>VESD</code> (<code>/DIFAD2/</code>) and the factor <code>FW</code> (<code>/VMULT/</code>).</li>
+<li><strong>Outputs:</strong> on the new grid, <code>EM</code> (zone masses), <code>EI</code> (moments of inertia), <code>EJ</code> (angular momenta), <code>EW</code> (angular velocities), <code>ECOD</code>, <code>ECOD2</code> (the two diffusion coefficients with their factors), and with <code>LDIFAD</code> <code>ECOD3</code>, <code>ECOD4</code> in <code>/DIFAD/</code>; <code>DR</code> is set to <code>DCHI</code>. <code>SECULR</code> solves the diffusion on this grid and maps the result back. <code>LDUM2</code> returns true, and nothing else is done, when the region has only one interface (<code>IEND - IBEG &lt;= 1</code>).</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Zone centers.</strong> $\log r$, $I/(m r^2)$ (<code>EI0</code>), $j = J/m$ and $\Omega$ are interpolated from the shells onto the new points. Then, for the interior zones,
+   $$\Delta m_k = \tfrac12\,(m_{k+1} - m_{k-1}),\qquad I_k = \frac{I}{m r^2}\Big|_k\,\Delta m_k\,r_k^2,\qquad J_k = j_k\,\Delta m_k .$$</li>
+<li><strong>The two end zones</strong> run from the half-way point to the next equally spaced point out to the half-way point to the next original shell (or the center, or the surface, where the mass is $10^{\texttt{HSTOT}}$). If the region borders a convection zone, all of that zone's shells are added to the end zone, so a convection zone moves as one block.</li>
+<li><strong>Zone edges.</strong> The diffusion coefficients are interpolated at $\chi_k - \tfrac12\Delta\chi$, assumed constant beyond the region's ends. With <code>LDIFAD</code>, the advective and diffusive terms $0.2\cdot4\pi f_W\,v$ are interpolated too, and the composition coefficient is added to the diffusive one (following Zahn 1992, as the comment says).</li>
+<li><strong>The Jacobian.</strong> The mesh coordinate is defined by the comment as
+   $$\chi = \frac{\log m}{\delta_m} + \frac{L}{\delta_L} - \frac{\log P}{\delta_P},$$
+   with $\delta_m$ = <code>HPTTOL(2)</code>, $\delta_L$ = <code>HPTTOL(9)</code> times the surface luminosity, $\delta_P$ = <code>HPTTOL(11)</code>, so that
+   $$\frac{d\chi}{dr} = \frac{4\pi\rho r^2}{\ln 10\;\delta_m\,m} + \frac{4\pi\rho r^2\,\varepsilon}{\delta_L} + \frac{G m \rho}{\ln 10\;\delta_P\,P\,r^2}.$$
+   The composition coefficient is multiplied by $\rho r^2\,d\chi/dr$, and the angular-momentum coefficients by $\rho r^2\,(I/m)\,d\chi/dr$ (for a thin spherical shell, $I/m = \tfrac23 r^2$, the comment notes), each interpolated in $\log_{10}$.</li>
+</ol></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Stale loop variable at the region's ends.</strong> In the loops that add a neighboring convection zone, <code>I0 = I + 1</code> and <code>I1 = I - 1</code> use <code>I</code>, which is left over from an earlier loop (the zone-center loop), not the loop variable <code>II</code>. <code>I0</code> and <code>I1</code> are not used afterwards, so there is no effect today, but they look like a remnant of an index meant to be <code>II</code>. Remove them?</li>
+<li><strong>The comment's $d\chi/dr$ omits $P$.</strong> The comment writes the third term as <code>RHO*GM/(LN10*DP*R**2)</code>; the code computes $G m\rho/(P r^2)$ (with <code>-HP(II)</code> in the exponent), which is the correct $d\log P/dr$ term. The comment should include $1/P$.</li>
+<li><strong>Hard-coded 0.2.</strong> In the advection–diffusion option, <code>FAC = 0.2D0*C4PI*FW</code>. Where does the 1/5 come from (probably the $\frac15$ of Zahn's 1992 transport equation)? A comment would help.</li>
+<li><strong>End zones use <code>HRU</code> but interior zones use interpolated $\log r$.</strong> <code>EI(1)</code> and <code>EI(NTOT)</code> take $r^2$ at the original shells <code>IBEG</code> and <code>IEND</code>, while the interior zones use $r$ interpolated at their centers. Intended?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-ROTGRID'>ROTGRID</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-ROTGRID'><h3><span class='kind'>subroutine</span>ROTGRID</h3>
+<p class='muted'>lines 2–249 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/rotgrid.f#L2-L249'>GitHub</a></p>
+<pre>SUBROUTINE ROTGRID(COD,COD2,HD,HI,HJMSAV,HL,HP,HR,HRU,HS,HS1,HS2,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-CTOL'>/CTOL/</a>, <a href='../commons.html#c-DIFAD'>/DIFAD/</a>, <a href='../commons.html#c-DIFAD2'>/DIFAD2/</a>, <a href='../commons.html#c-EGRID'>/EGRID/</a>, <a href='../commons.html#c-MDPHY'>/MDPHY/</a>, <a href='../commons.html#c-SPLIN'>/SPLIN/</a>, <a href='../commons.html#c-VARFC'>/VARFC/</a>, <a href='../commons.html#c-VMULT'>/VMULT/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/getgrid.f.html#def-GETGRID'>GETGRID</a> <span class='muted'>(getgrid.f)</span></li>
+<li><a href='../files/osplin.f.html#def-OSPLIN'>OSPLIN</a> <span class='muted'>(osplin.f)</span> ×10</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE ROTGRID(COD,COD2,HD,HI,HJMSAV,HL,HP,HR,HRU,HS,HS1,HS2,
+<span class="ln">3</span>     *                   HSTOT,IBEG,IEND,LCZ,M,WSAV,DR,ECOD,
+<span class="ln">4</span>     *                   ECOD2,EI,EJ,EM,EW,LDUM2)
+<span class="ln">5</span>      PARAMETER (JSON=5000)
+<span class="ln">6</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">7</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">8</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">9</span>      COMMON/CONST1/CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">10</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">11</span>      COMMON/CTOL/HTOLER(5,2),FCORR0,FCORRI,FCORR,HPTTOL(12),NITER1,
+<span class="ln">12</span>     *     NITER2,NITER3
+<span class="ln">13</span>      COMMON/EGRID/CHI(JSON),ECHI(JSON),ES1(JSON),DCHI,NTOT
+<span class="ln">14</span>      COMMON/MDPHY/AMUM(JSON),CPM(JSON),DELM(JSON),DELAM(JSON),
+<span class="ln">15</span>     *             DELRM(JSON),ESUMM(JSON),OM(JSON),QDTM(JSON),
+<span class="ln">16</span>     *             THDIFM(JSON),VELM(JSON),VISCM(JSON),EPSM(JSON)
+<span class="ln">17</span>      COMMON/SPLIN/XVAL(JSON),YVAL(JSON),XTAB(JSON),YTAB(JSON)
+<span class="ln">18</span>C MHP 05/02
+<span class="ln">19</span>      COMMON/DIFAD/ECOD3(JSON),ECOD4(JSON)
+<span class="ln">20</span>      COMMON/DIFAD2/VESA(JSON),VESA0(JSON),VESD(JSON),VESD0(JSON)
+<span class="ln">21</span>      COMMON/VARFC/VFC(JSON),LVFC,LDIFAD
+<span class="ln">22</span>      COMMON/VMULT/FW,FC,FO,FES,FGSF,FMU,FSS,RCRIT
+<span class="ln">23</span>C INPUT VARIABLES
+<span class="ln">24</span>      DIMENSION HD(JSON),HI(JSON),HJMSAV(JSON),HL(JSON),HP(JSON),
+<span class="ln">25</span>     *          HR(JSON),HRU(JSON),HS(JSON),HS1(JSON),HS2(JSON),
+<span class="ln">26</span>     *          LCZ(JSON),WSAV(JSON),COD(JSON),COD2(JSON)
+<span class="ln">27</span>C OUTPUT VARIABLES
+<span class="ln">28</span>      DIMENSION ECOD(JSON),ECOD2(JSON),EI(JSON),EJ(JSON),EM(JSON),
+<span class="ln">29</span>     *          EW(JSON),EI0(JSON)
+<span class="ln">30</span>C FLAG THE SPECIAL CASE OF A SINGLE UNSTABLE INTERFACE AND EXIT
+<span class="ln">31</span>      SAVE
+<span class="ln">32</span>      IF(IEND-IBEG.LE.1)THEN
+<span class="ln">33</span>         LDUM2 = .TRUE.
+<span class="ln">34</span>         GOTO 9999
+<span class="ln">35</span>      ELSE
+<span class="ln">36</span>         LDUM2 = .FALSE.
+<span class="ln">37</span>      ENDIF
+<span class="ln">38</span>C DEFINE A GRID OF EQUALLY SPACED POINTS.
+<span class="ln">39</span>      CALL <a href="../files/getgrid.f.html#def-GETGRID" title="GETGRID in getgrid.f">GETGRID</a>(HL,HP,HS,IBEG,IEND,M)
+<span class="ln">40</span>C GETGRID HAS DEFINED A SET OF CO-ORDINATES (CHI) AND EQUALLY SPACED
+<span class="ln">41</span>C MASS POINTS.  NOW FIND THE OTHER QUANTITIES OF INTEREST AT ZONE
+<span class="ln">42</span>C CENTERS:
+<span class="ln">43</span>C J/M (TO GET JTOT)
+<span class="ln">44</span>C I/MR^2 (TO GET ITOT)
+<span class="ln">45</span>C OMEGA
+<span class="ln">46</span>C R (NEEDED FOR I CALCULATION) - STORED IN YVAL
+<span class="ln">47</span>      NTAB = IEND - IBEG + 1
+<span class="ln">48</span>      DO I = 1,NTAB
+<span class="ln">49</span>         II = IBEG + I - 1
+<span class="ln">50</span>         XTAB(I) = CHI(I)
+<span class="ln">51</span>         YTAB(I) = HR(II)
+<span class="ln">52</span>      END DO
+<span class="ln">53</span>      DO I = 1,NTOT
+<span class="ln">54</span>         XVAL(I) = ECHI(I)
+<span class="ln">55</span>      END DO
+<span class="ln">56</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(XVAL,YVAL,XTAB,YTAB,NTAB,NTOT)
+<span class="ln">57</span>C I/MR^2
+<span class="ln">58</span>      DO I = 1,NTAB
+<span class="ln">59</span>         II = IBEG + I - 1
+<span class="ln">60</span>         YTAB(I) = HI(II)/(HS2(II)*HRU(II)**2)
+<span class="ln">61</span>      END DO
+<span class="ln">62</span>C MHP 05/02 STORE I/MR^2 FOR LATER USE IN
+<span class="ln">63</span>C DIFFUSION COEFFICIENTS FOR ANGULAR MOMENTUM
+<span class="ln">64</span>C TRANSPORT
+<span class="ln">65</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(XVAL,EI0,XTAB,YTAB,NTAB,NTOT)
+<span class="ln">66</span>C J/M
+<span class="ln">67</span>      DO I = 1,NTAB
+<span class="ln">68</span>         II = IBEG + I - 1
+<span class="ln">69</span>         YTAB(I) = HJMSAV(II)
+<span class="ln">70</span>      END DO
+<span class="ln">71</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(XVAL,EJ,XTAB,YTAB,NTAB,NTOT)
+<span class="ln">72</span>C OMEGA
+<span class="ln">73</span>      DO I = 1,NTAB
+<span class="ln">74</span>         II = IBEG + I - 1
+<span class="ln">75</span>         YTAB(I) = WSAV(II)
+<span class="ln">76</span>      END DO
+<span class="ln">77</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(XVAL,EW,XTAB,YTAB,NTAB,NTOT)
+<span class="ln">78</span>C CONVERT TO TOTAL I AND TOTAL J OF THE ZONES.
+<span class="ln">79</span>C INTERMEDIATE POINTS
+<span class="ln">80</span>      DO I = 2, NTOT-1
+<span class="ln">81</span>         EM(I) = 0.5D0*(ES1(I+1)-ES1(I-1))
+<span class="ln">82</span>C MHP 05/02 CHANGED TO REFLECT THE FACT THAT
+<span class="ln">83</span>C THE INFO PREVIOUSLY STORED IN EI IS NOW IN EI0
+<span class="ln">84</span>         EI(I) = EI0(I)*EM(I)*EXP(CLN*2.0D0*YVAL(I))
+<span class="ln">85</span>         EJ(I) = EJ(I)*EM(I)
+<span class="ln">86</span>      END DO
+<span class="ln">87</span>C SPECIAL TREATMENT OF THE BOUNDARIES; CAN BE CONVECTIVE.
+<span class="ln">88</span>C IF CONVECTIVE SUM OVER ALL SHELLS.  CARE IS NEEDED TO DO BOOK-KEEPING
+<span class="ln">89</span>C PROPERLY AT THE EDGES - TOP IS HALFWAY TO EQUALLY SPACED POINT, NOT
+<span class="ln">90</span>C HALFWAY TO EDGE OF UNEQUALLY SPACED ORIGINAL SET OF POINTS.
+<span class="ln">91</span>C
+<span class="ln">92</span>C CENTER
+<span class="ln">93</span>      EMTOP = 0.5D0*(ES1(2)+ES1(1))
+<span class="ln">94</span>      IF(IBEG.GT.1)THEN
+<span class="ln">95</span>         EMBOT = 0.5D0*(HS1(IBEG)+HS1(IBEG-1))
+<span class="ln">96</span>      ELSE
+<span class="ln">97</span>         EMBOT = 0.0D0
+<span class="ln">98</span>      ENDIF
+<span class="ln">99</span>      EM(1) = EMTOP - EMBOT
+<span class="ln">100</span>C MHP 05/02 CHANGED TO REFLECT THE FACT THAT
+<span class="ln">101</span>C THE INFO PREVIOUSLY STORED IN EI IS NOW IN EI0
+<span class="ln">102</span>      EI(1) = EI0(1)*EM(1)*HRU(IBEG)**2
+<span class="ln">103</span>      EJ(1) = EJ(1)*EM(1)
+<span class="ln">104</span>      IF(IBEG.GT.1)THEN
+<span class="ln">105</span>         DO II = IBEG-1,1,-1
+<span class="ln">106</span>            IF(.NOT.LCZ(II))THEN
+<span class="ln">107</span>               I0 = I + 1
+<span class="ln">108</span>               GOTO 10
+<span class="ln">109</span>            ENDIF
+<span class="ln">110</span>            EM(1) = EM(1)+HS2(II)
+<span class="ln">111</span>            EI(1) = EI(1)+HI(II)
+<span class="ln">112</span>            EJ(1) = EJ(1)+HJMSAV(II)*HS2(II)
+<span class="ln">113</span>         END DO
+<span class="ln">114</span>         I0 = 1
+<span class="ln">115</span> 10      CONTINUE
+<span class="ln">116</span>      ELSE
+<span class="ln">117</span>         I0 = 1
+<span class="ln">118</span>      ENDIF
+<span class="ln">119</span>C SURFACE
+<span class="ln">120</span>      EMBOT = 0.5D0*(ES1(NTOT)+ES1(NTOT-1))
+<span class="ln">121</span>      IF(IEND.LT.M)THEN
+<span class="ln">122</span>         EMTOP = 0.5D0*(HS1(IEND)+HS1(IEND+1))
+<span class="ln">123</span>      ELSE
+<span class="ln">124</span>         EMTOP = EXP(CLN*HSTOT)
+<span class="ln">125</span>      ENDIF
+<span class="ln">126</span>      EM(NTOT) = EMTOP - EMBOT
+<span class="ln">127</span>C MHP 05/02 CHANGED TO REFLECT THE FACT THAT
+<span class="ln">128</span>C THE INFO PREVIOUSLY STORED IN EI IS NOW IN EI0
+<span class="ln">129</span>      EI(NTOT) = EI0(NTOT)*EM(NTOT)*HRU(IEND)**2
+<span class="ln">130</span>      EJ(NTOT) = EJ(NTOT)*EM(NTOT)
+<span class="ln">131</span>      IF(IEND.LT.M)THEN
+<span class="ln">132</span>         DO II = IEND+1,M
+<span class="ln">133</span>            IF(.NOT.LCZ(II))THEN
+<span class="ln">134</span>               I1 = I -1
+<span class="ln">135</span>               GOTO 20
+<span class="ln">136</span>            ENDIF
+<span class="ln">137</span>            EM(NTOT) = EM(NTOT)+HS2(II)
+<span class="ln">138</span>            EI(NTOT) = EI(NTOT)+HI(II)
+<span class="ln">139</span>            EJ(NTOT) = EJ(NTOT)+HJMSAV(II)*HS2(II)
+<span class="ln">140</span>         END DO
+<span class="ln">141</span>         I1 = M
+<span class="ln">142</span> 20      CONTINUE
+<span class="ln">143</span>      ELSE
+<span class="ln">144</span>         I1 = M
+<span class="ln">145</span>      ENDIF
+<span class="ln">146</span>C NOW SOLVE FOR QUANTITIES NEEDED AT THE ZONE EDGES.  THESE ARE
+<span class="ln">147</span>C RELATED TO THE DIFFUSION COEFFICIENTS.  UNLIKE THE EQUALLY SPACED
+<span class="ln">148</span>C GRID IN R, WE NEED TO INCLUDE A JACOBIAN TERM FOR THE TRANSFORMATION
+<span class="ln">149</span>C OF VARIABLES.
+<span class="ln">150</span>C DIFFUSION COEFFICIENT FOR ANGULAR MOMENTUM - ASSUME CONSTANT BELOW
+<span class="ln">151</span>C BOTTOM INTERFACE OR ABOVE TOP INTERFACE
+<span class="ln">152</span>      XTAB(1) = CHI(1)
+<span class="ln">153</span>      YTAB(1) = COD(IBEG+1)
+<span class="ln">154</span>      DO I = 2,NTAB
+<span class="ln">155</span>         II = IBEG + I - 1
+<span class="ln">156</span>         XTAB(I) = 0.5D0*(CHI(I)+CHI(I-1))
+<span class="ln">157</span>         YTAB(I) = COD(II)
+<span class="ln">158</span>      END DO
+<span class="ln">159</span>      NTABB = NTAB + 1
+<span class="ln">160</span>      XTAB(NTABB) = CHI(NTAB)
+<span class="ln">161</span>      YTAB(NTABB) = COD(IEND)
+<span class="ln">162</span>      XVAL(1) = CHI(1)
+<span class="ln">163</span>      DO I = 2, NTOT
+<span class="ln">164</span>         XVAL(I) = ECHI(I)-0.5D0*DCHI
+<span class="ln">165</span>      END DO
+<span class="ln">166</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(XVAL,ECOD,XTAB,YTAB,NTABB,NTOT)
+<span class="ln">167</span>C DIFFUSION COEFFICIENT FOR MIXING - ASSUME CONSTANT BELOW
+<span class="ln">168</span>C BOTTOM INTERFACE OR ABOVE TOP INTERFACE
+<span class="ln">169</span>      YTAB(1) = COD2(IBEG+1)
+<span class="ln">170</span>      DO I = 2,NTAB
+<span class="ln">171</span>         II = IBEG + I - 1
+<span class="ln">172</span>         YTAB(I) = COD2(II)
+<span class="ln">173</span>      END DO
+<span class="ln">174</span>      YTAB(NTABB) = COD2(IEND)
+<span class="ln">175</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(XVAL,ECOD2,XTAB,YTAB,NTABB,NTOT)
+<span class="ln">176</span>C ADD DIFFUSION PLUS ADVECTION TREATMENT IF DESIRED
+<span class="ln">177</span>      IF(LDIFAD)THEN
+<span class="ln">178</span>         FAC = 0.2D0*C4PI*FW
+<span class="ln">179</span>         YTAB(1) = FAC*VESA(IBEG + 1)
+<span class="ln">180</span>         DO I = 2,NTAB
+<span class="ln">181</span>            II = IBEG + I - 1
+<span class="ln">182</span>            YTAB(I) = FAC*VESA(II)
+<span class="ln">183</span>         END DO
+<span class="ln">184</span>         YTAB(NTABB) = FAC*VESA(IEND)
+<span class="ln">185</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(XVAL,ECOD3,XTAB,YTAB,NTABB,NTOT)
+<span class="ln">186</span>         YTAB(1) = FAC*VESD(IBEG + 1)
+<span class="ln">187</span>         DO I = 2,NTAB
+<span class="ln">188</span>            II = IBEG + I - 1
+<span class="ln">189</span>            YTAB(I) = FAC*VESD(II)
+<span class="ln">190</span>         END DO
+<span class="ln">191</span>         YTAB(NTABB) = FAC*VESD(IEND)
+<span class="ln">192</span>         CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(XVAL,ECOD4,XTAB,YTAB,NTABB,NTOT)
+<span class="ln">193</span>C MHP 05/02 NOTE THAT THE COMPOSITION DIFFUSION COEFFICIENTS
+<span class="ln">194</span>C SHOULD BE ADDED TO THE DIFFUSIVE PART OF THE DIFFUSION + ADVECTION
+<span class="ln">195</span>C ANGULAR MOMENTUM TRANSPORT; C.F. ZAHN 1992.  ESSENTIALLY THE
+<span class="ln">196</span>C ORIGINAL VESD TERM IS THE DIFFUSIVE COMPONENT FROM HORIZONTAL
+<span class="ln">197</span>C TRANSPORT WHILE THE COD2 TERM REPRESENTS THE DIFFUSIVE COMPONENT
+<span class="ln">198</span>C FROM VERTICAL TRANSPORT.
+<span class="ln">199</span>         DO I = 1, NTOT
+<span class="ln">200</span>            ECOD4(I) = ECOD4(I) + ECOD2(I)
+<span class="ln">201</span>         END DO
+<span class="ln">202</span>      ENDIF
+<span class="ln">203</span>C PRODUCT OF RHO R^2 BY D CHI/DR
+<span class="ln">204</span>      DM = HPTTOL(2)
+<span class="ln">205</span>      DL = HPTTOL(9)*HL(M)*CLSUN
+<span class="ln">206</span>      DP = HPTTOL(11)
+<span class="ln">207</span>      DO I = 1, NTAB
+<span class="ln">208</span>         II = IBEG + I - 1
+<span class="ln">209</span>         XTAB(I) = CHI(I)
+<span class="ln">210</span>C D CHI/DR = 1/DM*( D LOG M/DR) + 1/DL*(DL/DR) - 1/DP*(D LOG P/DR)
+<span class="ln">211</span>C OR, USING FAC = 4*PI*RHO*R**2
+<span class="ln">212</span>C D CHI/DR = FAC/(LN 10 * DM * M) + FAC*EPSILON/DL + RHO*GM/(LN10*DP*R**2)
+<span class="ln">213</span>C STORED IN YVAL
+<span class="ln">214</span>         FAC = C4PI*EXP(CLN*(HD(II)+2.0D0*HR(II)))
+<span class="ln">215</span>         QCHIR = FAC/(CLN*DM*HS1(II))+FAC*EPSM(II)/DL+
+<span class="ln">216</span>     *   EXP(CLN*(CGL+HD(II)+HS(II)-HP(II)-2.0D0*HR(II)))/(CLN*DP)
+<span class="ln">217</span>         YTAB(I) = HD(II) + LOG10(QCHIR) + 2.0D0*HR(II)
+<span class="ln">218</span>      END DO
+<span class="ln">219</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(XVAL,YVAL,XTAB,YTAB,NTAB,NTOT)
+<span class="ln">220</span>C NOW ADD MULTIPLICATIVE FACTORS TO DIFFUSION COEFFICIENTS
+<span class="ln">221</span>C NOTE THAT A FACTOR OF 4PI HAS ALREADY BEEN INCLUDED IN
+<span class="ln">222</span>C CODIFF.
+<span class="ln">223</span>      DO I = 1, NTOT
+<span class="ln">224</span>         ECOD2(I) = ECOD2(I)*EXP(CLN*YVAL(I))
+<span class="ln">225</span>      END DO
+<span class="ln">226</span>C PRODUCT OF RHO R^4 BY D CHI/DR - STORED IN YVAL
+<span class="ln">227</span>C MHP 05/02 ADDED FACTOR OF I/MR^2 - 2/3 FOR A SPHERICAL SHELL
+<span class="ln">228</span>      DO I = 1, NTAB
+<span class="ln">229</span>         II = IBEG + I - 1
+<span class="ln">230</span>C         YTAB(I) = YTAB(I) + 2.0D0*HR(II) + LOG10(EI0(I))
+<span class="ln">231</span>         YTAB(I) = YTAB(I)  + LOG10(HI(II)/HS2(II))
+<span class="ln">232</span>      END DO
+<span class="ln">233</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(XVAL,YVAL,XTAB,YTAB,NTAB,NTOT)
+<span class="ln">234</span>C NOW ADD MULTIPLICATIVE FACTORS TO DIFFUSION COEFFICIENTS
+<span class="ln">235</span>      DO I = 1, NTOT
+<span class="ln">236</span>         ECOD(I) = ECOD(I)*EXP(CLN*YVAL(I))
+<span class="ln">237</span>      END DO
+<span class="ln">238</span>C MHP 05/02
+<span class="ln">239</span>      IF(LDIFAD)THEN
+<span class="ln">240</span>         DO I = 1,NTOT
+<span class="ln">241</span>            ECOD3(I) = ECOD3(I)*EXP(CLN*YVAL(I))
+<span class="ln">242</span>            ECOD4(I) = ECOD4(I)*EXP(CLN*YVAL(I))
+<span class="ln">243</span>         END DO
+<span class="ln">244</span>      ENDIF
+<span class="ln">245</span>C REDEFINE DR AS DCHI
+<span class="ln">246</span>      DR = DCHI
+<span class="ln">247</span> 9999 CONTINUE
+<span class="ln">248</span>      RETURN
+<span class="ln">249</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings: the zone sums, the end zones, the Jacobian $d\chi/dr$ (checked term by term against <code>QCHIR</code>), the factors on <code>ECOD</code>, <code>ECOD2</code>, <code>ECOD3</code>, <code>ECOD4</code> and the four questions hold.</p>
+<p>No change.</p></div></details>
+</main></body></html>

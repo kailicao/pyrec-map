@@ -1,0 +1,93 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>hsubp.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ hsubp.f</span></header><main>
+<h1>hsubp.f</h1>
+<p class='muted'>47 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/hsubp.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>HSUBP</code> computes the local pressure scale height at one point, the edge of a convective region, for the overshoot calculation (comment: "PD Dec. 1984, revised for YREC/Mark6 by MHP 2/91").</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../files/oversh.f.html#def-OVERSH"><code>OVERSH</code></a>, with <code>JEDGE</code> the point at the edge of the convection zone.</li>
+<li><strong>Inputs:</strong> the model's composition <code>HCOMP</code>, and $\log\rho$, $\log P$, $\log r$, $\log m$, $\log T$ (<code>HD</code>, <code>HP</code>, <code>HR</code>, <code>HS</code>, <code>HT</code>). <strong>Output:</strong> <code>PSCAHE</code>, the scale height in cm.</li>
+<li><strong>Calls:</strong> <a href="../files/eqstat.f.html#def-EQSTAT"><code>EQSTAT</code></a>, the equation of state.</li>
+<li><strong>COMMON blocks:</strong> the constants <code>CONST1</code> and <code>CONST2</code> (for <code>CLN</code> and $\log G$, <code>CGL</code>), and <code>DEBHU</code>, where it sets the composition used by the Debye–Hückel correction (<code>XXDH</code>, <code>YYDH</code>, <code>ZZDH</code>, <code>ZDH(1..3)</code>) before calling the EOS; <code>DEBHU</code> is shared with <code>EQSTAT</code>, <code>EQRELV</code>, <code>PHYSIC</code>, <code>COEFFT</code> and others.</li>
+</ul>
+<p><strong>The method.</strong> The scale height returned is the hydrostatic one,</p>
+<p>$$H_P = \frac{P}{\rho g} = \frac{P\,r^2}{\rho\,G\,m},$$</p>
+<p>computed in logs: <code>PSCAHE</code> $= 10^{\log P + 2\log r - \log\rho - \log G - \log m}$. Here $\log\rho$ is not the model's <code>HD(JEDGE)</code>: <code>DL</code> is an output argument of <a href="../files/eqstat.f.html#def-EQSTAT"><code>EQSTAT</code></a>, which recomputes the density from $P$, $T$, $X$, $Z$, and <code>PSCAHE</code> uses that value. The EOS call also returns <code>RMU</code> (probably $\mathcal{R}/\mu$), which goes only into a second, ideal-gas estimate <code>PSCAP</code> $= (\mathcal{R}/\mu)\,T r^2/(G m)$, which is never returned.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Unused result; which density.</strong> <code>PSCAP</code> is computed and dropped, and <code>RMU</code> from <code>EQSTAT</code> is used only for it; the comment says the EOS is called "to determine the mean molecular weight". The EOS call does change the result, though, through the density it returns in <code>DL</code>. Was the EOS density meant (rather than the model's <code>HD(JEDGE)</code>), and is <code>PSCAP</code> a leftover?</li>
+<li><strong>Debye–Hückel side effect.</strong> When <code>LDH</code> is true, <code>HSUBP</code> overwrites <code>XXDH</code>, <code>YYDH</code>, <code>ZZDH</code>, <code>ZDH(1..3)</code> in <code>DEBHU</code> with the composition at <code>JEDGE</code>. Do later EOS calls rely on these being set by their own callers?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+HSUBP
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-HSUBP'>HSUBP</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-HSUBP'><h3><span class='kind'>subroutine</span>HSUBP</h3>
+<p class='muted'>lines 4–47 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/hsubp.f#L4-L47'>GitHub</a></p>
+<pre>SUBROUTINE HSUBP (HCOMP,HD,HP,HR,HS,HT,JEDGE,PSCAHE)</pre>
+<div class='notes'><p>Returns $H_P = P r^2/(\rho G m)$ at point <code>JEDGE</code>, with $\rho$ from the EOS (above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+HSUBP
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-DEBHU'>/DEBHU/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/eqstat.f.html#def-EQSTAT'>EQSTAT</a> <span class='muted'>(eqstat.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/oversh.f.html#def-OVERSH'>OVERSH</a> <span class='muted'>(oversh.f)</span> ×4</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE HSUBP (HCOMP,HD,HP,HR,HS,HT,JEDGE,PSCAHE)
+<span class="ln">5</span>
+<span class="ln">6</span>      PARAMETER (JSON=5000)
+<span class="ln">7</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">8</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">9</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">10</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">11</span>C DBG 7/92 COMMON BLOCK ADDED TO COMPUTE DEBYE-HUCKEL CORRECTION.
+<span class="ln">12</span>      COMMON/DEBHU/CDH,ETADH0,ETADH1,ZDH(18),XXDH,
+<span class="ln">13</span>     1             YYDH,ZZDH,DHNUE(18),LDH
+<span class="ln">14</span>      DIMENSION HCOMP(15,JSON),HD(JSON),HP(JSON),HR(JSON),HS(JSON),
+<span class="ln">15</span>     *          HT(JSON),FXION(3)
+<span class="ln">16</span>      SAVE
+<span class="ln">17</span>
+<span class="ln">18</span>C *** CALCULATES THE LOCAL PRESSURE SCALE HEIGHT AT THE EDGE OF A
+<span class="ln">19</span>C     CONVECTIVE REGION (PD DEC. 1984) 2/91 MHP REVISED FOR YREC/MARK6***
+<span class="ln">20</span>C
+<span class="ln">21</span>C  CALL EQUATION OF STATE TO DETERMINE THE MEAN MOLECULAR WEIGHT.
+<span class="ln">22</span>      LDERIV = .FALSE.
+<span class="ln">23</span>      LATMO = .TRUE.
+<span class="ln">24</span>      KSAHA = 0
+<span class="ln">25</span>      X = HCOMP(1,JEDGE)
+<span class="ln">26</span>      Z = HCOMP(3,JEDGE)
+<span class="ln">27</span>      PL = HP(JEDGE)
+<span class="ln">28</span>      TL = HT(JEDGE)
+<span class="ln">29</span>      DL = HD(JEDGE)
+<span class="ln">30</span>      IF (LDH) THEN
+<span class="ln">31</span>         XXDH = HCOMP(1,JEDGE)
+<span class="ln">32</span>         YYDH = HCOMP(2,JEDGE)+HCOMP(4,JEDGE)
+<span class="ln">33</span>         ZZDH = HCOMP(3,JEDGE)
+<span class="ln">34</span>         ZDH(1) = HCOMP(5,JEDGE)+HCOMP(6,JEDGE)
+<span class="ln">35</span>         ZDH(2) = HCOMP(7,JEDGE)+HCOMP(8,JEDGE)
+<span class="ln">36</span>         ZDH(3) = HCOMP(9,JEDGE)+HCOMP(10,JEDGE)+HCOMP(11,JEDGE)
+<span class="ln">37</span>      END IF
+<span class="ln">38</span>      CALL <a href="../files/eqstat.f.html#def-EQSTAT" title="EQSTAT in eqstat.f">EQSTAT</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,
+<span class="ln">39</span>     *            RMU,AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,
+<span class="ln">40</span>     *            QAT,QAP,QCPT,QCPP,LDERIV,LATMO,KSAHA)
+<span class="ln">41</span>C  COMPUTE PRESSURE SCALE HEIGHT.
+<span class="ln">42</span>      SL = HS(JEDGE)
+<span class="ln">43</span>      RL = HR(JEDGE)
+<span class="ln">44</span>      PSCAP = RMU*EXP(CLN*(TL-CGL-SL+RL+RL))
+<span class="ln">45</span>      PSCAHE = EXP(CLN*(PL + 2.0D0*RL - DL - CGL - SL))
+<span class="ln">46</span>      RETURN
+<span class="ln">47</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "the EOS call … has no effect on the result": <code>EQSTAT</code> returns <code>DL</code> (log density from $P$, $T$, $X$, $Z$; it is an output argument, set by <code>EQSTAT2</code>), and <code>PSCAHE</code> uses that <code>DL</code>, not <code>HD(JEDGE)</code>. So $\rho$ in $H_P$ is the EOS density. Fix: correct the method and question 1.</li>
+</ol>
+<p>Revised: $\rho$ in $H_P$ is the EOS density (<code>DL</code>); method and question 1 corrected.</p></div></details>
+</main></body></html>

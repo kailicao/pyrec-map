@@ -1,0 +1,215 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>lir.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ lir.f</span></header><main>
+<h1>lir.f</h1>
+<p class='muted'>179 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/lir.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>LIR</code> is a general interpolation/extrapolation routine for tables: given a monotonic abscissa <code>ZI(1..NT)</code> and <code>II</code> ordinates tabulated at each node (<code>YI</code>, first dimension <code>ID</code>), it returns the <code>II</code> values at <code>Z</code>, by cubic (4-point Lagrange) interpolation, or linear when <code>NT</code> &lt; 4. A second entry point, <code>LIR1</code>, forces linear interpolation. It comes with the MHD equation-of-state package (it sits in the group of <code>MHDPX*</code>, <code>MHDST*</code>).</p>
+<p><strong>How it fits.</strong> Called by <a href="../files/intpt.f.html#def-INTPT"><code>INTPT</code></a> (five times per call: in pressure on four temperature rows, then in temperature) and by <a href="../files/mhdpx1.f.html#def-MHDPX1"><code>MHDPX1</code></a>, both in the MHD EOS interpolation. No call to the <code>LIR1</code> entry exists in <code>src/</code>. No COMMON blocks, no calls. The output flag <code>INTER</code> is 1 for interpolation and 0 for extrapolation.</p>
+<p><strong>The method.</strong> It scans from <code>N</code> = 1 (or, when <code>L</code> &gt; 1, from the node found by the previous call, kept in the saved <code>N</code>) to the first node beyond <code>Z</code>, in ascending or descending order. If <code>Z</code> falls on a node it copies that node's values. Otherwise it takes the four nodes around <code>Z</code> (shifted at the ends, so it extrapolates near and beyond them) and the Lagrange weights</p>
+<p>$$A_k = \prod_{j\ne k}\frac{z - z_j}{z_k - z_j},\qquad y_i(z) = \sum_{k=1}^{4} A_k\,y_i(z_k);$$</p>
+<p>the weight of node $k$ (<code>K</code>: the third of the four, i.e. the first node beyond <code>Z</code>, or the nearest end node near the table's ends; the comment calls it the point closest to <code>Z</code>) is then reset to $1 + A_k - \sum_j A_j$, so that the weights sum exactly to 1. The linear branch uses $y = w\,y_{n-1} + (1-w)\,y_n$ with $w = (z_n - z)/(z_n - z_{n-1})$. Any result exactly zero also zeroes the next element of <code>Y</code> (<code>Y(I+IR1)</code>, with <code>IR1</code> = 0 here, so it has no effect).</p>
+<p><strong>Design.</strong> The scan position <code>N</code> is saved between calls (<code>DATA N/-1/</code>, <code>SAVE</code>), so with <code>L</code> &gt; 1 the result depends on the previous call. The error branches (fewer than 2 points; first and last abscissae equal) return silently without setting <code>Y</code>; their messages are commented out.</p>
+<p><strong>KC's changes.</strong> 2025-05-30: arithmetic IF statements replaced by block IFs, and DO loops that ended on a labelled assignment rewritten to end on <code>CONTINUE</code> (no change in behaviour intended).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Silent failures.</strong> With <code>NT</code> &lt; 2 or <code>ZI(1)</code> = <code>ZI(NT)</code>, <code>LIR</code> returns without setting <code>Y</code> and without a message, so the caller uses stale values. Should it stop or warn?</li>
+<li><strong>A comment that no longer holds.</strong> "Most of the computation is performed in single precision": the routine is <code>IMPLICIT REAL*8</code>.</li>
+<li><strong>Unused entry and stride.</strong> <code>LIR1</code> is never called, and the stride <code>IR</code> is always 1, which makes the <code>IR1</code>, <code>IRD</code>, <code>IIR</code> arithmetic dead weight. Can the routine be simplified?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+LIR
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-LIR'>LIR</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-LIR'><h3><span class='kind'>subroutine</span>LIR</h3>
+<p class='muted'>lines 12–179 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/lir.f#L12-L179'>GitHub</a></p>
+<pre>SUBROUTINE  LIR(Z,ZI,Y,YI,II,ID,NT,L,INTER)</pre>
+<div class='notes'><p>Cubic (or linear) Lagrange interpolation of several tabulated quantities at once, with a remembered search position (above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+LIR
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/intpt.f.html#def-INTPT'>INTPT</a> <span class='muted'>(intpt.f)</span> ×2</li>
+<li><a href='../files/mhdpx1.f.html#def-MHDPX1'>MHDPX1</a> <span class='muted'>(mhdpx1.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">12</span>      SUBROUTINE  LIR(Z,ZI,Y,YI,II,ID,NT,L,INTER)
+<span class="ln">13</span>
+<span class="ln">14</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">15</span>
+<span class="ln">16</span>C     INTERPOLATION/EXTRAPOLATION ROUTINE
+<span class="ln">17</span>C     FOR A SUCH THAT Z=ZI(A),  SETS Y(I)=YI(I,A), I=1,II
+<span class="ln">18</span>C     ZI(N),YI(I,N) MUST BE SUPPLIED FOR N=1,NT AND I=1,II
+<span class="ln">19</span>C     ID IS FIRST DIMENSION OF YI
+<span class="ln">20</span>C     INTER IS SET TO 1 FOR INTERPOLATION AND 0 FOR EXTRAPOLATION
+<span class="ln">21</span>C     IF L.LE.1, SCAN TO FIND THE ZI(N) WHICH IMMEDIATELY BOUND Z
+<span class="ln">22</span>C                STARTS AT N=1
+<span class="ln">23</span>C     IF L.GT.1, SCAN STARTS FROM VALUE OF N FROM PREVIOUS CALL OF LIR
+<span class="ln">24</span>C     LIR USE CUBIC INTERPOLATION/EXTRAPOLATION UNLESS NT.LT.4
+<span class="ln">25</span>C     LIR1 USE LINEAR INTERPOLATION/EXTRAPOLATION
+<span class="ln">26</span>C     NOTE
+<span class="ln">27</span>C     MOST OF THE COMPUTATION IS PERFORMED IN SINGLE PRECISION
+<span class="ln">28</span>      DIMENSION ZI(1),Y(1),YI(1),A(4)
+<span class="ln">29</span>      DATA N/-1/
+<span class="ln">30</span>      save
+<span class="ln">31</span>C
+<span class="ln">32</span>      IL=0
+<span class="ln">33</span>      GO TO 1
+<span class="ln">34</span>      ENTRY LIR1(Z,ZI,Y,YI,II,ID,NT,L,INTER)
+<span class="ln">35</span>      IL=1
+<span class="ln">36</span>    1 CONTINUE
+<span class="ln">37</span>      IR=1
+<span class="ln">38</span>C     CHECK NT AND RESET IL IF NECESSARY
+<span class="ln">39</span>      IF(NT.LT.2) GO TO 101
+<span class="ln">40</span>      IF(NT.LT.4) IL=1
+<span class="ln">41</span>C     ADDRESSING CONSTANTS
+<span class="ln">42</span>      INTER=1
+<span class="ln">43</span>      IR1=IR-1
+<span class="ln">44</span>      IRD=IR*ID
+<span class="ln">45</span>      IIR=(II-1)*IR+1
+<span class="ln">46</span>      J=(NT-1)*IR+1
+<span class="ln">47</span>      DIFF=ZI(J)-ZI(1)
+<span class="ln">48</span>C     SET INDEX FOR START OF SEARCH
+<span class="ln">49</span>      N=(N-2)*IR+1
+<span class="ln">50</span>      IF(L.LE.1.OR.N.LT.1) N=1
+<span class="ln">51</span>C     DETERMINE POSITION OF Z WITHIN ZI
+<span class="ln">52</span>    2 IF(N.GT.J) GO TO 8
+<span class="ln">53</span>C KC 2025-05-30 fixed &quot;Arithmetic IF statement&quot;
+<span class="ln">54</span>C       IF(DIFF) 4,102,3
+<span class="ln">55</span>C     3 IF(ZI(N)-Z) 5,6,9
+<span class="ln">56</span>C     4 IF(ZI(N)-Z) 9,6,5
+<span class="ln">57</span>      IF (DIFF .LT. 0.0) THEN
+<span class="ln">58</span>         GOTO 4
+<span class="ln">59</span>      ELSE IF (DIFF .EQ. 0.0) THEN
+<span class="ln">60</span>         GOTO 102
+<span class="ln">61</span>      ELSE
+<span class="ln">62</span>         GOTO 3
+<span class="ln">63</span>      END IF
+<span class="ln">64</span>    3 IF (ZI(N) .LT. Z) THEN
+<span class="ln">65</span>         GOTO 5
+<span class="ln">66</span>      ELSE IF (ZI(N) .EQ. Z) THEN
+<span class="ln">67</span>         GOTO 6
+<span class="ln">68</span>      ELSE
+<span class="ln">69</span>         GOTO 9
+<span class="ln">70</span>      END IF
+<span class="ln">71</span>    4 IF (ZI(N) .LT. Z) THEN
+<span class="ln">72</span>         GOTO 9
+<span class="ln">73</span>      ELSE IF (ZI(N) .EQ. Z) THEN
+<span class="ln">74</span>         GOTO 6
+<span class="ln">75</span>      ELSE
+<span class="ln">76</span>         GOTO 5
+<span class="ln">77</span>      END IF
+<span class="ln">78</span>    5 N=N+IR
+<span class="ln">79</span>      GO TO 2
+<span class="ln">80</span>C     SET Y WHEN Z LIES ON A MESH POINT
+<span class="ln">81</span>    6 J=(N-1)*ID
+<span class="ln">82</span>      DO 7 I=1,IIR
+<span class="ln">83</span>C KC 2025-05-30 fixed &quot;DO termination statement which is not END DO or CONTINUE&quot;
+<span class="ln">84</span>C       Y(I)=YI(I+J)
+<span class="ln">85</span>C     7 IF(Y(I).EQ.0.D0) Y(I+IR1)=0.D0
+<span class="ln">86</span>         Y(I)=YI(I+J)
+<span class="ln">87</span>         IF(Y(I).EQ.0.D0) Y(I+IR1)=0.D0
+<span class="ln">88</span>    7 CONTINUE
+<span class="ln">89</span>      GO TO 30
+<span class="ln">90</span>C     CONTROL WHEN Z DOES NOT LIE ON A MESH POINT
+<span class="ln">91</span>    8 INTER=0
+<span class="ln">92</span>    9 IF(N.LE.1) INTER=0
+<span class="ln">93</span>      IF(IL.EQ.1) GO TO 20
+<span class="ln">94</span>C     CUBIC INTERPOLATION/EXTRAPOLATION
+<span class="ln">95</span>C     PIVOTAL POINT (M) AND POINT (K) CLOSEST TO Z
+<span class="ln">96</span>C    10 M=N
+<span class="ln">97</span>      M=N
+<span class="ln">98</span>      K=3
+<span class="ln">99</span>      IF(N.GT.1+IR) GO TO 11
+<span class="ln">100</span>      M=1+IR+IR
+<span class="ln">101</span>      K=N
+<span class="ln">102</span>   11 IF(N.LT.J) GO TO 12
+<span class="ln">103</span>      M=J-IR
+<span class="ln">104</span>      K=4
+<span class="ln">105</span>C     WEIGHTING FACTORS
+<span class="ln">106</span>   12 Y1=ZI(M-IR*2)
+<span class="ln">107</span>      Y2=ZI(M-IR)
+<span class="ln">108</span>      Y3=ZI(M)
+<span class="ln">109</span>      Y4=ZI(M+IR)
+<span class="ln">110</span>      Z1=Z-Y1
+<span class="ln">111</span>      Z2=Z-Y2
+<span class="ln">112</span>      Z3=Z-Y3
+<span class="ln">113</span>      Z4=Z-Y4
+<span class="ln">114</span>C    13 Z12=Z1*Z2
+<span class="ln">115</span>      Z12=Z1*Z2
+<span class="ln">116</span>      Z34=Z3*Z4
+<span class="ln">117</span>C    14 A(1)=Z2*Z34/((Y1-Y2)*(Y1-Y3)*(Y1-Y4))
+<span class="ln">118</span>      A(1)=Z2*Z34/((Y1-Y2)*(Y1-Y3)*(Y1-Y4))
+<span class="ln">119</span>      A(2)=Z1*Z34/((Y2-Y1)*(Y2-Y3)*(Y2-Y4))
+<span class="ln">120</span>      A(3)=Z12*Z4/((Y3-Y1)*(Y3-Y2)*(Y3-Y4))
+<span class="ln">121</span>      A(4)=Z12*Z3/((Y4-Y1)*(Y4-Y2)*(Y4-Y3))
+<span class="ln">122</span>C     CORRECT A(K)
+<span class="ln">123</span>C    15 DIFF=A(1)+A(2)+A(3)+A(4)
+<span class="ln">124</span>      DIFF=A(1)+A(2)+A(3)+A(4)
+<span class="ln">125</span>      A(K)=(1.D0+A(K))-DIFF
+<span class="ln">126</span>C     COMPUTE Y
+<span class="ln">127</span>C    16 M=(M-1)/IR-3
+<span class="ln">128</span>      M=(M-1)/IR-3
+<span class="ln">129</span>      M=M*IRD
+<span class="ln">130</span>      DO 18 I=1,IIR
+<span class="ln">131</span>C KC 2025-05-30 fixed &quot;DO termination statement which is not END DO or CONTINUE&quot;
+<span class="ln">132</span>C       K=I+M
+<span class="ln">133</span>C       YY=0.D0
+<span class="ln">134</span>C       DO 17 J=1,4
+<span class="ln">135</span>C       K=K+IRD
+<span class="ln">136</span>C       DIFF=YI(K)
+<span class="ln">137</span>C    17 YY=YY+A(J)*DIFF
+<span class="ln">138</span>C       Y(I)=YY
+<span class="ln">139</span>C    18 IF(Y(I).EQ.0.D0) Y(I+IR1)=0.D0
+<span class="ln">140</span>         K=I+M
+<span class="ln">141</span>         YY=0.D0
+<span class="ln">142</span>         DO 17 J=1,4
+<span class="ln">143</span>            K=K+IRD
+<span class="ln">144</span>            DIFF=YI(K)
+<span class="ln">145</span>            YY=YY+A(J)*DIFF
+<span class="ln">146</span>   17    CONTINUE
+<span class="ln">147</span>         Y(I)=YY
+<span class="ln">148</span>         IF(Y(I).EQ.0.D0) Y(I+IR1)=0.D0
+<span class="ln">149</span>   18 CONTINUE
+<span class="ln">150</span>      GO TO 30
+<span class="ln">151</span>C     LINEAR INTERPOLATION/EXTRAPOLATION
+<span class="ln">152</span>   20 IF(N.EQ.1) N=1+IR
+<span class="ln">153</span>      IF(N.GT.J) N=J
+<span class="ln">154</span>      Z1=ZI(N)
+<span class="ln">155</span>      Y1=(Z1-Z)/(Z1-ZI(N-IR))
+<span class="ln">156</span>      Y2=1.0D0-Y1
+<span class="ln">157</span>      J=(N-1)*ID
+<span class="ln">158</span>      M=J-IRD
+<span class="ln">159</span>      DO 21 I=1,IIR,IR
+<span class="ln">160</span>C KC 2025-05-30 fixed &quot;DO termination statement which is not END DO or CONTINUE&quot;
+<span class="ln">161</span>C       Y(I)=Y1*YI(I+M)+Y2*YI(I+J)
+<span class="ln">162</span>C    21 IF(Y(I).EQ.0.D0) Y(I+IR1)=0.D0
+<span class="ln">163</span>         Y(I)=Y1*YI(I+M)+Y2*YI(I+J)
+<span class="ln">164</span>         IF(Y(I).EQ.0.D0) Y(I+IR1)=0.D0
+<span class="ln">165</span>   21 CONTINUE
+<span class="ln">166</span>C     RESET N
+<span class="ln">167</span>   30 N=(N+IR-1)/IR
+<span class="ln">168</span>      RETURN
+<span class="ln">169</span>C     DIAGNOSTICS
+<span class="ln">170</span>  101 CONTINUE
+<span class="ln">171</span>      RETURN
+<span class="ln">172</span>  102 CONTINUE
+<span class="ln">173</span>      RETURN
+<span class="ln">174</span>C  1001 FORMAT(/1X,10(&#x27;*&#x27;),5X,&#x27;THERE ARE FEWER THAN TWO DATA POINTS IN&#x27;,
+<span class="ln">175</span>C      *      &#x27; LIR     NT =&#x27;,I4,5X,10(&#x27;*&#x27;)/)
+<span class="ln">176</span>C  1002 FORMAT(/1X,10(&#x27;*&#x27;),5X,&#x27;EXTREME VALUES OF INDEPENDENT VARIABLE&#x27;,
+<span class="ln">177</span>C      *      &#x27; EQUAL IN LIR&#x27;,5X,10(&#x27;*&#x27;)/16X,&#x27;ZI(1) =&#x27;,1PE13.5,&#x27;,   &#x27;,
+<span class="ln">178</span>C      *       &#x27;ZI(&#x27;,I4,&#x27;) =&#x27;,1PE13.5/)
+<span class="ln">179</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Unclear.</strong> "Called by <code>INTPT</code> (twice …)": two call sites, but five calls per <code>INTPT</code> call (four rows in pressure, one in temperature). Fix.</li>
+<li><strong>Unclear.</strong> "the weight of the node nearest <code>Z</code>": the code corrects <code>A(K)</code> with <code>K</code> = 3 (the first node beyond <code>Z</code>) except near the ends; "closest" is the comment's word. Fix: say which node.</li>
+</ol>
+<p>Checked otherwise: the scan, the on-node copy, the cubic weights, the linear branch, the silent error returns, KC's changes (the block IFs keep the arithmetic IFs' branches). <code>LIR1</code> has no caller.</p>
+<p>Revised: findings 1–2 applied.</p></div></details>
+</main></body></html>

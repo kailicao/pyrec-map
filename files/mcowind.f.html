@@ -1,0 +1,195 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>mcowind.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ mcowind.f</span></header><main>
+<h1>mcowind.f</h1>
+<p class='muted'>132 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/mcowind.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>MCOWIND</code> returns the change in the angular velocity of the surface convection zone caused by magnetized-wind angular-momentum loss over a (diffusion) time step. It implements the newer wind law (G. Somers 3/17, "PMM-style", by its comment after van Saders and Pinsonneault, probably) with saturation, an optional Rossby scaling and the centrifugal correction of Matt et al. (2012, ApJ 754, L26). When the new law is off (<code>LMWIND</code> false) it hands over to the older <a href="../files/cowind.f.html#def-COWIND"><code>COWIND</code></a>.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../files/seculr.f.html#def-SECULR"><code>SECULR</code></a>, in the angular-momentum transport, once per iteration <code>IT</code> of the diffusion solution.</li>
+<li><strong>Inputs:</strong> <code>BL</code> ($\log L/L_\odot$), <code>DT</code> (the diffusion step, s), <code>HICZ</code> (moment of inertia of the surface convection zone), <code>IT</code>, <code>OMEGAS</code> (surface $\Omega$ at the end of the previous iteration), <code>WOLD</code> (surface $\Omega$ at the start of the step), <code>SMASS</code> ($M/M_\odot$), <code>TEFFL</code>.</li>
+<li><strong>Outputs:</strong> <code>WIND1</code> and <code>WIND2</code>, the changes in $\Omega$ over the step computed with $\Omega$ at the start and at the end of the step; the caller averages them (its comment).</li>
+<li><strong>Calls:</strong> <a href="../files/cowind.f.html#def-COWIND"><code>COWIND</code></a> (old law) or <a href="../files/amcalc.f.html#def-AMCALC"><code>AMCALC</code></a>, which sets <code>STRUCTFACTOR</code> in <code>CWIND</code> from $M$, $L$ and $T_\mathrm{eff}$.</li>
+<li><strong>COMMON blocks:</strong> <code>CWIND</code> (<code>WMAX</code>, <code>EXW</code>, <code>CONSTFACTOR</code>, <code>STRUCTFACTOR</code>, <code>EXCEN</code>, <code>C_2</code>, …; from <a href="../files/parmin.f.html#def-PARMIN"><code>PARMIN</code></a>, with <code>AMCALC</code>, <code>COWIND</code>, <code>MWIND</code>, <code>GETW</code> and others), <code>PMMWIND</code> (<code>LMWIND</code>, <code>LROSSBY</code>, <code>LBSCALE</code>, the solar values <code>PMMSOLW</code>, <code>PMMSOLTAU</code>; with <code>AMCALC</code>, <code>MWIND</code>, <code>PARMIN</code>), <code>OVRTRN</code> (<code>TAUCZ</code>, <code>TAUCZ0</code>, <code>FRACSTEP</code>: the convective turnover time at the start and end of the step and the fraction of the step reached), and the constants. <code>DEUTER</code> is declared but not used.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Saturation.</strong> With Rossby scaling, the turnover time is interpolated in the step, $\tau = \tau_0 + f\,(\tau_1 - \tau_0)$, and the saturation rate is $\Omega_\mathrm{sat} = \Omega_\mathrm{max}\,\tau_\odot/\tau$. With the extra field scaling as well (<code>LBSCALE</code>, which acts only with Rossby scaling) the rates $\Omega$ and $\Omega_\mathrm{sat}$ are multiplied by $\tau/\tau_\odot$. Otherwise $\Omega_\mathrm{sat}$ = <code>WMAX</code>.</li>
+<li><strong>Coefficient.</strong> $C = (\Delta t/I_\mathrm{cz})\,K_\mathrm{const}\,K_\mathrm{struct}$.</li>
+<li>
+<p><strong>Centrifugal term.</strong> With $f = \Omega^2R^3/(2GM)$, for the star (at the start and end values of $\Omega$) and for the Sun ($f_\odot$),
+$$F_\mathrm{cen} = \left(\frac{c_2^2 + f_\odot}{c_2^2 + f}\right)^{n},$$
+$c_2$ = <code>C_2</code>, $n$ = <code>EXCEN</code>; $R$ from $L = 4\pi R^2\sigma T_\mathrm{eff}^4$.</p>
+</li>
+<li>
+<p><strong>Torque.</strong> With $\Omega_p = \min(\Omega,\Omega_\mathrm{sat})$ and the exponent $a$ = <code>EXW</code>,
+$$\Delta\Omega_1 = C\,\Omega_{p,\mathrm{start}}^{\,a-1}\,\Omega_\mathrm{start}\,F_{\mathrm{cen},1},\qquad \Delta\Omega_2 = C\,\Omega_{p,\mathrm{now}}^{\,a-1}\,\Omega_\mathrm{now}\,F_{\mathrm{cen},2},$$
+and <code>WIND2</code> is the running mean of $\Delta\Omega_2$ over the iterations (set at <code>IT</code> = 1, then averaged with the previous value).</p>
+</li>
+</ol>
+<p><strong>KC's changes.</strong> 2025-05-30: the variables of COMMON <code>PMMWIND</code> reordered (the character variable <code>AWIND</code> and the logicals moved to the end), the same in all units that share it.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>GL</code> is never set.</strong> The solar term is <code>FSUN = 0.5*PMMSOLW**2*CRSUN**3/EXP(CLN*GL)/CMSUN</code>; <code>GL</code> is a local variable that is never assigned (the stellar terms use <code>CGL</code>, $\log G$). So $f_\odot$ is computed with an undefined $G$ (probably $10^0 = 1$ if the compiler zeroes it). Was <code>CGL</code> meant?</li>
+<li><strong><code>WIND2</code> averaging.</strong> For <code>IT</code> &gt; 1, <code>WIND2</code> is $\tfrac12$(previous <code>WIND2</code> + new value), which weights the latest iterations most, not an average over iterations. Intended (as a damping)?</li>
+<li><strong>Rates scaled for <code>LBSCALE</code>.</strong> With <code>LBSCALE</code>, <code>WFIRST</code> and <code>WNOW</code> are scaled by $\tau/\tau_\odot$ but the final formula multiplies by the unscaled <code>WOLD</code> and <code>OMEGAS</code>. So the torque goes as $(\Omega\tau)^{a-1}\Omega$. Is that the intended law?</li>
+<li><strong>Single-precision literals.</strong> <code>0.5</code>, <code>3.0</code> in the centrifugal terms are single precision; harmless here, but inconsistent with the rest.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MCOWIND'>MCOWIND</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MCOWIND'><h3><span class='kind'>subroutine</span>MCOWIND</h3>
+<p class='muted'>lines 2–132 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/mcowind.f#L2-L132'>GitHub</a></p>
+<pre>SUBROUTINE MCOWIND(BL,DT,HICZ,IT,OMEGAS,SMASS,</pre>
+<div class='notes'><p>The new wind law: saturated power law in $\Omega$, optional Rossby scaling, Matt et al. centrifugal factor (above); otherwise <code>COWIND</code>.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST'>/CONST/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-CWIND'>/CWIND/</a>, <a href='../commons.html#c-DEUTER'>/DEUTER/</a>, <a href='../commons.html#c-OVRTRN'>/OVRTRN/</a>, <a href='../commons.html#c-PMMWIND'>/PMMWIND/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/amcalc.f.html#def-AMCALC'>AMCALC</a> <span class='muted'>(amcalc.f)</span></li>
+<li><a href='../files/cowind.f.html#def-COWIND'>COWIND</a> <span class='muted'>(cowind.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE MCOWIND(BL,DT,HICZ,IT,OMEGAS,SMASS,
+<span class="ln">3</span>     *                  TEFFL,WOLD,WIND1,WIND2)
+<span class="ln">4</span>
+<span class="ln">5</span>      PARAMETER (JSON=5000)
+<span class="ln">6</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">7</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">8</span>      COMMON/CONST/CLSUN,CLSUNL,CLNSUN,CMSUN,CMSUNL,CRSUN,CRSUNL,CMBOL
+<span class="ln">9</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">10</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">11</span>C MHP 8/17 ADDED EXCEN, C_2 TO COMMON BLOCK FOR MATT ET AL. 2012 CENT. TERM
+<span class="ln">12</span>      COMMON/CWIND/WMAX,EXMD,EXW,EXTAU,EXR,EXM,EXL,EXPR,CONSTFACTOR,
+<span class="ln">13</span>     *             STRUCTFACTOR,EXCEN,C_2,LJDOT0
+<span class="ln">14</span>C      COMMON/CWIND/WMAX,EXMD,EXW,EXTAU,EXR,EXM,CONSTFACTOR,STRUCTFACTOR,LJDOT0
+<span class="ln">15</span>C MHP 3/09 ADDED OPTION TO SCALE THE SATURATION RATE BY THE OVERTURN TIMESCALE
+<span class="ln">16</span>      COMMON/DEUTER/DRATE(JSON),DRATE0(JSON),FMASSACC,JCZ
+<span class="ln">17</span>C G Somers 3/17, ADDING NEW TAUCZ COMMON BLOCK
+<span class="ln">18</span>      COMMON/OVRTRN/LNEWTCZ,LCALCENV,TAUCZ,TAUCZ0,PPHOT,PPHOT0,FRACSTEP
+<span class="ln">19</span>      CHARACTER*3 AWIND
+<span class="ln">20</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">21</span>C       COMMON/PMMWIND/AWIND,LMWIND,LROSSBY,LBSCALE,PMMA,PMMB,PMMC,PMMD,PMMM,
+<span class="ln">22</span>C      *         PMMJD,PMMMD,PMMSOLP,PMMSOLW,PMMSOLTAU
+<span class="ln">23</span>      COMMON/PMMWIND/PMMA,PMMB,PMMC,PMMD,PMMM,PMMJD,PMMMD,PMMSOLP,PMMSOLW,PMMSOLTAU,
+<span class="ln">24</span>     *         LMWIND,LROSSBY,LBSCALE,AWIND
+<span class="ln">25</span>      SAVE
+<span class="ln">26</span>C  COWIND RETURNS THE CHANGE IN THE ANGULAR VELOCITY OF THE SURFACE
+<span class="ln">27</span>C  CONVECTION ZONE OF A STAR WHICH IS EXPERIENCING ANGULAR MOMENTUM LOSS.
+<span class="ln">28</span>C
+<span class="ln">29</span>C  INPUT VARIABLES:
+<span class="ln">30</span>C
+<span class="ln">31</span>C       DECLARED
+<span class="ln">32</span>C  BL : TOTAL LUMINOSITY
+<span class="ln">33</span>C  DT : DIFFUSION TIMESTEP.
+<span class="ln">34</span>C  HICZ : TOTAL MOMENT OF INERTIA OF THE SURFACE C.Z.
+<span class="ln">35</span>C  IT : ITERATION NUMBER (IN THE DIFFUSION ROUTINES).
+<span class="ln">36</span>C  OMEGAS : SURFACE ANGULAR VELOCITY AT THE END OF THE PREVIOUS ITERATION.
+<span class="ln">37</span>C  SMASS : STELLAR MASS (SOLAR UNITS)
+<span class="ln">38</span>C  TEFFL : STELLAR EFFECTIVE TEMPERATURE.
+<span class="ln">39</span>C  WOLD : SURFACE ANGULAR VELOCITY AT THE BEGINNING OF THE TIMESTEP.
+<span class="ln">40</span>C       IN COMMON BLOCKS
+<span class="ln">41</span>C
+<span class="ln">42</span>C  EXMD,EXW,EXTAU,EXR,EXM,FACTOR : USER PARAMETERS WHICH VARY THE STRENGTH
+<span class="ln">43</span>C  OF ANGULAR MOMENTUM LOSS AND ITS DEPENDENCE ON SURFACE ROTATION RATE
+<span class="ln">44</span>C  AND OTHER STELLAR PARAMETERS.
+<span class="ln">45</span>C
+<span class="ln">46</span>C  OUTPUT VARIABLES
+<span class="ln">47</span>C
+<span class="ln">48</span>C  WIND1,WIND2:CHANGE IN ANGULAR VELOCITY OF THE SURFACE C.Z. FOR THE TIMESTEP
+<span class="ln">49</span>C  BASED ON THE ANGULAR VELOCITY AT THE BEGINNING AND END OF THE TIMESTEP
+<span class="ln">50</span>C  RESPECTIVELY.
+<span class="ln">51</span>C
+<span class="ln">52</span>C  WIND1 AND WIND2 ARE INCORPORATED INTO THE DIFFUSION EQUATIONS;
+<span class="ln">53</span>C  THEY ARE AVERAGED TO FIND THE TOTAL ANGULAR MOMENTUM LOSS FOR THE
+<span class="ln">54</span>C  TIMESTEP.
+<span class="ln">55</span>C
+<span class="ln">56</span>C RUN OLD WINDLAW IF LMWIND = FALSE
+<span class="ln">57</span>      IF(.NOT.LMWIND)THEN
+<span class="ln">58</span>         CALL <a href="../files/cowind.f.html#def-COWIND" title="COWIND in cowind.f">COWIND</a>(BL,DT,HICZ,IT,OMEGAS,SMASS,
+<span class="ln">59</span>     *                  TEFFL,WOLD,WIND1,WIND2)
+<span class="ln">60</span>         GOTO 9999
+<span class="ln">61</span>      ENDIF
+<span class="ln">62</span>C
+<span class="ln">63</span>C G Somers 8/17 CREATE ROTATION DUMMY VARIABLES.
+<span class="ln">64</span>      WFIRST = WOLD
+<span class="ln">65</span>      WNOW = OMEGAS
+<span class="ln">66</span>C
+<span class="ln">67</span>C ADD ROSSBY SCALING TO WMAX = CRITICAL W FOR THE SUN.
+<span class="ln">68</span>      IF(LROSSBY)THEN
+<span class="ln">69</span>C MHP 8/17 CORRECTED TAUCZ CALCULATION TO INTERPOLATE PROPERLY IN TIMESTEP
+<span class="ln">70</span>         TCZ = TAUCZ0+FRACSTEP*(TAUCZ-TAUCZ0)
+<span class="ln">71</span>         WSAT = WMAX*PMMSOLTAU/TCZ
+<span class="ln">72</span>C G Somers 08/17 IF ADDING ADDITIONAL B SCALING, ADD ADDITIONAL TAUCZ TERM.
+<span class="ln">73</span>         IF(LBSCALE)THEN
+<span class="ln">74</span>            WFIRST = WFIRST*TCZ/PMMSOLTAU
+<span class="ln">75</span>            WNOW = WNOW*TCZ/PMMSOLTAU
+<span class="ln">76</span>            WSAT = WSAT*TCZ/PMMSOLTAU
+<span class="ln">77</span>         ENDIF
+<span class="ln">78</span>      ELSE
+<span class="ln">79</span>         WSAT = WMAX
+<span class="ln">80</span>      ENDIF
+<span class="ln">81</span>C
+<span class="ln">82</span>C G Somers 3/17, COMMENTING OUT OLD WIND LAW COEFFICIENT
+<span class="ln">83</span>C CALCULATION. ADDING NEW PMM-STYLE VERSION
+<span class="ln">84</span>C
+<span class="ln">85</span>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+<span class="ln">86</span>C
+<span class="ln">87</span>C      RL=0.5D0*(BL+CLSUNL-C4PIL-CSIGL-4.D0*TEFFL)
+<span class="ln">88</span>C      RTOT = EXP(CLN*RL)
+<span class="ln">89</span>C DMDOT IS THE MASS LOSS RATE IN SOLAR MASSES PER YEAR.
+<span class="ln">90</span>C      DMDOT = 2.0D-14
+<span class="ln">91</span>C DJ/DT = DT*FACTOR*(DMDOT/1.0D-14)**EXMD*OMEGA**EXW*(M/MSUN)**EXM
+<span class="ln">92</span>C         *(R/RSUN)**EXR
+<span class="ln">93</span>C  THE CONSTANT AND EXPONENTS ARE SET IN PARMIN BASED ON THE INPUT
+<span class="ln">94</span>C  INDEX ALFA;SEE PARMIN FOR DETAILS ON THE DEPENDENCE OF EACH ON ALFA.
+<span class="ln">95</span>C      C = DT/HICZ*FACTOR*(DMDOT/1.0D-14)**EXMD
+<span class="ln">96</span>C     *    *(RTOT/CRSUN)**EXR*SMASS**EXM
+<span class="ln">97</span>C
+<span class="ln">98</span>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+<span class="ln">99</span>C
+<span class="ln">100</span>C NEW CALCULATION. CALL AMCALC TO SET &quot;STRUCTFACTOR&quot;
+<span class="ln">101</span>C
+<span class="ln">102</span>      CALL <a href="../files/amcalc.f.html#def-AMCALC" title="AMCALC in amcalc.f">AMCALC</a>(SMASS,BL,TEFFL)
+<span class="ln">103</span>C
+<span class="ln">104</span>C CALCULATE THE NEW WIND COEFFICIENT.
+<span class="ln">105</span>C
+<span class="ln">106</span>      C = (DT/HICZ)*CONSTFACTOR*STRUCTFACTOR
+<span class="ln">107</span>C MHP 8/17 ADDED CENTRIFUGAL REDUCTION TERM FROM MATT+2012 ApJ 754, L26
+<span class="ln">108</span>C NOTE THAT THIS IS IMPLEMENTED HERE RELATIVE TO THE SUN
+<span class="ln">109</span>C      C_2 = 0.0506
+<span class="ln">110</span>      FSUN = 0.5*PMMSOLW**2*CRSUN**3/EXP(CLN*GL)/CMSUN
+<span class="ln">111</span>C     RADIUS
+<span class="ln">112</span>      RL = 0.5D0*(BL+CLSUNL-C4PIL-CSIGL-4.D0*TEFFL)
+<span class="ln">113</span>      FCORR1 = 0.5*WOLD**2*EXP(CLN*(3.0*RL-CGL))/SMASS/CMSUN
+<span class="ln">114</span>      FCORR2 = 0.5*OMEGAS**2*EXP(CLN*(3.0*RL-CGL))/SMASS/CMSUN
+<span class="ln">115</span>      FCEN1 = ((C_2**2+FSUN)/(C_2**2+FCORR1))**EXCEN
+<span class="ln">116</span>      FCEN2 = ((C_2**2+FSUN)/(C_2**2+FCORR2))**EXCEN
+<span class="ln">117</span>C
+<span class="ln">118</span>C G Somers, END
+<span class="ln">119</span>      WP = MIN(WFIRST,WSAT)
+<span class="ln">120</span>      WN = MIN(WNOW,WSAT)
+<span class="ln">121</span>      WIND1 = C*WP**(EXW-1.0D0)*WOLD*FCEN1
+<span class="ln">122</span>      TEMP = C*WN**(EXW-1.0D0)*OMEGAS*FCEN2
+<span class="ln">123</span>C      WIND1 = C*WP**(EXW-1.0D0)*WOLD
+<span class="ln">124</span>C      TEMP = C*WN**(EXW-1.0D0)*OMEGAS
+<span class="ln">125</span>      IF(IT.EQ.1) THEN
+<span class="ln">126</span>         WIND2 = TEMP
+<span class="ln">127</span>      ELSE
+<span class="ln">128</span>         WIND2 = 0.5D0*(WIND2+TEMP)
+<span class="ln">129</span>      ENDIF
+<span class="ln">130</span> 9999 CONTINUE
+<span class="ln">131</span>      RETURN
+<span class="ln">132</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked: the switch to <code>COWIND</code>, the saturation and Rossby scaling, the coefficient, the centrifugal factor (both $f$ terms, with $R$ in cm), the torque and the <code>WIND2</code> averaging; the four questions hold (<code>GL</code> is a local never set).</p>
+<ol>
+<li><strong>Unclear.</strong> "With the extra field scaling (<code>LBSCALE</code>)" reads as independent of the Rossby scaling; the code applies it only inside <code>IF(LROSSBY)</code>. Fix: say so.</li>
+<li><strong>Missing.</strong> COMMON <code>DEUTER</code> is declared but not used. Fix: one clause.</li>
+</ol>
+<p>Revised: both applied.</p></div></details>
+</main></body></html>

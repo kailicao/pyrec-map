@@ -1,0 +1,165 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>eqbound06.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ eqbound06.f</span></header><main>
+<h1>eqbound06.f</h1>
+<p class='muted'>115 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/eqbound06.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>EQBOUND06</code> decides whether $(T,\rho)$ lies inside the OPAL 2006 equation-of-state table and, near its edges, returns the weight for blending OPAL with the Yale/SCV equation of state ("LLP 10/16/06"). Unlike the 1995 and 2001 versions, it follows the table's irregular edge in both temperature and density, and combines the ramps.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../files/eqstat2.f.html#def-EQSTAT2">EQSTAT2</a>, after <a href="../files/oeqos06.f.html#def-OEQOS06">OEQOS06</a>, when <code>LOPALE06</code> is set and $1870 \le T \le 2\times10^8$ K and $\log\rho \le 7$ (EQSTAT2's own density).</li>
+<li><strong>Inputs and outputs:</strong> <code>T</code> (K) and <code>DL</code> ($\log_{10}\rho$) in; <code>LTAB</code>, <code>LRAMP</code> and <code>FAC</code> out.</li>
+<li><strong>COMMON blocks:</strong> <code>/AEOS06/</code> holds the table (<code>T6A</code>, <code>RHO</code>), shared with <a href="../files/esac06.f.html#def-ESAC06">ESAC06</a>, <code>READCOEOS06</code>, <code>RHOOFP06</code> and <code>T6RINTEOS06</code>. <code>/BEOS06/</code> holds <code>NTA</code> (for each density, the index of the lowest allowed temperature) and <code>NRA</code> (for each temperature, the index of the highest allowed density), set by DATA statements in <code>ESAC06</code>. <code>/BBEOS06/</code> holds the interpolation indices <code>K3</code> and <code>L2</code> that <code>ESAC06</code> found on its last call; this routine starts its search from them.</li>
+</ul>
+<p><strong>The method.</strong> With $T_6 = T/10^6$, $\rho = 10^{\mathrm{DL}}$, <code>T6A</code> decreasing and <code>RHO</code> increasing:</p>
+<ol>
+<li>Out of table if $\rho &lt; \rho_1$, $\rho \ge \rho_{N}$, $T_6 &gt; T_{6,1}$ or $T_6 \le T_{6,N}$.</li>
+<li>Ramps at the "easy borders": at high temperature, $f_T = (T_6 - T_{6,1})/(T_{6,2} - T_{6,1})$ when $T_6 &gt; T_{6,2}$; at low density, $f_\rho = (\rho - \rho_1)/(\rho_2 - \rho_1)$ when $\rho &lt; \rho_2$.</li>
+<li>Find $k$ and $l$ with $T_{6,k-1} \ge T_6 &gt; T_{6,k}$ and $\rho_{l-1} &lt; \rho \le \rho_l$, by a linear search from <code>K3</code> and <code>L2</code>.</li>
+<li>The irregular edge: out of table if $l &gt; $ <code>NRA(k)</code> or $k &gt; $ <code>NTA(l)</code>. On the last allowed row or column, a ramp: $f_\rho = (\rho_l - \rho)/(\rho_l - \rho_{l-1})$ if $l = $ <code>NRA(k)</code>; $f_T = (T_6 - T_{6,k})/(T_{6,k-1} - T_{6,k})$ if $k = $ <code>NTA(l)</code>.</li>
+<li>The weight is the product, $f = f_\rho f_T$.</li>
+</ol>
+<p>The ramps are linear in $\rho$ and $T_6$, not in their logarithms.</p>
+<p><strong>KC's changes.</strong> The unused argument <code>DL0</code> was removed, and the elements of <code>/BEOS06/</code> were reordered (2025-05-30/31).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Hidden dependence on ESAC06.</strong> The search starts from <code>K3</code> and <code>L2</code> in <code>/BBEOS06/</code>, left by the last call of <code>ESAC06</code>. That is true when <code>OEQOS06</code> has just called it, but the routine would misbehave if called alone. Should the indices be passed explicitly?</li>
+<li><strong>Linear ramps.</strong> The 1995 and 2001 versions ramp in $\log\rho$; this one ramps in $\rho$. Is the difference intended?</li>
+<li><strong>Overwritten ramp.</strong> At high temperature, step 2 sets $f_T$; if step 4 also finds $k = $ <code>NTA(l)</code>, it replaces that $f_T$ rather than combining them. Can both happen, and which should win?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>LLP  10/16/06 SUBROUTINE TO CHECK IF POINT IS WITHIN
+OPAL 2006 EOS TABLE.
+SUBROUTINE EQBOUND06(T,DL,DL0,FAC,LTAB,LRAMP)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-EQBOUND06'>EQBOUND06</a> <span class='muted'>subroutine · LLP  10/16/06 SUBROUTINE TO CHECK IF POINT IS WITHIN</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-EQBOUND06'><h3><span class='kind'>subroutine</span>EQBOUND06</h3>
+<p class='muted'>lines 5–114 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/eqbound06.f#L5-L114'>GitHub</a></p>
+<pre>SUBROUTINE EQBOUND06(T,DL,FAC,LTAB,LRAMP)</pre>
+<div class='notes'><p>In-table test and blending weight $f = f_\rho f_T$ for the OPAL 2006 table, following its irregular edge (<code>NTA</code>, <code>NRA</code>).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>LLP  10/16/06 SUBROUTINE TO CHECK IF POINT IS WITHIN
+OPAL 2006 EOS TABLE.
+SUBROUTINE EQBOUND06(T,DL,DL0,FAC,LTAB,LRAMP)  ! KC 2025-05-31</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-AEOS06'>/AEOS06/</a>, <a href='../commons.html#c-BBEOS06'>/BBEOS06/</a>, <a href='../commons.html#c-BEOS06'>/BEOS06/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/eqstat2.f.html#def-EQSTAT2'>EQSTAT2</a> <span class='muted'>(eqstat2.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">5</span>      SUBROUTINE EQBOUND06(T,DL,FAC,LTAB,LRAMP)
+<span class="ln">6</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">7</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">8</span>      Integer*4 l1,l2,l3,l4,k1,k2,k3,k4,ip,iq,k,l
+<span class="ln">9</span>      parameter (mx=5,mv=10,nr=169,nt=197)
+<span class="ln">10</span>      common/aeos06/  xz(mx,mv,nt,nr),
+<span class="ln">11</span>     . t6list(nr,nt),rho(nr),t6a(nt),esk(nt,nr),esk2(nt,nr),dfsx(mx)
+<span class="ln">12</span>     . ,dfs(nt),dfsr(nr),m,mf,xa(mx)
+<span class="ln">13</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">14</span>C       common/beos06/ iri(10),index(10),nta(nr),zz(mx),nra(nt)
+<span class="ln">15</span>      common/beos06/ zz(mx),iri(10),index(10),nta(nr),nra(nt)
+<span class="ln">16</span>      common/bbeos06/l1,l2,l3,l4,k1,k2,k3,k4,ip,iq
+<span class="ln">17</span>
+<span class="ln">18</span>      SAVE
+<span class="ln">19</span>      T6 = T*1.0D-6
+<span class="ln">20</span>      D = 10D0**DL
+<span class="ln">21</span>
+<span class="ln">22</span>C EXIT IF OUTSIDE TABLE IN RHO
+<span class="ln">23</span>      IF((D.LT.rho(1)) .OR. (D.GE.rho(nr)))THEN
+<span class="ln">24</span>         GOTO 9999        ! Out of Table in density. Go to out of table exit.
+<span class="ln">25</span>      ENDIF
+<span class="ln">26</span>
+<span class="ln">27</span>C Exit if outside table in T6
+<span class="ln">28</span>      IF((T6 .GT. T6a(1)) .OR. (T6 .LE. T6a(nt))) THEN
+<span class="ln">29</span>         GOTO 9999        ! Out of Table in temperature. Go to out of table exit.
+<span class="ln">30</span>      ENDIF
+<span class="ln">31</span>
+<span class="ln">32</span>C Initialize
+<span class="ln">33</span>      DRampF = 1D0   ! Initialize density ramp factor to 1
+<span class="ln">34</span>      TRampF = 1D0   ! Initialize temperature ramp factor to 1
+<span class="ln">35</span>      LTAB = .TRUE.  ! Presume that T6,D point is in OPAL table
+<span class="ln">36</span>      LRAMP = .FALSE. ! presume ramping is not needed,
+<span class="ln">37</span>                      ! i.e. we are not in the border of the table.
+<span class="ln">38</span>
+<span class="ln">39</span>C Check for easy borders
+<span class="ln">40</span>      IF(T6 .GT. T6a(2)) THEN
+<span class="ln">41</span>          TRampF = (T6-T6a(1))/(t6a(2)-T6a(1)) ! Ramp in temperature
+<span class="ln">42</span>          LRAMP = .TRUE.
+<span class="ln">43</span>      ENDIF
+<span class="ln">44</span>      IF(D .LT. rho(2)) THEN
+<span class="ln">45</span>          DRampF = (D - rho(1))/(rho(2)-rho(1)) ! Ramp in density
+<span class="ln">46</span>          LRAMP = .TRUE.
+<span class="ln">47</span>      ENDIF
+<span class="ln">48</span>
+<span class="ln">49</span>C Find a k such that T6a(k-1) &gt;= T6 &gt; T6a(k)
+<span class="ln">50</span>C and an l such that rho(l-1) &lt;  D  &lt;= rho(l)
+<span class="ln">51</span>C The ESAC06 variables (k=)k3 and (l-)l2 are close to what we need.
+<span class="ln">52</span>C A linear search will work fine.
+<span class="ln">53</span>      k = k3
+<span class="ln">54</span> 10   IF(T6 .LE. T6a(k)) then
+<span class="ln">55</span>        k = k+1
+<span class="ln">56</span>        goto 10
+<span class="ln">57</span>      ENDIF
+<span class="ln">58</span> 20   If( T6 .GT. T6a(k-1)) THEN
+<span class="ln">59</span>        k = k-1
+<span class="ln">60</span>        goto 20
+<span class="ln">61</span>      ENDIF
+<span class="ln">62</span>C We now have: T6a(k-1) &gt;= T6 &gt; T6a(k)
+<span class="ln">63</span>
+<span class="ln">64</span>      l = l2
+<span class="ln">65</span> 30   IF(D .GT. rho(l)) THEN
+<span class="ln">66</span>        l = l+1
+<span class="ln">67</span>        goto 30
+<span class="ln">68</span>      ENDIF
+<span class="ln">69</span> 40   IF(D .LE. rho(l-1)) THEN
+<span class="ln">70</span>        l = l-1
+<span class="ln">71</span>        goto 40
+<span class="ln">72</span>      ENDIF
+<span class="ln">73</span>C We now have: rho(l-1) &lt;  D  &lt;= rho(l)
+<span class="ln">74</span>
+<span class="ln">75</span>C For a given temperature in array T6a with index k, e.e., T6a(k), element
+<span class="ln">76</span>C nra(k) of array nra contains the index to the max allowed density in
+<span class="ln">77</span>C array rho. So, for a given T6a(k), the associated D must be less than
+<span class="ln">78</span>C rho(nra(k)). A valid index in array rho must be less than or equal to
+<span class="ln">79</span>C nra(k)
+<span class="ln">80</span>
+<span class="ln">81</span>      IF(l .GT. nra(k)) then
+<span class="ln">82</span>        goto 9999       ! Out of table exit in density.
+<span class="ln">83</span>      ENDIF
+<span class="ln">84</span>      IF(l .EQ. nra(k)) THEN
+<span class="ln">85</span>        LRAMP = .TRUE.
+<span class="ln">86</span>        DRampF = (rho(l)-D)/(rho(l)-rho(l-1))
+<span class="ln">87</span>      ENDIF
+<span class="ln">88</span>
+<span class="ln">89</span>C For a given density in array rho with index l, i.e., rho(l), element
+<span class="ln">90</span>C nta(l) of array nta contains the index to the min allowed temperature
+<span class="ln">91</span>C in array T6a. So for a given rho(l), the associated T6 must be
+<span class="ln">92</span>C greater than T6a(nta(l)). (Note that T6a is a decreasing array.) A
+<span class="ln">93</span>C valid index in T6a must be less than or equal to nta(l).
+<span class="ln">94</span>
+<span class="ln">95</span>      IF(k .GT. nta(l)) then
+<span class="ln">96</span>        goto 9999      ! Out of table exit in temperature
+<span class="ln">97</span>      ENDIF
+<span class="ln">98</span>      IF(k .EQ. nta(l)) THEN
+<span class="ln">99</span>        LRAMP = .TRUE.
+<span class="ln">100</span>        TRampF = (T6-T6a(k))/(T6a(k-1)-T6A(k))
+<span class="ln">101</span>      ENDIF
+<span class="ln">102</span>
+<span class="ln">103</span>      FAC = DRampF * TRampF
+<span class="ln">104</span>      return
+<span class="ln">105</span>
+<span class="ln">106</span>C OUT OF TABLE EXIT
+<span class="ln">107</span> 9999 CONTINUE
+<span class="ln">108</span>      LTAB = .FALSE.       ! Not in table
+<span class="ln">109</span>      LRAMP = .TRUE.       ! Turn on ramping
+<span class="ln">110</span>      FAC = 0D0            ! Set ramping factor to zero
+<span class="ln">111</span>C                            This way, out of table results are ramped to zero.
+<span class="ln">112</span>      RETURN
+<span class="ln">113</span>
+<span class="ln">114</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing.</strong> EQSTAT2 calls OPAL 2006 only when $1870 \le T \le 2\times10^8$ K and $\log\rho \le 7$. Fix: add.</li>
+<li><strong>Missing (design note).</strong> <code>KC 2025-05-30</code> reordered <code>/BEOS06/</code> in every routine that declares it (<code>ESAC06</code>, <code>RADSUB06</code>, <code>READCOEOS06</code>, <code>RHOOFP06</code>, this file): checked, consistent. No fix.</li>
+<li>Otherwise correct: the ramps, signs and search match the code.</li>
+</ol>
+<p>Revised: EQSTAT2's conditions added.</p></div></details>
+</main></body></html>

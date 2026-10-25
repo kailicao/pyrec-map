@@ -1,0 +1,47 @@
+## Explanation
+
+**Purpose.** This file computes the nuclear energy generation rate at one point, its derivatives with respect to density and temperature, the rates of the individual reactions (for the abundance changes), the solar neutrino fluxes and, in hot cores, the neutrino energy losses. Its long header, mostly by John Bahcall (JNB, 1990–1997) and Marc Pinsonneault (MHP), documents the reaction data: rates from *Neutrino Astrophysics* (Bahcall 1989) and the Solar Fusion Workshop (Adelberger et al. 1998), energy releases from Bahcall and Ulrich (1988, RMP 60, 297), screening from Salpeter (1954) and Graboske et al. (1973), alpha captures from Caughlan and Fowler (1988), neutrino losses from Itoh et al. (1996) or an older fit.
+
+**How it fits.**
+- **Inputs:** the arguments `DL`, `TL` ($\log\rho$, $\log T$), the mass fractions `X`, `Y`, `XHE3`, `XC12`, `XC13`, `XN14`, `XO16`, `XO18`, `XH2`, and `IU` (the point's index, used to store the rates and for the deuterium cap). From COMMON: the cross-section factors `SSTANDARD(17)`, derivative factors `QS0E`, `QQS0EE` and the N15+p branch factors `FO16`, `FC12` (`/CROSS/`, set by [[remap.f#REMAP|REMAP]]: all 1, or with `LNEWNUC` from the namelist's cross-sections and their derivatives); `WEAKSCREENING` (`/WEAK/`, 0.03 by default); the cut-off temperatures `TCUT` (`/CTLIM/`); `LSNU` (`/NEWENG/`, compute neutrino fluxes); `LNULOS1` (`/NULOSS/`, Itoh losses); `JCZ` (`/DEUTER/`) and `TAUCZ` (`/OVRTRN/`) for the deuterium cap.
+- **Who calls it:** [[coefft.f#COEFFT|COEFFT]] (every point, every iteration), the main program ([[main.f#(file level)|main.f]], for the neutrino fluxes and Be-7 of the output) and [[ytime.f#YTIME|YTIME]] (the time step).
+- **What it calls:** [[neutrino.f#NEUTRINO|NEUTRINO]] (the Itoh et al. losses), when `LNULOS1`.
+- **Outputs:**
+  - arguments: `EPP1`, `EPP2`, `EPP3` (energy from the pp chain's branches), `ECN` (CNO), `E3AL` (triple alpha), `SUM1` (the total, erg g$^{-1}$ s$^{-1}$), `PEP`, `PET` (its derivatives), and per point `HR1`…`HR13` (the reaction rates, per Gyr per amu) and `HF1` = $f_3$, `HF2` = $f_1$ (branching fractions); the abundance routines ([[kemcom.f#KEMCOM|KEMCOM]] and others) use the rates, per the comment;
+  - COMMON: `EALPCA` and `ENU` (`/NEWEPS/`, read by COEFFT and YTIME); `FLUX(10)` (`/FLUXES/`, neutrino fluxes at Earth per gram, read by COEFFT, main.f, [[wrtmonte.f#WRTMONTE|WRTMONTE]], [[wrtout.f#WRTOUT|WRTOUT]]); `ENGHE3`, `HE3ALL` (`/GRAB/`); `BE7MASSFRACTION` (`/BE7/`, read by main.f).
+
+**The method.**
+1. **Screening.** With the mass fractions over 13 isotopes, $\mu_I^{-1} = \sum X_i/A_i$, $\mu_e^{-1} = \sum Z_iX_i/A_i$, $\zeta = \sum Z_i^2X_i/A_i$, and a degeneracy factor $f'/f$ (a fit to Salpeter's figure 1 in $\log E_F/kT$):
+$$\Lambda_0 = 5.9426\times10^{-6}\,T_9^{-3/2}\sqrt{\rho/\mu_I}, \qquad U_\mathrm{weak} = Z_1Z_2\,\Lambda_0\,\sqrt{\frac{\zeta + (f'/f)\,\mu_e^{-1}}{\mu_I^{-1}}}.$$
+Weak screening if $U_\mathrm{weak} \le$ `WEAKSCREENING`; otherwise Graboske et al.'s intermediate form ($U \le 2$), or the strong form ($U \ge 5$ or where it is smaller). The rate is multiplied by $e^{U}$, with $\partial U/\partial\ln\rho$ and $\partial U/\partial\ln T$.
+2. **pp chain and CNO** (reactions 1–7: pp, $^3$He+$^3$He, $^3$He+$^4$He, p+$^{12}$C, p+$^{13}$C, p+$^{14}$N, p+$^{16}$O), in the form of *Neutrino Astrophysics* eq. 3.14 and Fowler, Caughlan and Zimmerman:
+$$r_j = \rho\left[T_9^{-2/3} + Q_1T_9^{-1/3} + s'_j(Q_2 + Q_3T_9^{1/3}) + s''_j(Q_4T_9^{2/3} + Q_5T_9)\right]\exp\!\left(Q_6T_9^{-1/3} + Q_7 + (Q_8T_9)^2 + U_j\right)S_j,$$
+with $S_j$ = `SSTANDARD(J)`, $s'$, $s''$ = `QS0E`, `QQS0EE` (user factors on the S-factor derivatives, MHP 8/14), and the logarithmic derivatives `DRATRO`, `DRATT`.
+3. **Branchings.** $^7$Be: electron capture against proton capture (with its own screening), $f_1$, $f_2$; $^{15}$N+p: ($p,\alpha$) against ($p,\gamma$), $f_3$, $f_4$.
+4. **Alpha captures** (above `TCUT(4)`): $^{13}$C($\alpha$,n), $^{12}$C($\alpha,\gamma$), $^{14}$N($\alpha,\gamma$), and triple alpha, $r_{3\alpha} \propto \rho^2T_9^{-3}e^{-4.4027/T_9}$.
+5. **Deuterium burning** (if $X_D > 10^{-11}$), as in [[deutrate.f#DEUTRATE|DEUTRATE]], with $Q = 5.494$ MeV. In the convective envelope (`IU` $\ge$ `JCZ`), when `TAUCZ` $> 1$, the rate is capped so that $r X \le (N_A/A_D)/\tau_\mathrm{cz}$ (`RDEUTMAX`).
+6. **Energy.** $\epsilon_j = r_j X_aX_b\,Q_j$, with the $Q$ values in MeV net of neutrino losses (for example 6.664 for pp, 12.860 for $^3$He+$^3$He, $1.586 + 17.394f_1 + 11.499f_2$ for $^3$He+$^4$He). Then `SUM1` $= \sum\epsilon_j$, `PEP` $= \sum\epsilon_j\,\partial\ln r_j/\partial\ln\rho$, `PET` likewise in $T$: absolute derivatives, $\partial\epsilon/\partial\ln\rho$ and $\partial\epsilon/\partial\ln T$, which is how COEFFT uses them.
+7. **Rates for the abundances:** `HR`$_j$ = $r_j C_{21}$, with $C_{21}$ = (s per $10^9$ yr) × (amu in g), per the comment.
+8. **Neutrino fluxes** (if `LSNU` and $X > 10^{-6}$): pp, pep, hep, $^7$Be, $^8$B, $^{13}$N, $^{15}$O, $^{17}$F and two "fictional" diagnostics, per gram at 1 AU, in $10^{10}$ cm$^{-2}$ s$^{-1}$.
+9. **Neutrino losses** (above `TCUT(5)`): from [[neutrino.f#NEUTRINO|NEUTRINO]] (Itoh et al. 1996) or the older fits for pair, photo- and plasma neutrinos; the loss is subtracted from `SUM1` and its derivatives from `PEP`, `PET`.
+
+**Design.** About half the file is comments: the history of every constant, and sets of `SSTANDARD` from published solar models (BP92, BP95, BP03, Gran Sasso 2009, …). Reactions 8–13 are partly "holdovers from the earlier Yale code"; 9 and 13 are zeroed.
+
+**KC's changes.** 2025-05-30: elements of `/NULOSS/` reordered; the threshold below which a neutrino flux is set to zero changed from $10^{-50}$ to 0 "to avoid underflow". 2025-05-31: the unused arguments (`PDT`, `PDP`, `Z`, `XN15`, `XO17`, `XLI6`, `XLI7`, `XBE9`) removed.
+
+## Questions for the experts
+
+1. **The Itoh branch's temperature derivative.** `PET = PEP + DSNUDT` should almost certainly be `PET = PET + DSNUDT`: as written, the temperature derivative of $\epsilon$ is replaced by the density derivative.
+2. **Relative and absolute derivatives.** In the Itoh branch, `DSNUDT` and `DSNUDD` are made relative ($\partial\ln\epsilon_\nu/\partial\ln T$) and then added to `PET`, `PEP`, which are absolute ($\partial\epsilon/\partial\ln T$). The older branch adds absolute terms. Should it be `ENU*DSNUDT`?
+3. **Alpha-capture derivatives.** For reactions 8, 10 and 11, `DRATT = DSCT + RHO/RATE*(…)` divides the derivative of the bracket by the whole rate, which includes the constant ($\sim10^{22}$) and $e^U$; the derivative of the bracket alone is then off by that factor, and `DRATT` is close to the screening term only. Also, in reaction 10, the derivatives of $R_1^2$ and $R_2^2$ lack a factor $T_9^{-2/3}$; in reaction 8, the derivative terms of `A2`…`A5` lack the factor $T_9^{-3/2}$ that multiplies them in the rate.
+4. **Deuterium rate.** As in [[deutrate.f#DEUTRATE|DEUTRATE]], the rate uses $T_9^{+2/3}$ where the standard fit has $T_9^{-2/3}$; here the derivative `QRTDEUT` (with its "$-2$") is that of the $T_9^{-2/3}$ form, so rate and derivative disagree. Also, the constant here is $6.023\times10^{23}/A_D$ (2.991e23) and in DEUTRATE $3.0115\times10^{23}$.
+5. **A comment that contradicts the code.** "MHP 5/90 change derivatives to be d ln eps/d ln rho …": the code returns `PEP = SUM2`, not divided by `SUM1`, so the derivatives are $\partial\epsilon/\partial\ln\rho$. The comment should be updated.
+6. **The low-temperature path.** Below `TCUT(1)` the routine jumps to label 200 without setting `SUM1`, `F1`, `F3`, which keep the previous call's values (`SAVE`); `HF1`, `HF2` and the returned `SUM1` may be stale. On that path `RHO`, `T9` and the $^7$Be rates are stale too, and with `LSNU` they enter `FLUX(3)` and `BE7MASSFRACTION`. COEFFT only calls above `TCUT(1)`, but main.f's call checks only $\log T \ge 6$.
+7. **The index passed by main.f (KC's change).** main.f's call was changed from passing `I` to passing `IU`, which main.f never sets; `HR1(IU)`…`HF2(IU)` are then written at an undefined index, and the deuterium cap compares an undefined `IU` with `JCZ`. Probably `I` was meant (see main.f, around line 388).
+8. **Hard-coded thresholds.** Rates below $10^{-30}$ (before) and $10^{-5}$ (after) are set to zero; `SUM1` $\le 10^{-12}$ zeroes `PEP`, `PET` and the `EG` array (so the neutrino fluxes), but keeps `SUM1` itself and the `DG` array (so `EPP1`, `ECN`, …). Are these still appropriate, and should `SUM1` be zeroed too?
+
+9. **S-factor derivatives in the temperature derivative.** In the pp/CNO loop, `DRATT` differentiates the bracket $R_1$ without the factors `QS0E(I)`, `QQS0EE(I)` that multiply its $Q_2$–$Q_5$ terms. With `LNEWNUC` and factors other than 1, the temperature derivative no longer matches the rate. Should the factors be added?
+
+### ENGEB
+
+Nuclear energy generation at one point: screening, the pp/CNO rates with S-factor scaling, $^7$Be and $^{15}$N branchings, alpha captures, deuterium burning, energies net of neutrinos, derivatives `PEP`/`PET`, per-reaction rates `HR1`–`HR13`, solar neutrino fluxes and neutrino losses.

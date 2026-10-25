@@ -1,0 +1,237 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>microdiff_cod.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ microdiff_cod.f</span></header><main>
+<h1>microdiff_cod.f</h1>
+<p class='muted'>177 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/microdiff_cod.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Computes the settling coefficients of one species at each point of the equally spaced grid, "in the method of the Thoul routine", for <a href="../files/microdiff_run.f.html#def-MICRODIFF_RUN">MICRODIFF_RUN</a>. Its header (G. Somers, 5/15) says it was written for light-element diffusion; it now serves hydrogen and metals too.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> <code>NPT</code> points with radius <code>ER</code> (units of $R_\odot$), density <code>EDEN</code> (g cm⁻³), temperature <code>ETEM</code> (K), $d\ln P/dr$ (<code>EHQPR</code>), $\nabla$ (<code>EDELR</code>), the three abundances <code>ESPEC(3,·)</code>, and the species' weight <code>THEA</code>, charge <code>THEZ</code> and column <code>J</code>.</li>
+<li><strong>Who calls it:</strong> only <code>MICRODIFF_RUN</code>, once on the grid points and once on the midpoints.</li>
+<li><strong>What it calls:</strong> <a href="../files/thdiff.f.html#def-THDIFF">THDIFF</a>, which solves for the diffusion coefficients of the four-species mixture (H, He, the species, electrons).</li>
+<li><strong>Outputs:</strong> <code>ECOD1</code> and <code>ECOD2</code>, and the hydrogen concentration gradient <code>EDXDR</code>, written on the hydrogen call ($J = 1$) and read on later calls.</li>
+<li><strong>COMMON blocks:</strong> <code>/CONST1/</code> (<code>CC13</code> $=1/3$), <code>/SCRTCH/</code> and <code>/GRAVS3/</code> and <code>/THEAGE/</code> are declared but not used.</li>
+</ul>
+<p><strong>The method.</strong> At each point, with mass fractions $X_k$ (floored at $10^{-24}$), weights $A_k$ (1.008, 4.004, <code>THEA</code>, $5.486\times10^{-4}$) and charges $Z_k$ (1, 2, <code>THEZ</code>, −1):</p>
+<ol>
+<li><strong>Concentrations</strong> relative to electrons: $c_k = \dfrac{X_k/A_k}{\sum_l Z_l X_l/A_l}$ for the three ions, $c_e = 1$.</li>
+<li><strong>Electron and ion densities:</strong> $n_e = \rho / (m_p \sum_k A_k c_k)$ with $m_p = 1.6726\times10^{-24}$ g, $n_i = \sum_\mathrm{ions} c_k\, n_e$.</li>
+<li><strong>Lengths:</strong> the inter-ionic distance $a_0 = (3/(4\pi n_i))^{1/3}$ (<code>0.23873</code> $= 3/4\pi$), the Debye length $\lambda_D = 6.9010\,\sqrt{T/(n_e \sum_k c_k Z_k^2)}$ cm, and $\lambda = \max(\lambda_D, a_0)$.</li>
+<li>
+<p><strong>Coulomb logarithms</strong> for each pair:
+$$x_{kl} = \frac{2.3939\times10^{3}\, T\, \lambda}{|Z_k Z_l|},\qquad \ln\Lambda_{kl} = 0.81245\,\ln\!\left(1 + 0.18769\, x_{kl}^{1.2}\right).$$</p>
+</li>
+<li>
+<p><strong><code>THDIFF</code></strong> returns the coefficients $A_P$ (<code>TAP</code>), $A_T$ (<code>TAT</code>) and $A_{kl}$ (<code>TAC</code>).</p>
+</li>
+<li><strong>The coefficients.</strong> With $f = r&#x27;^2\, T&#x27;^{5/2} / 2.2$ ($r&#x27;$ in $R_\odot$, $T&#x27;$ in $10^7$ K, 2.2 the fixed <code>LN_LAMBDA</code>):
+$$C_1 = -f\left[(A_P + A_T\nabla)\,\frac{d\ln P}{dr} + A_{j1}\,\frac{d\ln c_H}{dr}\right] X_j ,\qquad C_2 = -f\,A_{jj}.$$
+The comment writes the velocity as $A_P\, d\ln P/dr + A_T\, d\ln T/dr + A_X\, d\ln X/dr + A_D\, d\ln D/dr$; here $d\ln T/dr = \nabla\, d\ln P/dr$. The hydrogen term is dropped on the hydrogen call (it is the same as the last term) and is zero at the first and last points; $d\ln c_H/dr$ is a centred difference.</li>
+</ol>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused array <code>FGRLI</code> (a per-element factor, commented out in the code) removed from the declarations.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The hydrogen gradient on the midpoints.</strong> On the midpoint call, <code>EDXDR</code> is the midpoint array <code>EDXDR_H</code>, filled only when hydrogen is diffused. When <code>LDIFY</code> is false, <code>EDXDR</code> is never computed and holds zeros (or old values), so the $A_{j1}$ term silently vanishes for metals and light elements. Intended?</li>
+<li><strong>Two Coulomb logarithms.</strong> Pairwise Coulomb logarithms go into <code>THDIFF</code>, but the coefficient is also divided by a fixed $\ln\Lambda = 2.2$, and the time unit in <a href="../files/microdiff_setup.f.html#def-MICRODIFF_SETUP">MICRODIFF_SETUP</a> "includes factor of 2.2 from ln Lambda". Do the two cancel exactly, as the units suggest?</li>
+<li><strong>Skipped points.</strong> Where the species' abundance is exactly zero at a point and the next, only <code>ADS(I)</code> is set to zero; <code>FACS</code>, <code>APS</code>, <code>ATS</code> and <code>AHS</code> keep values from an earlier point or call (<code>SAVE</code>). The product with $X_j = 0$ makes $C_1$ zero, so this is harmless, but fragile.</li>
+<li><strong>Declared but unused.</strong> <code>/SCRTCH/</code>, <code>/GRAVS3/</code> and <code>/THEAGE/</code> are not used here.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+MICRODIFF_COD
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MICRODIFF_COD'>MICRODIFF_COD</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MICRODIFF_COD'><h3><span class='kind'>subroutine</span>MICRODIFF_COD</h3>
+<p class='muted'>lines 4–177 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/microdiff_cod.f#L4-L177'>GitHub</a></p>
+<pre>SUBROUTINE MICRODIFF_COD(NPT,ESPEC,ER,EDEN,ETEM,EHQPR,EDELR,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+MICRODIFF_COD
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-GRAVS3'>/GRAVS3/</a>, <a href='../commons.html#c-SCRTCH'>/SCRTCH/</a>, <a href='../commons.html#c-THEAGE'>/THEAGE/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/thdiff.f.html#def-THDIFF'>THDIFF</a> <span class='muted'>(thdiff.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/microdiff_run.f.html#def-MICRODIFF_RUN'>MICRODIFF_RUN</a> <span class='muted'>(microdiff_run.f)</span> ×2</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE MICRODIFF_COD(NPT,ESPEC,ER,EDEN,ETEM,EHQPR,EDELR,
+<span class="ln">5</span>     *                ECOD1,ECOD2,EDXDR,THEA,THEZ,J)
+<span class="ln">6</span>
+<span class="ln">7</span>      PARAMETER (JSON=5000)
+<span class="ln">8</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">9</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">10</span>      COMMON/GRAVS3/FGRY,FGRZ,LTHOUL,LDIFZ
+<span class="ln">11</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">12</span>      COMMON/SCRTCH/SESUM(JSON),SEG(7,JSON),SBETA(JSON),SETA(JSON),
+<span class="ln">13</span>     *       LOCONS(JSON),SO(JSON),SDEL(3,JSON),SFXION(3,JSON),SVEL(JSON),SCP(JSON)
+<span class="ln">14</span>      COMMON/THEAGE/DAGE
+<span class="ln">15</span>      DIMENSION ER(JSON),ESPEC(3,JSON),EDEN(JSON),ETEM(JSON),  ! ED(JSON)
+<span class="ln">16</span>     *          EHQPR(JSON),EDELR(JSON),ECOD1(JSON),ECOD2(JSON),
+<span class="ln">17</span>     *          ATOMWT(4),ZSPEC(4),XFRAC(4),TCL(4,4),TAP(4),TAT(4),TAC(4,4),
+<span class="ln">18</span>     *          FACS(JSON),APS(JSON),ATS(JSON),AHS(JSON),ADS(JSON),
+<span class="ln">19</span>C      *          HYDCON(JSON),EDXDR(JSON),FGRLI(4)  ! KC 2025-05-31
+<span class="ln">20</span>     *          HYDCON(JSON),EDXDR(JSON)
+<span class="ln">21</span>
+<span class="ln">22</span>      REAL*8 ZXA,AC,NI,CZ,XIJ,NE,AO,LAMBDAD,LAMBDA,CONCEN(4)
+<span class="ln">23</span>      REAL*8 LN_LAMBDA
+<span class="ln">24</span>      DATA NSPEC/4/
+<span class="ln">25</span>C       DATA FGRLI/1.0,1.0,1.0,1.0/
+<span class="ln">26</span>      SAVE
+<span class="ln">27</span>C G Somers 5/15: THIS IS A SUBROUTINE WRITEN TO CALCULATE THE DIFFUSION
+<span class="ln">28</span>C COEFFICIENT ON THE EQUALLY-SPACED GRID USED FOR LIGHT ELEMENT DIFFUSION.
+<span class="ln">29</span>C THIS CODE TAKES IN THE NECESSARY PARAMETERS ON THE EQUAL GRID (NAMELY
+<span class="ln">30</span>C HCOMP(1,I), HCOMP(2,I), HCOMP(13-15,I), DENSITY, TEMPERATURE, HQPR,
+<span class="ln">31</span>C AND DELR(2,I)
+<span class="ln">32</span>C
+<span class="ln">33</span>C SET UP THE ATOMIC WEIGHT AND CHARGE MATRICIES
+<span class="ln">34</span>      ATOMWT(1) = 1.008D0
+<span class="ln">35</span>      ATOMWT(2) = 4.004D0
+<span class="ln">36</span>      ATOMWT(3) = THEA
+<span class="ln">37</span>      ATOMWT(4) = 5.486D-4
+<span class="ln">38</span>      ZSPEC(1) = 1.0D0
+<span class="ln">39</span>      ZSPEC(2) = 2.0D0
+<span class="ln">40</span>      ZSPEC(3) = THEZ
+<span class="ln">41</span>      ZSPEC(4) = -1.0D0
+<span class="ln">42</span>C SET LN_LAMBDA, CON_RAD, AND CON_TEMP.
+<span class="ln">43</span>      LN_LAMBDA = 2.2
+<span class="ln">44</span>      CON_RAD=1.0D0/6.9598D10
+<span class="ln">45</span>      CON_TEMP=1.0D-7
+<span class="ln">46</span>C CALCULATE DIFFUSION COEFFICIENTS FOR EACH LAYER.
+<span class="ln">47</span>      DO 5 I = 1,NPT
+<span class="ln">48</span>         XFRAC(1) = ESPEC(1,I)
+<span class="ln">49</span>         XFRAC(2) = ESPEC(2,I)
+<span class="ln">50</span>         XFRAC(3) = ESPEC(3,I)
+<span class="ln">51</span>c make sure XFRAC = 0.0 isn&#x27;t used for diff coefficients
+<span class="ln">52</span>         IF (XFRAC(1).LT.1.0D-24) XFRAC(1) = 1.0D-24
+<span class="ln">53</span>         IF (XFRAC(2).LT.1.0D-24) XFRAC(2) = 1.0D-24
+<span class="ln">54</span>         IF (XFRAC(3).LT.1.0D-24) XFRAC(3) = 1.0D-24
+<span class="ln">55</span>c        calculate concentrations from mass fractions:
+<span class="ln">56</span>         ZXA=0.D0
+<span class="ln">57</span>         DO II=1,NSPEC-1
+<span class="ln">58</span>             ZXA=ZXA+ZSPEC(II)*XFRAC(II)/ATOMWT(II)
+<span class="ln">59</span>         ENDDO
+<span class="ln">60</span>         DO II=1,NSPEC-1
+<span class="ln">61</span>            CONCEN(II)=XFRAC(II)/(ATOMWT(II)*ZXA)
+<span class="ln">62</span>         ENDDO
+<span class="ln">63</span>         CONCEN(NSPEC)=1.D0
+<span class="ln">64</span>c        save the hydrogen concentration when X is diffused.
+<span class="ln">65</span>         IF(J.EQ.1) HYDCON(I) = CONCEN(1)
+<span class="ln">66</span>c        now check whether the Thoul routine must be run. if not,
+<span class="ln">67</span>c        write COD1 = COD2 = 0. If its the first shell in the depleted
+<span class="ln">68</span>C        zone, permit the calculations so that AD is correct.
+<span class="ln">69</span>         IF(ESPEC(J,I).EQ.0.0.AND.I.NE.NPT)THEN
+<span class="ln">70</span>            IF(ESPEC(J,I+1).EQ.0.0)THEN
+<span class="ln">71</span>               ADS(I) = 0.0
+<span class="ln">72</span>               GOTO 5
+<span class="ln">73</span>            ENDIF
+<span class="ln">74</span>         ENDIF
+<span class="ln">75</span>c        set relevant physical variables.
+<span class="ln">76</span>         RHO = EDEN(I)
+<span class="ln">77</span>         T = ETEM(I)
+<span class="ln">78</span>c        calculate density of electrons (NE) from mass density (RHO):
+<span class="ln">79</span>         AC=0.D0
+<span class="ln">80</span>         DO II=1,NSPEC
+<span class="ln">81</span>          AC=AC+ATOMWT(II)*CONCEN(II)
+<span class="ln">82</span>         ENDDO
+<span class="ln">83</span>         NE=RHO/(1.6726D-24*AC)
+<span class="ln">84</span>c        calculate interionic distance (AO):
+<span class="ln">85</span>         NI=0.D0
+<span class="ln">86</span>         DO II=1,NSPEC-1
+<span class="ln">87</span>            NI=NI+CONCEN(II)*NE
+<span class="ln">88</span>         ENDDO
+<span class="ln">89</span>         AO=(0.23873D0/NI)**CC13
+<span class="ln">90</span>c        calculate Debye length (LAMBDAD):
+<span class="ln">91</span>         CZ=0.D0
+<span class="ln">92</span>         DO II=1,NSPEC
+<span class="ln">93</span>          CZ=CZ+CONCEN(II)*ZSPEC(II)**2
+<span class="ln">94</span>         ENDDO
+<span class="ln">95</span>         LAMBDAD=6.9010D0*SQRT(T/(NE*CZ))
+<span class="ln">96</span>c        calculate LAMBDA to use in Coulomb logarithm:
+<span class="ln">97</span>         LAMBDA=MAX(LAMBDAD,AO)
+<span class="ln">98</span>c        calculate Coulomb logarithms:
+<span class="ln">99</span>         DO II=1,NSPEC
+<span class="ln">100</span>            DO JJ=1,NSPEC
+<span class="ln">101</span>               XIJ=2.3939D3*T*LAMBDA/ABS(ZSPEC(II)*ZSPEC(JJ))
+<span class="ln">102</span>               TCL(II,JJ)=0.81245D0
+<span class="ln">103</span>     *         *LOG(1.D0+0.18769D0*XIJ**1.2D0)
+<span class="ln">104</span>          ENDDO
+<span class="ln">105</span>         ENDDO
+<span class="ln">106</span>c
+<span class="ln">107</span>c        calculate the diffusion coefficients
+<span class="ln">108</span>c
+<span class="ln">109</span>         CALL <a href="../files/thdiff.f.html#def-THDIFF" title="THDIFF in thdiff.f">THDIFF</a>(NSPEC,ATOMWT,ZSPEC,XFRAC,TCL,TAP,TAT,TAC)
+<span class="ln">110</span>C
+<span class="ln">111</span>         HRU_I = ER(I)
+<span class="ln">112</span>         HTU_I = T*CON_TEMP
+<span class="ln">113</span>c         FAC=FGRLI(KK)*HRU_I**2*HTU_I**2.5D0/LN_LAMBDA
+<span class="ln">114</span>         FAC=HRU_I**2*HTU_I**2.5D0/LN_LAMBDA
+<span class="ln">115</span>c        collect the first diffusion terms for hydroden.
+<span class="ln">116</span>c        collect the third diffusion terms for everything else.
+<span class="ln">117</span>         AP = -TAP(J)
+<span class="ln">118</span>         AT = -TAT(J)*EDELR(I)
+<span class="ln">119</span>         AH = -TAC(J,1)
+<span class="ln">120</span>         AD = -TAC(J,J)
+<span class="ln">121</span>c        store the numbers so the hydrogen gradient can finish
+<span class="ln">122</span>c        being calculated; then use them later.
+<span class="ln">123</span>         FACS(I) = FAC
+<span class="ln">124</span>         APS(I) = AP
+<span class="ln">125</span>         ATS(I) = AT
+<span class="ln">126</span>         AHS(I) = AH
+<span class="ln">127</span>         ADS(I) = AD
+<span class="ln">128</span>    5 CONTINUE
+<span class="ln">129</span>      DO 10 I = 1,NPT
+<span class="ln">130</span>         FAC = FACS(I)
+<span class="ln">131</span>         AP = APS(I)
+<span class="ln">132</span>         AT = ATS(I)
+<span class="ln">133</span>         AH = AHS(I)
+<span class="ln">134</span>         AD = ADS(I)
+<span class="ln">135</span>c
+<span class="ln">136</span>c        The general diffusion velocity is written as:
+<span class="ln">137</span>c        Ap(D)*dlnP/dR + At(D)*dlnT/dR + Ax(D)*dlnX/dR + Ad(D)*dlnD/dR
+<span class="ln">138</span>c        The first two terms are pressure and temperature gradients, and
+<span class="ln">139</span>c        the last two terms are the hydrogen gradient and the diffused element
+<span class="ln">140</span>c        gradient. For hydrogren diffusion, we can neglect the third term, as
+<span class="ln">141</span>c        it is the same as the final term. For metal diffusion, we need all
+<span class="ln">142</span>c        four. (see Thoul et al. 1994 for details)
+<span class="ln">143</span>c
+<span class="ln">144</span>C        calculate the hydrogen gradient if diffusing X, then set
+<span class="ln">145</span>C        the local gradient to 0 to remove 2nd self-diff term.
+<span class="ln">146</span>C        look it up otherwise.
+<span class="ln">147</span>C
+<span class="ln">148</span>C        only calculate the gradient on the hydrogen call.
+<span class="ln">149</span>C        set the gradient at first and last points to 0.
+<span class="ln">150</span>c
+<span class="ln">151</span>         IF(J.EQ.1)THEN
+<span class="ln">152</span>            DLNCDR = 1.0
+<span class="ln">153</span>            IF (I.EQ.1) THEN
+<span class="ln">154</span>               DLNCDR = 0.0
+<span class="ln">155</span>            ELSEIF (I.EQ.NPT) THEN
+<span class="ln">156</span>               DLNCDR = 0.0
+<span class="ln">157</span>            ELSE
+<span class="ln">158</span>               CONI = LOG(HYDCON(I))
+<span class="ln">159</span>               CONIP1 = LOG(HYDCON(I+1))
+<span class="ln">160</span>               CONIM1 = LOG(HYDCON(I-1))
+<span class="ln">161</span>               DRADI = ER(I+1)-ER(I)
+<span class="ln">162</span>               T1 = (CONI-CONIM1)/DRADI
+<span class="ln">163</span>               T2 = (CONIP1-CONI)/DRADI
+<span class="ln">164</span>               DLNCDR = 0.5*(T1+T2)
+<span class="ln">165</span>            ENDIF
+<span class="ln">166</span>            EDXDR(I) = DLNCDR
+<span class="ln">167</span>c           zero out gradient for hydrogen abundance, as stated above.
+<span class="ln">168</span>            DLNCDR = 0.0
+<span class="ln">169</span>         ELSE
+<span class="ln">170</span>c           if not the hydrogen call, retrieve the gradient
+<span class="ln">171</span>            DLNCDR = EDXDR(I)
+<span class="ln">172</span>         ENDIF
+<span class="ln">173</span>         ECOD1(I) = FAC*(EHQPR(I)*(AP+AT)+DLNCDR*AH)*ESPEC(J,I)
+<span class="ln">174</span>         ECOD2(I) = FAC*AD
+<span class="ln">175</span>   10 CONTINUE
+<span class="ln">176</span>      RETURN
+<span class="ln">177</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked every equation (concentrations, $n_e$, $a_0$, $\lambda_D$, the Coulomb logarithms, $C_1$, $C_2$) and the COMMON blocks. Nothing to fix.</p>
+<p>Revised: no change.</p></div></details>
+</main></body></html>

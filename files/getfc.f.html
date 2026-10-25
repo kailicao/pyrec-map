@@ -1,0 +1,137 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>getfc.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ getfc.f</span></header><main>
+<h1>getfc.f</h1>
+<p class='muted'>86 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/getfc.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>GETFC</code> computes, shell by shell, the factor $f_c$ that relates the diffusion coefficient for chemical mixing to that for angular momentum transport by meridional circulation, "using the prescription of Zahn (1992)" (its comment).</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../files/seculr.f.html#def-SECULR">SECULR</a>, when <code>LVFC</code> is set, for the shells <code>IMIN..IMAX</code>.</li>
+<li><strong>Inputs:</strong> <code>HD</code> ($\log\rho$ at zone centres), <code>HRU</code> (radii at zone centres), <code>HV</code> (circulation velocities $U$ at zone edges), <code>OMEGA</code>; and from <code>/INTVAR/</code>, <code>RM</code> (radii at zone edges, the means of neighbouring centre radii) and <code>DM</code> (density at zone edges, interpolated in $\log\rho$), both set by <a href="../files/setupv.f.html#def-SETUPV">SETUPV</a>.</li>
+<li><strong>Output:</strong> <code>VFC</code> in <code>/VARFC/</code>, read by <code>SECULR</code>, <a href="../files/codiff.f.html#def-CODIFF">CODIFF</a>, <code>DCOEFT</code>, <a href="../files/checkj.f.html#def-CHECKJ">CHECKJ</a>, <code>ROTGRID</code> and <a href="../files/vcirc.f.html#def-VCIRC">VCIRC</a>.</li>
+<li><strong>COMMON blocks:</strong> <code>/VMULT/</code> gives <code>FC</code> (set in <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a>); <code>/INTVAR/</code> (the edge quantities), shared with <code>CODIFF</code>, <code>SECULR</code>, <code>SETUPV</code>, <code>VCIRC</code>; <code>/VARFC/</code> (output).</li>
+</ul>
+<p><strong>The method.</strong> The comment gives
+$$f_c = \min\left(1,\ \frac{C}{30}\,\frac{U}{2V - \alpha U}\right),\qquad \alpha = \frac12\frac{d\ln(r^2\Omega)}{d\ln r},\qquad V = \frac{1}{6\rho r}\frac{d}{dr}(\rho r^2 U).$$
+The code computes:</p>
+<ol>
+<li><code>ALPHA</code> $= \dfrac{1}{\Omega_m r_m}\dfrac{\Delta(\Omega r^2)}{\Delta r}$ between neighbouring zone centres, with $\Omega_m$ the mean of the two and $r_m$ = <code>RM</code> the edge between them, which is $d\ln(r^2\Omega)/d\ln r$, without the factor ½. It uses shell <code>IMIN-1</code>, which exists: MIDMOD sets <code>IMIN</code> ≥ 2.</li>
+<li><code>V</code> $= \dfrac{1}{3\rho r}\dfrac{d}{dr}(\rho r^2 U)$, which is $2V$; at the first and last shells, by the product rule with $dU/dr$ from the neighbour.</li>
+<li><code>VFC</code> $= \dfrac{f_c^{\mathrm{in}}}{\max\left(|{\tt V} - {\tt ALPHA}\,U|/U,\ f_c^{\mathrm{in}}\right)} = \min\left(1,\ \dfrac{f_c^{\mathrm{in}}\,U}{|2V - {\tt ALPHA}\,U|}\right)$, with $f_c^{\mathrm{in}}$ = <code>FC</code>; zero where $U \le 0$, and everywhere if <code>FC</code> ≤ 0. The absolute value is the code's; the comment's formula has none.</li>
+</ol></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The factor ½ in $\alpha$.</strong> The comment defines $\alpha$ with a factor ½; the code has none. Which is right?</li>
+<li><strong><code>FC</code> and $C/30$.</strong> The input <code>FC</code> plays the part of $C/30$ in the comment. Is that the intended meaning of the parameter?</li>
+<li><strong>Negative velocities.</strong> Where $U \le 0$, $f_c = 0$: no chemical mixing where the circulation flows inward. Intended, or should $|U|$ be used?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+$$$$$$GETFC
+</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-GETFC'>GETFC</a> <span class='muted'>subroutine · $$$$$$GETFC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-GETFC'><h3><span class='kind'>subroutine</span>GETFC</h3>
+<p class='muted'>lines 4–86 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/getfc.f#L4-L86'>GitHub</a></p>
+<pre>SUBROUTINE GETFC(HD,HRU,HV,IMIN,IMAX,OMEGA)</pre>
+<div class='notes'><p>Zahn (1992) ratio $f_c$ of the chemical to the angular-momentum diffusion coefficient, per shell, capped at 1 (equations above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+$$$$$$GETFC
+</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-INTVAR'>/INTVAR/</a>, <a href='../commons.html#c-VARFC'>/VARFC/</a>, <a href='../commons.html#c-VMULT'>/VMULT/</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span> ×2</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE GETFC(HD,HRU,HV,IMIN,IMAX,OMEGA)
+<span class="ln">5</span>
+<span class="ln">6</span>      PARAMETER (JSON=5000)
+<span class="ln">7</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">8</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">9</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">10</span>      COMMON/INTVAR/ALM(JSON),DELAMI(JSON),DELMI(JSON),DM(JSON),
+<span class="ln">11</span>     *              EPSILM(JSON),HGM(JSON),HS3(JSON),PM(JSON),
+<span class="ln">12</span>     *              QDTMI(JSON),RM(JSON),TM(JSON)
+<span class="ln">13</span>      COMMON/VMULT/FW,FC,FO,FES,FGSF,FMU,FSS,RCRIT
+<span class="ln">14</span>      COMMON/VARFC/VFC(JSON),LVFC,LDIFAD
+<span class="ln">15</span>      DIMENSION HD(JSON),HRU(JSON),HV(JSON),
+<span class="ln">16</span>     *          OMEGA(JSON),ALPHA(JSON),V(JSON)
+<span class="ln">17</span>      SAVE
+<span class="ln">18</span>C INPUT VARIABLES :
+<span class="ln">19</span>C HD - LOG10 OF DENSITY(GM/CM**3) AT ZONE CENTERS.
+<span class="ln">20</span>C RM - UNLOGGED RUN OF RADII AT ZONE EDGES.
+<span class="ln">21</span>C HRU - UNLOGGED RUN OF RADII AT ZONE CENTERS.
+<span class="ln">22</span>C HV - UNLOGGED RUN OF DIFFUSION VELOCITIES AT ZONE EDGES.
+<span class="ln">23</span>C IMIN,IMAX - STARTING AND ENDING SHELLS.
+<span class="ln">24</span>C OMEGA - RUN OF ANGULAR VELOCITIES AT ZONE CENTERS.
+<span class="ln">25</span>C OUTPUT VARIABLE :
+<span class="ln">26</span>C VFC - RATIO OF DIFFUSION COEFFICIENT FOR MIXING TO THAT FOR
+<span class="ln">27</span>C       ANGULAR MOMENTUM TRANSPORT.
+<span class="ln">28</span>C THIS SUBROUTINE SOLVES FOR THE VARIABLE FC USING THE
+<span class="ln">29</span>C PRESCRIPTION OF ZAHN (1992).
+<span class="ln">30</span>C FC = MIN (1, C/30*U/(2V-ALPHA*U), WHERE ALPHA=1/2 D(LN J/M)/D LN R
+<span class="ln">31</span>C AND V = 1/(6*RHO*R) *D/DR(RHO* R**2 * U) (U = DIFFUSION VELOCITY).
+<span class="ln">32</span>C
+<span class="ln">33</span>C IF FC = 0, SKIP CALCULATION (NO MIXING).
+<span class="ln">34</span>
+<span class="ln">35</span>      IF(FC.LE.0.0D0)THEN
+<span class="ln">36</span>         DO I = IMIN,IMAX
+<span class="ln">37</span>            VFC(I) = 0.0D0
+<span class="ln">38</span>         END DO
+<span class="ln">39</span>         GOTO 9999
+<span class="ln">40</span>      ENDIF
+<span class="ln">41</span>C DETERMINE ALPHA.
+<span class="ln">42</span>      DO I = IMIN,IMAX
+<span class="ln">43</span>         WM = 0.5D0*(OMEGA(I)+OMEGA(I-1))
+<span class="ln">44</span>         ALPHA(I) = (OMEGA(I)*HRU(I)**2-OMEGA(I-1)*HRU(I-1)**2)/
+<span class="ln">45</span>     *              (HRU(I)-HRU(I-1))/(WM*RM(I))
+<span class="ln">46</span>      END DO
+<span class="ln">47</span>C DETERMINE 2V.
+<span class="ln">48</span>      FX = (HRU(IMIN)-RM(IMIN))/(RM(IMIN+1)-RM(IMIN))
+<span class="ln">49</span>      VM = HV(IMIN)+FX*(HV(IMIN+1)-HV(IMIN))
+<span class="ln">50</span>      DR2VM = EXP(CLN*HD(IMIN))*HRU(IMIN)**2*VM
+<span class="ln">51</span>      DO I = IMIN + 1, IMAX - 1
+<span class="ln">52</span>         FX = (HRU(I)-RM(I))/(RM(I+1)-RM(I))
+<span class="ln">53</span>         VP = HV(I)+FX*(HV(I+1)-HV(I))
+<span class="ln">54</span>         DR2VP = EXP(CLN*HD(I))*HRU(I)**2*VP
+<span class="ln">55</span>         RHOR = DM(I)*RM(I)
+<span class="ln">56</span>         V(I) = CC13*(DR2VP-DR2VM)/RHOR/(HRU(I)-HRU(I-1))
+<span class="ln">57</span>         DR2VM = DR2VP
+<span class="ln">58</span>      END DO
+<span class="ln">59</span>C FOR FIRST AND LAST SHELLS, CALCULATE U*D/DR(RHO*R**2) AND ASSUME
+<span class="ln">60</span>C DU/DR = VALUE DERIVED FROM THE LAST NEIGHBOR SHELL WITH NONZERO V.
+<span class="ln">61</span>      RHOR = DM(IMIN)*RM(IMIN)
+<span class="ln">62</span>      DRHOR2 = (EXP(CLN*HD(IMIN))*HRU(IMIN)**2 -
+<span class="ln">63</span>     *         EXP(CLN*HD(IMIN-1))*HRU(IMIN-1)**2)/
+<span class="ln">64</span>     *         (HRU(IMIN) - HRU(IMIN-1))
+<span class="ln">65</span>      DUDR = (HV(IMIN+1)-HV(IMIN))/(RM(IMIN+1)-RM(IMIN))
+<span class="ln">66</span>      V(IMIN) = CC13*(HV(IMIN)*DRHOR2/RHOR + RM(IMIN)*DUDR)
+<span class="ln">67</span>      RHOR = DM(IMAX)*RM(IMAX)
+<span class="ln">68</span>      DRHOR2 = (EXP(CLN*HD(IMAX))*HRU(IMAX)**2 -
+<span class="ln">69</span>     *         EXP(CLN*HD(IMAX-1))*HRU(IMAX-1)**2)/
+<span class="ln">70</span>     *         (HRU(IMAX) - HRU(IMAX-1))
+<span class="ln">71</span>      DUDR = (HV(IMAX)-HV(IMAX-1))/(RM(IMAX)-RM(IMAX-1))
+<span class="ln">72</span>      V(IMAX) = CC13*(HV(IMAX)*DRHOR2/RHOR + RM(IMAX)*DUDR)
+<span class="ln">73</span>C NOW COMPUTE RUN OF FC; THIS ASSUMES THAT FC = SAME FOR ALL
+<span class="ln">74</span>C MECHANISMS AND IS LIMITED TO A MAXIMUM OF 1.
+<span class="ln">75</span>      DO I = IMIN,IMAX
+<span class="ln">76</span>         IF(HV(I).LE.0.0D0)THEN
+<span class="ln">77</span>            VFC(I) = 0.0D0
+<span class="ln">78</span>         ELSE
+<span class="ln">79</span>            FTEST = MAX(ABS(V(I)-ALPHA(I)*HV(I))/HV(I),FC)
+<span class="ln">80</span>            VFC(I) = FC/FTEST
+<span class="ln">81</span>         ENDIF
+<span class="ln">82</span>      END DO
+<span class="ln">83</span> 9999 CONTINUE
+<span class="ln">84</span>
+<span class="ln">85</span>      RETURN
+<span class="ln">86</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Question 4 answerable.</strong> "is <code>IMIN</code> ≥ 2 always?" MIDMOD sets <code>IMIN = MAX(2,I-1)</code> or <code>IMIN = 2</code> (midmod.f lines 329, 331), so <code>IMIN-1</code> is at least 1. Fix: state it and drop the question.</li>
+<li><strong>Unclear.</strong> "<code>DM</code> (density at zone edges, probably)". SETUPV sets <code>DM(I)</code> by four-point interpolation of $\log\rho$ to the zone edges (setupv.f line 207) and <code>RM(I)</code> as the mean of the neighbouring centre radii (line 68). Fix: drop "probably", name SETUPV.</li>
+<li><strong>Unclear.</strong> Step 3 writes $\alpha U$, but $\alpha$ was defined with the comment's ½, while the code uses <code>ALPHA</code> (no ½); the code also takes the absolute value, which the comment's formula does not. Fix: write <code>ALPHA</code> in step 3 and mention the absolute value.</li>
+</ol>
+<p>Revised: question 4 answered in "The method" and dropped; <code>DM</code>, <code>RM</code> sourced to SETUPV; step 3 written with <code>ALPHA</code> and the absolute value noted.</p></div></details>
+</main></body></html>

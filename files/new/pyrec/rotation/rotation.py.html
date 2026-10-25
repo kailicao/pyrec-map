@@ -1,0 +1,411 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>new/pyrec/rotation/rotation.py · YREC rp_1</title><link rel='stylesheet' href='../../../../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../../../../index.html'>YREC rp_1</a><span class='muted'>/ New version (Python) / pyrec/rotation/rotation.py</span></header><main>
+<h1>pyrec/rotation/rotation.py</h1>
+<p class='muted'>New version (Python) (stubs): 169 lines · 19 definitions</p>
+<h2>Header comments</h2>
+<pre class='doc'>Internal rotation: distortion, rotation laws, transport, winds, and the step.
+
+Angular momentum is transported by
+$\rho r^2\,\partial_t j = r^{-2}\,\partial_r(\rho r^4 D_J\,\partial_r\Omega)$,
+with $D_J$ from the instabilities&#x27; velocities, on the ChiGrid.
+
+Functions
+---------
+transport_coefficients : Diffusion coefficients on the interfaces (Numba).
+
+Classes
+-------
+Distortion : f_P, f_T, moments of inertia, the quadrupole.
+RotationLaw : Omega from j; solid-body zones.
+RotationTransport : Transport of j and composition by the instabilities.
+WindLaw : Base of the wind laws.
+KawalerWind : WIND, COWIND.
+MattWind : MWIND, MCOWIND, AMCALC.
+RotationStep : The rotation over one model step.
+
+Counterpart: new-fortran/rotation.md</pre>
+
+<p><strong>Counterpart</strong> (the design pages)</p><ul class='calls'><li><a href='../../../../new-fortran/rotation.html'>Rotation and mass loss</a> <span class='muted'>(new-fortran/rotation.md)</span></li></ul>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-transport_coefficients'>transport_coefficients</a> <span class='muted'>function · Diffusion coefficients for j and composition on the interfaces, from the instabilities&#x27; ve</span></li>
+<li><a href='#def-Distortion'>Distortion</a> <span class='muted'>class · The distortion of a rotating star.</span></li>
+<li><a href='#def-Distortion.factors'>Distortion.factors</a> <span class='muted'>method · f_P, f_T and &lt;g&gt; on every shell.</span></li>
+<li><a href='#def-Distortion.inertia'>Distortion.inertia</a> <span class='muted'>method · I and dI/dOmega.</span></li>
+<li><a href='#def-Distortion.quadrupole'>Distortion.quadrupole</a> <span class='muted'>method · The P2 potential (Zahn 1992).</span></li>
+<li><a href='#def-RotationLaw'>RotationLaw</a> <span class='muted'>class · Omega from j, with convection zones in solid-body rotation.</span></li>
+<li><a href='#def-RotationLaw.omega_from_j'>RotationLaw.omega_from_j</a> <span class='muted'>method · Omega on every shell from j.</span></li>
+<li><a href='#def-RotationLaw.solid_body'>RotationLaw.solid_body</a> <span class='muted'>method · Solid-body rotation between two shells.</span></li>
+<li><a href='#def-RotationTransport'>RotationTransport</a> <span class='muted'>class · Transport of j and composition by meridional circulation, GSF, secular and dynamical shear</span></li>
+<li><a href='#def-RotationTransport.secular'>RotationTransport.secular</a> <span class='muted'>method · Transport over ``dt`` [s]; True if the substep must be shortened (LREDO).</span></li>
+<li><a href='#def-WindLaw'>WindLaw</a> <span class='muted'>class · Base of the wind laws.</span></li>
+<li><a href='#def-WindLaw.domega'>WindLaw.domega</a> <span class='muted'>method · Change of the surface zone&#x27;s Omega [rad s-1].</span></li>
+<li><a href='#def-KawalerWind'>KawalerWind</a> <span class='muted'>class · The Kawaler wind law.</span></li>
+<li><a href='#def-MattWind'>MattWind</a> <span class='muted'>class · The Matt et al. wind law.</span></li>
+<li><a href='#def-RotationStep'>RotationStep</a> <span class='muted'>class · Evolves the internal rotation over one model step, in substeps.</span></li>
+<li><a href='#def-RotationStep.__call__'>RotationStep.__call__</a> <span class='muted'>method · N = min(ceil(DWMAX/DTDIF), ceil(DTWIND/DTDIF)) substeps.</span></li>
+<li><a href='#def-RotationStep._midstep'>RotationStep._midstep</a> <span class='muted'>method · The structure at fraction ``f`` of the step.</span></li>
+<li><a href='#def-RotationStep._check_j'>RotationStep._check_j</a> <span class='muted'>method · j &gt; 0, convergence, Omega.</span></li>
+<li><a href='#def-RotationStep._check_comp'>RotationStep._check_comp</a> <span class='muted'>method · 0 &lt;= X &lt;= 1; False cuts the substep.</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-transport_coefficients'><h3><span class='kind'>function</span>transport_coefficients</h3>
+<p class='muted'>lines 33–43</p>
+<pre>def transport_coefficients(shell: np.ndarray, factors: np.ndarray, d_j: np.ndarray,
+                           d_comp: np.ndarray) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Diffusion coefficients for j and composition on the interfaces, from the instabilities&#x27; velocities.
+
+Notes
+-----
+Numba: hot loop.
+
+Replaces: vcirc.f#VCIRC, setupv.f#SETUPV, codiff.f#CODIFF, getfc.f#GETFC, dadcoeft.f#DADCOEFT, dcoeft.f#DCOEFT, ccoeft.f#CCOEFT</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/vcirc.f.html#def-VCIRC'>VCIRC</a> <span class='muted'>(vcirc.f)</span></li><li><a href='../../../../files/setupv.f.html#def-SETUPV'>SETUPV</a> <span class='muted'>(setupv.f)</span></li><li><a href='../../../../files/codiff.f.html#def-CODIFF'>CODIFF</a> <span class='muted'>(codiff.f)</span></li><li><a href='../../../../files/getfc.f.html#def-GETFC'>GETFC</a> <span class='muted'>(getfc.f)</span></li><li><a href='../../../../files/dadcoeft.f.html#def-DADCOEFT'>DADCOEFT</a> <span class='muted'>(dadcoeft.f)</span></li><li><a href='../../../../files/dcoeft.f.html#def-DCOEFT'>DCOEFT</a> <span class='muted'>(dcoeft.f)</span></li><li><a href='../../../../files/ccoeft.f.html#def-CCOEFT'>CCOEFT</a> <span class='muted'>(ccoeft.f)</span></li></ul>
+
+<details><summary>External calls (1)</summary><p><code>numba.njit</code></p></details>
+<details><summary>Source</summary><pre class='src'><span class="ln">33</span>def transport_coefficients(shell: np.ndarray, factors: np.ndarray, d_j: np.ndarray,
+<span class="ln">34</span>                           d_comp: np.ndarray) -&gt; None:
+<span class="ln">35</span>    &quot;&quot;&quot;Diffusion coefficients for j and composition on the interfaces, from the instabilities&#x27; velocities.
+<span class="ln">36</span>
+<span class="ln">37</span>    Notes
+<span class="ln">38</span>    -----
+<span class="ln">39</span>    Numba: hot loop.
+<span class="ln">40</span>
+<span class="ln">41</span>    Replaces: vcirc.f#VCIRC, setupv.f#SETUPV, codiff.f#CODIFF, getfc.f#GETFC, dadcoeft.f#DADCOEFT, dcoeft.f#DCOEFT, ccoeft.f#CCOEFT
+<span class="ln">42</span>    &quot;&quot;&quot;
+<span class="ln">43</span>    ...</pre></details>
+</section>
+<section class='def' id='def-Distortion'><h3><span class='kind'>class</span>Distortion</h3>
+<p class='muted'>lines 46–68</p>
+<pre>class Distortion:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>The distortion of a rotating star.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">46</span>class Distortion:
+<span class="ln">47</span>    &quot;&quot;&quot;The distortion of a rotating star.&quot;&quot;&quot;
+<span class="ln">48</span>
+<span class="ln">49</span>    def factors(self, star: Star) -&gt; None:
+<span class="ln">50</span>        &quot;&quot;&quot;f_P, f_T and &lt;g&gt; on every shell.
+<span class="ln">51</span>
+<span class="ln">52</span>        Replaces: fpft.f#FPFT, shape.f#SHAPE, func.f#FUNC
+<span class="ln">53</span>        &quot;&quot;&quot;
+<span class="ln">54</span>        ...
+<span class="ln">55</span>
+<span class="ln">56</span>    def inertia(self, star: Star) -&gt; None:
+<span class="ln">57</span>        &quot;&quot;&quot;I and dI/dOmega.
+<span class="ln">58</span>
+<span class="ln">59</span>        Replaces: momi.f#MOMI, intmom.f#INTMOM
+<span class="ln">60</span>        &quot;&quot;&quot;
+<span class="ln">61</span>        ...
+<span class="ln">62</span>
+<span class="ln">63</span>    def quadrupole(self, star: Star) -&gt; None:
+<span class="ln">64</span>        &quot;&quot;&quot;The P2 potential (Zahn 1992).
+<span class="ln">65</span>
+<span class="ln">66</span>        Replaces: getqua.f#GETQUA
+<span class="ln">67</span>        &quot;&quot;&quot;
+<span class="ln">68</span>        ...</pre></details>
+</section>
+<section class='def' id='def-Distortion.factors'><h3><span class='kind'>method</span>Distortion.factors</h3>
+<p class='muted'>lines 49–54</p>
+<pre>def factors(self, star: Star) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>f_P, f_T and &lt;g&gt; on every shell.
+
+Replaces: fpft.f#FPFT, shape.f#SHAPE, func.f#FUNC</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/fpft.f.html#def-FPFT'>FPFT</a> <span class='muted'>(fpft.f)</span></li><li><a href='../../../../files/shape.f.html#def-SHAPE'>SHAPE</a> <span class='muted'>(shape.f)</span></li><li><a href='../../../../files/func.f.html#def-FUNC'>FUNC</a> <span class='muted'>(func.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">49</span>    def factors(self, star: Star) -&gt; None:
+<span class="ln">50</span>        &quot;&quot;&quot;f_P, f_T and &lt;g&gt; on every shell.
+<span class="ln">51</span>
+<span class="ln">52</span>        Replaces: fpft.f#FPFT, shape.f#SHAPE, func.f#FUNC
+<span class="ln">53</span>        &quot;&quot;&quot;
+<span class="ln">54</span>        ...</pre></details>
+</section>
+<section class='def' id='def-Distortion.inertia'><h3><span class='kind'>method</span>Distortion.inertia</h3>
+<p class='muted'>lines 56–61</p>
+<pre>def inertia(self, star: Star) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>I and dI/dOmega.
+
+Replaces: momi.f#MOMI, intmom.f#INTMOM</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/momi.f.html#def-MOMI'>MOMI</a> <span class='muted'>(momi.f)</span></li><li><a href='../../../../files/intmom.f.html#def-INTMOM'>INTMOM</a> <span class='muted'>(intmom.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">56</span>    def inertia(self, star: Star) -&gt; None:
+<span class="ln">57</span>        &quot;&quot;&quot;I and dI/dOmega.
+<span class="ln">58</span>
+<span class="ln">59</span>        Replaces: momi.f#MOMI, intmom.f#INTMOM
+<span class="ln">60</span>        &quot;&quot;&quot;
+<span class="ln">61</span>        ...</pre></details>
+</section>
+<section class='def' id='def-Distortion.quadrupole'><h3><span class='kind'>method</span>Distortion.quadrupole</h3>
+<p class='muted'>lines 63–68</p>
+<pre>def quadrupole(self, star: Star) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>The P2 potential (Zahn 1992).
+
+Replaces: getqua.f#GETQUA</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/getqua.f.html#def-GETQUA'>GETQUA</a> <span class='muted'>(getqua.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">63</span>    def quadrupole(self, star: Star) -&gt; None:
+<span class="ln">64</span>        &quot;&quot;&quot;The P2 potential (Zahn 1992).
+<span class="ln">65</span>
+<span class="ln">66</span>        Replaces: getqua.f#GETQUA
+<span class="ln">67</span>        &quot;&quot;&quot;
+<span class="ln">68</span>        ...</pre></details>
+</section>
+<section class='def' id='def-RotationLaw'><h3><span class='kind'>class</span>RotationLaw</h3>
+<p class='muted'>lines 71–86</p>
+<pre>class RotationLaw:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Omega from j, with convection zones in solid-body rotation.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">71</span>class RotationLaw:
+<span class="ln">72</span>    &quot;&quot;&quot;Omega from j, with convection zones in solid-body rotation.&quot;&quot;&quot;
+<span class="ln">73</span>
+<span class="ln">74</span>    def omega_from_j(self, star: Star, lcz: np.ndarray) -&gt; None:
+<span class="ln">75</span>        &quot;&quot;&quot;Omega on every shell from j.
+<span class="ln">76</span>
+<span class="ln">77</span>        Replaces: getrot.f#GETROT, wczimp.f#WCZIMP, wcz.f (uncalled)
+<span class="ln">78</span>        &quot;&quot;&quot;
+<span class="ln">79</span>        ...
+<span class="ln">80</span>
+<span class="ln">81</span>    def solid_body(self, star: Star, jstart: int, jend: int) -&gt; None:
+<span class="ln">82</span>        &quot;&quot;&quot;Solid-body rotation between two shells.
+<span class="ln">83</span>
+<span class="ln">84</span>        Replaces: solid.f#SOLID
+<span class="ln">85</span>        &quot;&quot;&quot;
+<span class="ln">86</span>        ...</pre></details>
+</section>
+<section class='def' id='def-RotationLaw.omega_from_j'><h3><span class='kind'>method</span>RotationLaw.omega_from_j</h3>
+<p class='muted'>lines 74–79</p>
+<pre>def omega_from_j(self, star: Star, lcz: np.ndarray) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Omega on every shell from j.
+
+Replaces: getrot.f#GETROT, wczimp.f#WCZIMP, wcz.f (uncalled)</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/getrot.f.html#def-GETROT'>GETROT</a> <span class='muted'>(getrot.f)</span></li><li><a href='../../../../files/wczimp.f.html#def-WCZIMP'>WCZIMP</a> <span class='muted'>(wczimp.f)</span></li><li><a href='../../../../files/wcz.f.html'>wcz.f</a> (uncalled)</li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">74</span>    def omega_from_j(self, star: Star, lcz: np.ndarray) -&gt; None:
+<span class="ln">75</span>        &quot;&quot;&quot;Omega on every shell from j.
+<span class="ln">76</span>
+<span class="ln">77</span>        Replaces: getrot.f#GETROT, wczimp.f#WCZIMP, wcz.f (uncalled)
+<span class="ln">78</span>        &quot;&quot;&quot;
+<span class="ln">79</span>        ...</pre></details>
+</section>
+<section class='def' id='def-RotationLaw.solid_body'><h3><span class='kind'>method</span>RotationLaw.solid_body</h3>
+<p class='muted'>lines 81–86</p>
+<pre>def solid_body(self, star: Star, jstart: int, jend: int) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Solid-body rotation between two shells.
+
+Replaces: solid.f#SOLID</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/solid.f.html#def-SOLID'>SOLID</a> <span class='muted'>(solid.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">81</span>    def solid_body(self, star: Star, jstart: int, jend: int) -&gt; None:
+<span class="ln">82</span>        &quot;&quot;&quot;Solid-body rotation between two shells.
+<span class="ln">83</span>
+<span class="ln">84</span>        Replaces: solid.f#SOLID
+<span class="ln">85</span>        &quot;&quot;&quot;
+<span class="ln">86</span>        ...</pre></details>
+</section>
+<section class='def' id='def-RotationTransport'><h3><span class='kind'>class</span>RotationTransport</h3>
+<p class='muted'>lines 89–105</p>
+<pre>class RotationTransport:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Transport of j and composition by meridional circulation, GSF, secular and dynamical shear.
+
+The work blocks of SETUPV and VCIRC (/INTVAR/, /VFACT/, /TAUKH/, ...)
+become private attributes.
+
+Replaces: seculr.f#SECULR, rotgrid.f#ROTGRID, ndifcom.f#NDIFCOM</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span></li><li><a href='../../../../files/rotgrid.f.html#def-ROTGRID'>ROTGRID</a> <span class='muted'>(rotgrid.f)</span></li><li><a href='../../../../files/ndifcom.f.html#def-NDIFCOM'>NDIFCOM</a> <span class='muted'>(ndifcom.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">89</span>class RotationTransport:
+<span class="ln">90</span>    &quot;&quot;&quot;Transport of j and composition by meridional circulation, GSF, secular and dynamical shear.
+<span class="ln">91</span>
+<span class="ln">92</span>    The work blocks of SETUPV and VCIRC (/INTVAR/, /VFACT/, /TAUKH/, ...)
+<span class="ln">93</span>    become private attributes.
+<span class="ln">94</span>
+<span class="ln">95</span>    Replaces: seculr.f#SECULR, rotgrid.f#ROTGRID, ndifcom.f#NDIFCOM
+<span class="ln">96</span>    &quot;&quot;&quot;
+<span class="ln">97</span>
+<span class="ln">98</span>    ECOD_FAC = 0.2  # In ECOD3/ECOD4 (DADCOEFT); source to be confirmed.
+<span class="ln">99</span>    VESN_FAC = 5.0  # In VESN (DADCOEFT).
+<span class="ln">100</span>    MAX_CORR = 0.1  # Limit on corrections (DADCOEFT).
+<span class="ln">101</span>    ZAHN_FIFTH = 0.2  # FAC = 0.2*4pi*FW, probably the 1/5 of Zahn 1992 (ROTGRID).
+<span class="ln">102</span>
+<span class="ln">103</span>    def secular(self, star: Star, zones: ConvectionZones, dt: float) -&gt; bool:
+<span class="ln">104</span>        &quot;&quot;&quot;Transport over ``dt`` [s]; True if the substep must be shortened (LREDO).&quot;&quot;&quot;
+<span class="ln">105</span>        ...</pre></details>
+</section>
+<section class='def' id='def-RotationTransport.secular'><h3><span class='kind'>method</span>RotationTransport.secular</h3>
+<p class='muted'>lines 103–105</p>
+<pre>def secular(self, star: Star, zones: ConvectionZones, dt: float) -&gt; bool:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Transport over ``dt`` [s]; True if the substep must be shortened (LREDO).</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">103</span>    def secular(self, star: Star, zones: ConvectionZones, dt: float) -&gt; bool:
+<span class="ln">104</span>        &quot;&quot;&quot;Transport over ``dt`` [s]; True if the substep must be shortened (LREDO).&quot;&quot;&quot;
+<span class="ln">105</span>        ...</pre></details>
+</section>
+<section class='def' id='def-WindLaw'><h3><span class='kind'>class</span>WindLaw</h3>
+<p class='muted'>lines 108–116</p>
+<pre>class WindLaw:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Base of the wind laws.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">108</span>class WindLaw:
+<span class="ln">109</span>    &quot;&quot;&quot;Base of the wind laws.&quot;&quot;&quot;
+<span class="ln">110</span>
+<span class="ln">111</span>    def domega(self, star: Star, dt: float) -&gt; float:
+<span class="ln">112</span>        &quot;&quot;&quot;Change of the surface zone&#x27;s Omega [rad s-1].
+<span class="ln">113</span>
+<span class="ln">114</span>        This is a hook for derived classes. The base class does nothing.
+<span class="ln">115</span>        &quot;&quot;&quot;
+<span class="ln">116</span>        ...</pre></details>
+</section>
+<section class='def' id='def-WindLaw.domega'><h3><span class='kind'>method</span>WindLaw.domega</h3>
+<p class='muted'>lines 111–116</p>
+<pre>def domega(self, star: Star, dt: float) -&gt; float:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Change of the surface zone&#x27;s Omega [rad s-1].
+
+This is a hook for derived classes. The base class does nothing.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">111</span>    def domega(self, star: Star, dt: float) -&gt; float:
+<span class="ln">112</span>        &quot;&quot;&quot;Change of the surface zone&#x27;s Omega [rad s-1].
+<span class="ln">113</span>
+<span class="ln">114</span>        This is a hook for derived classes. The base class does nothing.
+<span class="ln">115</span>        &quot;&quot;&quot;
+<span class="ln">116</span>        ...</pre></details>
+</section>
+<section class='def' id='def-KawalerWind'><h3><span class='kind'>class</span>KawalerWind</h3>
+<p class='muted'>lines 119–123</p>
+<pre>class KawalerWind(WindLaw):</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>The Kawaler wind law.
+
+Replaces: wind.f#WIND, cowind.f#COWIND</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/wind.f.html#def-WIND'>WIND</a> <span class='muted'>(wind.f)</span></li><li><a href='../../../../files/cowind.f.html#def-COWIND'>COWIND</a> <span class='muted'>(cowind.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">119</span>class KawalerWind(WindLaw):
+<span class="ln">120</span>    &quot;&quot;&quot;The Kawaler wind law.
+<span class="ln">121</span>
+<span class="ln">122</span>    Replaces: wind.f#WIND, cowind.f#COWIND
+<span class="ln">123</span>    &quot;&quot;&quot;</pre></details>
+</section>
+<section class='def' id='def-MattWind'><h3><span class='kind'>class</span>MattWind</h3>
+<p class='muted'>lines 126–130</p>
+<pre>class MattWind(WindLaw):</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>The Matt et al. wind law.
+
+Replaces: mwind.f#MWIND, mcowind.f#MCOWIND, amcalc.f#AMCALC</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/mwind.f.html#def-MWIND'>MWIND</a> <span class='muted'>(mwind.f)</span></li><li><a href='../../../../files/mcowind.f.html#def-MCOWIND'>MCOWIND</a> <span class='muted'>(mcowind.f)</span></li><li><a href='../../../../files/amcalc.f.html#def-AMCALC'>AMCALC</a> <span class='muted'>(amcalc.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">126</span>class MattWind(WindLaw):
+<span class="ln">127</span>    &quot;&quot;&quot;The Matt et al. wind law.
+<span class="ln">128</span>
+<span class="ln">129</span>    Replaces: mwind.f#MWIND, mcowind.f#MCOWIND, amcalc.f#AMCALC
+<span class="ln">130</span>    &quot;&quot;&quot;</pre></details>
+</section>
+<section class='def' id='def-RotationStep'><h3><span class='kind'>class</span>RotationStep</h3>
+<p class='muted'>lines 133–169</p>
+<pre>class RotationStep:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>Evolves the internal rotation over one model step, in substeps.
+
+Attributes
+----------
+dist : Distortion
+law : RotationLaw
+transport : RotationTransport
+wind : WindLaw or None
+
+Replaces: getw.f#GETW, rotmix.f#ROTMIX, bursmix.f#BURSMIX (never run), bsrotmix.f#BSROTMIX (never run)</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/getw.f.html#def-GETW'>GETW</a> <span class='muted'>(getw.f)</span></li><li><a href='../../../../files/rotmix.f.html#def-ROTMIX'>ROTMIX</a> <span class='muted'>(rotmix.f)</span></li><li><a href='../../../../files/bursmix.f.html#def-BURSMIX'>BURSMIX</a> <span class='muted'>(bursmix.f)</span> (never run)</li><li><a href='../../../../files/bsrotmix.f.html#def-BSROTMIX'>BSROTMIX</a> <span class='muted'>(bsrotmix.f)</span> (never run)</li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">133</span>class RotationStep:
+<span class="ln">134</span>    &quot;&quot;&quot;Evolves the internal rotation over one model step, in substeps.
+<span class="ln">135</span>
+<span class="ln">136</span>    Attributes
+<span class="ln">137</span>    ----------
+<span class="ln">138</span>    dist : Distortion
+<span class="ln">139</span>    law : RotationLaw
+<span class="ln">140</span>    transport : RotationTransport
+<span class="ln">141</span>    wind : WindLaw or None
+<span class="ln">142</span>
+<span class="ln">143</span>    Replaces: getw.f#GETW, rotmix.f#ROTMIX, bursmix.f#BURSMIX (never run), bsrotmix.f#BSROTMIX (never run)
+<span class="ln">144</span>    &quot;&quot;&quot;
+<span class="ln">145</span>
+<span class="ln">146</span>    def __call__(self, star: Star, start: StepStart, zones: ConvectionZones, dt: float) -&gt; None:
+<span class="ln">147</span>        &quot;&quot;&quot;N = min(ceil(DWMAX/DTDIF), ceil(DTWIND/DTDIF)) substeps.&quot;&quot;&quot;
+<span class="ln">148</span>        ...
+<span class="ln">149</span>
+<span class="ln">150</span>    def _midstep(self, star: Star, start: StepStart, f: float) -&gt; None:
+<span class="ln">151</span>        &quot;&quot;&quot;The structure at fraction ``f`` of the step.
+<span class="ln">152</span>
+<span class="ln">153</span>        Replaces: midmod.f#MIDMOD
+<span class="ln">154</span>        &quot;&quot;&quot;
+<span class="ln">155</span>        ...
+<span class="ln">156</span>
+<span class="ln">157</span>    def _check_j(self, star: Star) -&gt; None:
+<span class="ln">158</span>        &quot;&quot;&quot;j &gt; 0, convergence, Omega.
+<span class="ln">159</span>
+<span class="ln">160</span>        Replaces: checkj.f#CHECKJ
+<span class="ln">161</span>        &quot;&quot;&quot;
+<span class="ln">162</span>        ...
+<span class="ln">163</span>
+<span class="ln">164</span>    def _check_comp(self, star: Star) -&gt; bool:
+<span class="ln">165</span>        &quot;&quot;&quot;0 &lt;= X &lt;= 1; False cuts the substep.
+<span class="ln">166</span>
+<span class="ln">167</span>        Replaces: checkc.f#CHECKC
+<span class="ln">168</span>        &quot;&quot;&quot;
+<span class="ln">169</span>        ...</pre></details>
+</section>
+<section class='def' id='def-RotationStep.__call__'><h3><span class='kind'>method</span>RotationStep.__call__</h3>
+<p class='muted'>lines 146–148</p>
+<pre>def __call__(self, star: Star, start: StepStart, zones: ConvectionZones, dt: float) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>N = min(ceil(DWMAX/DTDIF), ceil(DTWIND/DTDIF)) substeps.</pre></details>
+
+
+<details><summary>Source</summary><pre class='src'><span class="ln">146</span>    def __call__(self, star: Star, start: StepStart, zones: ConvectionZones, dt: float) -&gt; None:
+<span class="ln">147</span>        &quot;&quot;&quot;N = min(ceil(DWMAX/DTDIF), ceil(DTWIND/DTDIF)) substeps.&quot;&quot;&quot;
+<span class="ln">148</span>        ...</pre></details>
+</section>
+<section class='def' id='def-RotationStep._midstep'><h3><span class='kind'>method</span>RotationStep._midstep</h3>
+<p class='muted'>lines 150–155</p>
+<pre>def _midstep(self, star: Star, start: StepStart, f: float) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>The structure at fraction ``f`` of the step.
+
+Replaces: midmod.f#MIDMOD</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/midmod.f.html#def-MIDMOD'>MIDMOD</a> <span class='muted'>(midmod.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">150</span>    def _midstep(self, star: Star, start: StepStart, f: float) -&gt; None:
+<span class="ln">151</span>        &quot;&quot;&quot;The structure at fraction ``f`` of the step.
+<span class="ln">152</span>
+<span class="ln">153</span>        Replaces: midmod.f#MIDMOD
+<span class="ln">154</span>        &quot;&quot;&quot;
+<span class="ln">155</span>        ...</pre></details>
+</section>
+<section class='def' id='def-RotationStep._check_j'><h3><span class='kind'>method</span>RotationStep._check_j</h3>
+<p class='muted'>lines 157–162</p>
+<pre>def _check_j(self, star: Star) -&gt; None:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>j &gt; 0, convergence, Omega.
+
+Replaces: checkj.f#CHECKJ</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/checkj.f.html#def-CHECKJ'>CHECKJ</a> <span class='muted'>(checkj.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">157</span>    def _check_j(self, star: Star) -&gt; None:
+<span class="ln">158</span>        &quot;&quot;&quot;j &gt; 0, convergence, Omega.
+<span class="ln">159</span>
+<span class="ln">160</span>        Replaces: checkj.f#CHECKJ
+<span class="ln">161</span>        &quot;&quot;&quot;
+<span class="ln">162</span>        ...</pre></details>
+</section>
+<section class='def' id='def-RotationStep._check_comp'><h3><span class='kind'>method</span>RotationStep._check_comp</h3>
+<p class='muted'>lines 164–169</p>
+<pre>def _check_comp(self, star: Star) -&gt; bool:</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>0 &lt;= X &lt;= 1; False cuts the substep.
+
+Replaces: checkc.f#CHECKC</pre></details>
+<p><strong>Replaces</strong> (the current code)</p><ul class='calls'><li><a href='../../../../files/checkc.f.html#def-CHECKC'>CHECKC</a> <span class='muted'>(checkc.f)</span></li></ul>
+
+<details><summary>Source</summary><pre class='src'><span class="ln">164</span>    def _check_comp(self, star: Star) -&gt; bool:
+<span class="ln">165</span>        &quot;&quot;&quot;0 &lt;= X &lt;= 1; False cuts the substep.
+<span class="ln">166</span>
+<span class="ln">167</span>        Replaces: checkc.f#CHECKC
+<span class="ln">168</span>        &quot;&quot;&quot;
+<span class="ln">169</span>        ...</pre></details>
+</section>
+</main></body></html>

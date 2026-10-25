@@ -1,0 +1,145 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>yllo3d.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ yllo3d.f</span></header><main>
+<h1>yllo3d.f</h1>
+<p class='muted'>79 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/yllo3d.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>YLLO3D</code> gives the OPAL92 (Livermore) opacity at $\log\rho$, $\log T$ and $X$: it chooses the composition tables, calls <a href="../files/yllo2d.f.html#def-YLLO2D">YLLO2D</a> for each, and interpolates linearly in $X$. Its header lists the family: <code>YLLO3D</code> and <code>SETLLO</code> are "the routines to be called"; <code>YLLO2D</code>, <code>YLLOC</code> and <code>LL4TH</code> work for them; <code>YLLO3D2</code> and <code>YLLO2D2</code> are the second-$Z$ versions.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/getopac.f.html#def-GETOPAC">GETOPAC</a>.</li>
+<li><strong>What it calls:</strong> <a href="../files/findex.f.html#def-FINDEX">FINDEX</a> and <a href="../files/yllo2d.f.html#def-YLLO2D">YLLO2D</a>.</li>
+<li><strong>Inputs:</strong> the tables' grids (<code>GLLOT</code>: <code>GRIDT</code>, three values of $X$ in <code>GRIDX</code>), the surface table's $X$ (<code>XENV4</code>, <code>LLOT4</code>); the last indices in COMMON <code>KIPMLL</code>, used by no other routine.</li>
+<li><strong>Outputs:</strong> <code>OF</code> = $\kappa$, <code>OLF</code> = $\log\kappa$, <code>QODF</code> = $\partial\log\kappa/\partial\log\rho$, <code>QOTF</code> = $\partial\log\kappa/\partial\log T$ at fixed $\rho$.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>$\log T_6 = \log T - 6$ and $\log R = \log\rho - 3\log T_6$ (the comments write "LN" and "T/10E6", but the code uses $\log_{10}$ and $T/10^6$).</li>
+<li>If $X$ is the surface table's (within $10^{-5}$) or one of the three grid values, one table is used. Otherwise the interval in $X$ is found: tables 2–3 are used for $X$ above the second grid value, and also below it when $\log R &gt; -1$; tables 1–2 only for $X$ below the second grid value at $\log R \le -1$. Then
+   $$\log\kappa = \log\kappa_{m} + (\log\kappa_{m+1} - \log\kappa_m)\,\frac{X - X_m}{X_{m+1} - X_m},$$
+   which extrapolates linearly when $X$ is outside $[X_m, X_{m+1}]$ (the comment: "linear extrapolation in X"). The derivatives are interpolated the same way.</li>
+<li>$\partial\log\kappa/\partial\log T|_\rho = \partial\log\kappa/\partial\log T|_R - 3\,\partial\log\kappa/\partial\log R$.</li>
+<li>The run stops if $T$ is outside the table ("T OUT OF TABLE").</li>
+</ol></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The choice of $X$ tables.</strong> For $X$ between the first two grid values, tables 1–2 are used only at $\log R \le -1$; at higher $\log R$ the code extrapolates from tables 2–3. Probably because table 1 lacks high-density entries; can the experts confirm?</li>
+<li><strong><code>DATA</code> for a COMMON block.</strong> <code>DATA M1,M2,M3/1,1,1/</code> initialises COMMON <code>KIPMLL</code> in a subroutine, which standard Fortran allows only in BLOCK DATA. <code>YLLO3D2</code> has no such <code>DATA</code>.</li>
+<li><strong>Comments on units.</strong> The comments write "LN(T/10E6)" for what the code computes as $\log_{10}(T/10^6)$.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>THIS IS THE INTERPOLATION FACILITY FOR THE LIVERMORE OPACITY TABLES
+USING CUBIC SPLINE INTERPLOATION SCHEME.
+*** YLLO3D AND SETLLO ARE THE ROUTINES TO BE CALLED!
+SUBROUTINE YLLO3D(DL,TL,X,OF,OLF,QODF,QOTF)
+SUBROUTINE YLLO2D(T,D,M1,M2,M3,O,OL,QODF,QOTF)
+SUBROUTINE YLLO3D2(DL,TL,X,OF,OLF,QODF,QOTF)
+SUBROUTINE YLLO2D2(T,D,M1,M2,M3,O,OL,QODF,QOTF)
+SUBROUTINE SETLLO(IOCTRL)                     READ LLOT
+SUBROUTINE YLLOC                              SPLINE COEFF.
+SUBROUTINE LL4TH(X) SURFACE TABLES
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+YLLO3D
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-YLLO3D'>YLLO3D</a> <span class='muted'>subroutine · THIS IS THE INTERPOLATION FACILITY FOR THE LIVERMORE OPACITY TABLES</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-YLLO3D'><h3><span class='kind'>subroutine</span>YLLO3D</h3>
+<p class='muted'>lines 15–79 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/yllo3d.f#L15-L79'>GitHub</a></p>
+<pre>SUBROUTINE YLLO3D(DL,TL,X,OF,OLF,QODF,QOTF)</pre>
+<div class='notes'><p>OPAL92 opacity at $(\rho, T, X)$: one composition table, or linear interpolation (or extrapolation) in $X$ between two, each from <code>YLLO2D</code>.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>THIS IS THE INTERPOLATION FACILITY FOR THE LIVERMORE OPACITY TABLES
+USING CUBIC SPLINE INTERPLOATION SCHEME.
+*** YLLO3D AND SETLLO ARE THE ROUTINES TO BE CALLED!
+SUBROUTINE YLLO3D(DL,TL,X,OF,OLF,QODF,QOTF)
+SUBROUTINE YLLO2D(T,D,M1,M2,M3,O,OL,QODF,QOTF)
+SUBROUTINE YLLO3D2(DL,TL,X,OF,OLF,QODF,QOTF)
+SUBROUTINE YLLO2D2(T,D,M1,M2,M3,O,OL,QODF,QOTF)
+SUBROUTINE SETLLO(IOCTRL)                     READ LLOT
+SUBROUTINE YLLOC                              SPLINE COEFF.
+SUBROUTINE LL4TH(X) SURFACE TABLES
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+YLLO3D
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-GLLOT'>/GLLOT/</a>, <a href='../commons.html#c-KIPMLL'>/KIPMLL/</a>, <a href='../commons.html#c-LLOT'>/LLOT/</a>, <a href='../commons.html#c-LLOT4'>/LLOT4/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/findex.f.html#def-FINDEX'>FINDEX</a> <span class='muted'>(findex.f)</span> ×2</li>
+<li><a href='../files/yllo2d.f.html#def-YLLO2D'>YLLO2D</a> <span class='muted'>(yllo2d.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span> ×2</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">15</span>      SUBROUTINE YLLO3D(DL,TL,X,OF,OLF,QODF,QOTF)
+<span class="ln">16</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">17</span>      IMPLICIT LOGICAL*4 (L)
+<span class="ln">18</span>      PARAMETER (NUMT=50)
+<span class="ln">19</span>      PARAMETER (NUMD=17)
+<span class="ln">20</span>      PARAMETER (NUMX=3)
+<span class="ln">21</span>      PARAMETER (NUMXT=NUMT*NUMX)
+<span class="ln">22</span>      PARAMETER (NUM4D=4*NUMD)
+<span class="ln">23</span>      COMMON /GLLOT/GRIDT(NUMT),GRIDX(NUMX),GRHOT3(NUMD)
+<span class="ln">24</span>      COMMON /LLOT/OPACITY(NUMXT,NUMD),NUMXM,NUMTM
+<span class="ln">25</span>      COMMON /LLOT4/XENV4,ZENV4,CFORD4(NUMT,NUM4D),KIPM1
+<span class="ln">26</span>      COMMON /KIPMLL/M1,M2,M3
+<span class="ln">27</span>      DATA  M1,M2,M3/1,1,1/
+<span class="ln">28</span>      SAVE
+<span class="ln">29</span>
+<span class="ln">30</span>      LONE=.FALSE.
+<span class="ln">31</span>C INDEPENDENT PARAMETER IN LIVERMORE OPACITY TABLE;
+<span class="ln">32</span>C T6 = LN(T/10E6)
+<span class="ln">33</span>      T6=TL-6.0D0
+<span class="ln">34</span>C RHOT3 = LN(RHO/(T/10E6)**3)
+<span class="ln">35</span>      RHOT3=DL-3.0D0*T6
+<span class="ln">36</span>
+<span class="ln">37</span>      IF(DABS(XENV4-X).LE.1.0D-5)THEN
+<span class="ln">38</span>         M1=4
+<span class="ln">39</span>         LONE=.TRUE.
+<span class="ln">40</span>         GO TO 131
+<span class="ln">41</span>      ENDIF
+<span class="ln">42</span>      DO 130 IM1=1,NUMX
+<span class="ln">43</span>         IF(DABS(GRIDX(IM1)-X).LE.1.0D-5)THEN
+<span class="ln">44</span>            M1=IM1
+<span class="ln">45</span>            LONE=.TRUE.
+<span class="ln">46</span>            GO TO 131
+<span class="ln">47</span>         ENDIF
+<span class="ln">48</span> 130  CONTINUE
+<span class="ln">49</span>      CALL <a href="../files/findex.f.html#def-FINDEX" title="FINDEX in findex.f">FINDEX</a>(GRIDX,NUMX,X,M1)
+<span class="ln">50</span>      IF(M1.LT.0)M1=-M1
+<span class="ln">51</span>      IF(M1.LE.1.AND.RHOT3.GT.-1.0D0)M1=2
+<span class="ln">52</span>      IF(M1.GE.3)M1=2
+<span class="ln">53</span>      IF(M1.LE.0)STOP &#x27; ERROR IN X GRID&#x27;
+<span class="ln">54</span> 131  CONTINUE
+<span class="ln">55</span>      CALL <a href="../files/findex.f.html#def-FINDEX" title="FINDEX in findex.f">FINDEX</a>(GRIDT,NUMTM,T6,M2)
+<span class="ln">56</span>      IF(M2.LT.0.AND.GRIDT(NUMTM).EQ.T6)M2=-M2
+<span class="ln">57</span>      IF(M2.LT.0)STOP &#x27; T OUT OF TABLE &#x27;
+<span class="ln">58</span>      CALL <a href="../files/yllo2d.f.html#def-YLLO2D" title="YLLO2D in yllo2d.f">YLLO2D</a>(T6,RHOT3,M1,M2,M3,O0,OL0,QOD0,QOT0)
+<span class="ln">59</span>      IF (LONE)THEN
+<span class="ln">60</span>C USE ONLY ONE X TABLE
+<span class="ln">61</span>         OLF=OL0
+<span class="ln">62</span>         OF=O0
+<span class="ln">63</span>         QODI=QOD0
+<span class="ln">64</span>         QOTI=QOT0
+<span class="ln">65</span>      ELSE
+<span class="ln">66</span>C LINEAR EXTRAPOLATION IN X
+<span class="ln">67</span>         CALL <a href="../files/yllo2d.f.html#def-YLLO2D" title="YLLO2D in yllo2d.f">YLLO2D</a>(T6,RHOT3,M1+1,M2,M3,O1,OL1,QOD1,QOT1)
+<span class="ln">68</span>         GRDNT=(X-GRIDX(M1))/(GRIDX(M1+1)-GRIDX(M1))
+<span class="ln">69</span>         OLF=(OL1-OL0)*GRDNT+OL0
+<span class="ln">70</span>         QODI=(QOD1-QOD0)*GRDNT+QOD0
+<span class="ln">71</span>         QOTI=(QOT1-QOT0)*GRDNT+QOT0
+<span class="ln">72</span>         OF=10.0D0**OLF
+<span class="ln">73</span>      ENDIF
+<span class="ln">74</span>C CONVERSION FROM THE DERIVATIVE WITH CONSTANT RHOT3 TO CONSTANT RHO
+<span class="ln">75</span>      QODF=QODI
+<span class="ln">76</span>      QOTF=QOTI-3.0D0*QODF
+<span class="ln">77</span>
+<span class="ln">78</span>      RETURN
+<span class="ln">79</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ul>
+<li><strong>Unclear.</strong> "forced to tables 2–3 (for $X$ above the second grid value, or below it at $\log R &gt; -1$)": "below it" reads as "below the second value", which at $\log R \le -1$ keeps tables 1–2. Fix: say that tables 2–3 are used for $X$ above the second grid value, and for $X$ below it only when $\log R &gt; -1$; otherwise tables 1–2.</li>
+<li>Checked and confirmed: the call from <code>GETOPAC</code>, the COMMON blocks (<code>/KIPMLL/</code> is used here only; <code>YLLO3D2</code> has <code>/KIPMLL2/</code>), $\log R$, the interpolation in $X$, the derivative at fixed $\rho$, the stops, and questions 1–3.</li>
+</ul>
+<p>Revised: the choice of tables reworded.</p></div></details>
+</main></body></html>

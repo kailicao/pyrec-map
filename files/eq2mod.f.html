@@ -1,0 +1,176 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>eq2mod.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ eq2mod.f</span></header><main>
+<h1>eq2mod.f</h1>
+<p class='muted'>121 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/eq2mod.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>EQ2MOD</code> maps a change in specific angular momentum, computed on an equally spaced grid, back onto the model's own mass points. It is the last step of the angular momentum transport by rotational instabilities: the diffusion equation is solved on the equally spaced grid for each unstable region, and this routine applies the result to the run of $j = J/M$ in the model.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../files/seculr.f.html#def-SECULR">SECULR</a>, after it has solved the diffusion equation for one unstable region (shells <code>IBEG</code> to <code>IEND</code>).</li>
+<li><strong>Inputs:</strong> the change <code>DJ</code> and the angular momentum <code>EJ</code> before redistribution, both on the equally spaced grid; the shell masses <code>HS2</code>; the convective flags <code>LCZ</code>; the total change <code>SUMDJ</code> across the grid.</li>
+<li><strong>What it calls:</strong> <a href="../files/osplin.f.html#def-OSPLIN">OSPLIN</a>, a shape-preserving osculatory quadratic spline (ACM Algorithm 574).</li>
+<li><strong>Output:</strong> the array <code>HJM</code> (specific angular momentum at each model point), updated in place.</li>
+<li><strong>COMMON blocks:</strong> <code>/EGRID/</code> holds the grids: <code>CHI</code> (the model points' coordinate, $\chi = \log M/\Delta M + L/(L_\mathrm{tot}\Delta L) - \log P/\Delta P$ in GETGRID's comment; here <code>CHI(1..NMOD)</code> are the region's points, from <code>IBEG</code> on), <code>ECHI</code> (the equally spaced points), <code>NTOT</code>; it is filled by <a href="../files/getgrid.f.html#def-GETGRID">GETGRID</a> and shared with <code>SECULR</code>, <code>ROTGRID</code>, <code>MIXGRID</code>, <code>MIXCOM</code> and <code>CHECKJ</code>. <code>/SPLIN/</code> is scratch space for the spline, shared with <code>MIXCOM</code>, <code>MIXGRID</code> and <code>ROTGRID</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>If the region's first or last shell is convective, it is extended (indices <code>I0</code>, <code>I1</code>) to the edge of that convection zone.</li>
+<li>The fractional change $y = \Delta j / j$ (<code>DJ/EJ</code>) is interpolated with <code>OSPLIN</code> from the equally spaced points <code>ECHI</code> to the model points <code>CHI</code>, giving <code>YVAL</code>.</li>
+<li>Each shell's $j$ is multiplied by $(1 + y_i)$. Shells in the extended convective parts take the value at the nearest edge (<code>YVAL(1)</code> or <code>YVAL(NMOD)</code>).</li>
+<li>Conservation check. With $m_i$ the shell mass (<code>HS2</code>),
+$$S_J = \sum_i j_i m_i, \qquad S_{\Delta} = \sum_i y_i\, j_i m_i .$$
+If $|S_\Delta - \Delta J| &gt; 10^{-5}|\Delta J|$, where $\Delta J$ is <code>SUMDJ</code>, every shell from <code>I0</code> to <code>I1</code> is rescaled by
+$$\frac{S_J + \Delta J}{S_J + S_\Delta},$$
+so that the region's total angular momentum changes by exactly $\Delta J$.</li>
+</ol></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The extended convective shells.</strong> In step 3, shells outside <code>IBEG..IEND</code> but in the same convection zone get the edge value of $y$, so their $j$, and their $\Omega$, scale by one common factor. That keeps the zone in solid-body rotation only if it already was; the code does not check it. Is that assumption safe here?</li>
+<li><strong>The tolerance.</strong> The rescaling is applied only when the mismatch exceeds $10^{-5}|\Delta J|$. When $\Delta J = 0$ (no surface loss, as the comment says), any mismatch triggers it. Is that intended?</li>
+<li><strong>A comment's name.</strong> The comment before the check speaks of <code>DUMDJ</code>; the variable is <code>SUMDJ</code>.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-EQ2MOD'>EQ2MOD</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-EQ2MOD'><h3><span class='kind'>subroutine</span>EQ2MOD</h3>
+<p class='muted'>lines 2–121 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/eq2mod.f#L2-L121'>GitHub</a></p>
+<pre>SUBROUTINE EQ2MOD(DJ,EJ,HS2,IBEG,IEND,LCZ,M,SUMDJ,HJM)</pre>
+<div class='notes'><p>Interpolates $\Delta j/j$ back to the model points, applies it, and rescales the region to conserve angular momentum (equations above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-EGRID'>/EGRID/</a>, <a href='../commons.html#c-SPLIN'>/SPLIN/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/osplin.f.html#def-OSPLIN'>OSPLIN</a> <span class='muted'>(osplin.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE EQ2MOD(DJ,EJ,HS2,IBEG,IEND,LCZ,M,SUMDJ,HJM)
+<span class="ln">3</span>      PARAMETER (JSON=5000)
+<span class="ln">4</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">5</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">6</span>      COMMON/SPLIN/XVAL(JSON),YVAL(JSON),XTAB(JSON),YTAB(JSON)
+<span class="ln">7</span>      COMMON/EGRID/CHI(JSON),ECHI(JSON),ES1(JSON),DCHI,NTOT
+<span class="ln">8</span>      DIMENSION DJ(JSON),EJ(JSON),HS2(JSON),LCZ(JSON),HJM(JSON)
+<span class="ln">9</span>      SAVE
+<span class="ln">10</span>C  THE DIFFUSION EQUATION FOR ANGULAR MOMENTUM TRANSPORT IS SOLVED USING AN
+<span class="ln">11</span>C  EQUALLY SPACED GRID FOR EACH UNSTABLE REGION.  ONCE THE EQUATION HAS
+<span class="ln">12</span>C  BEEN SOLVED, WE NEED THE NEW RUN OF ANGULAR MOMENTUM AT THE ORIGINAL
+<span class="ln">13</span>C  MODEL POINTS.
+<span class="ln">14</span>C
+<span class="ln">15</span>C  EQUAL2 TRANSFORM BACK TO THE ORIGINAL GRID AND CALCULATE THE CHANGE IN
+<span class="ln">16</span>C  SPECIFIC ANGULAR MOMENTUM IN EACH SHELL.
+<span class="ln">17</span>C
+<span class="ln">18</span>C  INPUT VARIABLES:
+<span class="ln">19</span>C
+<span class="ln">20</span>C     VARIABLES PERTAINING TO THE EQUALLY SPACED GRID POINTS USED TO SOLVE
+<span class="ln">21</span>C     THE DIFFUSION EQUATION :
+<span class="ln">22</span>C
+<span class="ln">23</span>C  DJ - CHANGE IN J AT EACH POINT DUE TO ROTATIONALLY INDUCED INSTABILITIES.
+<span class="ln">24</span>C  EJ - CONTAINS THE RUN OF ANGULAR MOMENTUM PRIOR TO ANGULAR MOMENTUM
+<span class="ln">25</span>C       REDISTRIBUTION.
+<span class="ln">26</span>C  NTOT - NUMBER OF EQUALLY SPACED GRID POINTS IN THE UNSTABLE REGION.
+<span class="ln">27</span>C  SUMDJ - TOTAL CHANGE IN ANGULAR MOMENTUM ACROSS GRID
+<span class="ln">28</span>C     VARIABLES PERTAINING TO THE ORIGINAL MODEL POINTS :
+<span class="ln">29</span>C
+<span class="ln">30</span>C  HS2 - THE UNLOGGED MASS CONTENT OF THE MODEL POINTS.
+<span class="ln">31</span>C  IBEG,IEND - THE FIRST AND LAST MODEL POINTS CONTAINED IN THE UNSTABLE
+<span class="ln">32</span>C  REGION.
+<span class="ln">33</span>C  LCZ - A LOGICAL ARRAY WHICH IS T IF THE MODEL POINT IS CONVECTIVE FOR
+<span class="ln">34</span>C  ANGULAR MOMENTUM PURPOSES AND F OTHERWISE.
+<span class="ln">35</span>C  M - THE TOTAL NUMBER OF MODEL POINTS.
+<span class="ln">36</span>C
+<span class="ln">37</span>C VARIABLES IN COMMON BLOCKS:
+<span class="ln">38</span>C
+<span class="ln">39</span>C /SPLIN/ CONTAINS DUMMY ARRAYS USED TO PERFORM AN OSCULATORY SPLINE
+<span class="ln">40</span>C INTERPOLATION.
+<span class="ln">41</span>C /EGRID/ CONTAINS THE VECTOR OF EQUALLY SPACED GRID POINTS.
+<span class="ln">42</span>C OUTPUT VARIABLE :
+<span class="ln">43</span>C  HJM - THE NEW RUN OF SPECIFIC ANGULAR MOMENTUM AT THE MODEL POINTS.
+<span class="ln">44</span>C -------------------------------------------------------------------------
+<span class="ln">45</span>C CHECK FOR LOWER AND UPPER CONVECTION ZONES.
+<span class="ln">46</span>      IF(.NOT.LCZ(IBEG) .OR. IBEG.EQ.1)THEN
+<span class="ln">47</span>         I0 = IBEG
+<span class="ln">48</span>      ELSE
+<span class="ln">49</span>         DO I = IBEG - 1, 1, -1
+<span class="ln">50</span>            IF(.NOT.LCZ(I))THEN
+<span class="ln">51</span>               I0 = I + 1
+<span class="ln">52</span>               GOTO 10
+<span class="ln">53</span>            ENDIF
+<span class="ln">54</span>         END DO
+<span class="ln">55</span>         I0 = 1
+<span class="ln">56</span> 10      CONTINUE
+<span class="ln">57</span>      ENDIF
+<span class="ln">58</span>      IF(.NOT.LCZ(IEND) .OR. IEND.EQ.M)THEN
+<span class="ln">59</span>         I1 = IEND
+<span class="ln">60</span>      ELSE
+<span class="ln">61</span>         DO I = IEND+1,M
+<span class="ln">62</span>            IF(.NOT.LCZ(I))THEN
+<span class="ln">63</span>               I1 = I - 1
+<span class="ln">64</span>               GOTO 20
+<span class="ln">65</span>            ENDIF
+<span class="ln">66</span>         END DO
+<span class="ln">67</span>         I1 = M
+<span class="ln">68</span> 20      CONTINUE
+<span class="ln">69</span>      ENDIF
+<span class="ln">70</span>C INTERPOLATE IN DJ/J AS A FUNCTION OF ECHI
+<span class="ln">71</span>      NMOD = IEND - IBEG + 1
+<span class="ln">72</span>      DO I = 1, NMOD
+<span class="ln">73</span>         XVAL(I) = CHI(I)
+<span class="ln">74</span>      END DO
+<span class="ln">75</span>      DO I = 1,NTOT
+<span class="ln">76</span>         XTAB(I) = ECHI(I)
+<span class="ln">77</span>         YTAB(I) = DJ(I)/EJ(I)
+<span class="ln">78</span>      END DO
+<span class="ln">79</span>      CALL <a href="../files/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(XVAL,YVAL,XTAB,YTAB,NTOT,NMOD)
+<span class="ln">80</span>C APPLY THE FRACTIONAL CHANGE IN J/M ACROSS THE MODEL.
+<span class="ln">81</span>      SUMJMOD = 0.0D0
+<span class="ln">82</span>      SUMDJMOD = 0.0D0
+<span class="ln">83</span>      IF(I0.LT.IBEG)THEN
+<span class="ln">84</span>         DO I = I0,IBEG-1
+<span class="ln">85</span>            SUMJMOD = SUMJMOD + HJM(I)*HS2(I)
+<span class="ln">86</span>            SUMDJMOD = SUMDJMOD + YVAL(1)*HJM(I)*HS2(I)
+<span class="ln">87</span>            HJM(I) = HJM(I)*(1.0D0+YVAL(1))
+<span class="ln">88</span>         END DO
+<span class="ln">89</span>      ENDIF
+<span class="ln">90</span>      DO I = IBEG,IEND
+<span class="ln">91</span>         II = I - IBEG + 1
+<span class="ln">92</span>         SUMJMOD = SUMJMOD + HJM(I)*HS2(I)
+<span class="ln">93</span>         SUMDJMOD = SUMDJMOD + YVAL(II)*HJM(I)*HS2(I)
+<span class="ln">94</span>         HJM(I) = HJM(I)*(1.0D0+YVAL(II))
+<span class="ln">95</span>      END DO
+<span class="ln">96</span>      IF(I1.GT.IEND)THEN
+<span class="ln">97</span>         DO I = IEND+1,I1
+<span class="ln">98</span>            SUMJMOD = SUMJMOD + HJM(I)*HS2(I)
+<span class="ln">99</span>            SUMDJMOD = SUMDJMOD + YVAL(NMOD)*HJM(I)*HS2(I)
+<span class="ln">100</span>            HJM(I) = HJM(I)*(1.0D0+YVAL(NMOD))
+<span class="ln">101</span>         END DO
+<span class="ln">102</span>      ENDIF
+<span class="ln">103</span>C CHECK THAT ANGULAR MOMENTUM HAS BEEN CONSERVED.  THE TOTAL ANGULAR
+<span class="ln">104</span>C MOMENTUM CAN BE REDUCED FROM SURFACE ANGULAR MOMENTUM LOSS; CARE IS
+<span class="ln">105</span>C USED HERE BECAUSE DUMDJ SHOULD BE ZERO IN MODELS WITHOUT LOSS.
+<span class="ln">106</span>      TEST = ABS(SUMDJMOD - SUMDJ)
+<span class="ln">107</span>      VAL = 1.0D-5*ABS(SUMDJ)
+<span class="ln">108</span>c      WRITE(*,*)SUMDJ,SUMDJMOD,SUMJMOD
+<span class="ln">109</span>c      WRITE(*,911)(DJ(I)/EJ(I),I=1,NTOT)
+<span class="ln">110</span>C  911  FORMAT(1P8E10.2)
+<span class="ln">111</span>C IF THE TEST SUM IS NOT THE SAME WITHIN THE RELATIVE TOLERANCE VAL,
+<span class="ln">112</span>C ADJUST THE TOTAL ANGULAR MOMENTUM OF THE ENTIRE REGION BY A CONSTANT
+<span class="ln">113</span>C FACTOR TO ENFORCE ANGULAR MOMENTUM CONSERVATION.
+<span class="ln">114</span>      IF(TEST.GT.VAL)THEN
+<span class="ln">115</span>         RATIO = (SUMJMOD + SUMDJ)/(SUMJMOD + SUMDJMOD)
+<span class="ln">116</span>         DO I = I0, I1
+<span class="ln">117</span>            HJM(I) = HJM(I)*RATIO
+<span class="ln">118</span>         END DO
+<span class="ln">119</span>      ENDIF
+<span class="ln">120</span>      RETURN
+<span class="ln">121</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Unclear (question 1 rests on a false premise).</strong> "Is a uniform fractional change in $j$ what solid-body rotation in the zone requires, or should $\Omega$ be uniform instead?" Multiplying every shell's $j$ by the same factor multiplies every shell's $\Omega$ by that factor too, so a zone already in solid-body rotation stays so. Fix: rewrite the question to ask whether the extended shells are assumed to be in solid-body rotation already (the code does not check it).</li>
+<li><strong>Missing.</strong> <code>CHI</code> is described only as "the model points' coordinate". GETGRID's comment defines it, $\chi = \log M/\Delta M + L/(L_\mathrm{tot}\Delta L) - \log P/\Delta P$. Fix: add a short phrase. Also note that <code>XVAL(I) = CHI(I)</code> for <code>I = 1..NMOD</code>, so <code>CHI</code> holds only the region's points, starting at <code>IBEG</code>.</li>
+</ol>
+<p>Revised: question 1 rewritten; <code>CHI</code> described.</p></div></details>
+</main></body></html>

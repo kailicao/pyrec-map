@@ -1,0 +1,124 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>ludcmp.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ ludcmp.f</span></header><main>
+<h1>ludcmp.f</h1>
+<p class='muted'>93 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/ludcmp.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>LUDCMP</code> replaces a square matrix by its LU decomposition with partial pivoting (Crout's method with implicit scaling), as <em>Numerical Recipes</em>' <code>LUDCMP</code>. <a href="../files/lubksb.f.html#def-LUBKSB"><code>LUBKSB</code></a> then solves systems with it.</p>
+<p><strong>How it fits.</strong> Called only by <a href="../files/thdiff.f.html#def-THDIFF"><code>THDIFF</code></a> (the diffusion coefficients of Thoul et al., by its name). No COMMON blocks, no calls. Arguments: <code>A(NP,NP)</code> (overwritten by L and U), <code>N</code>, <code>NP</code>, the row permutation <code>INDX</code>, and <code>D</code> = ±1 (the parity of the row swaps).</p>
+<p><strong>The method.</strong> It first stores each row's scale, $1/\max_k |a_{ik}|$, and stops with <code>STOP 'Singular matrix.'</code> if a row is all zero. Then, for each column $j$ it computes the $U$ entries above the diagonal and the candidates below, picks the pivot with the largest scaled magnitude $|a_{ij}|/\max_k |a_{ik}|$, swaps rows, and divides the sub-diagonal entries by the pivot. A zero pivot is replaced by <code>TINY</code> = $10^{-20}$.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Fixed work size.</strong> The scaling vector <code>VV</code> has <code>NMAX</code> = 100 entries and <code>N</code> is not checked against it.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>********************************************************</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-LUDCMP'>LUDCMP</a> <span class='muted'>subroutine · ********************************************************</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-LUDCMP'><h3><span class='kind'>subroutine</span>LUDCMP</h3>
+<p class='muted'>lines 2–93 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/ludcmp.f#L2-L93'>GitHub</a></p>
+<pre>SUBROUTINE LUDCMP(A,N,NP,INDX,D)</pre>
+<div class='notes'><p>LU decomposition with partial pivoting (<em>Numerical Recipes</em>).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>********************************************************</pre></details>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/thdiff.f.html#def-THDIFF'>THDIFF</a> <span class='muted'>(thdiff.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE LUDCMP(A,N,NP,INDX,D)
+<span class="ln">3</span>
+<span class="ln">4</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">5</span>
+<span class="ln">6</span>C     .. Parameters ..
+<span class="ln">7</span>      INTEGER NMAX
+<span class="ln">8</span>C      REAL TINY
+<span class="ln">9</span>      PARAMETER (NMAX=100,TINY=1.0D-20)
+<span class="ln">10</span>C     ..
+<span class="ln">11</span>C     .. Scalar Arguments ..
+<span class="ln">12</span>C      REAL D
+<span class="ln">13</span>      INTEGER N,NP
+<span class="ln">14</span>C     ..
+<span class="ln">15</span>C     .. Array Arguments ..
+<span class="ln">16</span>      DIMENSION A(NP,NP)
+<span class="ln">17</span>      INTEGER INDX(N)
+<span class="ln">18</span>C     ..
+<span class="ln">19</span>C     .. Local Scalars ..
+<span class="ln">20</span>C      REAL AAMAX,DUM,SUM
+<span class="ln">21</span>      INTEGER I,IMAX,J,K
+<span class="ln">22</span>C     ..
+<span class="ln">23</span>C     .. Local Arrays ..
+<span class="ln">24</span>      DIMENSION VV(NMAX)
+<span class="ln">25</span>      SAVE
+<span class="ln">26</span>C     ..
+<span class="ln">27</span>C     .. Intrinsic Functions ..
+<span class="ln">28</span>      INTRINSIC ABS
+<span class="ln">29</span>C     ..
+<span class="ln">30</span>      D = 1.D0
+<span class="ln">31</span>      DO 12 I = 1,N
+<span class="ln">32</span>          AAMAX = 0.D0
+<span class="ln">33</span>          DO 11 J = 1,N
+<span class="ln">34</span>              IF (ABS(A(I,J)).GT.AAMAX) AAMAX = ABS(A(I,J))
+<span class="ln">35</span>   11     CONTINUE
+<span class="ln">36</span>          IF (AAMAX.EQ.0D0) STOP &#x27;Singular matrix.&#x27;
+<span class="ln">37</span>          VV(I) = 1.D0/AAMAX
+<span class="ln">38</span>   12 CONTINUE
+<span class="ln">39</span>      DO 19 J = 1,N
+<span class="ln">40</span>          IF (J.GT.1) THEN
+<span class="ln">41</span>              DO 14 I = 1,J - 1
+<span class="ln">42</span>                  SUM = A(I,J)
+<span class="ln">43</span>                  IF (I.GT.1) THEN
+<span class="ln">44</span>                      DO 13 K = 1,I - 1
+<span class="ln">45</span>                          SUM = SUM - A(I,K)*A(K,J)
+<span class="ln">46</span>   13                 CONTINUE
+<span class="ln">47</span>                      A(I,J) = SUM
+<span class="ln">48</span>                  END IF
+<span class="ln">49</span>
+<span class="ln">50</span>   14         CONTINUE
+<span class="ln">51</span>          END IF
+<span class="ln">52</span>
+<span class="ln">53</span>          AAMAX = 0.D0
+<span class="ln">54</span>          DO 16 I = J,N
+<span class="ln">55</span>              SUM = A(I,J)
+<span class="ln">56</span>              IF (J.GT.1) THEN
+<span class="ln">57</span>                  DO 15 K = 1,J - 1
+<span class="ln">58</span>                      SUM = SUM - A(I,K)*A(K,J)
+<span class="ln">59</span>   15             CONTINUE
+<span class="ln">60</span>                  A(I,J) = SUM
+<span class="ln">61</span>              END IF
+<span class="ln">62</span>
+<span class="ln">63</span>              DUM = VV(I)*ABS(SUM)
+<span class="ln">64</span>              IF (DUM.GE.AAMAX) THEN
+<span class="ln">65</span>                  IMAX = I
+<span class="ln">66</span>                  AAMAX = DUM
+<span class="ln">67</span>              END IF
+<span class="ln">68</span>
+<span class="ln">69</span>   16     CONTINUE
+<span class="ln">70</span>          IF (J.NE.IMAX) THEN
+<span class="ln">71</span>              DO 17 K = 1,N
+<span class="ln">72</span>                  DUM = A(IMAX,K)
+<span class="ln">73</span>                  A(IMAX,K) = A(J,K)
+<span class="ln">74</span>                  A(J,K) = DUM
+<span class="ln">75</span>   17         CONTINUE
+<span class="ln">76</span>              D = -D
+<span class="ln">77</span>              VV(IMAX) = VV(J)
+<span class="ln">78</span>          END IF
+<span class="ln">79</span>
+<span class="ln">80</span>          INDX(J) = IMAX
+<span class="ln">81</span>          IF (J.NE.N) THEN
+<span class="ln">82</span>              IF (A(J,J).EQ.0D0) A(J,J) = TINY
+<span class="ln">83</span>              DUM = 1.D0/A(J,J)
+<span class="ln">84</span>              DO 18 I = J + 1,N
+<span class="ln">85</span>                  A(I,J) = A(I,J)*DUM
+<span class="ln">86</span>   18         CONTINUE
+<span class="ln">87</span>          END IF
+<span class="ln">88</span>
+<span class="ln">89</span>   19 CONTINUE
+<span class="ln">90</span>      IF (A(N,N).EQ.0D0) A(N,N) = TINY
+<span class="ln">91</span>      RETURN
+<span class="ln">92</span>
+<span class="ln">93</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing.</strong> The hard stop: a row of zeros ends the run with <code>STOP 'Singular matrix.'</code> (ludcmp.f:36). Fix: add to the method.</li>
+</ol>
+<p>Revised: the stop added to the method.</p></div></details>
+</main></body></html>

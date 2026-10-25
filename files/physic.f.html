@@ -1,0 +1,226 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>physic.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ physic.f</span></header><main>
+<h1>physic.f</h1>
+<p class='muted'>154 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/physic.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Recomputes the auxiliary physics at every shell of a model: equation of state, opacity, temperature gradients and convection, mean molecular weight, then the thermal diffusivity and viscosity, and the largest angular velocity gradient that is stable against the shear instability. Its comment: "find actual and adiabatic temperature gradients, opacity, and mean molecular weight for all radiative shells" (the loop in fact covers all shells).</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the model (<code>HCOMP</code>, <code>HD</code>, <code>HG</code> (gravity), <code>HL</code>, <code>HP</code>, <code>HR</code>, <code>HS</code>, <code>HT</code>, all logarithmic except <code>HL</code>, <code>HG</code> and <code>HCOMP</code>), the rotational distortion factors <code>FP</code>, <code>FT</code>, <code>M</code> and <code>TEFFL</code>; the envelope composition from <code>/COMP/</code> and <code>/COMP2/</code>; <code>LMHD</code> (<code>/MHD/</code>) and <code>LDH</code> (<code>/DEBHU/</code>).</li>
+<li><strong>Who calls it:</strong> <a href="../files/getw.f.html#def-GETW">GETW</a>, <a href="../files/hpoint.f.html#def-HPOINT">HPOINT</a> and <a href="../files/starin.f.html#def-STARIN">STARIN</a>.</li>
+<li><strong>What it calls:</strong> <a href="../files/meqos.f.html#def-MEQOS">MEQOS</a> (MHD tables) or <a href="../files/eqstat.f.html#def-EQSTAT">EQSTAT</a> (the general equation of state), <a href="../files/getopac.f.html#def-GETOPAC">GETOPAC</a>, <a href="../files/tpgrad.f.html#def-TPGRAD">TPGRAD</a> (gradients and convective velocity), <a href="../files/viscos.f.html#def-VISCOS">VISCOS</a>, and <a href="../files/intrp2.f.html#def-INTRP2">INTRP2</a>.</li>
+<li><strong>Outputs (all through COMMON blocks, except <code>LC</code>):</strong></li>
+<li><code>LC</code>, the convection flags (argument);</li>
+<li><code>/SCRTCH/</code>: <code>SDEL(1..3,·)</code> $= \nabla_\mathrm{rad}, \nabla, \nabla_\mathrm{ad}$, the opacity <code>SO</code>, the convective velocity <code>SVEL</code>;</li>
+<li><code>/TEMP/</code>: <code>CP</code>, <code>HAMU</code> (the mean molecular weight), <code>SQDT</code> ($(\partial\ln\rho/\partial\ln T)_P$), and through <code>VISCOS</code> <code>THDIF</code> and <code>VISC</code>;</li>
+<li><code>/DWMAX/</code>: <code>QWRMAX</code>, the critical $d\Omega/d\ln r$;</li>
+<li><code>/DPMIX/</code>: <code>IOVIM</code>, the current shell, for <code>TPGRAD</code>; <code>/OPTAB/</code>: the starting indices of the opacity search (<code>IDT = 15</code>, <code>IDD = 5</code>).
+  These feed the rotational mixing and transport routines (<a href="../files/midmod.f.html#def-MIDMOD">MIDMOD</a> interpolates them in time), and <a href="../files/microdiff_mte.f.html#def-MICRODIFF_MTE">MICRODIFF_MTE</a> (for microscopic diffusion) reads <code>SDEL(2,·)</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Per shell:</strong> the equation of state (with Debye–Hückel abundances set first when <code>LDH</code>), the opacity, and <code>TPGRAD</code>, without derivatives (<code>LDERIV = .FALSE.</code>).</li>
+<li>
+<p><strong>Mean molecular weight</strong> of a fully ionized gas. With $A$ = 1.007825, 4.002603, 12 and 3.01603 for H, ⁴He, the metals (as carbon) and ³He,
+$$\frac{1}{\mu_\mathrm{ion}} = \frac{1}{\mu_\mathrm{ion,env}} + \sum_k \frac{X_k - X_{k,\mathrm{env}}}{A_k},\qquad \frac{1}{\mu_e} = \frac{X}{A_\mathrm{H}} + 2\left(\frac{X_{^3\mathrm{He}}}{A_{^3\mathrm{He}}} + \frac{Y}{A_{^4\mathrm{He}}}\right) + \frac{Z}{2},\qquad \mu = \frac{\mu_\mathrm{ion}\,\mu_e}{\mu_\mathrm{ion}+\mu_e}.$$</p>
+</li>
+<li>
+<p><strong>Shear stability</strong> (Endal &amp; Sofia 1978, ApJ 220, 279, as cited). At each interface between shells, with $\rho$, $P$, $\nabla$, $\nabla_\mathrm{ad}$ and $g$ interpolated to the midpoint in $\log m$ (four-point Lagrange),
+$$\left(\frac{d\Omega}{d\ln r}\right)_\mathrm{max} = 2\sqrt{\frac{\rho}{P}\,g^2\,(\nabla_\mathrm{ad} - \nabla)}$$
+where the root is real, and 0 otherwise. <code>QWRMAX(IM)</code> belongs to the interface between shells <code>IM-1</code> and <code>IM</code>; it is 0 where both shells are convective, and <code>QWRMAX(1)</code> is never set. $\rho$ and $P$ are interpolated in their logarithms (<code>HD</code>, <code>HP</code>), $g$ (<code>HG</code>, not logarithmic) and the gradients directly.</p>
+</li>
+</ol>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused argument <code>LCZ</code> removed, and unused arguments removed from the calls to <code>MEQOS</code> and <code>VISCOS</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>LC</code> overwritten.</strong> <code>PHYSIC</code> resets the caller's convection flags <code>LC</code> from <code>TPGRAD</code>. Do all three callers expect this?</li>
+<li><strong>Unused or unset.</strong> <code>/DWMAX/</code>'s <code>QWRMX0</code> and the flag <code>LOCOND</code> are not used here; <code>KSAHA</code>, which EQSTAT updates (a counter of Saha-equation calls), is never initialized here.</li>
+<li><strong>The comment's "radiative shells".</strong> The loop covers all shells, convective ones included. Update the comment?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+SUBROUTINE PHYSIC(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,LCZ,M,TEFFL)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-PHYSIC'>PHYSIC</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-PHYSIC'><h3><span class='kind'>subroutine</span>PHYSIC</h3>
+<p class='muted'>lines 3–154 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/physic.f#L3-L154'>GitHub</a></p>
+<pre>SUBROUTINE PHYSIC(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,M,TEFFL)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+SUBROUTINE PHYSIC(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,LCZ,M,TEFFL)  ! KC 2025-05-31</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-COMP'>/COMP/</a>, <a href='../commons.html#c-COMP2'>/COMP2/</a>, <a href='../commons.html#c-CONST1'>/CONST1/</a>, <a href='../commons.html#c-CONST2'>/CONST2/</a>, <a href='../commons.html#c-DEBHU'>/DEBHU/</a>, <a href='../commons.html#c-DPMIX'>/DPMIX/</a>, <a href='../commons.html#c-DWMAX'>/DWMAX/</a>, <a href='../commons.html#c-FLAG'>/FLAG/</a>, <a href='../commons.html#c-MHD'>/MHD/</a>, <a href='../commons.html#c-OPTAB'>/OPTAB/</a>, <a href='../commons.html#c-SCRTCH'>/SCRTCH/</a>, <a href='../commons.html#c-TEMP'>/TEMP/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/eqstat.f.html#def-EQSTAT'>EQSTAT</a> <span class='muted'>(eqstat.f)</span></li>
+<li><a href='../files/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span></li>
+<li><a href='../files/intrp2.f.html#def-INTRP2'>INTRP2</a> <span class='muted'>(intrp2.f)</span></li>
+<li><a href='../files/meqos.f.html#def-MEQOS'>MEQOS</a> <span class='muted'>(meqos.f)</span></li>
+<li><a href='../files/tpgrad.f.html#def-TPGRAD'>TPGRAD</a> <span class='muted'>(tpgrad.f)</span></li>
+<li><a href='../files/viscos.f.html#def-VISCOS'>VISCOS</a> <span class='muted'>(viscos.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/getw.f.html#def-GETW'>GETW</a> <span class='muted'>(getw.f)</span></li>
+<li><a href='../files/hpoint.f.html#def-HPOINT'>HPOINT</a> <span class='muted'>(hpoint.f)</span></li>
+<li><a href='../files/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE PHYSIC(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,M,TEFFL)
+<span class="ln">4</span>
+<span class="ln">5</span>      PARAMETER (JSON=5000)
+<span class="ln">6</span>      IMPLICIT REAL*8(A-H,O-Z)
+<span class="ln">7</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">8</span>
+<span class="ln">9</span>      COMMON/COMP/XENV,ZENV,ZENVM,AMUENV,FXENV(12),XNEW,ZNEW,STOTAL,
+<span class="ln">10</span>     *     SENV
+<span class="ln">11</span>      COMMON/COMP2/YENV,Y3ENV
+<span class="ln">12</span>      COMMON/CONST1/ CLN,CLNI,C4PI,C4PIL,C4PI3L,CC13,CC23,CPI
+<span class="ln">13</span>      COMMON/CONST2/CGAS,CA3,CA3L,CSIG,CSIGL,CGL,CMKH,CMKHN
+<span class="ln">14</span>      COMMON/FLAG/LEXCOM
+<span class="ln">15</span>      COMMON/OPTAB/OPTOL,ZSI,IDT,IDD(4)
+<span class="ln">16</span>      COMMON/SCRTCH/SESUM(JSON),SEG(7,JSON),SBETA(JSON),SETA(JSON),
+<span class="ln">17</span>     * LOCONS(JSON),SO(JSON),SDEL(3,JSON),SFXION(3,JSON),SVEL(JSON),SCP(JSON)
+<span class="ln">18</span>      COMMON/TEMP/CP(JSON),HAMU(JSON),SQDT(JSON),THDIF(JSON),
+<span class="ln">19</span>     *     VISC(JSON)
+<span class="ln">20</span>      COMMON/DWMAX/QWRMAX(JSON),QWRMX0(JSON)
+<span class="ln">21</span>      COMMON/MHD/LMHD,IOMHD1,IOMHD2,IOMHD3,IOMHD4,IOMHD5,IOMHD6,
+<span class="ln">22</span>     1     IOMHD7, IOMHD8
+<span class="ln">23</span>C DBG 7/92 COMMON BLOCK ADDED TO COMPUTE DEBYE-HUCKEL CORRECTION.
+<span class="ln">24</span>      COMMON/DEBHU/CDH,ETADH0,ETADH1,ZDH(18),XXDH,
+<span class="ln">25</span>     1     YYDH,ZZDH,DHNUE(18),LDH
+<span class="ln">26</span>      COMMON/DPMIX/DPENV,ALPHAC,ALPHAE,ALPHAM,BETAC,IOV1,IOV2,
+<span class="ln">27</span>     *      IOVIM, LOVSTC, LOVSTE, LOVSTM, LSEMIC, LADOV, LOVMAX
+<span class="ln">28</span>      DIMENSION HCOMP(15,JSON),HD(JSON),HL(JSON),HG(JSON),
+<span class="ln">29</span>     *     HP(JSON),HR(JSON),HS(JSON),HT(JSON),LC(JSON),
+<span class="ln">30</span>C      *     FXION(3),FP(JSON),FT(JSON),ATOMWT(4),LCZ(JSON),  ! KC 2025-05-31
+<span class="ln">31</span>     *     FXION(3),FP(JSON),FT(JSON),ATOMWT(4),
+<span class="ln">32</span>     *     HF(4),HOLD(4)
+<span class="ln">33</span>      DATA ATOMWT/1.007825D0,4.002603D0,12.0D0,3.01603D0/
+<span class="ln">34</span>      SAVE
+<span class="ln">35</span>
+<span class="ln">36</span>C  FIND ACTUAL AND ADIABATIC TEMPERATURE GRADIENTS,OPACITY,AND
+<span class="ln">37</span>C  MEAN MOLECULAR WEIGHT FOR ALL RADIATIVE SHELLS.
+<span class="ln">38</span>      LDERIV = .FALSE.
+<span class="ln">39</span>      LOCOND = .FALSE.
+<span class="ln">40</span>      LATMO = .FALSE.
+<span class="ln">41</span>      IDT = 15
+<span class="ln">42</span>      DO 25 I = 1,4
+<span class="ln">43</span>         IDD(I) = 5
+<span class="ln">44</span> 25   CONTINUE
+<span class="ln">45</span>      DO 30 IM = 1,M
+<span class="ln">46</span>         SL = HS(IM)
+<span class="ln">47</span>         TL = HT(IM)
+<span class="ln">48</span>         PL = HP(IM)
+<span class="ln">49</span>         RL = HR(IM)
+<span class="ln">50</span>         B = HL(IM)
+<span class="ln">51</span>         X = HCOMP(1,IM)
+<span class="ln">52</span>         Z = HCOMP(3,IM)
+<span class="ln">53</span>         DL = HD(IM)
+<span class="ln">54</span>         FPL = FP(IM)
+<span class="ln">55</span>         FTL = FT(IM)
+<span class="ln">56</span>
+<span class="ln">57</span>         IF(LMHD) THEN
+<span class="ln">58</span>            CALL <a href="../files/meqos.f.html#def-MEQOS" title="MEQOS in meqos.f">MEQOS</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">59</span>     *           AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP)
+<span class="ln">60</span>C      *           QCPP,LDERIV,LATMO,KSAHA)  ! KC 2025-05-31
+<span class="ln">61</span>         ELSE
+<span class="ln">62</span>            IF (LDH) THEN
+<span class="ln">63</span>               XXDH = HCOMP(1,IM)
+<span class="ln">64</span>               YYDH = HCOMP(2,IM)+HCOMP(4,IM)
+<span class="ln">65</span>               ZZDH = HCOMP(3,IM)
+<span class="ln">66</span>               ZDH(1) = HCOMP(5,IM)+HCOMP(6,IM)
+<span class="ln">67</span>               ZDH(2) = HCOMP(7,IM)+HCOMP(8,IM)
+<span class="ln">68</span>               ZDH(3) = HCOMP(9,IM)+HCOMP(10,IM)+HCOMP(11,IM)
+<span class="ln">69</span>            END IF
+<span class="ln">70</span>            CALL <a href="../files/eqstat.f.html#def-EQSTAT" title="EQSTAT in eqstat.f">EQSTAT</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">71</span>     *           AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,
+<span class="ln">72</span>     *           QCPP,LDERIV,LATMO,KSAHA)
+<span class="ln">73</span>         ENDIF
+<span class="ln">74</span>         CALL <a href="../files/getopac.f.html#def-GETOPAC" title="GETOPAC in getopac.f">GETOPAC</a> (DL,TL,X,Z,O,OL,QOD,QOT,FXION)
+<span class="ln">75</span>         IOVIM=IM
+<span class="ln">76</span>         CALL <a href="../files/tpgrad.f.html#def-TPGRAD" title="TPGRAD in tpgrad.f">TPGRAD</a>(TL,T,PL,P,D,RL,SL,B,O,QDT,QDP,QOT,QOD,QCP,DEL,
+<span class="ln">77</span>     *        DELR,DELA,QDTT,QDTP,QAT,QAP,QACT,QACP,QACR,QCPT,QCPP,
+<span class="ln">78</span>     *        VEL,LDERIV,LCONV,FPL,FTL,TEFFL)
+<span class="ln">79</span>         LC(IM) = LCONV
+<span class="ln">80</span>         SDEL(1,IM) = DELR
+<span class="ln">81</span>         SDEL(2,IM) = DEL
+<span class="ln">82</span>         SDEL(3,IM) = DELA
+<span class="ln">83</span>C  FIND NEW RUN OF MEAN MOLECULAR WEIGHT ASSUMING FULLY IONIZED GAS.
+<span class="ln">84</span>C  AMUENV IS(1/MEAN MOLECULAR WEIGHT PER ION OF THE SURFACE MIXTURE.)
+<span class="ln">85</span>         DFX1 = HCOMP(1,IM) - XENV
+<span class="ln">86</span>         DFX2 = HCOMP(2,IM) - YENV
+<span class="ln">87</span>         DFX3 = HCOMP(3,IM) - ZENV
+<span class="ln">88</span>         DFX4 = HCOMP(4,IM) - Y3ENV
+<span class="ln">89</span>         TEMP = AMUENV + DFX1/ATOMWT(1) + DFX2/ATOMWT(2) +
+<span class="ln">90</span>     *        DFX3/ATOMWT(3) + DFX4/ATOMWT(4)
+<span class="ln">91</span>         AMU2 = 1.0D0/TEMP
+<span class="ln">92</span>         TEMP = HCOMP(1,IM)/ATOMWT(1) + 2.0D0*(HCOMP(4,IM)/ATOMWT(4)
+<span class="ln">93</span>     *        + HCOMP(2,IM)/ATOMWT(2)) + 0.5D0*HCOMP(3,IM)
+<span class="ln">94</span>         EMU2 = 1.0D0/TEMP
+<span class="ln">95</span>         HAMU(IM) = AMU2*EMU2/(AMU2+EMU2)
+<span class="ln">96</span>         SO(IM) = O
+<span class="ln">97</span>         CP(IM) = QCP
+<span class="ln">98</span>         SQDT(IM) = QDT
+<span class="ln">99</span>C JVS 10/13 Always want SVEL
+<span class="ln">100</span>         SVEL(IM) = VEL
+<span class="ln">101</span>C         IF(LC(IM))THEN
+<span class="ln">102</span>C            SVEL(IM) = VEL
+<span class="ln">103</span>C         ELSE
+<span class="ln">104</span>C            SVEL(IM) = 0.0D0
+<span class="ln">105</span>C         ENDIF
+<span class="ln">106</span> 30   CONTINUE
+<span class="ln">107</span>C  FIND THE THERMOMETRIC DIFFUSIVITY AND KINEMATIC VISCOSITY.
+<span class="ln">108</span>C       CALL VISCOS(HCOMP,HD,HT,LC,M)  ! KC 2025-05-31
+<span class="ln">109</span>      CALL <a href="../files/viscos.f.html#def-VISCOS" title="VISCOS in viscos.f">VISCOS</a>(HCOMP,HD,HT,M)
+<span class="ln">110</span>C  FIND THE RUN OF MAXIMUM ALLOWABLE D OMEGA/D LNR AND THE RUN OF ACTUAL
+<span class="ln">111</span>C  D OMEGA/D LN R FOR ALL RADIATIVE ZONES.
+<span class="ln">112</span>C  IF THE GRADIENT OF OMEGA EXCEEDS THE CRITICAL VALUE FOR THE SHEAR
+<span class="ln">113</span>C  INSTABILITY, A SHORT TIMESCALE INSTABILITY OCCURS.  MIX ALL ADJACENT
+<span class="ln">114</span>C  UNSTABLE ZONES TO A MARGINALLY STABLE STATE.
+<span class="ln">115</span>      DO 100 IM = 2,M
+<span class="ln">116</span>C  SKIP CONVECTIVE REGIONS
+<span class="ln">117</span>         IF(LC(IM).AND.LC(IM-1))THEN
+<span class="ln">118</span>            QWRMAX(IM) = 0.0D0
+<span class="ln">119</span>            GOTO 100
+<span class="ln">120</span>         ENDIF
+<span class="ln">121</span>C  NOW CHECK FOR SHEAR INSTABILITY -REF.ENDAL&amp;SOFIA APJ 220:279(1978)
+<span class="ln">122</span>C  THERMODYNAMIC QUANTITIES ARE CALCULATED AT THE SHELL MIDPOINT BY
+<span class="ln">123</span>C  4-POINT LAGRANGIAN INTERPOLATION.
+<span class="ln">124</span>         IF(IM.LE.2) THEN
+<span class="ln">125</span>            K = 1
+<span class="ln">126</span>         ELSE IF(IM.EQ.M) THEN
+<span class="ln">127</span>            K = M - 3
+<span class="ln">128</span>         ELSE
+<span class="ln">129</span>            K = IM - 2
+<span class="ln">130</span>         ENDIF
+<span class="ln">131</span>         DO 90 I = 1, 4
+<span class="ln">132</span>            HOLD(I) = HS(I+K-1)
+<span class="ln">133</span> 90      CONTINUE
+<span class="ln">134</span>C  USE 4-POINT LAGRANGIAN INTERPOLATION TO FIND PHYSICAL VARIABLES
+<span class="ln">135</span>C  AT THE INTERFACE BEING TESTED.
+<span class="ln">136</span>         HSMID = 0.5D0*(HS(IM) + HS(IM-1))
+<span class="ln">137</span>         CALL <a href="../files/intrp2.f.html#def-INTRP2" title="INTRP2 in intrp2.f">INTRP2</a>(HOLD,HF,HSMID)
+<span class="ln">138</span>         PMID=HP(K)*HF(1) + HP(K+1)*HF(2) + HP(K+2)*HF(3) +HP(K+3)*HF(4)
+<span class="ln">139</span>         DMID=HD(K)*HF(1) + HD(K+1)*HF(2) + HD(K+2)*HF(3) +HD(K+3)*HF(4)
+<span class="ln">140</span>         DELMID=SDEL(2,K)*HF(1) + SDEL(2,K+1)*HF(2) + SDEL(2,K+2)*HF(3)
+<span class="ln">141</span>     *        + SDEL(2,K+3)*HF(4)
+<span class="ln">142</span>         DELAMD=SDEL(3,K)*HF(1) + SDEL(3,K+1)*HF(2) + SDEL(3,K+2)*HF(3)
+<span class="ln">143</span>     *        + SDEL(3,K+3)*HF(4)
+<span class="ln">144</span>         GMID=HG(K)*HF(1) + HG(K+1)*HF(2) + HG(K+2)*HF(3) +HG(K+3)*HF(4)
+<span class="ln">145</span>         TEMP = DEXP(CLN*(DMID - PMID))*(DELAMD - DELMID)*GMID**2
+<span class="ln">146</span>         IF(TEMP.GT.0.0D0) THEN
+<span class="ln">147</span>            QWRMAX(IM) = 2.0D0*DSQRT(TEMP)
+<span class="ln">148</span>         ELSE
+<span class="ln">149</span>            QWRMAX(IM) = 0.0D0
+<span class="ln">150</span>         ENDIF
+<span class="ln">151</span> 100  CONTINUE
+<span class="ln">152</span>
+<span class="ln">153</span>      RETURN
+<span class="ln">154</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked: the $\mu$ formulas, the shear criterion (<code>DEXP(CLN*(DMID-PMID))*(DELAMD-DELMID)*GMID**2</code>), the stencil <code>K</code>, the COMMON outputs, the callers.</p>
+<ol>
+<li><strong>Wrong (small).</strong> "<a href="../files/microdiff.f.html">microdiff.f</a> uses <code>SDEL(2,·)</code>": the reader is MICRODIFF_MTE (round 1, microdiff.f finding 1). Fix: link MICRODIFF_MTE.</li>
+<li><strong>Unclear.</strong> "0 otherwise (and in convective regions)": <code>QWRMAX(IM)</code> belongs to the interface <code>IM-1</code>/<code>IM</code>, is 0 only where both shells are convective, and <code>QWRMAX(1)</code> is never set; $\rho$, $P$ are interpolated in logs, $g$ and the gradients directly. Fix: say so.</li>
+<li><strong>Missing (question 2).</strong> <code>KSAHA</code>, an in/out counter of EQSTAT, is never initialized here. Fix: add to question 2.</li>
+</ol>
+<p>Revised: all three applied.</p></div></details>
+</main></body></html>

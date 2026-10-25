@@ -1,0 +1,107 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>simeqc.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ simeqc.f</span></header><main>
+<h1>simeqc.f</h1>
+<p class='muted'>73 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/simeqc.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Solves a small linear system by Gaussian elimination with partial pivoting, in place.</p>
+<p><strong>How it fits.</strong> Its only caller is <a href="../files/kemcom.f.html#def-KEMCOM"><code>KEMCOM</code></a>, which calls <code>SIMEQC(A,8,7)</code>: 7 equations, with the matrix and one right-hand side stored together by columns in <code>A(56)</code> (7 × 8). The solution overwrites the last column. No COMMON blocks.</p>
+<p><strong>The method.</strong> For each column $j$, the row with the largest $|a_{ij}|$ ($i \ge j$) becomes the pivot row; it is swapped in and divided by the pivot, and the column is eliminated below. Back substitution then gives the solution in the right-hand-side column. A zero pivot (a singular matrix) stops the run with "STOPPED AT 1010" and the code 29. In general, <code>N</code> is the number of equations and <code>M</code> − <code>N</code> the number of right-hand sides; the array size 56 fixes <code>M</code>·<code>N</code> ≤ 56.</p>
+<p><strong>Design.</strong> The index arithmetic on a one-dimensional array, without comments, follows the style of old library routines (it resembles IBM's SSP <code>SIMQ</code>; our inference).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The error message goes to unit 5.</strong> <code>WRITE (5,1011)</code> writes to unit 5, normally standard input. Should it be <code>ISHORT</code> or <code>*</code>?</li>
+<li><strong>Exact zero only.</strong> The pivot test is <code>DABS(BIGA).EQ.0.0D0</code>, so a nearly singular system passes and may give a meaningless solution. Has this been an issue in <code>KEMCOM</code>?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+SIMEQC
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-SIMEQC'>SIMEQC</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-SIMEQC'><h3><span class='kind'>subroutine</span>SIMEQC</h3>
+<p class='muted'>lines 6–73 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/simeqc.f#L6-L73'>GitHub</a></p>
+<pre>SUBROUTINE SIMEQC(A,M,N)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+SIMEQC
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/kemcom.f.html#def-KEMCOM'>KEMCOM</a> <span class='muted'>(kemcom.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE SIMEQC(A,M,N)
+<span class="ln">7</span>
+<span class="ln">8</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">9</span>      DIMENSION A(56)
+<span class="ln">10</span>      SAVE
+<span class="ln">11</span>
+<span class="ln">12</span>      JJ=-N
+<span class="ln">13</span>      DO 65 J=1,N
+<span class="ln">14</span>      JY=J+1
+<span class="ln">15</span>      JJ=JJ+N+1
+<span class="ln">16</span>      BIGA=0.0D0
+<span class="ln">17</span>      IT=JJ-J
+<span class="ln">18</span>      DO 30 I=J,N
+<span class="ln">19</span>      IJ=IT+I
+<span class="ln">20</span>      IF(DABS(BIGA).GE.DABS(A(IJ))) GO TO 30
+<span class="ln">21</span>      BIGA=A(IJ)
+<span class="ln">22</span>      IMAX=I
+<span class="ln">23</span>   30 CONTINUE
+<span class="ln">24</span>      IF(DABS(BIGA).EQ.0.0D0) GOTO 1010
+<span class="ln">25</span>      GOTO 1012
+<span class="ln">26</span> 1010 WRITE (5,1011)
+<span class="ln">27</span> 1011 FORMAT (1X,&#x27;STOPPED AT 1010&#x27;)
+<span class="ln">28</span>      STOP29
+<span class="ln">29</span> 1012 IA=J+N*(J-2)
+<span class="ln">30</span>      IT=IMAX-J
+<span class="ln">31</span>      DO 50 K=J,M
+<span class="ln">32</span>      IA=IA+N
+<span class="ln">33</span>      IB=IA+IT
+<span class="ln">34</span>      SAVE=A(IA)
+<span class="ln">35</span>      A(IA)=A(IB)
+<span class="ln">36</span>      A(IB)=SAVE
+<span class="ln">37</span>      A(IA)=A(IA)/BIGA
+<span class="ln">38</span>   50 CONTINUE
+<span class="ln">39</span>      IF(J.EQ.N) GO TO 70
+<span class="ln">40</span>      IA=N*(J-1)
+<span class="ln">41</span>      DO 64 IX=JY,N
+<span class="ln">42</span>      IB=IA+IX
+<span class="ln">43</span>      IT=J-IX
+<span class="ln">44</span>      DO 60 JX=JY,M
+<span class="ln">45</span>      IC=N*(JX-1)+IX
+<span class="ln">46</span>      ID=IC+IT
+<span class="ln">47</span>      A(IC)=A(IC)-A(IB)*A(ID)
+<span class="ln">48</span>   60 CONTINUE
+<span class="ln">49</span>   64 CONTINUE
+<span class="ln">50</span>   65 CONTINUE
+<span class="ln">51</span>   70 NY=N-1
+<span class="ln">52</span>      IT=N*N
+<span class="ln">53</span>      DO 85 J=1,NY
+<span class="ln">54</span>      IA=IT-J
+<span class="ln">55</span>      IC=N*M
+<span class="ln">56</span>      IB=IC-J
+<span class="ln">57</span>      DO 80 K=1,J
+<span class="ln">58</span>      A(IB)=A(IB)-A(IA)*A(IC)
+<span class="ln">59</span>      N1=M-1
+<span class="ln">60</span>      IG=IB
+<span class="ln">61</span>      IH=IC
+<span class="ln">62</span>   75 IF(N1.LE.N) GO TO 78
+<span class="ln">63</span>      IG=IG-N
+<span class="ln">64</span>      IH=IH-N
+<span class="ln">65</span>      A(IG)=A(IG)-A(IA)*A(IH)
+<span class="ln">66</span>      N1=N1-1
+<span class="ln">67</span>      GO TO 75
+<span class="ln">68</span>   78 IA=IA-N
+<span class="ln">69</span>      IC=IC-1
+<span class="ln">70</span>   80 CONTINUE
+<span class="ln">71</span>   85 CONTINUE
+<span class="ln">72</span>      RETURN
+<span class="ln">73</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings: the pivoting, the row swap and scaling, the elimination below the pivot, the back substitution (columns <code>N</code>+1 to <code>M</code>), the stop code 29, the call <code>SIMEQC(A,8,7)</code> from <code>KEMCOM</code> (line 316) and both questions hold.</p>
+<p>No change.</p></div></details>
+</main></body></html>

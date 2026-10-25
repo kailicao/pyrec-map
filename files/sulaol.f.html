@@ -1,0 +1,144 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>sulaol.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ sulaol.f</span></header><main>
+<h1>sulaol.f</h1>
+<p class='muted'>98 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/sulaol.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>SULAOL</code> ("SPLINE LAOL89") prepares the LAOL89 opacity tables for interpolation in density: for each composition and temperature of the table, it fits a cubic spline to $\log\kappa$ as a function of $\log\rho$ and stores the spline's second derivatives. With two metallicities (<code>L2Z</code>, the "ZRAMP" option, DBG 4/94) it does the same for the second table.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the tables read by <a href="../files/rdlaol.f.html#def-RDLAOL">RDLAOL</a> into COMMON <code>NWLAOL</code> (<code>OLAOL</code>, the grids <code>OT</code>, <code>ORHO</code>, sizes <code>NUMOFXYZ</code>, <code>NUMT</code>, <code>NUMRHO</code>) and <code>NWLAOL2</code> (the second table).</li>
+<li><strong>Who calls it:</strong> <a href="../files/setupopac.f.html#def-SETUPOPAC">SETUPOPAC</a>, right after <code>RDLAOL</code>, when <code>LLAOL89</code> is set.</li>
+<li><strong>What it calls:</strong> <a href="../files/cspline.f.html#def-CSPLINE">CSPLINE</a>, with end slopes $10^{30}$, that is natural splines.</li>
+<li><strong>Outputs:</strong> COMMON <code>SLAOL</code> (<code>SLAOLL</code> = $\log\kappa$, <code>SRHOL</code> = $\log\rho$, <code>SDORL</code> = second derivatives, <code>NUMRS</code> = points per spline) and <code>SLAOL2</code>, read by <a href="../files/gtlaol.f.html#def-GTLAOL">GTLAOL</a>, <a href="../files/gtlaol2.f.html#def-GTLAOL2">GTLAOL2</a> and <a href="../files/gtpurz.f.html#def-GTPURZ">GTPURZ</a>. It also converts the temperature grid <code>OT</code> (and <code>OT2</code>) to $\log_{10}$ in place.</li>
+<li><strong>COMMON blocks:</strong> <code>NWLAOL</code>, <code>NWLAOL2</code>, <code>SLAOL</code>, <code>SLAOL2</code>, <code>NEWOPAC</code> (for <code>L2Z</code>), and <code>ZRAMP</code>, which it declares but does not use.</li>
+</ul>
+<p><strong>The method.</strong> For each composition $X$ and temperature $T$, the nonzero entries $\kappa(\rho_k)$ give points $(\log\rho_k, \log\kappa_k)$; zeros mark missing entries and are skipped. A spline is fitted only if at least four points remain; otherwise <code>NUMRS = 0</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The second table's temperature loop.</strong> For the second table, <code>OT2</code> is converted with <code>DO IT=1, NUMT</code>, the first table's size, while the rest of that block uses <code>NT2</code>. Should it be <code>NT2</code>?</li>
+<li><strong>Logarithm in place.</strong> <code>OT</code> and <code>OT2</code> become $\log_{10} T$ in place, so a second call to <code>SULAOL</code> would take the logarithm twice. Is it called only once per job?</li>
+<li><strong>Unused COMMON.</strong> <code>ZRAMP</code> is declared but not used here.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+SPLINE LAOL89
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-SULAOL'>SULAOL</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-SULAOL'><h3><span class='kind'>subroutine</span>SULAOL</h3>
+<p class='muted'>lines 6–98 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/sulaol.f#L6-L98'>GitHub</a></p>
+<pre>SUBROUTINE SULAOL</pre>
+<div class='notes'><p>Natural cubic splines of $\log\kappa$ against $\log\rho$ for each composition and temperature of the LAOL89 table (and of the second table with <code>L2Z</code>).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+SPLINE LAOL89
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-NEWOPAC'>/NEWOPAC/</a>, <a href='../commons.html#c-NWLAOL'>/NWLAOL/</a>, <a href='../commons.html#c-NWLAOL2'>/NWLAOL2/</a>, <a href='../commons.html#c-SLAOL'>/SLAOL/</a>, <a href='../commons.html#c-SLAOL2'>/SLAOL2/</a>, <a href='../commons.html#c-ZRAMP'>/ZRAMP/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/cspline.f.html#def-CSPLINE'>CSPLINE</a> <span class='muted'>(cspline.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/setupopac.f.html#def-SETUPOPAC'>SETUPOPAC</a> <span class='muted'>(setupopac.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE SULAOL
+<span class="ln">7</span>C DBG 4/94 Modified to do ZRAMP stuff.
+<span class="ln">8</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">9</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">10</span>C MHP 8/25 Removed unused variables
+<span class="ln">11</span>C      CHARACTER*256 FLAOL2
+<span class="ln">12</span>C      CHARACTER*256 FLAOL, FPUREZ
+<span class="ln">13</span>      REAL*8 RSCLZC,RSCLZM1, RSCLZM2
+<span class="ln">14</span>      REAL*8 ZLAOL1,ZLAOL2,ZOPAL1,ZOPAL2, ZOPAL951,
+<span class="ln">15</span>     *  ZALEX1, ZKUR1, ZKUR2  ! ZOPAL952, ZALEX2
+<span class="ln">16</span>      DIMENSION TOP(104),TR(104),TDOR(104)
+<span class="ln">17</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">18</span>      COMMON/NWLAOL/OLAOL(12,104,52), OXA(12), OT(52), ORHO(104),
+<span class="ln">19</span>     *  TOLLAOL, IOLAOL, NUMOFXYZ, NUMRHO, NUMT, LLAOL, LPUREZ,
+<span class="ln">20</span>     *  IOPUREZ
+<span class="ln">21</span>      COMMON/NWLAOL2/OLAOL2(12,104,52), OXA2(12), OT2(52),
+<span class="ln">22</span>     *                ORHO2(104), NXYZ2,NRHO2,NT2
+<span class="ln">23</span>      COMMON/SLAOL/SLAOLL(12,104,52),SRHOL(12,104,52),
+<span class="ln">24</span>     *  SDORL(12,104,52), NUMRS(12,52)
+<span class="ln">25</span>      COMMON/SLAOL2/SLAOLL2(12,104,52),SRHOL2(12,104,52),
+<span class="ln">26</span>     *  SDORL2(12,104,52), NUMRS2(12,52)
+<span class="ln">27</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">28</span>      COMMON/ZRAMP/RSCLZC(50), RSCLZM1(50), RSCLZM2(50),
+<span class="ln">29</span>     *             IOLAOL2, IOOPAL2, NK,
+<span class="ln">30</span>     *             LZRAMP
+<span class="ln">31</span>C OPACITY COMMON BLOCKS - modified 3/09
+<span class="ln">32</span>      COMMON /NEWOPAC/ZLAOL1,ZLAOL2,ZOPAL1,ZOPAL2, ZOPAL951,
+<span class="ln">33</span>     +       ZALEX1, ZKUR1, ZKUR2,TMOLMIN,TMOLMAX,LALEX06,
+<span class="ln">34</span>     +       LLAOL89,LOPAL92,LOPAL95,LKUR90,LALEX95,L2Z
+<span class="ln">35</span>      SAVE
+<span class="ln">36</span>      DO IT=1, NUMT
+<span class="ln">37</span>         OT(IT) = LOG10(OT(IT))
+<span class="ln">38</span>      END DO
+<span class="ln">39</span>      DO IX=1, NUMOFXYZ
+<span class="ln">40</span>         DO IT=1, NUMT
+<span class="ln">41</span>            NUMS=0
+<span class="ln">42</span>            DO IR=1, NUMRHO
+<span class="ln">43</span>                SLAOLL(IX,IR,IT) = 0.0D0
+<span class="ln">44</span>                SRHOL(IX,IR,IT) = 0.0D0
+<span class="ln">45</span>                SDORL(IX,IR,IT) = 0.0D0
+<span class="ln">46</span>                IF(OLAOL(IX,IR,IT) .NE. 0.0D0) THEN
+<span class="ln">47</span>                   NUMS = NUMS+1
+<span class="ln">48</span>                   TOP(NUMS) = LOG10(OLAOL(IX,IR,IT))
+<span class="ln">49</span>                   TR(NUMS) = LOG10(ORHO(IR))
+<span class="ln">50</span>                END IF
+<span class="ln">51</span>            END DO
+<span class="ln">52</span>            IF (NUMS .GE. 4) THEN
+<span class="ln">53</span>               NUMRS(IX,IT)=NUMS
+<span class="ln">54</span>               CALL <a href="../files/cspline.f.html#def-CSPLINE" title="CSPLINE in cspline.f">CSPLINE</a>(TR,TOP,NUMS,1.0D30,1.0D30,TDOR)
+<span class="ln">55</span>               DO IR=1,NUMS
+<span class="ln">56</span>                   SLAOLL(IX,IR,IT) = TOP(IR)
+<span class="ln">57</span>                   SRHOL(IX,IR,IT) = TR(IR)
+<span class="ln">58</span>                   SDORL(IX,IR,IT) = TDOR(IR)
+<span class="ln">59</span>               END DO
+<span class="ln">60</span>            ELSE
+<span class="ln">61</span>               NUMRS(IX,IT) = 0
+<span class="ln">62</span>            END IF
+<span class="ln">63</span>         END DO
+<span class="ln">64</span>      END DO
+<span class="ln">65</span>C DBG 4/94 Do SPLINE on second opacity table if ZRAMP
+<span class="ln">66</span>      IF (L2Z) THEN
+<span class="ln">67</span>       DO IT=1, NUMT
+<span class="ln">68</span>          OT2(IT) = LOG10(OT2(IT))
+<span class="ln">69</span>       END DO
+<span class="ln">70</span>         DO IX=1, NXYZ2
+<span class="ln">71</span>            DO IT=1, NT2
+<span class="ln">72</span>               NUMS=0
+<span class="ln">73</span>               DO IR=1, NRHO2
+<span class="ln">74</span>                  SLAOLL2(IX,IR,IT) = 0.0D0
+<span class="ln">75</span>                  SRHOL2(IX,IR,IT) = 0.0D0
+<span class="ln">76</span>                  SDORL2(IX,IR,IT) = 0.0D0
+<span class="ln">77</span>                  IF(OLAOL2(IX,IR,IT) .NE. 0.0D0) THEN
+<span class="ln">78</span>                     NUMS = NUMS+1
+<span class="ln">79</span>                     TOP(NUMS) = LOG10(OLAOL2(IX,IR,IT))
+<span class="ln">80</span>                     TR(NUMS) = LOG10(ORHO2(IR))
+<span class="ln">81</span>                  END IF
+<span class="ln">82</span>               END DO
+<span class="ln">83</span>               IF (NUMS .GE. 4) THEN
+<span class="ln">84</span>                  NUMRS2(IX,IT)=NUMS
+<span class="ln">85</span>                  CALL <a href="../files/cspline.f.html#def-CSPLINE" title="CSPLINE in cspline.f">CSPLINE</a>(TR,TOP,NUMS,1.0D30,1.0D30,TDOR)
+<span class="ln">86</span>                  DO IR=1,NUMS
+<span class="ln">87</span>                     SLAOLL2(IX,IR,IT) = TOP(IR)
+<span class="ln">88</span>                     SRHOL2(IX,IR,IT) = TR(IR)
+<span class="ln">89</span>                     SDORL2(IX,IR,IT) = TDOR(IR)
+<span class="ln">90</span>                  END DO
+<span class="ln">91</span>               ELSE
+<span class="ln">92</span>                  NUMRS2(IX,IT) = 0
+<span class="ln">93</span>               END IF
+<span class="ln">94</span>            END DO
+<span class="ln">95</span>         END DO
+<span class="ln">96</span>      END IF
+<span class="ln">97</span>      RETURN
+<span class="ln">98</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings.</p>
+<p>No change.</p></div></details>
+</main></body></html>

@@ -1,0 +1,135 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>setupopac.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ setupopac.f</span></header><main>
+<h1>setupopac.f</h1>
+<p class='muted'>78 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/setupopac.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Reads the opacity tables chosen for the run and sets up their interpolation. Its comment: "THIS SUBROUTINE READS IN SPECIFIED OPACITY TABLES AND SET UP SPLINES FOR THE TABLES. WHEN LZRAMP=T OR LDIFZ=T THEN READ IN SECOND SET OF OPACITY TABLES AT DIFFERENT Z."</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../files/setups.f.html#def-SETUPS"><code>SETUPS</code></a>, once per run; the file names are passed through (MHP 8/25).</li>
+<li><strong>What it calls,</strong> by the switches in <code>/NEWOPAC/</code>:</li>
+<li>interior tables: OPAL95, <a href="../files/ll95tbl.f.html#def-LL95TBL"><code>LL95TBL</code></a> then <a href="../files/op95xtab.f.html#def-OP95XTAB"><code>OP95XTAB</code></a> (<code>LOPAL95</code>); OPAL92, <a href="../files/setllo.f.html#def-SETLLO"><code>SETLLO</code></a> then <a href="../files/ll4th.f.html#def-LL4TH"><code>LL4TH</code></a> (<code>LOPAL92</code>); LAOL89, <a href="../files/rdlaol.f.html#def-RDLAOL"><code>RDLAOL</code></a> then <a href="../files/sulaol.f.html#def-SULAOL"><code>SULAOL</code></a> (<code>LLAOL89</code>); the pure-Z LAOL table, <a href="../files/rdzlaol.f.html#def-RDZLAOL"><code>RDZLAOL</code></a> then <a href="../files/zsulaol.f.html#def-ZSULAOL"><code>ZSULAOL</code></a> (<code>LPUREZ</code>, in <code>/NWLAOL/</code>);</li>
+<li>low-temperature tables, one of: Ferguson et al. 2005, <a href="../files/readalex06.f.html#def-READALEX06"><code>READALEX06</code></a> (<code>LALEX06</code>); Alexander 1995, <a href="../files/alxtbl.f.html#def-ALXTBL"><code>ALXTBL</code></a> then <a href="../files/alx8th.f.html#def-ALX8TH"><code>ALX8TH</code></a> (<code>LALEX95</code>); Kurucz, <a href="../files/setkrz.f.html#def-SETKRZ"><code>SETKRZ</code></a> (<code>LKUR90</code>).</li>
+<li><strong>Inputs:</strong> <code>XENV</code> (the envelope's $X$, for the tables built at fixed composition) and the file names. Sets <code>L2Z</code> = <code>LZRAMP</code> or <code>LDIFZ</code> (<code>/ZRAMP/</code>, <code>/GRAVS3/</code>) in <code>/NEWOPAC/</code>, which the readers use to decide whether to read a second table.</li>
+<li><strong>Output:</strong> the argument <code>V</code> (the LAOL mix, from <code>RDLAOL</code>), and the tables in the COMMON blocks of the routines called. They are used at run time by <a href="../files/getopac.f.html#def-GETOPAC"><code>GETOPAC</code></a>.</li>
+</ul></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Several interior tables at once.</strong> The interior switches are independent <code>IF</code>s, so more than one table can be read (for example OPAL95 and LAOL89). Is that intended, with <code>GETOPAC</code> choosing among them, or should they exclude each other like the low-temperature ones?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+SETUPOPAC
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-SETUPOPAC'>SETUPOPAC</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-SETUPOPAC'><h3><span class='kind'>subroutine</span>SETUPOPAC</h3>
+<p class='muted'>lines 6–78 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/setupopac.f#L6-L78'>GitHub</a></p>
+<pre>SUBROUTINE SETUPOPAC(XENV, V,FALEX06,FKUR,FKUR2,FLAOL,FLAOL2,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+SETUPOPAC
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-GRAVS3'>/GRAVS3/</a>, <a href='../commons.html#c-NEWOPAC'>/NEWOPAC/</a>, <a href='../commons.html#c-NWLAOL'>/NWLAOL/</a>, <a href='../commons.html#c-ZRAMP'>/ZRAMP/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../files/alx8th.f.html#def-ALX8TH'>ALX8TH</a> <span class='muted'>(alx8th.f)</span></li>
+<li><a href='../files/alxtbl.f.html#def-ALXTBL'>ALXTBL</a> <span class='muted'>(alxtbl.f)</span></li>
+<li><a href='../files/ll4th.f.html#def-LL4TH'>LL4TH</a> <span class='muted'>(ll4th.f)</span></li>
+<li><a href='../files/ll95tbl.f.html#def-LL95TBL'>LL95TBL</a> <span class='muted'>(ll95tbl.f)</span></li>
+<li><a href='../files/op95xtab.f.html#def-OP95XTAB'>OP95XTAB</a> <span class='muted'>(op95xtab.f)</span></li>
+<li><a href='../files/rdlaol.f.html#def-RDLAOL'>RDLAOL</a> <span class='muted'>(rdlaol.f)</span></li>
+<li><a href='../files/rdzlaol.f.html#def-RDZLAOL'>RDZLAOL</a> <span class='muted'>(rdzlaol.f)</span></li>
+<li><a href='../files/readalex06.f.html#def-READALEX06'>READALEX06</a> <span class='muted'>(readalex06.f)</span></li>
+<li><a href='../files/setkrz.f.html#def-SETKRZ'>SETKRZ</a> <span class='muted'>(setkrz.f)</span></li>
+<li><a href='../files/setllo.f.html#def-SETLLO'>SETLLO</a> <span class='muted'>(setllo.f)</span></li>
+<li><a href='../files/sulaol.f.html#def-SULAOL'>SULAOL</a> <span class='muted'>(sulaol.f)</span></li>
+<li><a href='../files/zsulaol.f.html#def-ZSULAOL'>ZSULAOL</a> <span class='muted'>(zsulaol.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/setups.f.html#def-SETUPS'>SETUPS</a> <span class='muted'>(setups.f)</span></li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE SETUPOPAC(XENV, V,FALEX06,FKUR,FKUR2,FLAOL,FLAOL2,
+<span class="ln">7</span>     *FLIV95,FLLDAT,FOPAL2,FPUREZ,OPECALEX)
+<span class="ln">8</span>
+<span class="ln">9</span>      IMPLICIT REAL*8 (A-H,O-Z)
+<span class="ln">10</span>      IMPLICIT LOGICAL*4(L)
+<span class="ln">11</span>      REAL*8 OLAOL,OXA,OT,ORHO,TOLLAOL
+<span class="ln">12</span>C     MHP 8/25 Added pass-through file names
+<span class="ln">13</span>      CHARACTER*256 FALEX06,FKUR,FKUR2,FLAOL,FLAOL2,FLIV95,FLLDAT,
+<span class="ln">14</span>     * FOPAL2,FPUREZ
+<span class="ln">15</span>      CHARACTER*256 OPECALEX(7)
+<span class="ln">16</span>C OPACITY COMMON BLOCKS - modified 3/09
+<span class="ln">17</span>      COMMON /NEWOPAC/ZLAOL1,ZLAOL2,ZOPAL1,ZOPAL2, ZOPAL951,
+<span class="ln">18</span>     +       ZALEX1, ZKUR1, ZKUR2,TMOLMIN,TMOLMAX,LALEX06,
+<span class="ln">19</span>     +       LLAOL89,LOPAL92,LOPAL95,LKUR90,LALEX95,L2Z
+<span class="ln">20</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">21</span>      COMMON/ZRAMP/RSCLZC(50), RSCLZM1(50), RSCLZM2(50),
+<span class="ln">22</span>     *             IOLAOL2, IOOPAL2, NK,
+<span class="ln">23</span>     *             LZRAMP
+<span class="ln">24</span>      COMMON/GRAVS3/FGRY,FGRZ,LTHOUL,LDIFZ
+<span class="ln">25</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">26</span>      COMMON/NWLAOL/OLAOL(12,104,52),OXA(12),OT(52),ORHO(104),TOLLAOL,
+<span class="ln">27</span>     *  IOLAOL, NUMOFXYZ, NUMRHO, NUMT, LLAOL, LPUREZ, IOPUREZ
+<span class="ln">28</span>      DIMENSION V(12)
+<span class="ln">29</span>      SAVE
+<span class="ln">30</span>
+<span class="ln">31</span>C
+<span class="ln">32</span>C     THIS SUBROUTINE READS IN SPECIFIED OPACITY TABLES AND
+<span class="ln">33</span>C     SET UP SPLINES FOR THE TABLES.
+<span class="ln">34</span>C     WHEN LZRAMP=T OR LDIFZ=T THEN READ IN SECOND SET OF
+<span class="ln">35</span>C     OPACITY TABLES AT DIFFERENT Z (E.G. ZOPAL952).
+<span class="ln">36</span>      L2Z = LZRAMP.OR.LDIFZ
+<span class="ln">37</span>C
+<span class="ln">38</span>C     INTERIOR TABLES
+<span class="ln">39</span>C
+<span class="ln">40</span>C     READ IN OPAL95 TABLES
+<span class="ln">41</span>      IF (LOPAL95) THEN
+<span class="ln">42</span>        CALL <a href="../files/ll95tbl.f.html#def-LL95TBL" title="LL95TBL in ll95tbl.f">LL95TBL</a>(FLIV95)
+<span class="ln">43</span>      CALL <a href="../files/op95xtab.f.html#def-OP95XTAB" title="OP95XTAB in op95xtab.f">OP95XTAB</a>(XENV)
+<span class="ln">44</span>      END IF
+<span class="ln">45</span>
+<span class="ln">46</span>C     READ IN OPAL92 TABLES AT ZOPAL1 AND ZOPAL2
+<span class="ln">47</span>      IF (LOPAL92) THEN
+<span class="ln">48</span>         CALL <a href="../files/setllo.f.html#def-SETLLO" title="SETLLO in setllo.f">SETLLO</a>(FLLDAT,FOPAL2)
+<span class="ln">49</span>       CALL <a href="../files/ll4th.f.html#def-LL4TH" title="LL4TH in ll4th.f">LL4TH</a>(XENV)
+<span class="ln">50</span>      END IF
+<span class="ln">51</span>C     READ IN LAOL89 TABLES AT ZLAOL1 AND ZLAOL2
+<span class="ln">52</span>      IF (LLAOL89) THEN
+<span class="ln">53</span>         CALL <a href="../files/rdlaol.f.html#def-RDLAOL" title="RDLAOL in rdlaol.f">RDLAOL</a>(V,FLAOL,FLAOL2)
+<span class="ln">54</span>       CALL <a href="../files/sulaol.f.html#def-SULAOL" title="SULAOL in sulaol.f">SULAOL</a>
+<span class="ln">55</span>      END IF
+<span class="ln">56</span>C
+<span class="ln">57</span>C     READ IN LAOL89 PURE Z TABLE
+<span class="ln">58</span>C
+<span class="ln">59</span>      IF(LPUREZ)THEN
+<span class="ln">60</span>         CALL <a href="../files/rdzlaol.f.html#def-RDZLAOL" title="RDZLAOL in rdzlaol.f">RDZLAOL</a>(FPUREZ)
+<span class="ln">61</span>       CALL <a href="../files/zsulaol.f.html#def-ZSULAOL" title="ZSULAOL in zsulaol.f">ZSULAOL</a>
+<span class="ln">62</span>      END IF
+<span class="ln">63</span>C
+<span class="ln">64</span>C     LOW TEMP TABLES
+<span class="ln">65</span>C
+<span class="ln">66</span>C     READ IN ALEX 2006 TABLES
+<span class="ln">67</span>      IF (LALEX06) THEN
+<span class="ln">68</span>        CALL <a href="../files/readalex06.f.html#def-READALEX06" title="READALEX06 in readalex06.f">READALEX06</a>(FALEX06)
+<span class="ln">69</span>C     READ IN ALEX 1995 TABLES
+<span class="ln">70</span>      ELSE IF (LALEX95) THEN
+<span class="ln">71</span>        CALL <a href="../files/alxtbl.f.html#def-ALXTBL" title="ALXTBL in alxtbl.f">ALXTBL</a>(OPECALEX)
+<span class="ln">72</span>      CALL <a href="../files/alx8th.f.html#def-ALX8TH" title="ALX8TH in alx8th.f">ALX8TH</a>(XENV)
+<span class="ln">73</span>C     READ IN KURUCZ TABLE AT ZKUR1 AND ZKUR2
+<span class="ln">74</span>      ELSE IF (LKUR90) THEN
+<span class="ln">75</span>          CALL <a href="../files/setkrz.f.html#def-SETKRZ" title="SETKRZ in setkrz.f">SETKRZ</a>(FKUR,FKUR2)
+<span class="ln">76</span>      END IF
+<span class="ln">77</span>      RETURN
+<span class="ln">78</span>      END</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ul>
+<li><strong>Wrong (detail).</strong> "by the switches in <code>/NEWOPAC/</code>": <code>LPUREZ</code> is in <code>/NWLAOL/</code>, not <code>/NEWOPAC/</code>. Fix: say so.</li>
+<li>Checked and confirmed: the calls and their order, <code>L2Z</code>, the low-temperature <code>ELSE IF</code> chain, the call from <code>SETUPS</code>, the question.</li>
+</ul>
+<p>Revised: <code>LPUREZ</code> placed in <code>/NWLAOL/</code>.</p></div></details>
+</main></body></html>

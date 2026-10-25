@@ -1,0 +1,310 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>condopacp.f · YREC rp_1</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body>
+<header class='top'><a href='../index.html'>YREC rp_1</a><span class='muted'>/ condopacp.f</span></header><main>
+<h1>condopacp.f</h1>
+<p class='muted'>238 lines · 3 definitions · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/condopacp.f'>on GitHub (rp_1)</a></p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file interpolates the electron thermal conductivity in the table of A. Y. Potekhin (<code>condall.d</code>; Potekhin, Baiko, Haensel and Yakovlev 1999, A&amp;A 346, 345, and Potekhin 1999, A&amp;A 351, 787, per its header), for one ion charge $Z_\mathrm{ion}$, temperature and density. It is Potekhin's published routine (version 23.05.99), with small changes for YREC.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>Zion</code>, <code>TLG</code> ($\log T$), <code>RLG</code> ($\log\rho$); the table, read from unit <code>IcondOpacP</code> (<code>/MISCOPAC/</code>) at the first call. <a href="../files/parmin.f.html#def-PARMIN">PARMIN</a> sets the unit (75) and opens the file ("MHP 8/25: file opening moved to parmin").</li>
+<li><strong>Who calls it:</strong> <a href="../files/condopacpint.f.html#def-CONDOPACPINT">CONDOPACPINT</a>, three times per point (for H, He and a metal of charge 8).</li>
+<li><strong>What it calls:</strong> <a href="#def-HUNT">HUNT</a> and <a href="#def-CINTERP3">CINTERP3</a>, both in this file.</li>
+<li><strong>Outputs:</strong> <code>CK</code> = $\log_{10} K$ (the conductivity, cgs), <code>DRK</code> = $\partial\log K/\partial\log\rho$, <code>DTK</code> = $\partial\log K/\partial\log T$.</li>
+</ul>
+<p><strong>The method.</strong> The table has 15 values of $\log Z_\mathrm{ion}$, 19 of $\log T$ and 64 of $\log\rho$; in the files of <code>input/opacity/conductive/potekhin/</code> (<code>condall.d</code>, <code>condall06.d</code>) they span $Z_\mathrm{ion}$ = 1 to 60, $3 \le \log T \le 9$ (steps of 1/3) and $-6 \le \log\rho \le 9.75$ (steps of 0.25).</p>
+<ol>
+<li>Locate the point in each grid with HUNT; outside the table the run stops (<code>CONINTER: … out of range</code>).</li>
+<li>Cubic interpolation in $\log\rho$ at 4 temperatures and 2 charges (8 calls to CINTERP3), giving $\log K$ and its derivative in $\log\rho$.</li>
+<li>Linear interpolation in $\log Z_\mathrm{ion}$.</li>
+<li>Cubic interpolation in $\log T$, of $\log K$ (giving also $\partial\log K/\partial\log T$) and of $\partial\log K/\partial\log\rho$.</li>
+</ol>
+<p><strong>Design.</strong> The table is kept in local <code>SAVE</code>d arrays, read once (<code>KRUN = 12345</code> marks it read). The array sizes must match the file. The error branch for $T$ prints the $Z$ grid before stopping, a debugging leftover.</p>
+<p><strong>KC's changes.</strong> 2025-05-30: the integer divisions <code>MAXZ/2+1</code> etc. rewritten as <code>INT(MAXZ/2.)+1</code> to silence the compiler warning <code>-Winteger-division</code>; the result is the same.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Stopping at the table's upper edges.</strong> Any point outside the table stops the run. <a href="../files/condopacpint.f.html#def-CONDOPACPINT">CONDOPACPINT</a> guards the call with limits equal to the table's edges ($3 \le \log T \le 9$, $\log\rho \le 9.75$, inclusive). But HUNT returns $N$ for a value equal to the last grid value, so a point at exactly $\log T = 9$ or $\log\rho = 9.75$ passes the guard and stops the run. Rare, but should the guards be strict, or the last interval accepted?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+This subroutine interpolates the electron thermal conductivity       *
+from the data file &quot;condall.d&quot;                          *
+---------------------------------------------------  Version 23.05.99</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-CONDOPACP'>CONDOPACP</a> <span class='muted'>subroutine · * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *</span></li>
+<li><a href='#def-CINTERP3'>CINTERP3</a> <span class='muted'>subroutine</span></li>
+<li><a href='#def-HUNT'>HUNT</a> <span class='muted'>subroutine</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-CONDOPACP'><h3><span class='kind'>subroutine</span>CONDOPACP</h3>
+<p class='muted'>lines 5–144 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/condopacp.f#L5-L144'>GitHub</a></p>
+<pre>subroutine CondOpacP(Zion,TLG,RLG,CK,DRK,DTK)</pre>
+<div class='notes'><p>Interpolates $\log K$ and its derivatives in Potekhin's conductivity table: cubic in $\log\rho$ and $\log T$, linear in $\log Z_\mathrm{ion}$. Reads the table at the first call.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+This subroutine interpolates the electron thermal conductivity       *
+from the data file &quot;condall.d&quot;                          *
+---------------------------------------------------  Version 23.05.99</pre></details>
+<p><strong>COMMON blocks</strong> <a href='../commons.html#c-MISCOPAC'>/MISCOPAC/</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='#def-CINTERP3'>CINTERP3</a> ×10</li>
+<li><a href='#def-HUNT'>HUNT</a> ×3</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../files/condopacpint.f.html#def-CONDOPACPINT'>CONDOPACPINT</a> <span class='muted'>(condopacpint.f)</span> ×6</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">5</span>      subroutine CondOpacP(Zion,TLG,RLG,CK,DRK,DTK)
+<span class="ln">6</span>* Input: Zion - ion charge, TLG - lg(T[K]), RLG - lg(rho[g/cc])
+<span class="ln">7</span>* Output: CK - Log_{10} thermal conductivity (kappa) [CGS units]
+<span class="ln">8</span>*         DRK - d log kappa / d log rho
+<span class="ln">9</span>*         DTK - d log kappa / d log T
+<span class="ln">10</span>***      (it is also possible to obtain all second derivatives)      ***
+<span class="ln">11</span>
+<span class="ln">12</span>C     This Subroutine interpolates thermal conductivity from
+<span class="ln">13</span>C     a precalculated table condall.d available at
+<span class="ln">14</span>C     http://www.ioffe.rssi.ru/astro/conduct
+<span class="ln">15</span>C     For theoretical base of this calculation, see
+<span class="ln">16</span>C      A.Y.Potekhin, D.A.Baiko, P.Haensel, D.G.Yakovlev, 1999
+<span class="ln">17</span>C                  Astron. Astrophys. 346, 345.
+<span class="ln">18</span>C     Extension from strongly- to weakly-degenerate regime
+<span class="ln">19</span>C     has been done using the thermal averaging - for example
+<span class="ln">20</span>C         A.Y.Potekhin, 1999, Astron. Astrophys. 351, 787.
+<span class="ln">21</span>C     Please quote these publication when using this program
+<span class="ln">22</span>C     SOURCE DATA FILE &#x27;condall.d&#x27; MUST BE IN YOUR
+<span class="ln">23</span>C      CURRENT DIRECTORY
+<span class="ln">24</span>C     Please address any questions/comments to Alexander Potekhin:
+<span class="ln">25</span>C     e-mail: palex@astro.ioffe.rssi.ru
+<span class="ln">26</span>
+<span class="ln">27</span>      implicit double precision (A-H), double precision (O-Z)
+<span class="ln">28</span>      save
+<span class="ln">29</span>      parameter (MAXT=19,MAXR=64,MAXZ=15)
+<span class="ln">30</span>!!! NB: These parameters must be consistent with the table &quot;condall.d&quot;!!!
+<span class="ln">31</span>      dimension AT(MAXT),AR(MAXR),AZ(MAXZ),AKAP(MAXT,MAXR,MAXZ)
+<span class="ln">32</span>
+<span class="ln">33</span>C The following three lines provide and interface to PARMIN in order to
+<span class="ln">34</span>C locate the Potekhin files.
+<span class="ln">35</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">36</span>      COMMON /MISCOPAC/IKUR2,IcondOpacP,LcondOpacP
+<span class="ln">37</span>      LOGICAL*4 LcondOpacP
+<span class="ln">38</span>
+<span class="ln">39</span>C removed unused variables
+<span class="ln">40</span>C     CHARACTER*256 FKUR2,FcondOpacP
+<span class="ln">41</span>
+<span class="ln">42</span>      data KRUN/-1/
+<span class="ln">43</span>
+<span class="ln">44</span>      if (KRUN.ne.12345) then   ! Reading
+<span class="ln">45</span>         IP = IcondOpacP
+<span class="ln">46</span>C MHP 8/25 file opening moved to parmin
+<span class="ln">47</span>C         open(IP,file=FcondOpacP,status=&#x27;OLD&#x27;)
+<span class="ln">48</span>c         print*,&#x27;Reading thermal conductivity data...&#x27;
+<span class="ln">49</span>         read(IP,&#x27;(A)&#x27;) ! skip the first line
+<span class="ln">50</span>        do IZ=1,MAXZ
+<span class="ln">51</span>           read(IP,*) Z,(AT(IT),IT=1,MAXT)
+<span class="ln">52</span>           AZ(IZ)=dlog10(Z)
+<span class="ln">53</span>          do IR=1,MAXR
+<span class="ln">54</span>             read(IP,*) AR(IR),(AKAP(IT,IR,IZ),IT=1,MAXT)
+<span class="ln">55</span>          enddo
+<span class="ln">56</span>      enddo
+<span class="ln">57</span>         close(IP)
+<span class="ln">58</span>         KRUN=12345
+<span class="ln">59</span>C KC 2025-05-30 fixed -Winteger-division
+<span class="ln">60</span>C          IZ=MAXZ/2+1
+<span class="ln">61</span>C          IT=MAXT/2+1
+<span class="ln">62</span>C          IR=MAXR/2+1
+<span class="ln">63</span>         IZ=INT(MAXZ/2.)+1
+<span class="ln">64</span>         IT=INT(MAXT/2.)+1
+<span class="ln">65</span>         IR=INT(MAXR/2.)+1
+<span class="ln">66</span>c         print*,&#x27;Potekhin Conductivity File read in.&#x27;
+<span class="ln">67</span>      endif
+<span class="ln">68</span>      ZLG=dlog10(Zion)
+<span class="ln">69</span>      call <a href="#def-HUNT" title="HUNT in condopacp.f">HUNT</a>(AZ,MAXZ,ZLG,IZ)
+<span class="ln">70</span>      if (IZ.eq.0.or.IZ.eq.MAXZ) stop&#x27;CONINTER: Z out of range&#x27;
+<span class="ln">71</span>      call <a href="#def-HUNT" title="HUNT in condopacp.f">HUNT</a>(AT,MAXT,TLG,IT)
+<span class="ln">72</span>
+<span class="ln">73</span>C      if (IT.eq.0.or.IT.eq.MAXT) stop&#x27;CONINTER: T out of range&#x27;
+<span class="ln">74</span>      if (IT.eq.0.or.IT.eq.MAXT) then
+<span class="ln">75</span>                  print*, AZ
+<span class="ln">76</span>                  print*, MAXZ, TLG, IZ
+<span class="ln">77</span>                  stop&#x27;CONINTER: T out of range&#x27;
+<span class="ln">78</span>      endif
+<span class="ln">79</span>
+<span class="ln">80</span>      call <a href="#def-HUNT" title="HUNT in condopacp.f">HUNT</a>(AR,MAXR,RLG,IR)
+<span class="ln">81</span>      if (IR.eq.0.or.IR.eq.MAXR) stop&#x27;CONINTER: rho out of range&#x27;
+<span class="ln">82</span>      ITM=max0(1,IT-1)
+<span class="ln">83</span>      ITP=min0(MAXT,IT+2)
+<span class="ln">84</span>      IRM=max0(1,IR-1)
+<span class="ln">85</span>      IRP=min0(MAXR,IR+2)
+<span class="ln">86</span>* Cubic interpolation in RLG:
+<span class="ln">87</span>* Z0:
+<span class="ln">88</span>      call <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">CINTERP3</a>(AR(IRM),AR(IR),AR(IR+1),AR(IRP),RLG,IR,MAXR,
+<span class="ln">89</span>     *   AKAP(ITM,IRM,IZ),AKAP(ITM,IR,IZ),
+<span class="ln">90</span>     *   AKAP(ITM,IR+1,IZ),AKAP(ITM,IRP,IZ),
+<span class="ln">91</span>     *   CKTMZ0,DRKTMZ0,DR2KTMZ0,XR)
+<span class="ln">92</span>      call <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">CINTERP3</a>(AR(IRM),AR(IR),AR(IR+1),AR(IRP),RLG,IR,MAXR,
+<span class="ln">93</span>     *   AKAP(IT,IRM,IZ),AKAP(IT,IR,IZ),
+<span class="ln">94</span>     *   AKAP(IT,IR+1,IZ),AKAP(IT,IRP,IZ),
+<span class="ln">95</span>     *   CKT0Z0,DRKT0Z0,DR2KT0Z0,XR)
+<span class="ln">96</span>      call <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">CINTERP3</a>(AR(IRM),AR(IR),AR(IR+1),AR(IRP),RLG,IR,MAXR,
+<span class="ln">97</span>     *   AKAP(IT+1,IRM,IZ),AKAP(IT+1,IR,IZ),
+<span class="ln">98</span>     *   AKAP(IT+1,IR+1,IZ),AKAP(IT+1,IRP,IZ),
+<span class="ln">99</span>     *   CKT1Z0,DRKT1Z0,DR2KT1Z0,XR)
+<span class="ln">100</span>      call <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">CINTERP3</a>(AR(IRM),AR(IR),AR(IR+1),AR(IRP),RLG,IR,MAXR,
+<span class="ln">101</span>     *   AKAP(ITP,IRM,IZ),AKAP(ITP,IR,IZ),
+<span class="ln">102</span>     *   AKAP(ITP,IR+1,IZ),AKAP(ITP,IRP,IZ),
+<span class="ln">103</span>     *   CKTPZ0,DRKTPZ0,DR2KTPZ0,XR)
+<span class="ln">104</span>* Z1:
+<span class="ln">105</span>      call <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">CINTERP3</a>(AR(IRM),AR(IR),AR(IR+1),AR(IRP),RLG,IR,MAXR,
+<span class="ln">106</span>     *   AKAP(ITM,IRM,IZ+1),AKAP(ITM,IR,IZ+1),
+<span class="ln">107</span>     *   AKAP(ITM,IR+1,IZ+1),AKAP(ITM,IRP,IZ+1),
+<span class="ln">108</span>     *   CKTMZ1,DRKTMZ1,DR2KTMZ1,XR)
+<span class="ln">109</span>      call <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">CINTERP3</a>(AR(IRM),AR(IR),AR(IR+1),AR(IRP),RLG,IR,MAXR,
+<span class="ln">110</span>     *   AKAP(IT,IRM,IZ+1),AKAP(IT,IR,IZ+1),
+<span class="ln">111</span>     *   AKAP(IT,IR+1,IZ+1),AKAP(IT,IRP,IZ+1),
+<span class="ln">112</span>     *   CKT0Z1,DRKT0Z1,DR2KT0Z1,XR)
+<span class="ln">113</span>      call <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">CINTERP3</a>(AR(IRM),AR(IR),AR(IR+1),AR(IRP),RLG,IR,MAXR,
+<span class="ln">114</span>     *   AKAP(IT+1,IRM,IZ+1),AKAP(IT+1,IR,IZ+1),
+<span class="ln">115</span>     *   AKAP(IT+1,IR+1,IZ+1),AKAP(IT+1,IRP,IZ+1),
+<span class="ln">116</span>     *   CKT1Z1,DRKT1Z1,DR2KT1Z1,XR)
+<span class="ln">117</span>      call <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">CINTERP3</a>(AR(IRM),AR(IR),AR(IR+1),AR(IRP),RLG,IR,MAXR,
+<span class="ln">118</span>     *   AKAP(ITP,IRM,IZ+1),AKAP(ITP,IR,IZ+1),
+<span class="ln">119</span>     *   AKAP(ITP,IR+1,IZ+1),AKAP(ITP,IRP,IZ+1),
+<span class="ln">120</span>     *   CKTPZ1,DRKTPZ1,DR2KTPZ1,XR)
+<span class="ln">121</span>* Linear interpolation in ZLG:
+<span class="ln">122</span>      XZ1=(ZLG-AZ(IZ))/(AZ(IZ+1)-AZ(IZ))
+<span class="ln">123</span>      XZ0=1D0-XZ1
+<span class="ln">124</span>      CKTM=XZ0*CKTMZ0+XZ1*CKTMZ1
+<span class="ln">125</span>      DRKTM=XZ0*DRKTMZ0+XZ1*DRKTMZ1
+<span class="ln">126</span>      DR2KTM=XZ0*DR2KTMZ0+XZ1*DR2KTMZ1
+<span class="ln">127</span>      CKT0=XZ0*CKT0Z0+XZ1*CKT0Z1
+<span class="ln">128</span>      DRKT0=XZ0*DRKT0Z0+XZ1*DRKT0Z1
+<span class="ln">129</span>      DR2KT0=XZ0*DR2KT0Z0+XZ1*DR2KT0Z1
+<span class="ln">130</span>      CKT1=XZ0*CKT1Z0+XZ1*CKT1Z1
+<span class="ln">131</span>      DRKT1=XZ0*DRKT1Z0+XZ1*DRKT1Z1
+<span class="ln">132</span>      DR2KT1=XZ0*DR2KT1Z0+XZ1*DR2KT1Z1
+<span class="ln">133</span>      CKTP=XZ0*CKTPZ0+XZ1*CKTPZ1
+<span class="ln">134</span>      DRKTP=XZ0*DRKTPZ0+XZ1*DRKTPZ1
+<span class="ln">135</span>      DR2KTP=XZ0*DR2KTPZ0+XZ1*DR2KTPZ1
+<span class="ln">136</span>* Cubic interpolation in TLG:
+<span class="ln">137</span>      call <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">CINTERP3</a>(AT(ITM),AT(IT),AT(IT+1),AT(ITP),TLG,IT,MAXT,
+<span class="ln">138</span>     *   CKTM,CKT0,CKT1,CKTP, ! input: values of lg kappa
+<span class="ln">139</span>     *   CK,DTK,DT2K,XT) ! lg kappa, d lg k / d lg T, d2 lg k / d2 lg T
+<span class="ln">140</span>      call <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">CINTERP3</a>(AT(ITM),AT(IT),AT(IT+1),AT(ITP),TLG,IT,MAXT,
+<span class="ln">141</span>     *   DRKTM,DRKT0,DRKT1,DRKTP, ! input: values of d lg k / d lg rho
+<span class="ln">142</span>     *   DRK,DRTK,DRT2K,XT) ! d lg k / d lg rho, d2 lgk/(d lgT d lg rho)
+<span class="ln">143</span>      return
+<span class="ln">144</span>      end</pre></details>
+</section>
+<section class='def' id='def-CINTERP3'><h3><span class='kind'>subroutine</span>CINTERP3</h3>
+<p class='muted'>lines 146–189 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/condopacp.f#L146-L189'>GitHub</a></p>
+<pre>subroutine CINTERP3(ZM,Z0,Z1,ZP,Z,N0,MXNV,VM,V0,V1,VP,</pre>
+<div class='notes'><p>Interpolation on the interval $[z_0, z_1]$ from 4 tabulated points: a cubic Hermite polynomial whose end slopes are weighted means of the neighboring secant slopes,
+$$v&#x27;_0 = \frac{(v_1 - v_0)/h^2 + (v_0 - v_-)/h_-^2}{1/h + 1/h_-},$$
+and likewise $v&#x27;_1$; quadratic at the table's first and last intervals. Returns the value, the first and the second derivative.</p></div>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='#def-CONDOPACP'>CONDOPACP</a> ×10</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">146</span>      subroutine CINTERP3(ZM,Z0,Z1,ZP,Z,N0,MXNV,VM,V0,V1,VP,
+<span class="ln">147</span>     &amp;   VF,DF,D2,XH)
+<span class="ln">148</span>* Given 4 values of Z and 4 values of V, find VF corresponding to 5th Z
+<span class="ln">149</span>*                                                       Version 23.05.99
+<span class="ln">150</span>*   Output: VF - interpolated value of function
+<span class="ln">151</span>*           DF - interpolated derivative
+<span class="ln">152</span>*           D2 - interpolated second derivative
+<span class="ln">153</span>*           XH - fraction of the path from N0 to N0+1
+<span class="ln">154</span>      implicit double precision (A-H), double precision (O-Z)
+<span class="ln">155</span>      if (N0.le.0.or.N0.ge.MXNV) stop&#x27;CINTERP: N0 out of range&#x27;
+<span class="ln">156</span>      X=Z-Z0
+<span class="ln">157</span>      H=Z1-Z0   ! basic interval
+<span class="ln">158</span>      XH=X/H
+<span class="ln">159</span>      if (N0.gt.1) then
+<span class="ln">160</span>         HM=Z0-ZM  ! left adjoint interval
+<span class="ln">161</span>         V01=((V1-V0)/H**2+(V0-VM)/HM**2)/
+<span class="ln">162</span>     /   (1D0/H+1D0/HM) ! left derivative
+<span class="ln">163</span>      endif
+<span class="ln">164</span>      if (N0.lt.MXNV-1) then
+<span class="ln">165</span>         HP=ZP-Z1 ! right adjoint interval
+<span class="ln">166</span>         V11=((V1-V0)/H**2+(VP-V1)/HP**2)/
+<span class="ln">167</span>     /   (1D0/H+1D0/HP) ! right derivative
+<span class="ln">168</span>      endif
+<span class="ln">169</span>      if (N0.gt.1.and.N0.lt.MXNV-1) then   ! Cubic interpolation
+<span class="ln">170</span>         C2=3D0*(V1-V0)-H*(V11+2D0*V01)
+<span class="ln">171</span>         C3=H*(V01+V11)-2D0*(V1-V0)
+<span class="ln">172</span>         VF=V0+V01*X+C2*XH**2+C3*XH**3
+<span class="ln">173</span>         DF=V01+(2D0*C2*XH+3D0*C3*XH**2)/H
+<span class="ln">174</span>         D2=(2D0*C2+6D0*C3*XH)/H**2
+<span class="ln">175</span>         goto 10
+<span class="ln">176</span>      endif
+<span class="ln">177</span>      if (N0.eq.1) then   ! Quadratic interpolation
+<span class="ln">178</span>         C2=V0-V1+V11*H
+<span class="ln">179</span>         VF=V1-V11*(H-X)+C2*(1D0-XH)**2
+<span class="ln">180</span>         DF=V11-2D0*C2*(1D0-XH)/H
+<span class="ln">181</span>         D2=2D0*C2/H**2
+<span class="ln">182</span>      else  ! N0=MXNV-1
+<span class="ln">183</span>         C2=V1-V0-V01*H
+<span class="ln">184</span>         VF=V0+V01*X+C2*XH**2
+<span class="ln">185</span>         DF=V01+2D0*C2*XH/H
+<span class="ln">186</span>         D2=2D0*C2/H**2
+<span class="ln">187</span>      endif
+<span class="ln">188</span>   10 return
+<span class="ln">189</span>      end</pre></details>
+</section>
+<section class='def' id='def-HUNT'><h3><span class='kind'>subroutine</span>HUNT</h3>
+<p class='muted'>lines 191–238 · <a href='https://github.com/yreclab/yrec/blob/rp_1/src/condopacp.f#L191-L238'>GitHub</a></p>
+<pre>subroutine HUNT(XX,N,X,JLO)</pre>
+<div class='notes'><p>Numerical Recipes' <code>HUNT</code>: finds $j$ with $x_j \le x &lt; x_{j+1}$ in a monotonic table, starting from the previous index and doubling the step before bisecting. Returns 0 or $N$ outside the table, and $N$ also for a value equal to the last one.</p></div>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='#def-CONDOPACP'>CONDOPACP</a> ×3</li>
+</ul>
+<details><summary>Source</summary><pre class='src'><span class="ln">191</span>      subroutine HUNT(XX,N,X,JLO)
+<span class="ln">192</span>*   W.H.Press, B.P.Flannery, S.A.Teukolsky, W.T.Vetterling
+<span class="ln">193</span>*   Numerical Receipes(Cambridge Univ., 1986)
+<span class="ln">194</span>*     Given an array XX of length N, and given a value X,
+<span class="ln">195</span>*     returns a value JLO such that X is between XX(JLO) and XX(JLO+1).
+<span class="ln">196</span>*     XX must be monotonic, either increasing or decreasing.
+<span class="ln">197</span>*     JLO=0 or JLO=N is returned to indicate that X is out of range.
+<span class="ln">198</span>*     JLO on input is taken as the initial guess for JLO on output.
+<span class="ln">199</span>      implicit double precision (A-H), double precision (O-Z)
+<span class="ln">200</span>      dimension XX(*)
+<span class="ln">201</span>      logical ASCND
+<span class="ln">202</span>      ASCND=XX(N).gt.XX(1) ! true if ascending order, false otherwise
+<span class="ln">203</span>      if (JLO.le.0.or.JLO.gt.N) then ! Input guess not useful.
+<span class="ln">204</span>         JLO=0
+<span class="ln">205</span>         JHI=N+1
+<span class="ln">206</span>         goto 3 ! go immediately to bisection
+<span class="ln">207</span>      endif
+<span class="ln">208</span>      INC=1 ! set the hunting increment
+<span class="ln">209</span>      if (X.ge.XX(JLO).eqv.ASCND) then ! Hunt up:
+<span class="ln">210</span>    1     JHI=JLO+INC
+<span class="ln">211</span>        if (JHI.gt.N) then ! Done hunting, since off end of table
+<span class="ln">212</span>           JHI=N+1
+<span class="ln">213</span>        elseif (X.ge.XX(JHI).eqv.ASCND) then ! Not done hunting
+<span class="ln">214</span>           JLO=JHI
+<span class="ln">215</span>           INC=INC+INC
+<span class="ln">216</span>           goto 1
+<span class="ln">217</span>        endif
+<span class="ln">218</span>      else ! Hunt down:
+<span class="ln">219</span>         JHI=JLO
+<span class="ln">220</span>    2    JLO=JHI-INC
+<span class="ln">221</span>        if (JLO.lt.1) then ! Done hunting, since off end of table
+<span class="ln">222</span>           JLO=0
+<span class="ln">223</span>        elseif (X.lt.XX(JLO).eqv.ASCND) then ! Not done hunting
+<span class="ln">224</span>           JHI=JLO
+<span class="ln">225</span>           INC=INC+INC ! so double the increment
+<span class="ln">226</span>           goto 2      ! and try again
+<span class="ln">227</span>        endif ! Done hunting, value bracketed
+<span class="ln">228</span>      endif
+<span class="ln">229</span>*   Hunt is done, so begin the final bisection phase:
+<span class="ln">230</span>    3 if (JHI-JLO.eq.1) return
+<span class="ln">231</span>      JM=(JHI+JLO)/2
+<span class="ln">232</span>      if (X.ge.XX(JM).eqv.ASCND) then
+<span class="ln">233</span>         JLO=JM
+<span class="ln">234</span>      else
+<span class="ln">235</span>         JHI=JM
+<span class="ln">236</span>      endif
+<span class="ln">237</span>      goto 3
+<span class="ln">238</span>      end</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Settled. Question 1 (are CONDOPACPINT's limits inside the table?): the tables in <code>input/opacity/conductive/potekhin/</code> (<code>condall.d</code>, <code>condall06.d</code>) span exactly $3 \le \log T \le 9$, $-6 \le \log\rho \le 9.75$ (64 steps of 0.25) and $Z_\mathrm{ion}$ from 1 to 60, so the guards equal the table's edges. But HUNT returns $N$ for a value equal to the last grid value, so a point at exactly $\log T = 9$ or $\log\rho = 9.75$, which the guards (<code>.LE.</code>) let through, stops the run. Fix: state the ranges and turn the question into this edge case.</li>
+<li>Unclear. HUNT "returns 0 or $N$ outside the table": also $N$ at the last value itself. Fix: add.</li>
+</ol>
+<p>Revised: the table's ranges stated; question 1 turned into the edge case at the upper limits; HUNT's return at the last value added.</p></div></details>
+</main></body></html>
