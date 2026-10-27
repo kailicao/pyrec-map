@@ -1,0 +1,1903 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>engeb.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ engeb.f</span></header><main>
+<h1>engeb.f</h1>
+<p class='muted'>1307 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/engeb.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>engeb.py</code>, 571 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file computes the nuclear energy generation rate at one point, its derivatives with respect to density and temperature, the rates of the individual reactions (for the abundance changes), the solar neutrino fluxes and, in hot cores, the neutrino energy losses. Its long header, mostly by John Bahcall (JNB, 1990–1997) and Marc Pinsonneault (MHP), documents the reaction data: rates from <em>Neutrino Astrophysics</em> (Bahcall 1989) and the Solar Fusion Workshop (Adelberger et al. 1998), energy releases from Bahcall and Ulrich (1988, RMP 60, 297), screening from Salpeter (1954) and Graboske et al. (1973), alpha captures from Caughlan and Fowler (1988), neutrino losses from Itoh et al. (1996) or an older fit.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>DL</code>, <code>TL</code> ($\log\rho$, $\log T$), the mass fractions <code>X</code>, <code>Y</code>, <code>XHE3</code>, <code>XC12</code>, <code>XC13</code>, <code>XN14</code>, <code>XO16</code>, <code>XO18</code>, <code>XH2</code>, and <code>IU</code> (the point's index, used to store the rates and for the deuterium cap). From the modules: the derivative factors <code>QS0E</code>, <code>QQS0EE</code> and the N15+p branch factors <code>FO16</code>, <code>FC12</code> (<a href="../yrec-map/cross_mod.f.html#def-CROSS_MOD"><code>CROSS_MOD</code></a>, set by <a href="../yrec-map/remap.f.html#def-REMAP">REMAP</a>: all 1, or with <code>LNEWNUC</code> from the namelist's cross-sections and their derivatives); from <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a>, the cross-section factors <code>SSTANDARD(17)</code>, <code>WEAKSCREENING</code> (0.03 by default), the cut-off temperatures <code>TCUT</code>, <code>LSNU</code> (compute neutrino fluxes) and <code>LNULOS1</code> (Itoh losses); <code>JCZ</code> (<a href="../yrec-map/deuter_mod.f.html#def-DEUTER_MOD"><code>DEUTER_MOD</code></a>) and <code>TAUCZ</code> (<a href="../yrec-map/ovrtrn_mod.f.html#def-OVRTRN_MOD"><code>OVRTRN_MOD</code></a>) for the deuterium cap; <code>CLN</code>, <code>CC13</code>, <code>CC23</code> from <code>CONSTANTS_MOD</code>.</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/coefft.f.html#def-COEFFT">COEFFT</a> (every point, every iteration), the main program (<a href="../yrec-map/main.f.html#def-_file_level_">main.f</a>, for the neutrino fluxes and Be-7 of the output) and <a href="../yrec-map/ytime.f.html#def-YTIME">YTIME</a> (the time step).</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/neutrino.f.html#def-NEUTRINO">NEUTRINO</a> (the Itoh et al. losses), when <code>LNULOS1</code>.</li>
+<li><strong>Outputs:</strong></li>
+<li>arguments: <code>EPP1</code>, <code>EPP2</code>, <code>EPP3</code> (energy from the pp chain's branches), <code>ECN</code> (CNO), <code>E3AL</code> (triple alpha), <code>SUM1</code> (the total, erg g$^{-1}$ s$^{-1}$), <code>PEP</code>, <code>PET</code> (its derivatives), and per point <code>HR1</code>…<code>HR13</code> (the reaction rates, per Gyr per amu) and <code>HF1</code> = $f_3$, <code>HF2</code> = $f_1$ (branching fractions); the abundance routines (<a href="../yrec-map/kemcom.f.html#def-KEMCOM">KEMCOM</a> and others) use the rates, per the comment; <code>EALPCA</code> (energy from alpha captures) and <code>ENU</code> (neutrino losses), read by COEFFT and YTIME right after their calls (main.f passes locals it does not use); <code>BE7MASSFRACTION</code>, set only with <code>LSNU</code> and read only by main.f, which keeps it between calls by its <code>SAVE</code>;</li>
+<li>modules: <code>FLUX(10)</code> (<a href="../yrec-map/fluxes_mod.f.html#def-FLUXES_MOD"><code>FLUXES_MOD</code></a>, neutrino fluxes at Earth per gram, read by COEFFT, main.f, <a href="../yrec-map/wrtout.f.html#def-WRTOUT">WRTOUT</a>); <code>ENGHE3</code>, <code>HE3ALL</code> (<a href="../yrec-map/grab_mod.f.html#def-GRAB_MOD"><code>GRAB_MOD</code></a>).</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>
+<p><strong>Screening.</strong> With the mass fractions over 13 isotopes, $\mu_I^{-1} = \sum X_i/A_i$, $\mu_e^{-1} = \sum Z_iX_i/A_i$, $\zeta = \sum Z_i^2X_i/A_i$, and a degeneracy factor $f&#x27;/f$ (a fit to Salpeter's figure 1 in $\log E_F/kT$):
+$$\Lambda_0 = 5.9426\times10^{-6}\,T_9^{-3/2}\sqrt{\rho/\mu_I}, \qquad U_\mathrm{weak} = Z_1Z_2\,\Lambda_0\,\sqrt{\frac{\zeta + (f&#x27;/f)\,\mu_e^{-1}}{\mu_I^{-1}}}.$$
+Weak screening if $U_\mathrm{weak} \le$ <code>WEAKSCREENING</code>; otherwise Graboske et al.'s intermediate form ($U \le 2$), or the strong form ($U \ge 5$ or where it is smaller). The rate is multiplied by $e^{U}$, with $\partial U/\partial\ln\rho$ and $\partial U/\partial\ln T$.</p>
+</li>
+<li>
+<p><strong>pp chain and CNO</strong> (reactions 1–7: pp, $^3$He+$^3$He, $^3$He+$^4$He, p+$^{12}$C, p+$^{13}$C, p+$^{14}$N, p+$^{16}$O), in the form of <em>Neutrino Astrophysics</em> eq. 3.14 and Fowler, Caughlan and Zimmerman:
+$$r_j = \rho\left[T_9^{-2/3} + Q_1T_9^{-1/3} + s&#x27;_j(Q_2 + Q_3T_9^{1/3}) + s&#x27;&#x27;_j(Q_4T_9^{2/3} + Q_5T_9)\right]\exp\!\left(Q_6T_9^{-1/3} + Q_7 + (Q_8T_9)^2 + U_j\right)S_j,$$
+with $S_j$ = <code>SSTANDARD(J)</code>, $s&#x27;$, $s&#x27;&#x27;$ = <code>QS0E</code>, <code>QQS0EE</code> (user factors on the S-factor derivatives, MHP 8/14), and the logarithmic derivatives <code>DRATRO</code>, <code>DRATT</code>.</p>
+</li>
+<li>
+<p><strong>Branchings.</strong> $^7$Be: electron capture against proton capture (with its own screening), $f_1$, $f_2$; $^{15}$N+p: ($p,\alpha$) against ($p,\gamma$), $f_3$, $f_4$.</p>
+</li>
+<li><strong>Alpha captures</strong> (above <code>TCUT(4)</code>): $^{13}$C($\alpha$,n), $^{12}$C($\alpha,\gamma$), $^{14}$N($\alpha,\gamma$), and triple alpha, $r_{3\alpha} \propto \rho^2T_9^{-3}e^{-4.4027/T_9}$.</li>
+<li><strong>Deuterium burning</strong> (if $X_D &gt; 10^{-11}$), as in <a href="../yrec-map/deutrate.f.html#def-DEUTRATE">DEUTRATE</a>, with $Q = 5.494$ MeV. In the convective envelope (<code>IU</code> $\ge$ <code>JCZ</code>), when <code>TAUCZ</code> $&gt; 1$, the rate is capped so that $r X \le (N_A/A_D)/\tau_\mathrm{cz}$ (<code>RDEUTMAX</code>).</li>
+<li><strong>Energy.</strong> $\epsilon_j = r_j X_aX_b\,Q_j$, with the $Q$ values in MeV net of neutrino losses (for example 6.664 for pp, 12.860 for $^3$He+$^3$He, $1.586 + 17.394f_1 + 11.499f_2$ for $^3$He+$^4$He). Then <code>SUM1</code> $= \sum\epsilon_j$, <code>PEP</code> $= \sum\epsilon_j\,\partial\ln r_j/\partial\ln\rho$, <code>PET</code> likewise in $T$: absolute derivatives, $\partial\epsilon/\partial\ln\rho$ and $\partial\epsilon/\partial\ln T$, which is how COEFFT uses them.</li>
+<li><strong>Rates for the abundances:</strong> <code>HR</code>$_j$ = $r_j C_{21}$, with $C_{21}$ = (s per $10^9$ yr) × (amu in g), per the comment.</li>
+<li><strong>Neutrino fluxes</strong> (if <code>LSNU</code> and $X &gt; 10^{-6}$): pp, pep, hep, $^7$Be, $^8$B, $^{13}$N, $^{15}$O, $^{17}$F and two "fictional" diagnostics, per gram at 1 AU, in $10^{10}$ cm$^{-2}$ s$^{-1}$.</li>
+<li><strong>Neutrino losses</strong> (above <code>TCUT(5)</code>): from <a href="../yrec-map/neutrino.f.html#def-NEUTRINO">NEUTRINO</a> (Itoh et al. 1996) or the older fits for pair, photo- and plasma neutrinos; the loss is subtracted from <code>SUM1</code> and its derivatives from <code>PEP</code>, <code>PET</code>.</li>
+</ol>
+<p><strong>Design.</strong> About half the file is comments: the history of every constant, and sets of <code>SSTANDARD</code> from published solar models (BP92, BP95, BP03, Gran Sasso 2009, …). Reactions 8–13 are partly "holdovers from the earlier Yale code"; 9 and 13 are zeroed.</p>
+<p><strong>KC's changes.</strong> 2025-05-30: elements of <code>/NULOSS/</code> reordered; the threshold below which a neutrino flux is set to zero changed from $10^{-50}$ to 0 "to avoid underflow". 2025-05-31: the unused arguments (<code>PDT</code>, <code>PDP</code>, <code>Z</code>, <code>XN15</code>, <code>XO17</code>, <code>XLI6</code>, <code>XLI7</code>, <code>XBE9</code>) removed.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> <code>EALPCA</code>, <code>ENU</code> (formerly <code>/NEWEPS/</code>) and <code>BE7MASSFRACTION</code> (formerly <code>/BE7/</code>) are now arguments, the last three; <code>DSNUDT</code>, <code>DSNUDD</code> (formerly <code>/NULOSS/</code>, read nowhere else) are locals; the constants given in single precision (the reaction and screening coefficients, the $Q$ values, <code>C21</code>, <code>CONVERT</code>, the neutrino-loss fits) are now double precision, and the exponents <code>0.6666667</code> and <code>0.666667</code> are now <code>CC23</code>, exactly 2/3, so results change slightly (probably in about the seventh digit); COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The Itoh branch's temperature derivative.</strong> <code>PET = PEP + DSNUDT</code> should almost certainly be <code>PET = PET + DSNUDT</code>: as written, the temperature derivative of $\epsilon$ is replaced by the density derivative.</li>
+<li><strong>Relative and absolute derivatives.</strong> In the Itoh branch, <code>DSNUDT</code> and <code>DSNUDD</code> are made relative ($\partial\ln\epsilon_\nu/\partial\ln T$) and then added to <code>PET</code>, <code>PEP</code>, which are absolute ($\partial\epsilon/\partial\ln T$). The older branch adds absolute terms. Should it be <code>ENU*DSNUDT</code>?</li>
+<li><strong>Alpha-capture derivatives.</strong> For reactions 8, 10 and 11, <code>DRATT = DSCT + RHO/RATE*(…)</code> divides the derivative of the bracket by the whole rate, which includes the constant ($\sim10^{22}$) and $e^U$; the derivative of the bracket alone is then off by that factor, and <code>DRATT</code> is close to the screening term only. Also, in reaction 10, the derivatives of $R_1^2$ and $R_2^2$ lack a factor $T_9^{-2/3}$; in reaction 8, the derivative terms of <code>A2</code>…<code>A5</code> lack the factor $T_9^{-3/2}$ that multiplies them in the rate.</li>
+<li><strong>Deuterium rate.</strong> As in <a href="../yrec-map/deutrate.f.html#def-DEUTRATE">DEUTRATE</a>, the rate uses $T_9^{+2/3}$ where the standard fit has $T_9^{-2/3}$; here the derivative <code>QRTDEUT</code> (with its "$-2$") is that of the $T_9^{-2/3}$ form, so rate and derivative disagree. Also, the constant here is $6.023\times10^{23}/A_D$ (2.991e23) and in DEUTRATE $3.0115\times10^{23}$.</li>
+<li><strong>A comment that contradicts the code.</strong> "MHP 5/90 change derivatives to be d ln eps/d ln rho …": the code returns <code>PEP = SUM2</code>, not divided by <code>SUM1</code>, so the derivatives are $\partial\epsilon/\partial\ln\rho$. The comment should be updated.</li>
+<li><strong>The low-temperature path.</strong> Below <code>TCUT(1)</code> the routine jumps to label 200 without setting <code>SUM1</code>, <code>F1</code>, <code>F3</code>, which keep the previous call's values (<code>SAVE</code>); <code>HF1</code>, <code>HF2</code> and the returned <code>SUM1</code> may be stale. On that path <code>RHO</code>, <code>T9</code> and the $^7$Be rates are stale too, and with <code>LSNU</code> they enter <code>FLUX(3)</code> and <code>BE7MASSFRACTION</code>. COEFFT only calls above <code>TCUT(1)</code>, but main.f's call checks only $\log T \ge 6$.</li>
+<li><strong>The index passed by main.f (KC's change).</strong> main.f's call was changed from passing <code>I</code> to passing <code>IU</code>, which main.f never sets; <code>HR1(IU)</code>…<code>HF2(IU)</code> are then written at an undefined index, and the deuterium cap compares an undefined <code>IU</code> with <code>JCZ</code>. Probably <code>I</code> was meant (see main.f, around line 388).</li>
+<li>
+<p><strong>Hard-coded thresholds.</strong> Rates below $10^{-30}$ (before) and $10^{-5}$ (after) are set to zero; <code>SUM1</code> $\le 10^{-12}$ zeroes <code>PEP</code>, <code>PET</code> and the <code>EG</code> array (so the neutrino fluxes), but keeps <code>SUM1</code> itself and the <code>DG</code> array (so <code>EPP1</code>, <code>ECN</code>, …). Are these still appropriate, and should <code>SUM1</code> be zeroed too?</p>
+</li>
+<li>
+<p><strong>S-factor derivatives in the temperature derivative.</strong> In the pp/CNO loop, <code>DRATT</code> differentiates the bracket $R_1$ without the factors <code>QS0E(I)</code>, <code>QQS0EE(I)</code> that multiply its $Q_2$–$Q_5$ terms. With <code>LNEWNUC</code> and factors other than 1, the temperature derivative no longer matches the rate. Should the factors be added?</p>
+</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+ENGEB
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-ENGEB'>ENGEB</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-ENGEB'><h3><span class='kind'>subroutine</span>ENGEB</h3>
+<p class='muted'>lines 4–1307 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/engeb.f#L4-L1307'>GitHub</a></p>
+<pre>SUBROUTINE ENGEB(EPP1,EPP2,EPP3,ECN,E3AL,PEP,PET,SUM1,DL,</pre>
+<div class='notes'><p>Nuclear energy generation at one point: screening, the pp/CNO rates with S-factor scaling, $^7$Be and $^{15}$N branchings, alpha captures, deuterium burning, energies net of neutrinos, derivatives <code>PEP</code>/<code>PET</code>, per-reaction rates <code>HR1</code>–<code>HR13</code>, solar neutrino fluxes and neutrino losses.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+ENGEB
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/cross_mod.f.html#def-CROSS_MOD'>CROSS_MOD</a>, <a href='../yrec-map/deuter_mod.f.html#def-DEUTER_MOD'>DEUTER_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/fluxes_mod.f.html#def-FLUXES_MOD'>FLUXES_MOD</a>, <a href='../yrec-map/grab_mod.f.html#def-GRAB_MOD'>GRAB_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/ovrtrn_mod.f.html#def-OVRTRN_MOD'>OVRTRN_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/neutrino.f.html#def-NEUTRINO'>NEUTRINO</a> <span class='muted'>(neutrino.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/coefft.f.html#def-COEFFT'>COEFFT</a> <span class='muted'>(coefft.f)</span></li>
+<li><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span></li>
+<li><a href='../yrec-map/ytime.f.html#def-YTIME'>YTIME</a> <span class='muted'>(ytime.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE ENGEB(EPP1,EPP2,EPP3,ECN,E3AL,PEP,PET,SUM1,DL,
+<span class="ln">5</span>C      *TL,PDT,PDP,X,Y,Z,XHE3,XC12,XC13,XN14,XN15,XO16,XO17,
+<span class="ln">6</span>C      *XO18,XH2,XLI6,XLI7,XBE9,IU,HR1,HR2,HR3,HR4,HR5,HR6,HR7,  ! KC 2025-05-31
+<span class="ln">7</span>     *TL,X,Y,XHE3,XC12,XC13,XN14,XO16,
+<span class="ln">8</span>     *XO18,XH2,IU,HR1,HR2,HR3,HR4,HR5,HR6,HR7,
+<span class="ln">9</span>     *HR8,HR9,HR10,HR11,HR12,HR13,HF1,HF2,BE7MASSFRACTION,EALPCA,ENU)
+<span class="ln">10</span>C 10/15/26 MHP via Claude
+<span class="ln">11</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">12</span>C PARAMETER(JSON=5000) here.
+<span class="ln">13</span>      USE DIMENSIONS_MOD
+<span class="ln">14</span>C 10/14/26 MHP via Claude
+<span class="ln">15</span>C code changed to convert COMMON/OVRTRN/ into OVRTRN_MOD.
+<span class="ln">16</span>      USE OVRTRN_MOD
+<span class="ln">17</span>C 10/14/26 MHP via Claude
+<span class="ln">18</span>C code changed to convert COMMON/GRAB/ into GRAB_MOD.
+<span class="ln">19</span>      USE GRAB_MOD
+<span class="ln">20</span>C 10/14/26 MHP via Claude
+<span class="ln">21</span>C code changed to convert COMMON/FLUXES/ into FLUXES_MOD.
+<span class="ln">22</span>      USE FLUXES_MOD
+<span class="ln">23</span>C 10/14/26 MHP via Claude
+<span class="ln">24</span>C code changed to convert COMMON/DEUTER/ into DEUTER_MOD.
+<span class="ln">25</span>      USE DEUTER_MOD
+<span class="ln">26</span>C 10/14/26 MHP via Claude
+<span class="ln">27</span>C code changed to convert COMMON/CROSS/ into CROSS_MOD.
+<span class="ln">28</span>      USE CROSS_MOD
+<span class="ln">29</span>C 10/14/26 MHP via Claude
+<span class="ln">30</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">31</span>      USE NMLPAR_MOD
+<span class="ln">32</span>C 10/14/26 MHP via Claude
+<span class="ln">33</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">34</span>      USE CONSTANTS_MOD
+<span class="ln">35</span>C 10/20/26 MHP via Claude
+<span class="ln">36</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">37</span>C explicit declarations.
+<span class="ln">38</span>      IMPLICIT NONE
+<span class="ln">39</span>      REAL*8 A1,A2,A3,A4,A5,AMU,ANUC,BE7ELECTRON,BE7MASSFRACTION,
+<span class="ln">40</span>     *       BE7PROTON,C12ALPHA,C21,CAMUBE7,CONVERT,D,DA1,DD,DEGD,DG,
+<span class="ln">41</span>     *       DGDEUT,DL,DR1,DRATRO,DRATT,DSCR,DSCT,DSNUDD,DSNUDT,E3AL,
+<span class="ln">42</span>     *       EALPCA,ECN,EFMKT,EG,EGDEUT,EL,EL2,ELI,EMU,EMUE,EN,ENU,EPP1,
+<span class="ln">43</span>     *       EPP2,EPP3,EX1,EX2,EX3,EZ,EZ3,F1,F2,F3,F4,FOURPIAU2,FPRF,
+<span class="ln">44</span>     *       HF1,HF2,HR1,HR10,HR11,HR12,HR13,HR2,HR3,HR4,HR5,HR6,HR7,
+<span class="ln">45</span>     *       HR8,HR9,O16GAMMA,PEP,PET,PFMC2,POLX10,POLX11,POLX12,POLX21,
+<span class="ln">46</span>     *       POLX22,POLX31,POLX32,Q1,Q2,Q3,Q4,Q5,Q6,Q6HEP,Q7,Q8,QDEUT,
+<span class="ln">47</span>     *       QEDN,QEDNX,QETN,QETNX,QRBE7,QRTDEUT,R1,R2,RATE,RDEUT,
+<span class="ln">48</span>     *       RDEUT2,RDEUTMAX,RHO,RWE,SNU,SUM1,SUM2,SUM3,T,T9,T9M1,T9M12,
+<span class="ln">49</span>     *       T9M13,T9M2,T9M23,T9M32,T9P13,T9P23,TEMP,TEMP3,TFACDEUT,
+<span class="ln">50</span>     *       TFACDEUT2,TL,TM1,TRM,UINT,USTR,UTOT,UTOTBE7P,UTOTHE3P,UWK,
+<span class="ln">51</span>     *       V1,V2,V3,X,XC12,XC13,XFRAC,XH2,XHE3,XN14,XO16,XO18,XTR,XXL,
+<span class="ln">52</span>     *       XXL6,XXL8,Y,Z23,Z28,Z33,Z43,Z53,Z58,Z86,Z86BE7P,Z86HE3P,
+<span class="ln">53</span>     *       ZBAR,ZC,ZCURL,ZET,ZNUC,ZO,ZPRD,ZPRDBE7P,ZPRDHE3P,ZZ
+<span class="ln">54</span>      INTEGER I,IU,K,NELEM,NRXNS,NZ
+<span class="ln">55</span>
+<span class="ln">56</span>
+<span class="ln">57</span>C 3/92 DBG Added new neutrino loss calculation routines
+<span class="ln">58</span>C NOVEMBER 6, 1990 (JNB)
+<span class="ln">59</span>C THE FOLLOWING SUBROUTINE CALCULATES THE NUCLEAR REACTION RATES WITH
+<span class="ln">60</span>C   SPECIAL ATTENTION TO DETAIL REQUIRED FOR CALCULATING SOLAR NEUTRINO
+<span class="ln">61</span>C   FLUXES. THE NEUTRINO FLUXES ARE EVALUATED ALSO IN THIS SUBROUTINE.
+<span class="ln">62</span>C ALL PHYSICAL QUANTITIES ARE CGS. THE REACTION RATES ARE IN
+<span class="ln">63</span>C  GM^{-1}S^{-1}.
+<span class="ln">64</span>C  MHP 10/97
+<span class="ln">65</span>C
+<span class="ln">66</span>c   On 10/13/97, JNB converted the nuclear masses from neutral nuclear
+<span class="ln">67</span>c   masses to bare nuclear masses by subtracting Z(I)*(m_e)*c^2 from
+<span class="ln">68</span>c   the neutral nuclear masses. This caused changes in a number of
+<span class="ln">69</span>c   places: in ANUC(I), in Q1(I)-Q7(I), in the calculation of the Be7electron
+<span class="ln">70</span>c   Be7proton rates, and in the calculation of the N15p branching ratio.
+<span class="ln">71</span>c
+<span class="ln">72</span>c   JNB made some purely cosmetic changes on 1/20/96. Revised all of the
+<span class="ln">73</span>c   input Q&#x27;s on 9/23-25/97 to agree with submitted version of Solar
+<span class="ln">74</span>c   Fusion Workshop paper. The SStandard are fixed to agree with
+<span class="ln">75</span>c   the Workshop paper. JNB recalculated all of the EG(I) to determine
+<span class="ln">76</span>c   the best values for the energy generation for all the reactions,
+<span class="ln">77</span>c   taking account of my improved calculations of neutrino energy loss.
+<span class="ln">78</span>c   The calculations are documented in Vol. 19, 132-141, 1997 of my notes.
+<span class="ln">79</span>c   The neutral atom mass differences are taken from Table of Isotopes,
+<span class="ln">80</span>c   8th Ed, 1996 and the neutrino energy losses from Bahcall, Gallium
+<span class="ln">81</span>c   solar neutrino experiments, Phys Rev C, in press, 1997.
+<span class="ln">82</span>c
+<span class="ln">83</span>c  All numbers in this subroutine have been calculated by John Bahcall
+<span class="ln">84</span>c  so that they agree with the modern numbers in Neutrino
+<span class="ln">85</span>c  Astrophysics (1989) or much more recent results, as indicated in
+<span class="ln">86</span>c  comments lines.
+<span class="ln">87</span>C
+<span class="ln">88</span>C  PREVIOUS VERSIONS OF THE YALE CODE
+<span class="ln">89</span>C  USED THE NUCLEAR REACTION RATES PRIMARILY FROM FOWLER, CAUGHLAN, AND
+<span class="ln">90</span>C  ZIMMERMAN IN ANN. REV. ASTR. AND ASTROPHYS. (1975) OR, FOR THE BE7 AND
+<span class="ln">91</span>C  B8 RATES, THE VALUES FROM BAHCALL AND SEARS (1972), ALSO. ANN. REV. ASTR.
+<span class="ln">92</span>C  AND ASTROPHYS. SOME VALUES WERE FROM HARRIS ET AL (1983, ANN. REV. ASTR.
+<span class="ln">93</span>C  IN A FEW CASES, NUMERICAL ERRORS (NOT DUE TO REVISIONS IN THE NUCLEAR DATA)
+<span class="ln">94</span>C  HAVE BEEN CORRECTED.  IN A SMALL NUMBER OF OTHER PLACES, THE PREVIOUS
+<span class="ln">95</span>C  PROGRAM CONTAINED PHYSICALLY INCORRECT STATEMENTS, WHICH HAVE BEEN CORRECTED
+<span class="ln">96</span>C  IN THE PRESENT VERSION. IN THE COURSE OF THE CHECKING AND REVISIONS, I
+<span class="ln">97</span>C  HAVE ADDED MANY COMMENT STATEMENTS IN ORDER TO MAKE THE PROGRAM MORE
+<span class="ln">98</span>C  TRANSPARENT AND SIMPLER TO REVISE.  SOME STATEMENTS HAVE BEEN ADDED
+<span class="ln">99</span>C  TO SIMPLIFY THE PROCESS OF REVISING THE SUBROUTINE AS IMPROVED DATA
+<span class="ln">100</span>C  BECOME AVAILABLE.  FOR EXAMPLE, I HAVE INSERTED EXPLICITLY
+<span class="ln">101</span>C  THE STANDARD CROSS SECTION FACTORS IN A WAY THAT IS EASY TO REVISE;
+<span class="ln">102</span>C  SSTANDARD(I) = 1.0 WHEN THE ITH CROSS SECTION HAS THE STANDARD VALUE
+<span class="ln">103</span>C  MEASUREMENTS USED IN NEUTRINO ASTROPHYSICS.
+<span class="ln">104</span>C  MHP 10/97
+<span class="ln">105</span>C
+<span class="ln">106</span>c  The PREVIOUS standard values of SStandard(I) used were those that
+<span class="ln">107</span>c   were given in Table 1 of Bahcall and Pinsonneault (1992).  This work
+<span class="ln">108</span>c   was  published in the Reviews of Modern Physics, 64,885, 1992. The
+<span class="ln">109</span>c   current version of SStandard(I) refers to Bahcall and
+<span class="ln">110</span>c   Pinsonneault(1995) , Rev. Mod. Phys. 67, 781 (1995), Table 1, if
+<span class="ln">111</span>c   changes have occured.  Otherwise, they are the same as in the
+<span class="ln">112</span>c   Bahcall-Pinsonnealt (1992) Rev. Mod. Phys. article.
+<span class="ln">113</span>C
+<span class="ln">114</span>c  Weakscreening is a parameter set in this subroutine. To obtain
+<span class="ln">115</span>c  the Graboske et al. and Salpeter standard results, use:
+<span class="ln">116</span>c  weakscreening = 0.03.  To investigate the effect of always using
+<span class="ln">117</span>c  weak screening, use a value for weakscreening greater than unity,
+<span class="ln">118</span>c  e. g., 30. The transition region between weak and strong screening
+<span class="ln">119</span>c  is defined by Graboske et al. as $\Lambda_{12} = 0.1$, see page
+<span class="ln">120</span>c  ApJ 181, 465 (1973) [5/15/97].
+<span class="ln">121</span>c
+<span class="ln">122</span>c  The value of SStandard(17) for hep is taken from Carlson et al (1991)
+<span class="ln">123</span>c  Phys. Rev. C 44, 619. It corresponds to an S sub 0 =
+<span class="ln">124</span>c  1.3 E-20 keV-barns, a factor of 0.1625  smaller than indicated by the
+<span class="ln">125</span>c  older measurements and calculations used in Neutrino Astrophysics.
+<span class="ln">126</span>c
+<span class="ln">127</span>C THE NUCLEAR ENERGY RELEASE TO THE STAR FROM EACH REACTION
+<span class="ln">128</span>C  IS TAKEN FROM BAHCALL AND ULRICH, RMP 60, 297 (1988) AND TAKES ACCOUNT
+<span class="ln">129</span>C  ACCURATELY OF NEUTRINO ENERGY LOSS.
+<span class="ln">130</span>C
+<span class="ln">131</span>C I HAVE ADDED A NEW SECTION AT THE END OF THE SUBROUTINE THAT
+<span class="ln">132</span>C  CALCULATES THE SOLAR NEUTRINO FLUXES AT THE EARTH.  THESE FLUXES
+<span class="ln">133</span>C  ARE IN THE UNITS OF CM^-2 SEC^-2 PER GM. TO GET THE FLUX
+<span class="ln">134</span>C  FROM A SHELL, MULTIPLY BY THE MASS OF THE SHELL IN UNITS OF
+<span class="ln">135</span>C  GRAMS.  THE FLUXES ARE IN A COMMON BLOCK, FLUXES.  I ALSO CALCULATE
+<span class="ln">136</span>C  THE FICTIONAL NEUTRINO FLUXES ASSOCIATED WITH THE HE3 + HE3 AND WITH
+<span class="ln">137</span>C  THE HE3 + HE4 RECTIONS; THESE FICTIONAL FLUXES ARE USEFUL DIAGNOSTICS
+<span class="ln">138</span>C  OF THE SOLAR MODEL.
+<span class="ln">139</span>C
+<span class="ln">140</span>C *****************************************
+<span class="ln">141</span>C CHANGING NUCLEAR REACTION CROSS SECTIONS.
+<span class="ln">142</span>C *****************************************
+<span class="ln">143</span>C NUCLEAR CROSS SECTIONS CAN BE CHANGED SIMPLY BY INSERTING NEW NUMBERS
+<span class="ln">144</span>C  FOR THE DATA VALUES OF SSTANDARD(I), WHICH ARE THE RATIOS OF THE
+<span class="ln">145</span>C  DESIRED CROSS SECTION FACTORS TO THE VALUES GIVEN IN TABLES 3.2 AND
+<span class="ln">146</span>C  3.4 OF NEUTRINO ASTROPHYSICS (1989). IF THE VALUE GIVEN IN NEUTRINO
+<span class="ln">147</span>C  ASTROPHYSICS IS USED, THEN SSTANDARD(I) = 1.0 .  TO INCREASE THE CROSS
+<span class="ln">148</span>C  SECTION FOR REACTION K BY A FACTOR OF TWO COMPARED TO THE STANDARD
+<span class="ln">149</span>C  VALUE, SET SSTANDARD(K) = 2.0 .  TO DETERMINE WHICH VALUE OF I GOES
+<span class="ln">150</span>C  WITH WHICH REACTION, SEE THE SECTION JUST BELOW.
+<span class="ln">151</span>C  THE ENERGY DERIVATIVES ENTER IN A FORM IN WHICH THEY ARE DIVIDED BY
+<span class="ln">152</span>C  THE ABSOLUTE VALUES OF THE CROSS SECTIONS AT ZERO ENERGY.  THUS IF
+<span class="ln">153</span>C  THE SHAPE OF THE CROSS SECTION EXTRAPOLATION IS UNCHANGED AND ONLY
+<span class="ln">154</span>C  THE INTERCEPT OF S(E) AT ZERO ENERGY IS CHANGED, THEN NO CORRECTION
+<span class="ln">155</span>C  NEED BE MADE FOR THE DERIVATIVES.  THEY ARE AUTOMATICALLY SCALED
+<span class="ln">156</span>C  CORRECTLY.  THE EXACT WAY THAT THE DERIVATIVES ENTER THE
+<span class="ln">157</span>C  CALCULATIONS IS DESCRIBED IN THE SECTION LABELED ``DEFINING THE
+<span class="ln">158</span>C  Q(I)&#x27;&#x27; THAT IS PRESENTED BELOW.
+<span class="ln">159</span>C ************************************
+<span class="ln">160</span>C IDENTIFYING THE REACTIONS.
+<span class="ln">161</span>C ************************************
+<span class="ln">162</span>C  THE VALUE OF J DENOTES WHICH OF THE REACTIONS THE COEFFICIENTS
+<span class="ln">163</span>C  REFER TO:
+<span class="ln">164</span>C  J = 1, PP; J = 2, HE3+HE3; J = 3, HE3+ HE4; J =4, P + C12;  J = 5, P+C13;
+<span class="ln">165</span>C  J = 6. P + N14; J = 7, P + O16.
+<span class="ln">166</span>C  REACTIONS J = 8, 13 ARE NOT RELEVANT FOR THE SOLAR INTERIOR; THEY ARE
+<span class="ln">167</span>C   HOLDOVERS FROM THE EARLIER YALE CODE.
+<span class="ln">168</span>C  REACTION 14 IS PEP; REACTION 15 IS BE7 ELECTRON CAPTURE; REACTION 16 IS
+<span class="ln">169</span>C   BE7 PROTON CAPTURE; REACTION 17 IS THE HEP REACTION.
+<span class="ln">170</span>C  do not change sstandard(14) unless you want to change the ratio of
+<span class="ln">171</span>C  pep to pp.
+<span class="ln">172</span>C   REACTIONS 14-17 WERE NOT EXPLICITLY INCLUDED IN THE YALE
+<span class="ln">173</span>C    PREVIOUS VERSION OF THE CODE, BUT THEY ARE IMPORTANT FOR
+<span class="ln">174</span>C    SOLAR NEUTRINO CALCULATIONS.
+<span class="ln">175</span>C   THE BRANCHING OF THE N15 + P REACTIONS IS TREATED IN A SERIES OF
+<span class="ln">176</span>C    SEPARATE STATEMENTS FOLLOWING THE CALCULATION OF THE BE7 + P
+<span class="ln">177</span>C    REACTION. SEE THE DEFINITIONS OF F3 AND F4.  IF THE CROSS-SECTION
+<span class="ln">178</span>C    FACTORS OF THE N15 + P REACTIONS ARE REVISED, THEN THE NUMERICAL
+<span class="ln">179</span>C    COEFFICIENTS MUST BE CHANGED IN THE DEFINITION OF C12ALPHA AND
+<span class="ln">180</span>C    O16GAMMA.
+<span class="ln">181</span>C FOR Q1(I), ...,Q(5(I), I = 8 CORRESPONDS TO THE BE7 +  P REACTION.
+<span class="ln">182</span>C  THIS ASSIGNMENT FOR I = 8 IS ONLY VALID FOR THE LISTED Q&#x27;S AND NOT
+<span class="ln">183</span>C  FOR OTHER ARRAYS IN THE PROGRAM.
+<span class="ln">184</span>C  IU IS THE SHELL NUMBER.
+<span class="ln">185</span>
+<span class="ln">186</span>
+<span class="ln">187</span>
+<span class="ln">188</span>
+<span class="ln">189</span>C 10/13/26 MHP via Claude: removed the unused COMMON/IOUNITS/ declaration
+<span class="ln">190</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">191</span>C 10/12/26 MHP via Claude
+<span class="ln">192</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">193</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">194</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">195</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">196</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">197</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">198</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">199</span>C
+<span class="ln">200</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">201</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">202</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">203</span>C 10/13/26 MHP via Claude
+<span class="ln">204</span>C code changed to drop COMMON/CTLIM/, declared here but never used.
+<span class="ln">205</span>C 9/25/26 MHP via Claude
+<span class="ln">206</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">207</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">208</span>C 10/13/26 MHP via Claude
+<span class="ln">209</span>C code changed to replace COMMON/NEWEPS/ with explicit arguments: engeb.f
+<span class="ln">210</span>C computes EALPCA and ENU, and coefft.f and ytime.f read them right after
+<span class="ln">211</span>C their own CALL ENGEB, so they are returned as arguments.  main.f, the
+<span class="ln">212</span>C third caller, passes locals it does not use.
+<span class="ln">213</span>C 10/13/26 MHP via Claude
+<span class="ln">214</span>C code changed to replace COMMON/BE7/ with an explicit argument.  ENGEB
+<span class="ln">215</span>C computes BE7MASSFRACTION and main.f is its only reader, storing it into
+<span class="ln">216</span>C BE7M(I) right after the call, so it is now ENGEB&#x27;s last argument.
+<span class="ln">217</span>C ENGEB&#x27;s other two callers, coefft.f and ytime.f, pass a local they do
+<span class="ln">218</span>C not use.
+<span class="ln">219</span>C 9/06 GN ---  New neutrino loss common block
+<span class="ln">220</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">221</span>C       COMMON/NULOSS/LNULOS1,DSNUDT,DSNUDD
+<span class="ln">222</span>C 10/13/26 MHP via Claude
+<span class="ln">223</span>C code changed to remove COMMON/NULOSS/: engeb.f assigns DSNUDT and
+<span class="ln">224</span>C DSNUDD and nothing reads them, in engeb.f or anywhere else, so they are
+<span class="ln">225</span>C now plain locals there.  parmin.f declared the block without using it.
+<span class="ln">226</span>C MHP 8/96 CROSS SECTIONS PUT IN COMMON BLOCK.
+<span class="ln">227</span>C      COMMON/CROSS/SSTANDARD(17)
+<span class="ln">228</span>C MHP 6/14 DERIVATIVES ADDED
+<span class="ln">229</span>C G Somers 3/17, ADDING NEW TAUCZ COMMON BLOCK
+<span class="ln">230</span>C JVS 10/11 Common block for He3+He3 luminosity
+<span class="ln">231</span>      DIMENSION HR1(JSON),HR2(JSON),HR3(JSON),HR4(JSON),HR5(JSON),
+<span class="ln">232</span>     1 HR6(JSON),HR7(JSON),HR8(JSON),HR9(JSON),HR10(JSON),HR11(JSON),
+<span class="ln">233</span>     2 HR12(JSON),HR13(JSON),HF1(JSON),HF2(JSON)
+<span class="ln">234</span>      DIMENSION XFRAC(13),RATE(13),DRATRO(13),DRATT(13),UTOT(13),
+<span class="ln">235</span>     1 DSCR (13),DSCT(13),DG(13),ZPRD(13),Z53(13),Z43(13),Z23(13),
+<span class="ln">236</span>     2 Z86(13),Q1(8),Q2(8),Q3(8),Q4(8),Q5(8),Q6(7),Q7(7),Q8(7),EG(50)
+<span class="ln">237</span>      DIMENSION ANUC(13), ZNUC(13)
+<span class="ln">238</span>      DIMENSION V1(7),V2(7),V3(7)
+<span class="ln">239</span>
+<span class="ln">240</span>
+<span class="ln">241</span>C***MHP 5/91 STATEMENTS ADDED FOR EVOLVED STAR NEUTRINO LOSSES.
+<span class="ln">242</span>C NEUTRINO COEFFICIENTS
+<span class="ln">243</span>
+<span class="ln">244</span>
+<span class="ln">245</span>      DATA V1,V2,V3/
+<span class="ln">246</span>     1 6.002D19,2.084D20,1.872D21,9.383D-1,-4.141D-1,5.829D-2,5.5924D0,
+<span class="ln">247</span>     2 4.886D10,7.580D10,6.023D10,6.290D-3,7.483D-3,3.061D-4,1.5654D0,
+<span class="ln">248</span>     3 2.320D-7,8.449D-8,1.787D-8,2.581D-2,1.734D-2,6.990D-4,0.56457D0/
+<span class="ln">249</span>C ***************************
+<span class="ln">250</span>C ANUC ARE ATOMIC MASS UNITS.
+<span class="ln">251</span>C ***************************
+<span class="ln">252</span>c  On 10/13/97, JNB converted ANUC(I) from neutral atomic masses to
+<span class="ln">253</span>c  bare nuclear masses.
+<span class="ln">254</span>c
+<span class="ln">255</span>c  The scale is the mass of C12 divided by 12 or 931.49432 MeV,
+<span class="ln">256</span>c  which is 1.6605402 times 10^{-24} gm. The values are obtained
+<span class="ln">257</span>c  by dividing the mass excess (expressed in MeV) by 931.49432 MeV and
+<span class="ln">258</span>c  adding to this the atomic mass number, A.  The value for Be7, which
+<span class="ln">259</span>c  is used implicitly in this subroutine was, 7.016930, until 13/13/97.
+<span class="ln">260</span>c  We now use the bare nuclear mass of 7.014735 .
+<span class="ln">261</span>c
+<span class="ln">262</span>      DATA ANUC/1.008665D0,1.007276D0,2.013553D0,3.015501D0,3.014933D0,4.001506D0,
+<span class="ln">263</span>     1     11.996709D0,13.000064D0,13.999233D0,15.990526D0,17.994772D0,19.986954D0,
+<span class="ln">264</span>     2     23.978458D0/,ZNUC/0.,1.,1.,1.,2.,2.,6.,6.,7.,8.,8.,10.,12./,
+<span class="ln">265</span>     3     NELEM/13/
+<span class="ln">266</span>
+<span class="ln">267</span>
+<span class="ln">268</span>C THE ISOTOPES ARE NEUTRON, H1, D, H3, HE3, HE4, C12, C13, N14, O16, O18,
+<span class="ln">269</span>C  NE20, MG24, RESPECTIVELY. ALL OF THESE NUMBERS WERE CHECKED.
+<span class="ln">270</span>C NELEM IS THE NUMBER OF ISOTOPES INCLUDED.
+<span class="ln">271</span>C **************************************************************************
+<span class="ln">272</span>C THE QUANTITIES Q1(J), Q2(J), ...,Q5(J) ARE THE TERMS IN EQUATION 3.14 OF
+<span class="ln">273</span>C  NEUTRINO ASTROPHYSICS AND IN EQUATION 53 OF FOWLER, CAUGHLAN, AND
+<span class="ln">274</span>C  ZIMMERMAN (1967) EQ. 53, IN BOTH CASES MULTIPLIED BY T SUB 9 ^(-2/3).
+<span class="ln">275</span>C  THE REACTIONS CORRESPONDING TO EACH J ARE LISTED ABOVE, UNDER:
+<span class="ln">276</span>C   IDENTIFYING THE RECTIONS.
+<span class="ln">277</span>C  FOR THIS SET OF PARAMETERS, AND ONLY FOR THIS SET OF PARAMETERS,
+<span class="ln">278</span>C  J = 8 CORRESPONDS TO THE BE7 + P REACTION.
+<span class="ln">279</span>C **************************************************************************
+<span class="ln">280</span>C GENERAL EXPRESSION FOR Q&#x27;S:
+<span class="ln">281</span>C T_9^(-2/3)[S_EFF/S(0)] =
+<span class="ln">282</span>C   [T_9^(-2/3) + Q1(I)T_9^(-1/3) + Q2(I) + Q3(I)T_9^(1/3) +
+<span class="ln">283</span>C    Q4(I)T_9^(2/3) + Q(5)T_9 ]
+<span class="ln">284</span>C
+<span class="ln">285</span>C BY COMPARISON WITH EQUATION 3.14 OF NEUTRINO ASTROPHYSICS, WE SEE THAT
+<span class="ln">286</span>C
+<span class="ln">287</span>C  Q1 = (5/(12*TAU))*T_9^(-1/3) .
+<span class="ln">288</span>C  Q2 = (S&#x27;/S)(E_0))*T_9^(-2/3) .
+<span class="ln">289</span>C  Q3 = (S&#x27;/S)(35/36)(K*10^9 K)
+<span class="ln">290</span>C  Q4 = (S&#x27;&#x27;/2S)(E_0^2)(T_9^(-4/3)
+<span class="ln">291</span>C  Q5 = (89/72)(S&#x27;&#x27;/S)(E_0)(KT)(T_9^(-5/3)
+<span class="ln">292</span>C
+<span class="ln">293</span>C EACH OF THE Q&#x27;S IS INDEPENDENT OF TEMPERATURE (T), AS CAN BE SEEN FROM
+<span class="ln">294</span>C  EQUATIONS 3.10 AND 3.11 .
+<span class="ln">295</span>C
+<span class="ln">296</span>C MHP 10/97
+<span class="ln">297</span>c All of the values of the Q1, ...., Q5 have been recalculated, using
+<span class="ln">298</span>c  where needed nuclear cross sections given in Tables 3.2 and 3.4 of
+<span class="ln">299</span>c  Neutrino Astrophysics.  They have been updated on 9/16/97 to reflect
+<span class="ln">300</span>c  the derivatives and cross section factors in Adelberger et al. 1998,
+<span class="ln">301</span>c  the paper on the Solar Fusion Workshop.
+<span class="ln">302</span>c
+<span class="ln">303</span>C ******************************************************************
+<span class="ln">304</span>C Q6 IS THE COEFFICIENT OF THE TEMPERATURE TERM IN THE DEFINITION OF
+<span class="ln">305</span>C  TAU, EQUATION 3.10 OF NEUTRINO ASTROPHYSICS.
+<span class="ln">306</span>C  TAU = Q6*(T SUB 9 TO THE (-1/3) POWER ).
+<span class="ln">307</span>C ******************************************************************
+<span class="ln">308</span>C SLIGHT CHANGES HAVE BEEN MADE IN THE PREVIOUS VALUES OF Q6 TO MAKE
+<span class="ln">309</span>C  THE DATA MORE ACCURATE.
+<span class="ln">310</span>C NOTE THAT Q6 IS NEGATIVE.
+<span class="ln">311</span>C ********************************************************************
+<span class="ln">312</span>C Q7 IS THE CONSTANT IN FRONT OF THE REACTION RATE. THE LOGARITHMS ARE
+<span class="ln">313</span>C  RELATED TO S FACTORS BY A LOGARITHM AND VARIOUS NUMERICAL FACTORS.
+<span class="ln">314</span>C ********************************************************************
+<span class="ln">315</span>C THE GENERAL RELATION IS:
+<span class="ln">316</span>C  Q7 = 70.62860 + ((LN(Z0*Z1/A))/3) -LN(A0*A1) - LN(S SUB 0)
+<span class="ln">317</span>C       -LN(1 + DELTA_01)
+<span class="ln">318</span>C  HERE S SUB 0 IS THE CROSS SECTION FACTOR IN UNITS OF KEV-BARNS.
+<span class="ln">319</span>C  THE NUMERICAL VALUES USED HERE ARE TAKEN FROM TABLES 3.4 AND 3.2
+<span class="ln">320</span>C   OF NUCLEAR ASTROPHYSICS.
+<span class="ln">321</span>C  THE QUANTITY DELTA_01 IS NON-ZERO (EQUAL TO UNITY) ONLY WHEN THE
+<span class="ln">322</span>C   TWO REACTING NUCLEI, 0 AND 1, ARE IDENTICAL.
+<span class="ln">323</span>C Q8 REFLECTS A TERM IN THE EXPONENTIAL THAT OCCURS IN THE RATES, THE
+<span class="ln">324</span>C  TERM BEING PROPORTIONAL TO E^( CONSTANT*T_9^2). SEE HARRIS, ET AL.
+<span class="ln">325</span>C  1983, ANNUAL REV. ASTRON. ASTROPHYS.21, 165 (1983) FOR THE MEANING
+<span class="ln">326</span>C  OF THIS OBSCURE TERM.
+<span class="ln">327</span>C THE VALUES OF Q1(I),...Q7(I) GIVEN BELOW WERE OBTAINED USING THE DATA
+<span class="ln">328</span>C  IN NEUTRINO ASTROPHYSICS WITH THE AID OF AUXILARY COMPUTER CODES
+<span class="ln">329</span>C  THAT GENERATED ACCURATE EVALUATIONS. THE NUMBERS GIVEN HERE ARE
+<span class="ln">330</span>C  IN MANY CASES COMPLETELY DIFFERENT FROM THE VALUES IN THE ORIGINAL
+<span class="ln">331</span>C  YALE CODE.
+<span class="ln">332</span>C NRXNS IS THE NUMBER OF REACTIONS BEING TRACKED.
+<span class="ln">333</span>C DBG 8/94 APPLIED MHP UPDATE TO NUCLEAR REACTIONS
+<span class="ln">334</span>c 10/13/97. Changed Q(I) so that are now calculated for the bare nuclear
+<span class="ln">335</span>c masses. The calculates were made cues.f . Last date on the calculations
+<span class="ln">336</span>c in my notes is 10/10/97.  Note Q6 is -tau(T_9 = 1); in cues.f, I calculate
+<span class="ln">337</span>c tau(T_6 = 1). The connection is:  Q6 = 0.1*tau(cues.f).
+<span class="ln">338</span>c
+<span class="ln">339</span>c
+<span class="ln">340</span>C BP00 values
+<span class="ln">341</span>C      DATA Q1/0.12317,.03392,.0325,.0304,.03035,.0273,.02494,.040572/,
+<span class="ln">342</span>C     1Q2/1.08749,-.273,-.2085,.7630,-0.4044,-1.60,-1.224, -0.2095/,
+<span class="ln">343</span>C     2Q3/.93833,-.0648,-.0474,.1626,-.08598,-.3064,-.2139,-0.0595/,
+<span class="ln">344</span>C     3Q4/0.,0.,0.,4.79,7.456,0.0,.69703,.16762/,
+<span class="ln">345</span>C     4Q5/0.,0.,0.,2.595,4.032,0.0,0.3097,.12114/,
+<span class="ln">346</span>C     5Q6/-3.3804,-12.2757,-12.826,-13.6899,-13.7173,-15.2281,-16.6925/,
+<span class="ln">347</span>C     6Q7/20.8964,76.6003,67.8036,69.130,70.3809,69.8517,70.8012/,
+<span class="ln">348</span>C     7Q8/0.,0.,0.,0.0,0.0,0.0,0./,
+<span class="ln">349</span>C     8NRXNS/13/
+<span class="ln">350</span>C Revised values 7/21/03
+<span class="ln">351</span>C      DATA Q1/0.12317,.03392,.0325,.0304,.03035,.0273,.02494,.040572/,
+<span class="ln">352</span>C     1Q2/1.08749,-.273,-.2085,.7630,-0.4044,-1.60,-1.224, 0.0/,
+<span class="ln">353</span>C     2Q3/.93833,-.0648,-.0474,.1626,-.08598,-.3064,-.2139,0.0/,
+<span class="ln">354</span>C     3Q4/0.,0.,0.,4.79,7.456,0.0,.69703,0.0/,
+<span class="ln">355</span>C     4Q5/0.,0.,0.,2.595,4.032,0.0,0.3097,0.0/,
+<span class="ln">356</span>C     5Q6/-3.3804,-12.2757,-12.826,-13.6899,-13.7173,-15.2281,-16.6925/,
+<span class="ln">357</span>C     6Q7/20.8964,76.6003,67.8036,69.130,70.3809,69.8517,70.8012/,
+<span class="ln">358</span>C     7Q8/0.,0.,0.,0.0,0.0,0.0,0./,
+<span class="ln">359</span>C     8NRXNS/13/
+<span class="ln">360</span>C MHP 9/14 RESTORED BE7+P DERIVATIVES THAT WERE ZEROED OUT
+<span class="ln">361</span>      DATA Q1/0.12317D0,.03392D0,.0325D0,.0304D0,.03035D0,.0273D0,.02494D0,.040572D0/,
+<span class="ln">362</span>     1Q2/1.08749D0,-.273D0,-.2085D0,.7630D0,-0.4044D0,-1.60D0,-1.224D0,-0.2095D0/,
+<span class="ln">363</span>     2Q3/.93833D0,-.0648D0,-.0474D0,.1626D0,-.08598D0,-.3064D0,-.2139D0,-0.0595D0/,
+<span class="ln">364</span>     3Q4/0.,0.,0.,4.79D0,7.456D0,0.0,.69703D0,0.16762D0/,
+<span class="ln">365</span>     4Q5/0.,0.,0.,2.595D0,4.032D0,0.0,0.3097D0,0.12114D0/,
+<span class="ln">366</span>     5Q6/-3.3804D0,-12.2757D0,-12.826D0,-13.6899D0,-13.7173D0,-15.2281D0,-16.6925D0/,
+<span class="ln">367</span>     6Q7/20.8964D0,76.6003D0,67.8036D0,69.130D0,70.3809D0,69.8517D0,70.8012D0/,
+<span class="ln">368</span>     7Q8/0.,0.,0.,0.0,0.0,0.0,0./,
+<span class="ln">369</span>     8NRXNS/13/
+<span class="ln">370</span>C ***NOTE THAT SSTANDARD IS AN INPUT PARAMETER SET IN THE NAMELIST;
+<span class="ln">371</span>C PREVIOUS PUBLISHED SETS OF SSTANDARD ARE INDICATED BELOW.
+<span class="ln">372</span>c Changed slightly 3He-3He on 9/25/97 to take account of the S&#x27;.
+<span class="ln">373</span>c
+<span class="ln">374</span>c****************FD Feb 09 ************************************
+<span class="ln">375</span>c Original data from Neutrino Astrophysics 1989 Bahcall
+<span class="ln">376</span>c Table 3.2 and 3.4
+<span class="ln">377</span>c Table 3.2 pp
+<span class="ln">378</span>c         Q(MeV)  S_0(KeV barns)
+<span class="ln">379</span>c H-p     1.44    4.07E-022
+<span class="ln">380</span>c He3-He3 12.86   5.15E+003
+<span class="ln">381</span>c He3-He4 1.59    0.54
+<span class="ln">382</span>c 7Be-p   0.14    0.02
+<span class="ln">383</span>c He-p    19.8    8.00E-020
+<span class="ln">384</span>c
+<span class="ln">385</span>c
+<span class="ln">386</span>c Table 3.4 cno   Q(MeV)  S_0(MeV barns)
+<span class="ln">387</span>c
+<span class="ln">388</span>c C12-p   1.94    1.45E-003
+<span class="ln">389</span>c C13-p   7.55    5.50E-003
+<span class="ln">390</span>c N14-p   7.3     3.32E-003
+<span class="ln">391</span>c N15-p O16       12.13   6.40E-002
+<span class="ln">392</span>c N15-p C12       4.97    78
+<span class="ln">393</span>c O16-p   0.6     9.40E-003
+<span class="ln">394</span>c
+<span class="ln">395</span>c****************************************************************************
+<span class="ln">396</span>C FD-MP Fev 2009 values changed to included the results presented at Gran Sasso
+<span class="ln">397</span>C by A. Formicola
+<span class="ln">398</span>C Cross sections are:
+<span class="ln">399</span>C  s11      pp      = 3.92 +- 0.08 D-25 MeVb      Physun talk Formicola
+<span class="ln">400</span>C  s13      Hep     = 8.6  +- 1.3  D-20 KeVb
+<span class="ln">401</span>C  s33      He3-He3 = 5.32 +- 0.08 MeVb
+<span class="ln">402</span>C  s34      He3_He4 = 0.568 +- 0.014 KeVb         mean LUNA 2007 - Brown 2007 - Singh 2004
+<span class="ln">403</span>C  s17      Be7+p   = 22.1 +-0.6 +-0.6 eVb        A.Junghans PRC70(2004)045501
+<span class="ln">404</span>C  s114     N14-p   = 1.57 +- 0.13 KeVb           Marta et al. Luna coll. PRC 78 (2008) 022802)
+<span class="ln">405</span>c
+<span class="ln">406</span>c This cross section factor gives the following SSTANDARD
+<span class="ln">407</span>c
+<span class="ln">408</span>c  SSTANDARD=0.9631,1.0330,1.0519,0.9241,1.3818,0.47290,1.0,
+<span class="ln">409</span>c 1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0108,0.84770,1.0750
+<span class="ln">410</span>c**********************************************************************
+<span class="ln">411</span>C BP03 values, changed 7/21/03
+<span class="ln">412</span>C     SStandard/0.9681,1.0485,0.9815,0.9241,1.3818,1.0542,1.0,
+<span class="ln">413</span>C    $          1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0108,0.8807,1.075/
+<span class="ln">414</span>c  Previously (6/16/97) used S at Gamow Peak. Agrees with Workshop paper.
+<span class="ln">415</span>c
+<span class="ln">416</span>C     SStandard/0.9828,1.0485,0.9815,0.9241,1.3818,1.0542,1.0,
+<span class="ln">417</span>C    $          1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0108,0.7819,0.2875/
+<span class="ln">418</span>c  This is the revised version created from the Seattle Workshop paper
+<span class="ln">419</span>c  on Solar Fusion Reactions. Corrections inserted 9/16/1997. See pg.
+<span class="ln">420</span>c  132, Volume 19, of notes.
+<span class="ln">421</span>C     9  SStandard/0.9828,1.0291,0.9815,0.9241,1.3818,1.0542,1.0,
+<span class="ln">422</span>C     $ 1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.018,0.7819,0.2875/
+<span class="ln">423</span>C VALUES BASED ON PARKER REVIEW ARTICLE.
+<span class="ln">424</span>C    9  SSTANDARD/1.0049,0.9709,0.9870,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,
+<span class="ln">425</span>C    $  1.0,1.0,1.0,1.0,1.0,1.913/
+<span class="ln">426</span>C BP 92 VALUES
+<span class="ln">427</span>c     9  SSTANDARD/0.9828,0.9709,0.9870,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,
+<span class="ln">428</span>c     $  1.0,1.0,1.0,1.0,0.9218,0.1625/
+<span class="ln">429</span>C BP 95 VALUES
+<span class="ln">430</span>C     9  SSTANDARD/0.9558,0.9690,0.9712,1.0,1.0,0.992,1.0,1.0,1.0,1.0,
+<span class="ln">431</span>C     $  1.0,1.0,1.0,1.0,1.0,0.92088,0.1625/
+<span class="ln">432</span>C LATEST VALUES, INCLUDING NEW PP RATE
+<span class="ln">433</span>C    9  SSTANDARD/0.9558,0.9709,0.9870,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,
+<span class="ln">434</span>C    $  1.0,1.0,1.0,1.0,0.9218,0.1625/
+<span class="ln">435</span>C Dar &amp; Shaviv Values
+<span class="ln">436</span>C    9  SSTANDARD/0.9828,0.9709,0.8333,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,
+<span class="ln">437</span>C    $  1.0,1.0,1.0,1.0,0.6996,0.1625/
+<span class="ln">438</span>C Schramm &amp; Shi Values
+<span class="ln">439</span>C    9  SSTANDARD/0.9828,1.0874,0.9870,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,
+<span class="ln">440</span>C    $  1.0,1.0,1.0,1.0,0.8313,0.1625/
+<span class="ln">441</span>C *********************************************************************
+<span class="ln">442</span>C THE VALUES OF SSTANDARD(I) ARE TO BE CHANGED FROM UNITY IF THE CROSS
+<span class="ln">443</span>C  SECTION FACTORS ARE NOT THE ONES GIVEN IN NEUTRINO ASTROPHYSICS,
+<span class="ln">444</span>C  TABLE 3.2 AND TABLE 3.4 .
+<span class="ln">445</span>C THE CURRENT VALUES ARE CHANGED TO BE THE PREFERRED VALUES LISTED IN
+<span class="ln">446</span>C  THE LAST COLUMN OF TABLE 1 OF BAHCALL AND PINSONNEAULT (1991),
+<span class="ln">447</span>C   6/14/91.
+<span class="ln">448</span>C *********************************************************************
+<span class="ln">449</span>C ZPRD IS USED IN SCREENING CALCULATIONS. IT IS THE PRODUCT OF THE
+<span class="ln">450</span>C  CHARGES OF THE INTERACTING IONS. ZPRD WAS CHECKED. Z86 IS USED
+<span class="ln">451</span>C  IN CALCULATING INTERMEDIATE SCREENING AND IS DEFINED BY GRABOSKE ET
+<span class="ln">452</span>C  AL, AP. J. 181, PAGE 465 (1973), IN TABLE 4.  Z86 WAS CHECKED AND
+<span class="ln">453</span>C  SOME NUMERICAL VALUES WERE MADE SLIGHTLY MORE ACCURATE.  Z53, Z43,
+<span class="ln">454</span>C  AND Z23 ARE ALSO DEFINED IN TABLE 4 (SEE ABOVE).  SINCE THEY ARE
+<span class="ln">455</span>C  ONLY USED IN STRONG SCREENING, THE VALUES OF Z53, Z43, AND Z23
+<span class="ln">456</span>C  WERE NOT CHECKED.
+<span class="ln">457</span>      DATA ZPRD/1.,4.,4.,6.,6.,7.,8.,12.,16.,12.,14.,12.,36./,Z53/1.175D0,
+<span class="ln">458</span>     1   3.73D0,3.73D0,4.804D0,4.804D0,5.385D0,5.941D0,9.014D0,11.24D0,9.014D0,10.15D0,
+<span class="ln">459</span>     2   9.104D0,23.28D0/,Z43/0.52D0,1.31D0,1.31D0,1.488D0,1.488D0,1.61D0,1.721D0,2.577D0,
+<span class="ln">460</span>     3   3.025D0,2.577D0,2.81D0,2.577D0,5.668D0/,Z23/-0.413D0,-0.655D0,-0.655D0,-0.643D0,
+<span class="ln">461</span>     4   -0.643D0,-0.659D0,-0.673D0,-0.889D0,-0.946D0,-0.889D0,-0.92D0,-0.889D0,-1.36D0/,
+<span class="ln">462</span>     5   Z86/1.630D0,5.917D0,5.917D0,8.302D0,8.302D0,9.520D0,10.716D0,16.192D0,20.978D0,
+<span class="ln">463</span>     6   16.192D0,18.606D0,16.192D0,45.6635D0/,
+<span class="ln">464</span>     7   C21/5.240358D-8/
+<span class="ln">465</span>      SAVE
+<span class="ln">466</span>C ZERO OUT THE ENERGY YIELDS FROM NEUTRINOS(ENU) AND ALPHA CAPTURE
+<span class="ln">467</span>C REACTIONS (EALPCA).
+<span class="ln">468</span>      ENU = 0.0D0
+<span class="ln">469</span>      EALPCA = 0.0D0
+<span class="ln">470</span>C DEFINE NEXT THE FRACTIONAL ABUNDANCES BY MASS OF THE IMPORTANT
+<span class="ln">471</span>C  ISOTOPES.
+<span class="ln">472</span>C X, Y, Z, XHE3,..., XBE9 ARE THE MASS FRACTIONS OF THE ISOTOPES.
+<span class="ln">473</span>C  THE ABUNDANCES OF NEUTRONS, H2, H3, NE20,AND MG24, WHICH ARE,
+<span class="ln">474</span>C  RESPECTIVELY, XFRAC(I) FOR I = 1,3,4,12,13, ARE NO LONGER USED.
+<span class="ln">475</span>      XFRAC(1) = 0.0
+<span class="ln">476</span>      XFRAC(2) = X
+<span class="ln">477</span>C MHP 5/02 ADDED DEUTERIUM
+<span class="ln">478</span>C      XFRAC(3) = 0.0
+<span class="ln">479</span>      XFRAC(3) = XH2
+<span class="ln">480</span>      XFRAC(4) = 0.0
+<span class="ln">481</span>      XFRAC(5) = XHE3
+<span class="ln">482</span>      XFRAC(6) = Y
+<span class="ln">483</span>      XFRAC(7) = XC12
+<span class="ln">484</span>      XFRAC(8) = XC13
+<span class="ln">485</span>      XFRAC(9) = XN14
+<span class="ln">486</span>      XFRAC(10) = XO16
+<span class="ln">487</span>      XFRAC(11) = XO18
+<span class="ln">488</span>      XFRAC(12) = 0.0
+<span class="ln">489</span>      XFRAC(13) = 0.0
+<span class="ln">490</span>C *******************************************************************
+<span class="ln">491</span>C BEGIN CALCULATION OF SCREENING CORRECTION.
+<span class="ln">492</span>C *******************************************************************
+<span class="ln">493</span>C  THE BASIC REFERENCES ARE SALPETER, AUSTRALIAN JOURNAL OF PHYSICS,
+<span class="ln">494</span>C  VOL. 7, 373 (1954). THE FORMULA FOR WEAK SCREENING THAT IS BEING
+<span class="ln">495</span>C  PROGRAMMED IS EQUATION (25) OF THIS PAPER. THE OTHER IMPORTANT
+<span class="ln">496</span>C  REFERENCES ARE: DEWITT, GRABOSKE, AND COOPER, AP. J. 181, 439 (1973)
+<span class="ln">497</span>C  AND GRABOSKE ET AL., AP. J. 181, 457 (1973). THE VALUES OF EMU AND
+<span class="ln">498</span>C  ZET ARE ESSENTIAL FOR COMPUTING WEAK SCREENING; THE VALUE OF AMU IS
+<span class="ln">499</span>C  USED IN AN NON-ESSENTIAL WAY IN THIS COMPUTATION. XTR IS USED IN
+<span class="ln">500</span>C  COMPUTING INTERMEDIATE SCREENING.
+<span class="ln">501</span>C AMU IS ONE OVER THE MEAN MOLECULAR WEIGHT OF THE IONS, MU SUB I .
+<span class="ln">502</span>C EMU IS ONE OVER THE ELECTRON MEAN MOLECULAR WEIGHT, MU SUB E.
+<span class="ln">503</span>C  EMU IS USED HERE AS THE NAME FOR THE SECOND PART OF THE ZETA FUNCTION
+<span class="ln">504</span>C  IN THE SALPETER EXPRESSION FOR WEAK SCREENING.
+<span class="ln">505</span>C XTR IS USED LATER IN THE INTERMEDIATE SCREENING CALCULATION.  THE AVERAGE
+<span class="ln">506</span>C  OF THE QUANTITY Z**(3B -1) IS EQUAL TO XTR/AMU.
+<span class="ln">507</span>C ZET IS THE FIRST PART OF THE SALPETER SCREENING ZETA VARIABLE.
+<span class="ln">508</span>C MU = SUM OVER I OF [X(I)/A(I)].
+<span class="ln">509</span>C MU SUB E = SUM OVER I [ Z(I)*X(I)/A(I)].
+<span class="ln">510</span>      AMU = 0.
+<span class="ln">511</span>      EMU = 0.
+<span class="ln">512</span>      XTR = 0.
+<span class="ln">513</span>      ZET = 0.
+<span class="ln">514</span>      DO 10 I = 1,NELEM
+<span class="ln">515</span>         TRM = XFRAC(I)/ANUC(I)
+<span class="ln">516</span>         AMU = AMU+TRM
+<span class="ln">517</span>         EMU = EMU+TRM*ZNUC(I)
+<span class="ln">518</span>         XTR = XTR+TRM*ZNUC(I)**1.58D0
+<span class="ln">519</span>         ZET = ZET+TRM*ZNUC(I)**2
+<span class="ln">520</span>   10 CONTINUE
+<span class="ln">521</span>C DL AND DT ARE THE THE LOG10 OF THE DENSITY AND TEMPERATURE.
+<span class="ln">522</span>C  THE UNIT OF TEMPERATURE IS 10^9 K AND THE UNIT OF DENSITY IS
+<span class="ln">523</span>C  GM PER CM^3 .
+<span class="ln">524</span>C PDT AND PDP ARE THE DERIVATIVES OF THE DENSITY WITH RESPECT TO
+<span class="ln">525</span>C  TEMPERATURE AND DENSITY.
+<span class="ln">526</span>C DD = LOG RHO TO THE BASE 10.
+<span class="ln">527</span>C CLN = LN10.  CLN IS CONVERSION BETWEEN LOG10 AND LN.
+<span class="ln">528</span>C CONVERT DENSITY TO UNLOGGED FORM.
+<span class="ln">529</span>C RWE = RHO/(MU SUB E), I. E., THE NUMBER OF ELECTRONS DIVIDED BY
+<span class="ln">530</span>C  AVOGADRO&#x27;S NUMBER.
+<span class="ln">531</span>      RWE = ( EXP(CLN*DL) )*EMU
+<span class="ln">532</span>C THE EXPRESSION FOR RWE WAS INCORRECT IN THE ORIGINAL YALE SUBROUTINE.
+<span class="ln">533</span>C  THE ORIGINAL VERSION HAD ( EXP(CLN*DL) ) DIVIDED BY EMU INSTEAD OF
+<span class="ln">534</span>C  MULTIPLIED BY EMU.  RWE IS USED LATER IN COMPUTING THE SCREENING
+<span class="ln">535</span>C  CORRECTION.
+<span class="ln">536</span>      DD = DL
+<span class="ln">537</span>C SET RATES EQUAL TO ZERO FOR THE LOG_10(T) &lt; 6.0.
+<span class="ln">538</span>C REPLACED FIXED 1 MILLION K THRESHOLD WITH TCUT(1).
+<span class="ln">539</span>C      IF(TL.LE.6.0) THEN
+<span class="ln">540</span>      IF(TL.LE.TCUT(1)) THEN
+<span class="ln">541</span>C MHP 5/02 DEUTERIUM BURNING
+<span class="ln">542</span>         DGDEUT = 0.0D0
+<span class="ln">543</span>         QRTDEUT = 0.0D0
+<span class="ln">544</span>         EN = -20.
+<span class="ln">545</span>         PEP = 0.
+<span class="ln">546</span>         PET = 0.
+<span class="ln">547</span>         DO 20 I = 1,NRXNS
+<span class="ln">548</span>            EG(I) = 0.
+<span class="ln">549</span>            RATE(I) = 0.
+<span class="ln">550</span>            DG(I) = 0.
+<span class="ln">551</span>   20    CONTINUE
+<span class="ln">552</span>         GO TO 200
+<span class="ln">553</span>      ENDIF
+<span class="ln">554</span>C T9P13 IS THE TEMPERATURE IN UNITS OF 10^9 DEGREES K TO THE PLUS 1/3
+<span class="ln">555</span>C  POWER.  MINUS IS DENOTED BY M.  HERE T9 IS THE TEMPERATURE IN UNITS
+<span class="ln">556</span>C  OF 10^9 K, CONVERTED FROM THE LOG_10 (T) AND RHO IS THE DENSITY IN
+<span class="ln">557</span>C  CGS UNITS.
+<span class="ln">558</span>      RHO=EXP(CLN*DD)
+<span class="ln">559</span>      T9 = EXP(CLN*(TL - 9.0D0))
+<span class="ln">560</span>      T9P13 = T9**CC13
+<span class="ln">561</span>      T9P23 = T9P13**2
+<span class="ln">562</span>      T9M13=1./T9P13
+<span class="ln">563</span>      T9M23=T9M13**2
+<span class="ln">564</span>      T9M1=1./T9
+<span class="ln">565</span>      T9M2=T9M1**2
+<span class="ln">566</span>      T9M12=1./DSQRT(T9)
+<span class="ln">567</span>      T9M32=T9M1*T9M12
+<span class="ln">568</span>C MHP 5/02 ADD DEUTERIUM BURNING TERM TO THE CODE
+<span class="ln">569</span>C IF DEUTERIUM IS ABOVE A MINIMUM THRESHOLD VALUE.
+<span class="ln">570</span>C RDEUT IS THE RATE (EXCLUDING FACTORS OF THE
+<span class="ln">571</span>C ABUNDANCES) AND QRTDEUT IS THE DERIVATIVE W/R/T T.
+<span class="ln">572</span>C NOTE THAT SCREENING IS EXCLUDED - REASONABLE GIVEN
+<span class="ln">573</span>C THE LOW TEMPERATURES INVOLVED.
+<span class="ln">574</span>      IF(XH2.LE.1.0D-11)THEN
+<span class="ln">575</span>         RDEUT = 0.0D0
+<span class="ln">576</span>         QRTDEUT = 0.0D0
+<span class="ln">577</span>      ELSE
+<span class="ln">578</span>C ENERGY YIELD FOR DEUTERIUM BURNING
+<span class="ln">579</span>        QDEUT = 5.494D0
+<span class="ln">580</span>        ZZ = -3.72D0*T9M13
+<span class="ln">581</span>        TFACDEUT = 1.0D0+0.112D0*T9P13+3.38D0*T9P23+2.65D0*T9
+<span class="ln">582</span>C FACTOR OF 6.023D23/ REFLECTS AVAGADROS NUMBER DIVIDED BY THE
+<span class="ln">583</span>C MASS OF THE DEUTERON IN AMU
+<span class="ln">584</span>        RDEUT = RHO*2.240D3*T9P23*EXP(ZZ)*TFACDEUT*6.023D23/ANUC(3)
+<span class="ln">585</span>        TFACDEUT2 = 0.112D0*T9P13+6.76D0*T9P23+7.95D0*T9
+<span class="ln">586</span>        QRTDEUT = CC13*((TFACDEUT2/TFACDEUT) -2.0D0 - ZZ)
+<span class="ln">587</span>C NOW LIMIT DEUTERIUM BURNING IN A SURFACE CZ TO BE ON A TIME SCALE
+<span class="ln">588</span>C NO SHORTER THAN THE CONVECTIVE OVERTURN TIMESCALE.
+<span class="ln">589</span>        IF(IU.GE.JCZ .AND. TAUCZ.GT.1.0D0)THEN
+<span class="ln">590</span>           RDEUTMAX = 6.023D23/ANUC(3)/TAUCZ
+<span class="ln">591</span>           RDEUT2 = RDEUT*X
+<span class="ln">592</span>           IF(RDEUT2.GT.RDEUTMAX)THEN
+<span class="ln">593</span>C JVS 0712 Commented out write command
+<span class="ln">594</span>C              WRITE(*,*)RDEUT2,RDEUTMAX
+<span class="ln">595</span>              IF(X.GT.1.0D-6)THEN
+<span class="ln">596</span>                 RDEUT = RDEUTMAX/X
+<span class="ln">597</span>              ENDIF
+<span class="ln">598</span>           ENDIF
+<span class="ln">599</span>         ENDIF
+<span class="ln">600</span>      ENDIF
+<span class="ln">601</span>C ***********************************
+<span class="ln">602</span>C F PRIME/F
+<span class="ln">603</span>C ***********************************
+<span class="ln">604</span>C THE NEXT PIECE OF CODE COMPUTES FIRST THE FERMI ENERGY DIVIDED BY KT, WHERE
+<span class="ln">605</span>C  PFMC2 IS THE FERMI MOMENTUM DIVIDED BY MASS OF ELECTRON TIMES C, ALL
+<span class="ln">606</span>C  SQUARED AND EFMKT IS THE FERMI ENERGY DIVIDED BY KT.  THE QUANTITY
+<span class="ln">607</span>C  FPRF IS THE RATIO OF F PRIME TO F IN SALPETER&#x27;S SCREENING CORRECTION.
+<span class="ln">608</span>C  THE VALUE OF FPRF IS DETERMINED IN THE INTERMEDIATE CASE BY AN
+<span class="ln">609</span>C  INTERPOLATION FORMULA DEPENDING UPON THE DEGREE OF DEGENERACY, AS
+<span class="ln">610</span>C  MEASURED BY DEGD = LOG10(E_F/KT). THE NUMERICAL VALUES FOR THE FIT
+<span class="ln">611</span>C  WERE TAKEN FROM SALPETER&#x27;S ORIGINAL PAPER, FIGURE 1. THE ONLY CHANGES
+<span class="ln">612</span>C  IN THIS PART OF THE SUBROUTINE WERE THE CORRECTION OF THE ERROR IN
+<span class="ln">613</span>C  THE DEFINITION OF RWE (SEE ABOVE) AND REFINEMENTS OF THE COEFFICIENTS
+<span class="ln">614</span>C  IN THE EXPRESSIONS FOR PFMC2 AND EFMKT.
+<span class="ln">615</span>      PFMC2=1.017677D-4*RWE**CC23
+<span class="ln">616</span>      EFMKT=5.92986D0*T9M1*(DSQRT(1.+PFMC2)-1.)
+<span class="ln">617</span>      IF(EFMKT.LE.1.E-2) THEN
+<span class="ln">618</span>         FPRF=1.0
+<span class="ln">619</span>      ELSE
+<span class="ln">620</span>         DEGD=DLOG10(EFMKT)
+<span class="ln">621</span>         IF(DEGD.GE.1.5) THEN
+<span class="ln">622</span>            FPRF=0.0
+<span class="ln">623</span>         ELSE
+<span class="ln">624</span>            FPRF=0.75793D0-0.54621D0*DEGD-0.30964D0*DEGD**2+0.12535D0*DEGD**3+
+<span class="ln">625</span>     *      0.1203D0*DEGD**4-0.012857D0*DEGD**5-0.014768D0*DEGD**6
+<span class="ln">626</span>         ENDIF
+<span class="ln">627</span>      ENDIF
+<span class="ln">628</span>C END OF CALCULATION OF FERMI ENERGY DIVIDED BY KT AND THE INTERPOLATION
+<span class="ln">629</span>C  FORMULA FOR (F PRIME/F), WHICH APPEARS IN SALPETER&#x27;S SCREENING
+<span class="ln">630</span>C  FORMULA.
+<span class="ln">631</span>C NOW WE GET TO THE COMPUTATION OF WEAK SCREENING (SEE ALSO PAGE 61 OF
+<span class="ln">632</span>C  NEUTRINO ASTROPHYSICS, WHICH GIVES ONLY A SIMPLIFIED FORMULA) AND
+<span class="ln">633</span>C  ALSO THE MORE COMPLICATED INTERMEDIATE AND STRONG SCREENING CASES
+<span class="ln">634</span>C  (SEE REFERENCES TO AP. J. 181 ABOVE FOR INTERMEDIATE
+<span class="ln">635</span>C  AND STRONG SCREENING), ESPECIALLY PAGE 465.
+<span class="ln">636</span>C XXL IS USED IN ALL THE SCREENING FORMULAE.  THIS QUANTITY IS THE
+<span class="ln">637</span>C  IS THE FUNCTION CALLED LAMBDA SUB ZERO BY GRABOSKE ET AL. THE
+<span class="ln">638</span>C  QUANTITY XXL**0.86 = XXL8 IS USED IN CALCULATING INTERMEDIATE
+<span class="ln">639</span>C  SCREENING.
+<span class="ln">640</span>C ZCURL IS THE QUANTITY DEFINED BY EQUATION (4) OF DEWITT ET AL; IT
+<span class="ln">641</span>C  IS THEIR Z WITH A CURLY SYMBOL ON ITS TOP. ZCURL IS USED IN WEAK
+<span class="ln">642</span>C  AND IN INTERMEDIATE SCREENING AND WAS FIRST DEFINED BY SALPETER.
+<span class="ln">643</span>C  ZCURL IS THE SAME AS SALPETER&#x27;S ZETA EXCEPT FOR THE FACTOR OF 1/AMU.
+<span class="ln">644</span>C (Z SUB 1 TIMES Z SUB 2)*XXL*ZCURL GIVES THE WEAK SCREENING FACTOR,
+<span class="ln">645</span>C  THE SAME AS SALPETER OR AS EQUATION (19) OF GRABOSKE ET AL.
+<span class="ln">646</span>C Z BAR IS THE SAME AS Z BAR OF DE WITT ET AL AND IS THE AVERAGE CHARGE
+<span class="ln">647</span>C  OF THE IONS.  IT IS EQUAL TO EMU/AMU.  THE QUANTITY (Z BAR)**0.28 =
+<span class="ln">648</span>C  Z28 OCCURS IN THE COMPUTATION OF INTERMEDIATE SCREENING.
+<span class="ln">649</span>C XXL6 IS USED FOR COMPUTING STRONG STRONG SCREENING.
+<span class="ln">650</span>C THE NOTATION USED HERE IS EXPLAINED IN LARGE PART BY
+<span class="ln">651</span>C  EQUATION (4) OF DEWITT ET AL., AP. J. 181, PAGE 439.
+<span class="ln">652</span>C THE FINAL EXPRESSION FOR WEAK SCREENING IS EXACTLY EQUAL TO SALPETER&#x27;S
+<span class="ln">653</span>C  FORMULA, WHICH INCLUDES A DEGENERACY CORRECTION. THE MORE GENERAL
+<span class="ln">654</span>C  EXPRESSIONS ARE GIVEN IN TABLE 4 AND EQUATION (19) OF GRABOSKE ET AL.
+<span class="ln">655</span>      XXL=5.9426D-6*T9M32*DSQRT(RHO*AMU)
+<span class="ln">656</span>      XXL6=XXL**CC23
+<span class="ln">657</span>      XXL8=XXL**0.86D0
+<span class="ln">658</span>      ZCURL=DSQRT((ZET+FPRF*EMU)/AMU)
+<span class="ln">659</span>      ZBAR=EMU/AMU
+<span class="ln">660</span>      Z58=ZCURL**0.58D0
+<span class="ln">661</span>      Z28=ZBAR**0.28D0
+<span class="ln">662</span>      Z33=ZBAR**CC13
+<span class="ln">663</span>      TM1=XXL*ZCURL
+<span class="ln">664</span>C COMPUTE SCREENING FOR EACH OF THE REACTIONS.
+<span class="ln">665</span>      DO 30 I=1,NRXNS
+<span class="ln">666</span>         UWK=TM1*ZPRD(I)
+<span class="ln">667</span>         IF(UWK.LE.WEAKSCREENING) THEN
+<span class="ln">668</span>C WEAKSCREENING IS A NUMERICAL PARAMETER PASSED IN THE FLUX COMMON
+<span class="ln">669</span>C  BLOCK. TO OBTAIN THE GRABOSKE ET AL. AND SALPETER STANDARD RESULTS,
+<span class="ln">670</span>C  USE: WEAKSCREENING = 0.03.  FOR THE STANDARD SOLAR MODEL, THIS IS THE
+<span class="ln">671</span>C  VALUE THAT SHOULD BE ADOPTED. TO INVESTIGATE THE EFFECT OF ALWAYS USING
+<span class="ln">672</span>C  WEAK SCREENING, USE A LARGE VALUE FOR WEAKSCREENING, E. G., 30.  AS
+<span class="ln">673</span>C  LONG AS WEAKSCREENING IS ASSUMED TO BE BIGGER THAN ONE, THE PROGRAM
+<span class="ln">674</span>C  WILL ALWAYS CALCULATE FOR THE SUN WITH THE WEAK SCREENING
+<span class="ln">675</span>C  APPROXIMATION.
+<span class="ln">676</span>C UTOT IS THE FINAL SCREENING CORRECTION WHICH APPEARS IN THE
+<span class="ln">677</span>C  RATE EXPRESSION AS: EXP(UTOT) .
+<span class="ln">678</span>C DSCR IS THE LOGARITHMIC DERIVATIVE WITH RESPECT TO DENSITY OF THE
+<span class="ln">679</span>C  SCREENING CORRECTION, D LOG (E^(U_TOT)) /D LOG RHO .
+<span class="ln">680</span>C DSCT IS THE LOGARITHMIC DERIVATIVE OF THE SCREENING WITH RESPECT TO T,
+<span class="ln">681</span>C D LOG (E^(U_TOT)) /D LOG T .  THE LIMITING FORMULAE GIVEN IN THE FIRST
+<span class="ln">682</span>C OPTION ARE OBVIOUS SINCE IN THE WEAK LIMIT SALPETER&#x27;S FORMULA SHOWS
+<span class="ln">683</span>C THAT U IS PROPORTIONAL TO THE SQUARE ROOT OF RHO TIMES T^(-3/2).
+<span class="ln">684</span>            UTOT(I)=UWK
+<span class="ln">685</span>            DSCR(I)=0.5*UWK
+<span class="ln">686</span>            DSCT(I)=-1.5*UWK
+<span class="ln">687</span>         ELSE
+<span class="ln">688</span>            UINT=0.38D0*XXL8*XTR*Z86(I)/(AMU*Z58*Z28)
+<span class="ln">689</span>            IF(UWK.LE.2.) THEN
+<span class="ln">690</span>               UTOT(I)=UINT
+<span class="ln">691</span>               DSCR(I)=0.43D0*UINT
+<span class="ln">692</span>               DSCT(I)=-1.29D0*UINT
+<span class="ln">693</span>            ELSE
+<span class="ln">694</span>               USTR=0.624D0*Z33*XXL6*(Z53(I)+0.316D0*Z33*Z43(I)+0.737D0*
+<span class="ln">695</span>     *         Z23(I)/(ZBAR*XXL6))
+<span class="ln">696</span>               IF(USTR.LT.UINT.OR.UWK.GE.5.) THEN
+<span class="ln">697</span>                  UTOT(I)=USTR
+<span class="ln">698</span>                  DSCR(I)=0.208D0*Z33*(Z53(I)+0.316D0*Z33*Z43(I))*XXL6
+<span class="ln">699</span>                  DSCT(I)=-3.*DSCR(I)
+<span class="ln">700</span>               ELSE
+<span class="ln">701</span>                  UTOT(I)=UINT
+<span class="ln">702</span>                  DSCR(I)=0.43D0*UINT
+<span class="ln">703</span>                  DSCT(I)=-1.29D0*UINT
+<span class="ln">704</span>               ENDIF
+<span class="ln">705</span>            ENDIF
+<span class="ln">706</span>         ENDIF
+<span class="ln">707</span>   30 CONTINUE
+<span class="ln">708</span>C ****************************************************************
+<span class="ln">709</span>C END OF SCREENING CALCULATION. WEAK AND INTERMEDIATE SCREENING FORMS
+<span class="ln">710</span>C  ARE GIVEN CORRECTLY.  STRONG SCREENING WAS NOT CHECKED BECAUSE IT IS
+<span class="ln">711</span>C  NOT RELEVANT FOR THE SUN.
+<span class="ln">712</span>C ****************************************************************
+<span class="ln">713</span>      NZ=1
+<span class="ln">714</span>      IF(X.EQ.0.0) THEN
+<span class="ln">715</span>         F1=0.
+<span class="ln">716</span>         F2=0.
+<span class="ln">717</span>         F3=0.
+<span class="ln">718</span>         F4=0.
+<span class="ln">719</span>         GOTO 50
+<span class="ln">720</span>      ENDIF
+<span class="ln">721</span>      NZ=8
+<span class="ln">722</span>C **************************************************************
+<span class="ln">723</span>C  CALCULATE REACTION RATES FOR THE THREE PRINCIPAL RECTIONS OF
+<span class="ln">724</span>C   THE PP CHAIN: PP, HE3+HE3, HE3 +HE4, AND THE FOUR PROTON
+<span class="ln">725</span>C   BURNING REACTIONS ON C12: C13, N14, AND O16.
+<span class="ln">726</span>C **************************************************************
+<span class="ln">727</span>C R1 IS (T SUB 9)^(-3/2) TIMES (S SUB EFF)/(S SUB 0). THE CORRECT
+<span class="ln">728</span>C  EXPRESSION FOR (S SUB EFF)/(S SUB 0) IS GIVEN IN EQUATION 3.14 OF
+<span class="ln">729</span>C  NEUTRINO ASTROPHYSICS.  THE NUMERICAL FORM THAT IS USED IS EQUATION
+<span class="ln">730</span>C  52 OF FOWLER, CAUHLAN, AND ZIMMERMAN, VOL. 5, 1967.
+<span class="ln">731</span>C RATE(I) IS THE RATE OF THE DIFFERENT REACTIONS PER SECOND PER GRAM,
+<span class="ln">732</span>C  EXCEPT THAT THE MASS FRACTIONS ARE OMITTED AT THIS POINT AND PUT IN
+<span class="ln">733</span>C  LATER.
+<span class="ln">734</span>C DRATT IS LOGARITHMIC DERIVATIVE OF RATE WITH RESPECT TO TEMPERATURE,
+<span class="ln">735</span>C  D LOG RATE DIVIDED BY D LOG T, LOG TO BASE 10.
+<span class="ln">736</span>C DRATRO IS THE LOGARITHMIC DERIVATIVE OF THE RATE WITH RESPECT TO
+<span class="ln">737</span>C  DENSITY, D LOG RATE/D LOG RHO, LOG TO BASE 10.
+<span class="ln">738</span>C THE PREVIOUS YALE VERSION HAD THE RATE FOR THE O16 + P REACTION
+<span class="ln">739</span>C  MULTIPLIED BY T9**(-1/7). THIS FACTOR IS INCORRECT AND HAS BEEN
+<span class="ln">740</span>C  REMOVED; IT APPEARED BEFORE AS AN IF STATEMENT REFERRING ONLY TO
+<span class="ln">741</span>C  RATE(7).
+<span class="ln">742</span>      DO 40 I=1,7
+<span class="ln">743</span>C         R1=T9M23+Q1(I)*T9M13+Q2(I)+Q3(I)*T9P13+Q4(I)*T9P23+Q5(I)*T9
+<span class="ln">744</span>C MHP 8/14 RATES CORRECTED TO PERMIT USER MODIFICATION OF REACTION
+<span class="ln">745</span>C RATE DERIVATIVES
+<span class="ln">746</span>         R1=T9M23+Q1(I)*T9M13+QS0E(I)*(Q2(I)+Q3(I)*T9P13)+
+<span class="ln">747</span>     *      QQS0EE(I)*(Q4(I)*T9P23+Q5(I)*T9)
+<span class="ln">748</span>         RATE(I)=RHO*R1*EXP(Q6(I)*T9M13+Q7(I)+(Q8(I)*T9)**2+UTOT(I))
+<span class="ln">749</span>         RATE(I) = RATE(I)*SSTANDARD(I)
+<span class="ln">750</span>         IF(RATE(I).LT.1.E-30) THEN
+<span class="ln">751</span>            RATE(I)=0.
+<span class="ln">752</span>            DRATT(I)=0.
+<span class="ln">753</span>         ELSE
+<span class="ln">754</span>            DRATRO(I)=1.+DSCR(I)
+<span class="ln">755</span>            DRATT(I)=DSCT(I)-(Q6(I)*T9M13+(2.*T9M23+Q1(I)*T9M13-Q3(I)*
+<span class="ln">756</span>     *      T9P13-2.*Q4(I)*T9P23-3.*Q5(I)*T9)/R1)/3.+2.*(Q8(I)*T9)**2
+<span class="ln">757</span>         ENDIF
+<span class="ln">758</span>   40 CONTINUE
+<span class="ln">759</span>C ***************************************************************
+<span class="ln">760</span>C END OF CALCULATION OF REACTION RATES FOR FIRST 7 REACTIONS.
+<span class="ln">761</span>C ***************************************************************
+<span class="ln">762</span>C ***********************************************
+<span class="ln">763</span>C BE7 BURNING
+<span class="ln">764</span>C ***********************************************
+<span class="ln">765</span>C CALCULATE THE BURNING OF BE7 BY PROTONS (WHICH PRODUCES THE MOST
+<span class="ln">766</span>C  EXPERIMENTALLY ACCESSIBLE SOLAR NEUTRINOS) AND THE BURNING OF BE7
+<span class="ln">767</span>C  BY ELECTRON CAPTURE (THE DOMINANT PROCESS).
+<span class="ln">768</span>C  THE ELECTRON CAPTURE RATE IN SEC^(-1) IS GIVEN BY EQUATION (3.18) OF
+<span class="ln">769</span>C  NEUTRINO ASTROPHYSICS.  CAN OMIT THE FACTOR OF RHO (IN CGS UNITS)
+<span class="ln">770</span>C  WHICH ALSO APPEARS IN THE BE7PROTON RATE. THE BE7 PROTON CAPTURE
+<span class="ln">771</span>C  RATE IS GIVEN BY TABLE 3.2 AND EQUATION (3.12).  NOTE THAT 1 OVER MU
+<span class="ln">772</span>C  SUB E IS EQUAL TO EMU.
+<span class="ln">773</span>C HERE WE USE THE NOTATION BE7 + PROTON = BE7PROTON AND
+<span class="ln">774</span>C  BE7 + E = BE7ELECTRON.
+<span class="ln">775</span>C F1 IS THE FRACTION OF THE BE7 THAT IS BURNED BY ELECTRON CAPTURE.
+<span class="ln">776</span>C F2 IS THE FRACTION OF THE BE7 THAT IS BURNED BY PROTON CAPTURE.
+<span class="ln">777</span>C F3 IS THE FRACTION OF THE N14 THAT IS BURNED BY P, ALPHA REACTION.
+<span class="ln">778</span>C F4 IS THE FRACTION OF THE N15 THAT IS BURNED BY P, GAMMA REACTION.
+<span class="ln">779</span>C SEE TABLE 21 OF BAHCALL AND ULRICH (1988), REV. MOD. PHYS. 60.
+<span class="ln">780</span>c 10/13/97. I changed Temp3 (i.e., tau) by 5/10^5 as a result of
+<span class="ln">781</span>c using bare nuclear masses. Previously coefficient was -10.26202.
+<span class="ln">782</span>c I did not change Be7electron for the slightly different S0 for
+<span class="ln">783</span>c electron capture, since that is done in SStandard. Previous coefficient
+<span class="ln">784</span>c in Be7electron expression was (3.126571E+5). 10/14/97.
+<span class="ln">785</span>c
+<span class="ln">786</span>         BE7ELECTRON = (1.752D-10)*T9M12*(1.0 + 0.004D0*(1000.*T9 - 16.))
+<span class="ln">787</span>         BE7ELECTRON = BE7ELECTRON*EMU*SSTANDARD(15)
+<span class="ln">788</span>         TEMP3 = (-10.2625D0*T9M13)
+<span class="ln">789</span>         BE7PROTON = (3.128813D+5)*X*SSTANDARD(16)*EXP(TEMP3)
+<span class="ln">790</span>C INCLUDE FOR BE7PROTON THE T9M23 FACTOR AND ALL CORRECTIONS PROPORTIONAL TO
+<span class="ln">791</span>C  Q1,...,Q5 FROM EQUATION 3.14 OF NEUTRINO ASTROPHYSICS. THESE
+<span class="ln">792</span>C  CORRECTIONS ARE DEFINED EARLIER IN THIS SUBROUTINE.
+<span class="ln">793</span>C         QRBE7 = T9M23 + Q1(8)*T9M13 + Q2(8)+ Q3(8)*T9P13
+<span class="ln">794</span>C     $          + Q4(8)*T9P23 + Q5(8)*T9
+<span class="ln">795</span>C MHP 9/14 ADDED THE ABILITY TO ALTER DERIVATIVES INDEPENDENTLY
+<span class="ln">796</span>         QRBE7 = T9M23 + Q1(8)*T9M13 + QS0E(8)*(Q2(8)+ Q3(8)*T9P13)
+<span class="ln">797</span>     $          + QQS0EE(8)*(Q4(8)*T9P23 + Q5(8)*T9)
+<span class="ln">798</span>         BE7PROTON = BE7PROTON*QRBE7
+<span class="ln">799</span>C CALCULATE THE SCREENING CORRECTION FOR BE7 + P REACTION.  USE WEAK AND
+<span class="ln">800</span>C  INTERMEDIATE SCREENING FORMULAE.
+<span class="ln">801</span>         ZPRDBE7P = 4.0
+<span class="ln">802</span>         Z86BE7P = 5.7790D0
+<span class="ln">803</span>         UWK = TM1*ZPRDBE7P
+<span class="ln">804</span>         IF(UWK.LE.WEAKSCREENING) THEN
+<span class="ln">805</span>            UTOTBE7P = UWK
+<span class="ln">806</span>         ELSE
+<span class="ln">807</span>            UINT = 0.38D0*XXL8*XTR*Z86BE7P/(AMU*Z58*Z28)
+<span class="ln">808</span>            UTOTBE7P = UINT
+<span class="ln">809</span>          END IF
+<span class="ln">810</span>         BE7PROTON = BE7PROTON*EXP(UTOTBE7P)
+<span class="ln">811</span>C END OF CALCULATION OF SCREENING CORRECTION FOR BE7 + P REACTION.
+<span class="ln">812</span>C MULTIPLY RATES BY FACTOR OF RHO/[(ATOMIC MASS UNIT)*A(BE7)] TO GET
+<span class="ln">813</span>C  IN UNITS OF GM^{-1}.  CALL FACTOR CAMUBE7. Corrected for Be7 bare
+<span class="ln">814</span>c  mass number. Previously used 8.582295E+22 in the expression below.
+<span class="ln">815</span>c  These corrections were made on 10/14/97.
+<span class="ln">816</span>c
+<span class="ln">817</span>         CAMUBE7 = RHO*8.584981D+22
+<span class="ln">818</span>         BE7PROTON = CAMUBE7*BE7PROTON
+<span class="ln">819</span>         BE7ELECTRON = CAMUBE7*BE7ELECTRON
+<span class="ln">820</span>C END OF MULTIPLICATION INSERTED NOVEMBER 6, 1990.
+<span class="ln">821</span>         F1 = BE7ELECTRON/(BE7ELECTRON + BE7PROTON)
+<span class="ln">822</span>         F2 = BE7PROTON/(BE7ELECTRON + BE7PROTON)
+<span class="ln">823</span>C *********************************************************************
+<span class="ln">824</span>C END OF CALCULATION OF CRUCIAL BE7 ELECTRON CAPTURE AND PROTON CAPTURE
+<span class="ln">825</span>C  RATES AND THEIR RATIO.
+<span class="ln">826</span>C *********************************************************************
+<span class="ln">827</span>C ***************************
+<span class="ln">828</span>C N15 + P BRANCHING.
+<span class="ln">829</span>C ***************************
+<span class="ln">830</span>C THE FOLLOWING STATEMENTS COMPUTE THE BRANCHING OF N15(P,ALPHA)C12
+<span class="ln">831</span>C  AND N15(P,GAMMA)O16. THESE STATEMENTS REPLACE OUTDATED STATEMENTS
+<span class="ln">832</span>C  IN THE YALE CODE. THE CNO CROSS-SECTION FACTORS ARE FROM TABLE 3.4
+<span class="ln">833</span>C  OF NEUTRINO ASTROPHYSICS.  THE RATIO OF THE REACTIONS DEPENDS ONLY
+<span class="ln">834</span>C  UPON THE EFFECTIVE ZERO ENERGY S-FACTOR, WHICH IS S0(ZERO ENERGY)
+<span class="ln">835</span>C  TIMES THE COMBINATION OF TEMPERATURE AND S-FACTOR DERIVATIVES/S0
+<span class="ln">836</span>C  THAT WAS USED PREVIOUSLY AS R1 IN THE RATE CALCULATIONS. THE
+<span class="ln">837</span>C  NUMERICAL COEFFICIENTS THAT APPEAR IN THE RATE WERE REPRESENTED
+<span class="ln">838</span>C  BY THE Q1(J),...Q5(J) FOR THE OTHER REACTIONS.
+<span class="ln">839</span>C  THE QVALUES FOR THE N15 REACTIONS HAVE BEEN COMPUTED SEPARATELY.
+<span class="ln">840</span>C DBG 8/94 APPLIED MHP UPDATE TO NUCLEAR REACTIONS
+<span class="ln">841</span>c  To agree with Solar Fusion Workshop paper, the value of S0 in keV-b
+<span class="ln">842</span>c  has been changed from 78000. to 675000. on 9/25/97. On 10/14/97,
+<span class="ln">843</span>c  JNB changed cues.f so as to compute the Q-coefficients for the N15 + p
+<span class="ln">844</span>c  reactions.  Also, checked that the coefficients are the same as the
+<span class="ln">845</span>c  ones given earlier in energy.f when we use the older CNO data.
+<span class="ln">846</span>c
+<span class="ln">847</span>      O16GAMMA = T9M23 + 0.0273016D0*T9M13 + 0.14374D0 + 0.027490D0*T9P13
+<span class="ln">848</span>     $          + 6.14685D0*T9P23 + 2.98940D0*T9
+<span class="ln">849</span>C MULTIPLY BY THE VALUE OF S0 IN KEV-B.
+<span class="ln">850</span>C      O16GAMMA = O16GAMMA*64.
+<span class="ln">851</span>C MHP 9/14 ADDED THE OPTION TO MODIFY THE RELATIVE CROSS SECTIONS
+<span class="ln">852</span>C FOR N15+P -&gt; C12+ALPHA AND O16+GAMMA
+<span class="ln">853</span>      O16GAMMA = O16GAMMA*64*FO16
+<span class="ln">854</span>C
+<span class="ln">855</span>      C12ALPHA = T9M23 + 0.0273016D0*T9M13 + 2.01186D0 + 0.384763D0*T9P13
+<span class="ln">856</span>     $          + 17.0579D0*T9P23 + 8.29580D0*T9
+<span class="ln">857</span>C      C12ALPHA = C12ALPHA*67500
+<span class="ln">858</span>      C12ALPHA = C12ALPHA*67500*FC12
+<span class="ln">859</span>      F3 = C12ALPHA/(C12ALPHA + O16GAMMA)
+<span class="ln">860</span>      F4 = 1.0D0 - F3
+<span class="ln">861</span>C END OF NEW ROUTINE FOR THE BRANCHING OF N15 + P .
+<span class="ln">862</span>   50 DO 60 I=NZ,NRXNS
+<span class="ln">863</span>         RATE(I)=0.
+<span class="ln">864</span>         DRATRO(I)=0.
+<span class="ln">865</span>         DRATT(I)=0.
+<span class="ln">866</span>   60 CONTINUE
+<span class="ln">867</span>C***MHP 3/91 ALPHA CAPTURE REACTIONS UPDATED TO CAUGHLAN AND FOWLER(1988)
+<span class="ln">868</span>C   RATES.  THE RATES ARE EXPRESSED IN THE SAME TERMS USED BY CZ, WITH
+<span class="ln">869</span>C   THE CONVERSION FACTOR IN THE FRONT OBTAINED FROM VANDENBERG&#x27;S
+<span class="ln">870</span>C   NOTES ON THE REACTION RATES.
+<span class="ln">871</span>C  RATE(8)  HE4+C13
+<span class="ln">872</span>C  RATE(10) HE4+C12=&gt;O16
+<span class="ln">873</span>C  RATE(11) HE4+N14=&gt;O18
+<span class="ln">874</span>C  RATE(12) TRIPLE ALPHA
+<span class="ln">875</span>      IF(TL.LT.TCUT(4)) GO TO 100
+<span class="ln">876</span>C C13(ALPHA,N) O16
+<span class="ln">877</span>      R1=T9M23+0.0129D0*T9M13+2.04D0+0.184D0*T9P13
+<span class="ln">878</span>      A1 = 6.77D15*EXP(-32.329D0*T9M13-(T9/1.284D0)**2)
+<span class="ln">879</span>      A2 = 3.82D5*EXP(-9.373D0*T9M1)
+<span class="ln">880</span>      A3 = 1.41D6*EXP(-11.873D0*T9M1)
+<span class="ln">881</span>      A4 = 2.00D9*EXP(-20.409D0*T9M1)
+<span class="ln">882</span>      A5 = 2.92D9*EXP(-29.283D0*T9M1)
+<span class="ln">883</span>      RATE(8) = 1.157126D22*RHO*EXP(UTOT(8))*(A1*R1+T9M32*(A2+A3+A4+A5))
+<span class="ln">884</span>      DRATRO(8)=1.0D0+DSCR(8)
+<span class="ln">885</span>      DR1 = CC13*(-2.0D0*T9M23-0.0129D0*T9M13+0.184D0*T9P13)
+<span class="ln">886</span>      DA1 = A1*(CC13*32.329D0*T9M13 - 2.0D0*(T9/1.284D0)**2)
+<span class="ln">887</span>      DRATT(8) = DSCT(8)+RHO/RATE(8)*(DR1*A1 + R1*DA1 +
+<span class="ln">888</span>     *           A2*(9.373D0*T9M1-1.5D0)+A3*(11.873D0*T9M1-1.5D0)+
+<span class="ln">889</span>     *           A4*(20.409D0*T9M1-1.5D0)+A5*(29.283D0*T9M1-1.5D0))
+<span class="ln">890</span>C C12(ALPHA,GAMMA)O16
+<span class="ln">891</span>      R1 = 1.0D0/(1.0D0+0.0489D0*T9M23)
+<span class="ln">892</span>      R2 = 1.0D0/(1.0D0+0.2654D0*T9M23)
+<span class="ln">893</span>      A1 = T9M2*EXP(-32.120D0*T9M13)
+<span class="ln">894</span>      A2 = 1.04D8*R1**2*EXP(-(T9/3.496D0)**2)
+<span class="ln">895</span>      A3 = 1.76D8*R2**2
+<span class="ln">896</span>      A4 = 1.25D3*T9M32*EXP(-27.499D0*T9M1)
+<span class="ln">897</span>      A5 = 1.43D-2*T9**5*EXP(-15.541D0*T9M1)
+<span class="ln">898</span>      RATE(10) = 1.25388D22*RHO*EXP(UTOT(10))*(A1*(A2+A3)+A4+A5)
+<span class="ln">899</span>      DRATRO(10) = 1.0D0+DSCR(10)
+<span class="ln">900</span>      DRATT(10) = DSCT(10)+RHO/RATE(10)*(A1*((CC13*32.120D0*T9M13-2.0D0)*
+<span class="ln">901</span>     *            (A2+A3)+A2*(R1*CC13*0.1956D0-2.0D0*(T9/3.496D0)**2)+A3*
+<span class="ln">902</span>     *            (CC13*1.0616D0*R2))+A4*(27.499D0*T9M1-1.5D0)+A5*
+<span class="ln">903</span>     *            (5.0D0+15.541D0*T9M1))
+<span class="ln">904</span>C N14(ALPHA,GAMMA)F18 + F18=&gt;O18+EPLUS+NU
+<span class="ln">905</span>      R1 = T9M23+0.012D0*T9M13+1.45D0+0.177D0*T9P13+1.97D0*T9P23
+<span class="ln">906</span>     *     +0.406D0*T9
+<span class="ln">907</span>      A1 = 7.78D9*EXP(-36.031D0*T9M13-(T9/0.881D0)**2)
+<span class="ln">908</span>      A2 = T9M32*2.36D-10*EXP(-2.798D0*T9M1)
+<span class="ln">909</span>      A3 = T9M32*2.03D0*EXP(-5.054D0*T9M1)
+<span class="ln">910</span>      A4 = T9M23*1.15D4*EXP(-12.310D0*T9M1)
+<span class="ln">911</span>      RATE(11)= 1.07452D22*RHO*EXP(UTOT(11))*(A1*R1+A2+A3+A4)
+<span class="ln">912</span>      DRATRO(11)=1.+DSCR(11)
+<span class="ln">913</span>      DR1 = CC13*(-2.0D0*T9M23-0.012D0*T9M13+0.177D0*T9P13+
+<span class="ln">914</span>     *      3.94D0*T9P23)+0.406D0*T9
+<span class="ln">915</span>      DA1 = A1*(CC13*36.031D0*T9M13-2.0D0*(T9/0.881D0)**2)
+<span class="ln">916</span>      DRATT(11) = DSCT(11)+RHO/RATE(11)*(DR1*A1+R1*DA1+A2*
+<span class="ln">917</span>     *            (2.798D0*T9M1-1.5D0)+A3*(5.054D0*T9M1-1.5D0)+
+<span class="ln">918</span>     *            A4*(12.310D0*T9M1-CC23))
+<span class="ln">919</span>C TRIPLE ALPHA
+<span class="ln">920</span>      RATE(12) = 1.565315D21*RHO**2*T9M1*T9M2*2.79D-8*
+<span class="ln">921</span>     *           EXP(-4.4027D0*T9M1+UTOT(12))
+<span class="ln">922</span>      DRATRO(12) = 2.0D0+DSCR(12)
+<span class="ln">923</span>      DRATT(12) = -3.0D0+DSCT(12)+4.4027D0*T9M1
+<span class="ln">924</span>C *******************
+<span class="ln">925</span>C EG(I)
+<span class="ln">926</span>C *******************
+<span class="ln">927</span>C MULTIPLY THE RATES PER GRAM, RATE(I), BY THE ABUNDANCES OF THE
+<span class="ln">928</span>C  REACTING SPECIES BY MASS, TO GET THE TOTAL RATES PER GRAM, EG.
+<span class="ln">929</span>  100 EG(1)=RATE(1)*X*X
+<span class="ln">930</span>C MHP 5/02 ADD DEUTERIUM BURNING IF RELEVANT
+<span class="ln">931</span>      IF(XH2.GT.1.0D-11)THEN
+<span class="ln">932</span>         EGDEUT = RDEUT*X*XH2
+<span class="ln">933</span>      ELSE
+<span class="ln">934</span>         EGDEUT = 0.0D0
+<span class="ln">935</span>      ENDIF
+<span class="ln">936</span>      EG(2)=RATE(2)*XHE3*XHE3
+<span class="ln">937</span>      EG(3)=RATE(3)*XHE3*Y
+<span class="ln">938</span>      EG(4)=RATE(4)*X*XC12
+<span class="ln">939</span>      EG(5)=RATE(5)*X*XC13
+<span class="ln">940</span>      EG(6)=RATE(6)*X*XN14
+<span class="ln">941</span>      EG(7)=RATE(7)*X*XO16
+<span class="ln">942</span>      EG(8)=RATE(8)*Y*XC13
+<span class="ln">943</span>C     EG(9)=RATE(9)*Y*X016
+<span class="ln">944</span>      EG(10)=RATE(10)*Y*XC12
+<span class="ln">945</span>      EG(11)=RATE(11)*Y*XN14
+<span class="ln">946</span>      EG(12)=RATE(12)*Y**3
+<span class="ln">947</span>C     EG(13)=RATE(13)*XC12*XC12
+<span class="ln">948</span>C ******************************************************************
+<span class="ln">949</span>C ****************************************
+<span class="ln">950</span>C ENERGY GENERATION.
+<span class="ln">951</span>C ****************************************
+<span class="ln">952</span>C CALCULATE ENERGY GENERATION BY MULTIPLYING RATES PER GRAM PER SEC BY
+<span class="ln">953</span>C  THE ENERGY RELEASE.  THE ENERGIES ARE TAKEN FROM TABLE 21 OF BAHCALL AND
+<span class="ln">954</span>C  ULRICH (1988), REV. MOD. PHYS. 60, 297. THIS TABLE IS BASED UPON A CAREFUL
+<span class="ln">955</span>C  CALCULATION OF THE AVERAGE AMOUNT OF ENERGY LOSS BY NEUTRINOS FOR
+<span class="ln">956</span>C  EACH REACTION. THE NUMBERS FOR THE C12 + P REACTION SEQUENCE AND THE
+<span class="ln">957</span>C  C13 + P REACTION ARE BROKEN DOWN SEPARATELY FOR THIS
+<span class="ln">958</span>C  SUBROUTINE.
+<span class="ln">959</span>C THE FINAL NUMBERS ARE IN ERG PER GM PER SECOND.
+<span class="ln">960</span>C DEFINE THE CONSTANT TO CONVERT MEV&#x27;S TO ERGS. THE NUMBERS THAT APPEAR
+<span class="ln">961</span>C  ARE IN MEV SO THEY CAN BE EASILY IDENTIFIED.
+<span class="ln">962</span>      CONVERT = 1.602177D-6
+<span class="ln">963</span>C THE MULTIPLYING CONSTANTS BELOW ARE IN MEV.
+<span class="ln">964</span>c  JNB changed the pp energy release by 0.002 MeV because of a better
+<span class="ln">965</span>c  estimate of the neutrino energy loss on 9/25/97. See pg. 139 of
+<span class="ln">966</span>c  Vol. 19 of my notes.  On pgs. 139-141, I document other small changes
+<span class="ln">967</span>c  to this energy generation. No large changes; all of order keV changes
+<span class="ln">968</span>c  except for the rare 8B reaction.  9/28/97.
+<span class="ln">969</span>c
+<span class="ln">970</span>      DG(1)=EG(1)*6.664D0*CONVERT
+<span class="ln">971</span>C MHP 5/02 ADD DEUTERIUM BURNING
+<span class="ln">972</span>      IF(XH2.GT.1.0D-11)THEN
+<span class="ln">973</span>         DGDEUT = EGDEUT*QDEUT*CONVERT
+<span class="ln">974</span>      ELSE
+<span class="ln">975</span>         DGDEUT = 0.0D0
+<span class="ln">976</span>      ENDIF
+<span class="ln">977</span>      DG(2)=EG(2)*12.860D0*CONVERT
+<span class="ln">978</span>      DG(3)=EG(3)*(1.586D0+F1*17.394D0+F2*11.499D0)*CONVERT
+<span class="ln">979</span>      DG(4)=EG(4)*3.457372D0*CONVERT
+<span class="ln">980</span>      DG(5)=EG(5)*7.550628D0*CONVERT
+<span class="ln">981</span>      DG(6)=EG(6)*(9.054D0+F3*4.966D0+F4*12.128D0)*CONVERT
+<span class="ln">982</span>      DG(7)=EG(7)*3.553D0*CONVERT
+<span class="ln">983</span>      DG(8)=EG(8)*2.216D0*CONVERT
+<span class="ln">984</span>      DG(10)=EG(10)*7.162D0*CONVERT
+<span class="ln">985</span>      DG(11)=EG(11)*5.815D0*CONVERT
+<span class="ln">986</span>      DG(12)=EG(12)*7.275D0*CONVERT
+<span class="ln">987</span>C JVS 10/11 Need to grab He3 energy generation
+<span class="ln">988</span>      ENGHE3 = DG(2)
+<span class="ln">989</span>      HE3ALL = DG(2)+DG(3)
+<span class="ln">990</span>C JVS end
+<span class="ln">991</span>
+<span class="ln">992</span>C *******************************************************************
+<span class="ln">993</span>C END OF CALCULATION OF ENERGY RELEASE.
+<span class="ln">994</span>C *******************************************************************
+<span class="ln">995</span>C SET TO ZERO O16+ALPHA AND C12+C12 RATES.
+<span class="ln">996</span>      DRATRO(9) = 0.0
+<span class="ln">997</span>      DRATT(9) = 0.0
+<span class="ln">998</span>      DG(9) = 0.0
+<span class="ln">999</span>      DRATRO(13) = 0.0
+<span class="ln">1000</span>      DRATT(13) = 0.0
+<span class="ln">1001</span>      DG(13) = 0.0
+<span class="ln">1002</span>C END OF XEROING OUT OF REACTIONS 9 AND 13.
+<span class="ln">1003</span>      SUM1=0.0
+<span class="ln">1004</span>      SUM2=0.0
+<span class="ln">1005</span>      SUM3=0.0
+<span class="ln">1006</span>      DO 110 I=1,NRXNS
+<span class="ln">1007</span>C *******************************************************************
+<span class="ln">1008</span>C SUM OF THE TOTAL ENERGY GENERATION IN ERGS PER GRM PER SECOND WITH
+<span class="ln">1009</span>C DERIVATIVES WITH RESPECT TO DENSITY AND TO TEMPERATURE.
+<span class="ln">1010</span>C *******************************************************************
+<span class="ln">1011</span>C SUM1 = SUM OF ALL ENERGY GENERATION RATES. NOTE THAT THE BURNING OF
+<span class="ln">1012</span>C  BE7 IS INCLUDED IN DG(3) ABOVE.
+<span class="ln">1013</span>C SUM2 = SUM OVER I OF DG(I)* [D LOG RATE(I) / D LOG RHO ].
+<span class="ln">1014</span>C SUM3 = SUM OVER I OF DG(I)* [D LOG RATE(I) / D LOG T ].
+<span class="ln">1015</span>         SUM1=SUM1+DG(I)
+<span class="ln">1016</span>         SUM2=SUM2+DG(I)*DRATRO(I)
+<span class="ln">1017</span>         SUM3=SUM3+DG(I)*DRATT(I)
+<span class="ln">1018</span>  110 CONTINUE
+<span class="ln">1019</span>C MHP 5/02 ADD DEUTERIUM BURNING
+<span class="ln">1020</span>C      IF(IU.LE.10)THEN
+<span class="ln">1021</span>C         WRITE(*,911)IU,SUM1,DGDEUT,SUM2,SUM3,QRTDEUT
+<span class="ln">1022</span>C      ENDIF
+<span class="ln">1023</span>C 911  FORMAT(I5,1P5E13.3)
+<span class="ln">1024</span>      SUM1 = SUM1 + DGDEUT
+<span class="ln">1025</span>      SUM2 = SUM2 + DGDEUT
+<span class="ln">1026</span>      SUM3 = SUM3 + DGDEUT*QRTDEUT
+<span class="ln">1027</span>      IF(SUM1.LE.1.E-12) THEN
+<span class="ln">1028</span>         EN=-20.
+<span class="ln">1029</span>         PEP=0.
+<span class="ln">1030</span>         PET=0.
+<span class="ln">1031</span>         DO 120 I=1,NRXNS
+<span class="ln">1032</span>            EG(I)=0.
+<span class="ln">1033</span>  120    CONTINUE
+<span class="ln">1034</span>      ELSE
+<span class="ln">1035</span>C ******************************************************
+<span class="ln">1036</span>C GLOBAL QUANTITIES THAT ARE RETURNED BY THE SUBROUTINE.
+<span class="ln">1037</span>C ******************************************************
+<span class="ln">1038</span>C PEP AND PET ARE THE DERIVATIVES OF THE TOTAL ENERGY GENERATION RATE
+<span class="ln">1039</span>C  WITH RESPECT TO DENSITY AND TEMPERATURE.
+<span class="ln">1040</span>C MHP 5/90 CHANGE DERIVATIVES TO BE D LN EPS/D LN RHO AND D LN EPS/D LN T
+<span class="ln">1041</span>C TO PUT THEM IN THE SAME FORM AS PRATHER DERIVATIVES.
+<span class="ln">1042</span>C        EN=DLOG10(SUM1)
+<span class="ln">1043</span>C        PEPD=SUM2/SUM1
+<span class="ln">1044</span>C        PEP=PDP*PEPD
+<span class="ln">1045</span>C        PET=SUM3/SUM1+PDT*PEPD
+<span class="ln">1046</span>         PEP = SUM2
+<span class="ln">1047</span>         PET = SUM3
+<span class="ln">1048</span>      ENDIF
+<span class="ln">1049</span>C PDP = D LOG RHO/ D LOG P; PDT = D LOG RHO/ D LOG T.
+<span class="ln">1050</span>C *****************************************************
+<span class="ln">1051</span>C END OF COMPUTATION OF THE GLOBAL QUANTITIES.
+<span class="ln">1052</span>C *****************************************************
+<span class="ln">1053</span>      DO 130 I=1,NRXNS
+<span class="ln">1054</span>         IF(RATE(I).LE.1.E-5) RATE(I) = 0.0
+<span class="ln">1055</span>  130 CONTINUE
+<span class="ln">1056</span>C ******************************************************
+<span class="ln">1057</span>C RATES PER 10^9 YEARS PER ATOMIC MASS UNIT: HRK(IU)
+<span class="ln">1058</span>C ******************************************************
+<span class="ln">1059</span>C HR1, ..., HR13 ARE THE RATES OF THE INDIVIDUAL REACTIONS.
+<span class="ln">1060</span>C  THE INTERPRETATION OF WHICH REACTION GOES WITH WHICH SYMBOL CAN BE
+<span class="ln">1061</span>C  MADE EASILY BY LOOKING AT THE DEFINITIONS OF THE EG(I)&#x27;S.
+<span class="ln">1062</span>C  THE ABUNDANCES ARE UPDATED IN SUBROUTINE KEMCOM USING THESE MATRICES.
+<span class="ln">1063</span>C C21 IS THE PRODUCT OF (10^9 YEARS/1 SECOND)*(1 ATOMIC MASS UNIT/1
+<span class="ln">1064</span>C  GRAM). I HAVE USED HERE SIDEREAL YEAR IN CONVERTING TO SECONDS.
+<span class="ln">1065</span>  200 HR1(IU)=RATE(1)*C21
+<span class="ln">1066</span>      HR2(IU)=RATE(2)*C21
+<span class="ln">1067</span>      HR3(IU)=RATE(3)*C21
+<span class="ln">1068</span>      HR4(IU)=RATE(4)*C21
+<span class="ln">1069</span>      HR5(IU)=RATE(5)*C21
+<span class="ln">1070</span>      HR6(IU)=RATE(6)*C21
+<span class="ln">1071</span>      HR7(IU)=RATE(7)*C21
+<span class="ln">1072</span>      HR8(IU)=RATE(8)*C21
+<span class="ln">1073</span>      HR9(IU)=RATE(9)*C21
+<span class="ln">1074</span>      HR10(IU)=RATE(10)*C21
+<span class="ln">1075</span>      HR11(IU)=RATE(11)*C21
+<span class="ln">1076</span>      HR12(IU)=RATE(12)*C21
+<span class="ln">1077</span>      HR13(IU)=RATE(13)*C21
+<span class="ln">1078</span>      HF1(IU)=F3
+<span class="ln">1079</span>      HF2(IU)=F1
+<span class="ln">1080</span>C ****************************************
+<span class="ln">1081</span>C END OF COMPUTATION OF HRK(IU).
+<span class="ln">1082</span>C ****************************************
+<span class="ln">1083</span>C ****************************************
+<span class="ln">1084</span>C CALCULATING THE TOTAL ENERGY GENERATION.
+<span class="ln">1085</span>C ****************************************
+<span class="ln">1086</span>C THE SUMMATION OF THE ENERGIES IS GIVEN IN TABLE 21 OF NEUTRINO
+<span class="ln">1087</span>C  ASTROPHYSICS.
+<span class="ln">1088</span>C THE ORIGINAL YALE SUBROUTINE CONTAINED SERIOUS ERRORS.  THE
+<span class="ln">1089</span>C  CALCULATION OF THE RATE OF ENERGY THROUGH EPP2 AND EPP3 (SEE
+<span class="ln">1090</span>C  BELOW) CONTAINED TWO FACTORS OF BRANCHING RATIOS, RATHER THAN
+<span class="ln">1091</span>C  THE SINGLE FACTOR THAT SHOULD BE PRESENT. THIS HAD THE EFFECT
+<span class="ln">1092</span>C  OF REDUCING ARTIFICIALLY THE ENERGY CALCULATED FROM THESE
+<span class="ln">1093</span>C  REACTIONS.
+<span class="ln">1094</span>C EPP1 INCLUDES THE ENERGY GENERATED BY THE PP REACTION, BY THE H2 + P
+<span class="ln">1095</span>C  REACTION, AND BY THE HE3 + HE3 REACTION.  SEE TABLE 21 OF NEUTRINO
+<span class="ln">1096</span>C  ASTROPHYSICS.
+<span class="ln">1097</span>      EPP1 = DG(1)+DG(2)+DGDEUT
+<span class="ln">1098</span>C      EPP1 = DG(1)+DG(2)
+<span class="ln">1099</span>C EPP3 INCLUDES THE ENERGY GENERATED BY THE HE3 + HE4 REACTION AND BY
+<span class="ln">1100</span>C  THE BURNING OF BE7 THROUGH PROTON CAPTURE.
+<span class="ln">1101</span>C      EPP3 = EG(3)*(1.586 + F2*11.499)*CONVERT
+<span class="ln">1102</span>      EPP3 = EG(3)*F2*(1.586D0 + 11.499D0)*CONVERT
+<span class="ln">1103</span>C EPP2 INCLUDES THE ENERGY GENERATED BY THE HE3 + HE4 REACTION AND BY
+<span class="ln">1104</span>C  THE BURNING OF BE7 THROUGH ELECTRON CAPTURE.
+<span class="ln">1105</span>C      EPP2 = EG(3)*(1.586 + F1*17.394)*CONVERT
+<span class="ln">1106</span>      EPP2 = DG(3) - EPP3
+<span class="ln">1107</span>C ECN IS THE ENERGY GENERATED THROUGH THE CNO CYCLE.
+<span class="ln">1108</span>      ECN=DG(4)+DG(5)+DG(6)+DG(7)
+<span class="ln">1109</span>C E3AL IS THE ENERGY GENERATED THROUGH THE TRIPLE-ALPHA REACTION AND
+<span class="ln">1110</span>C  IS NEGLIGIBLE FOR THE SUN.
+<span class="ln">1111</span>      E3AL = DG(12)
+<span class="ln">1112</span>
+<span class="ln">1113</span>
+<span class="ln">1114</span>C ENERGY FROM ALPHA CAPTURE REACTIONS.
+<span class="ln">1115</span>      EALPCA=DG(8)+DG(10)+DG(11)
+<span class="ln">1116</span>      IF(LSNU)THEN
+<span class="ln">1117</span>C MHP 9/91 CHANGE TO TURN OFF NEUTRINO CALC FOR HYDROGEN-EXHAUSTED CORE.
+<span class="ln">1118</span>         IF(X.LE.1.0D-6)THEN
+<span class="ln">1119</span>            DO I=1,10
+<span class="ln">1120</span>               FLUX(I)=0.0D0
+<span class="ln">1121</span>            END DO
+<span class="ln">1122</span>         ELSE
+<span class="ln">1123</span>C ****************************************************************
+<span class="ln">1124</span>C CALCULATION OF NEUTRINO FLUXES
+<span class="ln">1125</span>C ****************************************************************
+<span class="ln">1126</span>C THIS PART OF THE SUBROUTINE CALCULATES THE NEUTRINOS FLUXES IN
+<span class="ln">1127</span>C  NUMBER PER GRAM PER SQUARE CENTIMETER PER SECOND AT THE EARTH&#x27;S SURFACE
+<span class="ln">1128</span>C  (ASSUMING NOTHING HAPPENS TO THE NEUTRINOS AFTER THEY ARE CREATED).
+<span class="ln">1129</span>C SEE TABLES 3.1 AND 3.3 OF NEUTRINOS ASTROPHYSICS OR EQUATIONS 6.1-6.8
+<span class="ln">1130</span>C  FOR THE REACTIONS. THE ORDER OF THE REACTIONS IS THE SAME AS IN
+<span class="ln">1131</span>C  EQUATIONS 6.1-6.8 .
+<span class="ln">1132</span>C DEFINE 4*PI*(AU)**2 .
+<span class="ln">1133</span>         FOURPIAU2 = 2.812295D+27
+<span class="ln">1134</span>C FLUX OF PP NEUTRINOS.
+<span class="ln">1135</span>         FLUX(1) = EG(1)/FOURPIAU2
+<span class="ln">1136</span>C FLUX OF PEP NEUTRINOS. USE EQUATION 3.17 OF NEUTRINO ASTROPHYSICS.
+<span class="ln">1137</span>c Note that should not change SStandard(14) unless the ratio of pep to pp
+<span class="ln">1138</span>c  is changed.  Pep rate is explicitly scaled here with respect to the pp
+<span class="ln">1139</span>c  rate.
+<span class="ln">1140</span>         FLUX(2) = (3.4848D-6)*RWE*T9M12*(1.0 + 20.*T9)*EG(1)
+<span class="ln">1141</span>         FLUX(2) = FLUX(2)*SSTANDARD(14)/FOURPIAU2
+<span class="ln">1142</span>C FLUX OF HEP NEUTRINOS.  USE EQUATION 3.12 DIRECTLY.
+<span class="ln">1143</span>         Q6HEP = -6.1399D0
+<span class="ln">1144</span>C Q6 IS THE NEGATIVE OF THE COEFFICIENT OF T9M13 IN TAU, EQUATION 3.10.
+<span class="ln">1145</span>         FLUX(3) = (1.71724D+11)*RHO*T9M23*EXP(Q6HEP*T9M13)
+<span class="ln">1146</span>C THE DERIVATIVES OF THE CROSS SECTION FACTOR ARE NOT KNOWN AND ARE
+<span class="ln">1147</span>C  TAKEN TO BE ZERO.  THE ONLY TERM FROM EQUATION 3.14 THAT SURVIVES
+<span class="ln">1148</span>C  IS 5/(12*TAU).
+<span class="ln">1149</span>         FLUX(3) = (1.0 + 0.067862D0*T9P13)*SSTANDARD(17)*FLUX(3)
+<span class="ln">1150</span>C CALCULATE WEAK OR INTERMEDIATE SCREENING FOR HEP NEUTRINOS.
+<span class="ln">1151</span>         ZPRDHE3P = 2.0
+<span class="ln">1152</span>         Z86HE3P = 3.08687D0
+<span class="ln">1153</span>         UWK = TM1*ZPRDHE3P
+<span class="ln">1154</span>         IF(UWK.LE.WEAKSCREENING) THEN
+<span class="ln">1155</span>            UTOTHE3P = UWK
+<span class="ln">1156</span>         ELSE
+<span class="ln">1157</span>            UINT = 0.38D0*XXL8*XTR*Z86HE3P/(AMU*Z58*Z28)
+<span class="ln">1158</span>            UTOTHE3P = UINT
+<span class="ln">1159</span>         END IF
+<span class="ln">1160</span>C END OF CALCULATION OF SCREENING CORRECTION FOR HE3 + P REACTION.
+<span class="ln">1161</span>         FLUX(3) = FLUX(3)*EXP(UTOTHE3P)
+<span class="ln">1162</span>         FLUX(3) = FLUX(3)*X*XHE3/FOURPIAU2
+<span class="ln">1163</span>C COMPUTE BE7MASSFRACTION. THIS IS NOT REQUIRED FOR THE NEUTRINO
+<span class="ln">1164</span>C  FLUXES SINCE BE7 IS ALWAYS IN EQUILIBRIUM WITH THE SLOWER PRODUCTION
+<span class="ln">1165</span>C  RATE OF HE3 + HE4.  HOWEVER, IT IS OF INTEREST IN SOME APPLICATIONS
+<span class="ln">1166</span>C  TO KNOW THE BE7 MASS FRACTION, SO I COMPUTE IT HERE AND IT CAN BE
+<span class="ln">1167</span>C 10/13/26 MHP via Claude
+<span class="ln">1168</span>C  RETURNED AS AN ARGUMENT.  THE LINE ABOVE PREVIOUSLY READ &quot;EXTRACTED
+<span class="ln">1169</span>C  WITH A COMMON STATEMENT IF DESIRED&quot;, WHICH DESCRIBED COMMON/BE7/;
+<span class="ln">1170</span>C  THAT BLOCK IS GONE AND BE7MASSFRACTION IS NOW THE LAST ARGUMENT.
+<span class="ln">1171</span>C  NOTE THIS ASSIGNMENT SITS INSIDE A CONDITIONAL, SO CALLERS MUST KEEP
+<span class="ln">1172</span>C  THE VARIABLE STATIC TO RETAIN THE LAST COMPUTED VALUE AS THE COMMON
+<span class="ln">1173</span>C  BLOCK DID; main.f&#x27;s BLANKET SAVE PROVIDES THAT.
+<span class="ln">1174</span>         BE7MASSFRACTION = EG(3)/(BE7PROTON + BE7ELECTRON)
+<span class="ln">1175</span>C END OF NOVEMBER 6, 1990  ADDITION.
+<span class="ln">1176</span>C FLUX OF BE7 NEUTRINOS.
+<span class="ln">1177</span>         FLUX(4) = EG(3)*F1/FOURPIAU2
+<span class="ln">1178</span>C FLUX OF B8 NEUTRINOS.
+<span class="ln">1179</span>         FLUX(5) = EG(3)*F2/FOURPIAU2
+<span class="ln">1180</span>C FLUX OF N13 NEUTRINOS.
+<span class="ln">1181</span>         FLUX(6) = EG(4)/FOURPIAU2
+<span class="ln">1182</span>C FLUX OF O15 NEUTRINOS.
+<span class="ln">1183</span>         FLUX(7) = EG(6)/FOURPIAU2
+<span class="ln">1184</span>C FLUX OF F17 NEUTRINOS.
+<span class="ln">1185</span>         FLUX(8) = EG(7)/FOURPIAU2
+<span class="ln">1186</span>C FLUX OF FICTIONAL HE3 + HE3 NEUTRINOS.
+<span class="ln">1187</span>         FLUX(9) = EG(2)/FOURPIAU2
+<span class="ln">1188</span>C FLUX OF FICTIONAL HE3 + HE4 NEUTRINOS.
+<span class="ln">1189</span>         FLUX(10) = EG(3)/FOURPIAU2
+<span class="ln">1190</span>C SET UNITS OF NEUTRINO FLUXES TO BE 10**10 PER CM^2 PER SEC PER GM AT THE
+<span class="ln">1191</span>C  EARTH. MULTIPLY BY 10**-10.
+<span class="ln">1192</span>C  IF THE VALUE FOR THIS SHELL IS NEGLIGIBLY SMALL, SET EQUAL TO ZERO.
+<span class="ln">1193</span>         DO K = 1,10
+<span class="ln">1194</span>            FLUX(K) = (1.0D-10)*FLUX(K)
+<span class="ln">1195</span>            TEMP = FLUX(K)
+<span class="ln">1196</span>C KC 2025-05-30 CHANGED 1.E-50 TO 0.0 TO AVOID UNDERFLOW
+<span class="ln">1197</span>            IF(TEMP.LE.0.0) THEN
+<span class="ln">1198</span>              FLUX(K) = 0.0
+<span class="ln">1199</span>            END IF
+<span class="ln">1200</span>         END DO
+<span class="ln">1201</span>C MHP 9/91 ENDIF INSERTED HERE.
+<span class="ln">1202</span>         ENDIF
+<span class="ln">1203</span>      ENDIF
+<span class="ln">1204</span>C END OF NEUTRINO FLUX ROUTINE.
+<span class="ln">1205</span>C
+<span class="ln">1206</span>C***MHP 5/91
+<span class="ln">1207</span>CC CALCULATE NEUTRINO LOSSES FOR NEUTRINO-COOLED CORES OF EVOLVED STARS.
+<span class="ln">1208</span>C 3/92 DBG Added option to use new (more sophisticated) neutrino loss
+<span class="ln">1209</span>C routines.  See subroutine NEUTR for complete description.
+<span class="ln">1210</span>
+<span class="ln">1211</span>
+<span class="ln">1212</span>      IF(TL.LE.TCUT(5)) RETURN
+<span class="ln">1213</span>
+<span class="ln">1214</span>
+<span class="ln">1215</span>          ZC = XC12+XC13
+<span class="ln">1216</span>          ZO = XO16+XO18
+<span class="ln">1217</span>          T=10.0**TL
+<span class="ln">1218</span>          D=10.0**DL
+<span class="ln">1219</span>
+<span class="ln">1220</span>
+<span class="ln">1221</span>***** Itoh 1996 Neutrino loss routines - Grant Newsham 9/06 *****
+<span class="ln">1222</span>
+<span class="ln">1223</span>
+<span class="ln">1224</span>      IF (LNULOS1) THEN
+<span class="ln">1225</span>
+<span class="ln">1226</span>
+<span class="ln">1227</span>
+<span class="ln">1228</span>          CALL <a href="../yrec-map/neutrino.f.html#def-NEUTRINO" title="NEUTRINO in neutrino.f">NEUTRINO</a>(T,D,X,Y,ZC,ZO,SNU,DSNUDT,DSNUDD)
+<span class="ln">1229</span>
+<span class="ln">1230</span>
+<span class="ln">1231</span>          ENU = -SNU
+<span class="ln">1232</span>          DSNUDT = -DSNUDT*T/ENU
+<span class="ln">1233</span>          DSNUDD = -DSNUDD*D/ENU
+<span class="ln">1234</span>
+<span class="ln">1235</span>
+<span class="ln">1236</span>          SUM1 = SUM1 + ENU
+<span class="ln">1237</span>
+<span class="ln">1238</span>
+<span class="ln">1239</span>          PEP = PEP + DSNUDD
+<span class="ln">1240</span>          PET = PEP + DSNUDT
+<span class="ln">1241</span>
+<span class="ln">1242</span>
+<span class="ln">1243</span>*****************************************************************
+<span class="ln">1244</span>
+<span class="ln">1245</span>
+<span class="ln">1246</span>       ELSE
+<span class="ln">1247</span>
+<span class="ln">1248</span>
+<span class="ln">1249</span>
+<span class="ln">1250</span>C     THESE ARE OLD NEUTRINO LOSS ROUTINES
+<span class="ln">1251</span>
+<span class="ln">1252</span>
+<span class="ln">1253</span>         EL = T9/5.9302D0
+<span class="ln">1254</span>         ELI = 1.0/EL
+<span class="ln">1255</span>         EZ = EXP(CC13*CLN*(DL-9.0))*ELI*(0.7937D0+0.2063D0*X)
+<span class="ln">1256</span>         EZ3 = EZ**3
+<span class="ln">1257</span>         EMUE = 0.5*(1.0+X)
+<span class="ln">1258</span>         EX1 = 0.0
+<span class="ln">1259</span>         IF(T9.GE.0.2) THEN
+<span class="ln">1260</span>CC PAIR NEUTRINOS
+<span class="ln">1261</span>            EL2 = EL*EL
+<span class="ln">1262</span>            POLX10=(1.+EL2*(-13.04D0+EL2*(133.5+EL2*(1534.+EL2*918.6D0))))
+<span class="ln">1263</span>            POLX11 = V1(1) + EZ*(V1(2) + EZ*V1(3))
+<span class="ln">1264</span>            POLX12 = EZ3 + ELI*(V1(4) + ELI*(V1(5) + ELI*V1(6)))
+<span class="ln">1265</span>            EX1 = DEXP(-EZ*V1(7)-ELI-ELI-CLN*DL)*POLX10*POLX11/POLX12
+<span class="ln">1266</span>         ENDIF
+<span class="ln">1267</span>CC PHOTO NEUTRINOS
+<span class="ln">1268</span>         POLX21 = V2(1) + EZ*(V2(2) + EZ*V2(3))
+<span class="ln">1269</span>         POLX22 = EZ3 + ELI*(V2(4) + ELI*(V2(5) + ELI*V2(6)))
+<span class="ln">1270</span>         EX2 = EMUE*EL**5*DEXP(-EZ*V2(7))*POLX21/POLX22
+<span class="ln">1271</span>CC PLASMA NEUTRINOS
+<span class="ln">1272</span>         POLX31 = V3(1) + EZ*(V3(2) + EZ*V3(3))
+<span class="ln">1273</span>         POLX32 = EZ3 + ELI*(V3(4) + ELI*(V3(5) + ELI*V3(6)))
+<span class="ln">1274</span>         EX3 = EMUE**3*DEXP(-EZ*V3(7)+CLN*(DL+DL))*POLX31/POLX32
+<span class="ln">1275</span>         ENU = -(EX1 + EX2 + EX3)
+<span class="ln">1276</span>         SUM1 = SUM1 + ENU
+<span class="ln">1277</span>         QETNX = 0.0
+<span class="ln">1278</span>         QEDNX = 0.0
+<span class="ln">1279</span>         IF(T9.GE.0.2) THEN
+<span class="ln">1280</span>C MHP 10/02 fixed column 72 problem
+<span class="ln">1281</span>            QEDN= EZ*(V1(2)+2.*EZ*V1(3))/POLX11 - EZ*V1(7)
+<span class="ln">1282</span>     *            - 3.0d0*EZ3/POLX12
+<span class="ln">1283</span>            QETN= -QEDN+ ELI*(V1(4)+ELI*(2.*V1(5)+3.*ELI*V1(6)))/POLX12
+<span class="ln">1284</span>            QETNX= EL2*(-26.08D0+EL2*(534.+EL2*(9204.+EL2*7348.8D0)))/POLX10
+<span class="ln">1285</span>            QETNX = (QETNX + QETN + ELI+ELI)*EX1
+<span class="ln">1286</span>            QEDNX = (-1.0 +CC13*QEDN)*EX1
+<span class="ln">1287</span>         ENDIF
+<span class="ln">1288</span>         QEDN= EZ*(V2(2)+2.*EZ*V2(3))/POLX21 - EZ*V2(7) - 3.*EZ3/POLX22
+<span class="ln">1289</span>         QETN= -QEDN+ ELI*(V2(4)+ELI*(2.*V2(5)+3.*ELI*V2(6)))/POLX22
+<span class="ln">1290</span>         QETNX = QETNX + (5.0 + QETN)*EX2
+<span class="ln">1291</span>         QEDNX = QEDNX +CC13*QEDN*EX2
+<span class="ln">1292</span>         QEDN= EZ*(V3(2)+2.*EZ*V3(3))/POLX31 - EZ*V3(7) - 3.*EZ3/POLX32
+<span class="ln">1293</span>         QETN=-QEDN + ELI*(V3(4)+ELI*(2.*V3(5)+3.*ELI*V3(6)))/POLX32
+<span class="ln">1294</span>         QETNX = QETNX + QETN*EX3
+<span class="ln">1295</span>         QEDNX = QEDNX + (2.0 +CC13*QEDN)*EX3
+<span class="ln">1296</span>
+<span class="ln">1297</span>
+<span class="ln">1298</span>         PET = PET - QETNX
+<span class="ln">1299</span>         PEP = PEP - QEDNX
+<span class="ln">1300</span>
+<span class="ln">1301</span>
+<span class="ln">1302</span>
+<span class="ln">1303</span>      END IF
+<span class="ln">1304</span>
+<span class="ln">1305</span>
+<span class="ln">1306</span>      RETURN
+<span class="ln">1307</span>      END</pre></details>
+<details class='py' id='py-engeb'><summary>Python version: engeb</summary><pre class='doc'>Nuclear energy generation at one point: screening, the pp/CNO rates
+with S-factor scaling, the Be7 and N15 branchings, alpha captures,
+deuterium burning, energies net of neutrinos, the derivatives PEP and
+PET, the per-reaction rates HR1-HR13, the solar neutrino fluxes and
+the neutrino losses.
+
+Translates: engeb.f#ENGEB (09c3b9b)
+
+Arguments: dl, tl (log rho, log T); the mass fractions x, y, xhe3,
+xc12, xc13, xn14, xo16, xo18, xh2; iu, the point&#x27;s index; hr1-hr13,
+hf1, hf2, arrays set at index iu (index 0 unused). The other scalars
+are only set (passed in with any value).
+
+Returns (epp1, epp2, epp3, ecn, e3al, pep, pet, sum1, be7massfraction,
+ealpca, enu): the energy of the pp chain&#x27;s three branches, CNO and
+triple alpha; d eps/d ln rho and d eps/d ln T; the total (erg/g/s);
+the Be7 mass fraction (set only with LSNU and X &gt; 1e-6); the energy
+from alpha captures; the neutrino losses (negative). Also sets
+fluxes_mod.flux, grab_mod.enghe3 and grab_mod.he3all.</pre><pre class='src'><span class="ln">92</span>def engeb(epp1, epp2, epp3, ecn, e3al, pep, pet, sum1, dl,
+<span class="ln">93</span>          tl, x, y, xhe3, xc12, xc13, xn14, xo16,
+<span class="ln">94</span>          xo18, xh2, iu, hr1, hr2, hr3, hr4, hr5, hr6, hr7,
+<span class="ln">95</span>          hr8, hr9, hr10, hr11, hr12, hr13, hf1, hf2, be7massfraction,
+<span class="ln">96</span>          ealpca, enu):
+<span class="ln">97</span>    &quot;&quot;&quot;Nuclear energy generation at one point: screening, the pp/CNO rates
+<span class="ln">98</span>    with S-factor scaling, the Be7 and N15 branchings, alpha captures,
+<span class="ln">99</span>    deuterium burning, energies net of neutrinos, the derivatives PEP and
+<span class="ln">100</span>    PET, the per-reaction rates HR1-HR13, the solar neutrino fluxes and
+<span class="ln">101</span>    the neutrino losses.
+<span class="ln">102</span>
+<span class="ln">103</span>    Translates: engeb.f#ENGEB (09c3b9b)
+<span class="ln">104</span>
+<span class="ln">105</span>    Arguments: dl, tl (log rho, log T); the mass fractions x, y, xhe3,
+<span class="ln">106</span>    xc12, xc13, xn14, xo16, xo18, xh2; iu, the point&#x27;s index; hr1-hr13,
+<span class="ln">107</span>    hf1, hf2, arrays set at index iu (index 0 unused). The other scalars
+<span class="ln">108</span>    are only set (passed in with any value).
+<span class="ln">109</span>
+<span class="ln">110</span>    Returns (epp1, epp2, epp3, ecn, e3al, pep, pet, sum1, be7massfraction,
+<span class="ln">111</span>    ealpca, enu): the energy of the pp chain&#x27;s three branches, CNO and
+<span class="ln">112</span>    triple alpha; d eps/d ln rho and d eps/d ln T; the total (erg/g/s);
+<span class="ln">113</span>    the Be7 mass fraction (set only with LSNU and X &gt; 1e-6); the energy
+<span class="ln">114</span>    from alpha captures; the neutrino losses (negative). Also sets
+<span class="ln">115</span>    fluxes_mod.flux, grab_mod.enghe3 and grab_mod.he3all.
+<span class="ln">116</span>    &quot;&quot;&quot;
+<span class="ln">117</span>    global f1, f2, f3, f4, rho, t9, t9m1, t9m12, t9m13, t9m23, t9p13
+<span class="ln">118</span>    global tm1, xxl8, z58, z28, be7proton, be7electron, convert
+<span class="ln">119</span>    c = constants_mod
+<span class="ln">120</span>    nml = nmlpar_mod
+<span class="ln">121</span>    cr = cross_mod
+<span class="ln">122</span>
+<span class="ln">123</span>    enu = 0.0
+<span class="ln">124</span>    ealpca = 0.0
+<span class="ln">125</span>    # Mass fractions of the 13 isotopes (n, 3H, Ne, Mg taken as zero).
+<span class="ln">126</span>    xfrac[1] = 0.0
+<span class="ln">127</span>    xfrac[2] = x
+<span class="ln">128</span>    xfrac[3] = xh2
+<span class="ln">129</span>    xfrac[4] = 0.0
+<span class="ln">130</span>    xfrac[5] = xhe3
+<span class="ln">131</span>    xfrac[6] = y
+<span class="ln">132</span>    xfrac[7] = xc12
+<span class="ln">133</span>    xfrac[8] = xc13
+<span class="ln">134</span>    xfrac[9] = xn14
+<span class="ln">135</span>    xfrac[10] = xo16
+<span class="ln">136</span>    xfrac[11] = xo18
+<span class="ln">137</span>    xfrac[12] = 0.0
+<span class="ln">138</span>    xfrac[13] = 0.0
+<span class="ln">139</span>    # 1/mu_I, 1/mu_e, the sum for intermediate screening, and zeta.
+<span class="ln">140</span>    amu = 0.0
+<span class="ln">141</span>    emu = 0.0
+<span class="ln">142</span>    xtr = 0.0
+<span class="ln">143</span>    zet = 0.0
+<span class="ln">144</span>    for i in range(1, NELEM + 1):  # loop 10
+<span class="ln">145</span>        trm = xfrac[i] / ANUC[i]
+<span class="ln">146</span>        amu = amu + trm
+<span class="ln">147</span>        emu = emu + trm * ZNUC[i]
+<span class="ln">148</span>        xtr = xtr + trm * ZNUC[i]**1.58
+<span class="ln">149</span>        zet = zet + trm * ZNUC[i]**2
+<span class="ln">150</span>    rwe = math.exp(c.cln * dl) * emu
+<span class="ln">151</span>    dd = dl
+<span class="ln">152</span>
+<span class="ln">153</span>    low_t = tl &lt;= nml.tcut[1]
+<span class="ln">154</span>    if low_t:
+<span class="ln">155</span>        # Below TCUT(1): no burning; jump to label 200.
+<span class="ln">156</span>        # Question (see the page): SUM1, F1, F3 and the Be7 terms are stale.
+<span class="ln">157</span>        dgdeut = 0.0
+<span class="ln">158</span>        qrtdeut = 0.0
+<span class="ln">159</span>        en = -20.0
+<span class="ln">160</span>        pep = 0.0
+<span class="ln">161</span>        pet = 0.0
+<span class="ln">162</span>        for i in range(1, NRXNS + 1):  # loop 20
+<span class="ln">163</span>            eg[i] = 0.0
+<span class="ln">164</span>            rate[i] = 0.0
+<span class="ln">165</span>            dg[i] = 0.0
+<span class="ln">166</span>    else:
+<span class="ln">167</span>        rho = math.exp(c.cln * dd)
+<span class="ln">168</span>        t9 = math.exp(c.cln * (tl - 9.0))
+<span class="ln">169</span>        t9p13 = t9**c.cc13
+<span class="ln">170</span>        t9p23 = t9p13**2
+<span class="ln">171</span>        t9m13 = 1.0 / t9p13
+<span class="ln">172</span>        t9m23 = t9m13**2
+<span class="ln">173</span>        t9m1 = 1.0 / t9
+<span class="ln">174</span>        t9m2 = t9m1**2
+<span class="ln">175</span>        t9m12 = 1.0 / math.sqrt(t9)
+<span class="ln">176</span>        t9m32 = t9m1 * t9m12
+<span class="ln">177</span>
+<span class="ln">178</span>        # Deuterium burning (MHP 5/02), as in DEUTRATE.
+<span class="ln">179</span>        if xh2 &lt;= 1.0e-11:
+<span class="ln">180</span>            rdeut = 0.0
+<span class="ln">181</span>            qrtdeut = 0.0
+<span class="ln">182</span>        else:
+<span class="ln">183</span>            qdeut = 5.494
+<span class="ln">184</span>            zz = -3.72 * t9m13
+<span class="ln">185</span>            tfacdeut = 1.0 + 0.112 * t9p13 + 3.38 * t9p23 + 2.65 * t9
+<span class="ln">186</span>            # Question (see the page): T9**(+2/3); the derivative below is
+<span class="ln">187</span>            # that of the T9**(-2/3) form.
+<span class="ln">188</span>            rdeut = (rho * 2.240e3 * t9p23 * math.exp(zz) * tfacdeut
+<span class="ln">189</span>                     * 6.023e23 / ANUC[3])
+<span class="ln">190</span>            tfacdeut2 = 0.112 * t9p13 + 6.76 * t9p23 + 7.95 * t9
+<span class="ln">191</span>            qrtdeut = c.cc13 * ((tfacdeut2 / tfacdeut) - 2.0 - zz)
+<span class="ln">192</span>            # Cap in the surface convection zone by the overturn time.
+<span class="ln">193</span>            # Question (see the page): IU is never set by main.f&#x27;s call.
+<span class="ln">194</span>            if iu &gt;= deuter_mod.jcz and ovrtrn_mod.taucz &gt; 1.0:
+<span class="ln">195</span>                rdeutmax = 6.023e23 / ANUC[3] / ovrtrn_mod.taucz
+<span class="ln">196</span>                rdeut2 = rdeut * x
+<span class="ln">197</span>                if rdeut2 &gt; rdeutmax:
+<span class="ln">198</span>                    if x &gt; 1.0e-6:
+<span class="ln">199</span>                        rdeut = rdeutmax / x
+<span class="ln">200</span>
+<span class="ln">201</span>        # Degeneracy factor f&#x27;/f, a fit to Salpeter&#x27;s figure 1.
+<span class="ln">202</span>        pfmc2 = 1.017677e-4 * rwe**c.cc23
+<span class="ln">203</span>        efmkt = 5.92986 * t9m1 * (math.sqrt(1.0 + pfmc2) - 1.0)
+<span class="ln">204</span>        if efmkt &lt;= 1.0e-2:
+<span class="ln">205</span>            fprf = 1.0
+<span class="ln">206</span>        else:
+<span class="ln">207</span>            degd = math.log10(efmkt)
+<span class="ln">208</span>            if degd &gt;= 1.5:
+<span class="ln">209</span>                fprf = 0.0
+<span class="ln">210</span>            else:
+<span class="ln">211</span>                fprf = (0.75793 - 0.54621 * degd - 0.30964 * degd**2
+<span class="ln">212</span>                        + 0.12535 * degd**3 + 0.1203 * degd**4
+<span class="ln">213</span>                        - 0.012857 * degd**5 - 0.014768 * degd**6)
+<span class="ln">214</span>
+<span class="ln">215</span>        # Screening: weak, intermediate or strong, for each reaction.
+<span class="ln">216</span>        xxl = 5.9426e-6 * t9m32 * math.sqrt(rho * amu)
+<span class="ln">217</span>        xxl6 = xxl**c.cc23
+<span class="ln">218</span>        xxl8 = xxl**0.86
+<span class="ln">219</span>        zcurl = math.sqrt((zet + fprf * emu) / amu)
+<span class="ln">220</span>        zbar = emu / amu
+<span class="ln">221</span>        z58 = zcurl**0.58
+<span class="ln">222</span>        z28 = zbar**0.28
+<span class="ln">223</span>        z33 = zbar**c.cc13
+<span class="ln">224</span>        tm1 = xxl * zcurl
+<span class="ln">225</span>        for i in range(1, NRXNS + 1):  # loop 30
+<span class="ln">226</span>            uwk = tm1 * ZPRD[i]
+<span class="ln">227</span>            if uwk &lt;= nml.weakscreening:
+<span class="ln">228</span>                utot[i] = uwk
+<span class="ln">229</span>                dscr[i] = 0.5 * uwk
+<span class="ln">230</span>                dsct[i] = -1.5 * uwk
+<span class="ln">231</span>            else:
+<span class="ln">232</span>                uint = 0.38 * xxl8 * xtr * Z86[i] / (amu * z58 * z28)
+<span class="ln">233</span>                if uwk &lt;= 2.0:
+<span class="ln">234</span>                    utot[i] = uint
+<span class="ln">235</span>                    dscr[i] = 0.43 * uint
+<span class="ln">236</span>                    dsct[i] = -1.29 * uint
+<span class="ln">237</span>                else:
+<span class="ln">238</span>                    ustr = 0.624 * z33 * xxl6 * (
+<span class="ln">239</span>                        Z53[i] + 0.316 * z33 * Z43[i]
+<span class="ln">240</span>                        + 0.737 * Z23[i] / (zbar * xxl6))
+<span class="ln">241</span>                    if ustr &lt; uint or uwk &gt;= 5.0:
+<span class="ln">242</span>                        utot[i] = ustr
+<span class="ln">243</span>                        dscr[i] = (0.208 * z33 * (Z53[i] + 0.316 * z33
+<span class="ln">244</span>                                                  * Z43[i]) * xxl6)
+<span class="ln">245</span>                        dsct[i] = -3.0 * dscr[i]
+<span class="ln">246</span>                    else:
+<span class="ln">247</span>                        utot[i] = uint
+<span class="ln">248</span>                        dscr[i] = 0.43 * uint
+<span class="ln">249</span>                        dsct[i] = -1.29 * uint
+<span class="ln">250</span>
+<span class="ln">251</span>        # pp chain and CNO, reactions 1-7 (none without hydrogen).
+<span class="ln">252</span>        if x == 0.0:
+<span class="ln">253</span>            nz = 1
+<span class="ln">254</span>            f1 = 0.0
+<span class="ln">255</span>            f2 = 0.0
+<span class="ln">256</span>            f3 = 0.0
+<span class="ln">257</span>            f4 = 0.0
+<span class="ln">258</span>        else:
+<span class="ln">259</span>            nz = 8
+<span class="ln">260</span>            for i in range(1, 8):  # loop 40
+<span class="ln">261</span>                r1 = (t9m23 + Q1[i] * t9m13
+<span class="ln">262</span>                      + cr.qs0e[i] * (Q2[i] + Q3[i] * t9p13)
+<span class="ln">263</span>                      + cr.qqs0ee[i] * (Q4[i] * t9p23 + Q5[i] * t9))
+<span class="ln">264</span>                rate[i] = rho * r1 * math.exp(Q6[i] * t9m13 + Q7[i]
+<span class="ln">265</span>                                              + (Q8[i] * t9)**2 + utot[i])
+<span class="ln">266</span>                rate[i] = rate[i] * nml.sstandard[i]
+<span class="ln">267</span>                if rate[i] &lt; 1.0e-30:
+<span class="ln">268</span>                    rate[i] = 0.0
+<span class="ln">269</span>                    dratt[i] = 0.0
+<span class="ln">270</span>                else:
+<span class="ln">271</span>                    dratro[i] = 1.0 + dscr[i]
+<span class="ln">272</span>                    # Question (see the page): no QS0E, QQS0EE factors here.
+<span class="ln">273</span>                    dratt[i] = (dsct[i] - (Q6[i] * t9m13
+<span class="ln">274</span>                                           + (2.0 * t9m23 + Q1[i] * t9m13
+<span class="ln">275</span>                                              - Q3[i] * t9p13
+<span class="ln">276</span>                                              - 2.0 * Q4[i] * t9p23
+<span class="ln">277</span>                                              - 3.0 * Q5[i] * t9) / r1) / 3.0
+<span class="ln">278</span>                                + 2.0 * (Q8[i] * t9)**2)
+<span class="ln">279</span>
+<span class="ln">280</span>            # Be7: electron capture against proton capture.
+<span class="ln">281</span>            be7electron = (1.752e-10 * t9m12
+<span class="ln">282</span>                           * (1.0 + 0.004 * (1000.0 * t9 - 16.0)))
+<span class="ln">283</span>            be7electron = be7electron * emu * nml.sstandard[15]
+<span class="ln">284</span>            temp3 = -10.2625 * t9m13
+<span class="ln">285</span>            be7proton = 3.128813e+5 * x * nml.sstandard[16] * math.exp(temp3)
+<span class="ln">286</span>            qrbe7 = (t9m23 + Q1[8] * t9m13
+<span class="ln">287</span>                     + cr.qs0e[8] * (Q2[8] + Q3[8] * t9p13)
+<span class="ln">288</span>                     + cr.qqs0ee[8] * (Q4[8] * t9p23 + Q5[8] * t9))
+<span class="ln">289</span>            be7proton = be7proton * qrbe7
+<span class="ln">290</span>            # Screening of Be7 + p (ZPRD = 4).
+<span class="ln">291</span>            utotbe7p = _screen_weak_or_int(tm1 * 4.0, 5.7790, amu, xtr)
+<span class="ln">292</span>            be7proton = be7proton * math.exp(utotbe7p)
+<span class="ln">293</span>            camube7 = rho * 8.584981e+22
+<span class="ln">294</span>            be7proton = camube7 * be7proton
+<span class="ln">295</span>            be7electron = camube7 * be7electron
+<span class="ln">296</span>            f1 = be7electron / (be7electron + be7proton)
+<span class="ln">297</span>            f2 = be7proton / (be7electron + be7proton)
+<span class="ln">298</span>
+<span class="ln">299</span>            # N15 + p: (p,alpha) to C12 against (p,gamma) to O16.
+<span class="ln">300</span>            o16gamma = (t9m23 + 0.0273016 * t9m13 + 0.14374
+<span class="ln">301</span>                        + 0.027490 * t9p13 + 6.14685 * t9p23 + 2.98940 * t9)
+<span class="ln">302</span>            o16gamma = o16gamma * 64 * cr.fo16
+<span class="ln">303</span>            c12alpha = (t9m23 + 0.0273016 * t9m13 + 2.01186
+<span class="ln">304</span>                        + 0.384763 * t9p13 + 17.0579 * t9p23 + 8.29580 * t9)
+<span class="ln">305</span>            c12alpha = c12alpha * 67500 * cr.fc12
+<span class="ln">306</span>            f3 = c12alpha / (c12alpha + o16gamma)
+<span class="ln">307</span>            f4 = 1.0 - f3
+<span class="ln">308</span>
+<span class="ln">309</span>        for i in range(nz, NRXNS + 1):  # label 50, loop 60
+<span class="ln">310</span>            rate[i] = 0.0
+<span class="ln">311</span>            dratro[i] = 0.0
+<span class="ln">312</span>            dratt[i] = 0.0
+<span class="ln">313</span>
+<span class="ln">314</span>        # Alpha captures, above TCUT(4).
+<span class="ln">315</span>        # Question (see the page): the derivatives DRATT(8, 10, 11).
+<span class="ln">316</span>        if tl &gt;= nml.tcut[4]:
+<span class="ln">317</span>            # C13(alpha,n)O16.
+<span class="ln">318</span>            r1 = t9m23 + 0.0129 * t9m13 + 2.04 + 0.184 * t9p13
+<span class="ln">319</span>            a1 = 6.77e15 * math.exp(-32.329 * t9m13 - (t9 / 1.284)**2)
+<span class="ln">320</span>            a2 = 3.82e5 * math.exp(-9.373 * t9m1)
+<span class="ln">321</span>            a3 = 1.41e6 * math.exp(-11.873 * t9m1)
+<span class="ln">322</span>            a4 = 2.00e9 * math.exp(-20.409 * t9m1)
+<span class="ln">323</span>            a5 = 2.92e9 * math.exp(-29.283 * t9m1)
+<span class="ln">324</span>            rate[8] = (1.157126e22 * rho * math.exp(utot[8])
+<span class="ln">325</span>                       * (a1 * r1 + t9m32 * (a2 + a3 + a4 + a5)))
+<span class="ln">326</span>            dratro[8] = 1.0 + dscr[8]
+<span class="ln">327</span>            dr1 = c.cc13 * (-2.0 * t9m23 - 0.0129 * t9m13 + 0.184 * t9p13)
+<span class="ln">328</span>            da1 = a1 * (c.cc13 * 32.329 * t9m13 - 2.0 * (t9 / 1.284)**2)
+<span class="ln">329</span>            dratt[8] = dsct[8] + rho / rate[8] * (
+<span class="ln">330</span>                dr1 * a1 + r1 * da1
+<span class="ln">331</span>                + a2 * (9.373 * t9m1 - 1.5) + a3 * (11.873 * t9m1 - 1.5)
+<span class="ln">332</span>                + a4 * (20.409 * t9m1 - 1.5) + a5 * (29.283 * t9m1 - 1.5))
+<span class="ln">333</span>            # C12(alpha,gamma)O16.
+<span class="ln">334</span>            r1 = 1.0 / (1.0 + 0.0489 * t9m23)
+<span class="ln">335</span>            r2 = 1.0 / (1.0 + 0.2654 * t9m23)
+<span class="ln">336</span>            a1 = t9m2 * math.exp(-32.120 * t9m13)
+<span class="ln">337</span>            a2 = 1.04e8 * r1**2 * math.exp(-(t9 / 3.496)**2)
+<span class="ln">338</span>            a3 = 1.76e8 * r2**2
+<span class="ln">339</span>            a4 = 1.25e3 * t9m32 * math.exp(-27.499 * t9m1)
+<span class="ln">340</span>            a5 = 1.43e-2 * t9**5 * math.exp(-15.541 * t9m1)
+<span class="ln">341</span>            rate[10] = (1.25388e22 * rho * math.exp(utot[10])
+<span class="ln">342</span>                        * (a1 * (a2 + a3) + a4 + a5))
+<span class="ln">343</span>            dratro[10] = 1.0 + dscr[10]
+<span class="ln">344</span>            dratt[10] = dsct[10] + rho / rate[10] * (
+<span class="ln">345</span>                a1 * ((c.cc13 * 32.120 * t9m13 - 2.0) * (a2 + a3)
+<span class="ln">346</span>                      + a2 * (r1 * c.cc13 * 0.1956 - 2.0 * (t9 / 3.496)**2)
+<span class="ln">347</span>                      + a3 * (c.cc13 * 1.0616 * r2))
+<span class="ln">348</span>                + a4 * (27.499 * t9m1 - 1.5) + a5 * (5.0 + 15.541 * t9m1))
+<span class="ln">349</span>            # N14(alpha,gamma)F18, F18 -&gt; O18 + e+ + nu.
+<span class="ln">350</span>            r1 = (t9m23 + 0.012 * t9m13 + 1.45 + 0.177 * t9p13
+<span class="ln">351</span>                  + 1.97 * t9p23 + 0.406 * t9)
+<span class="ln">352</span>            a1 = 7.78e9 * math.exp(-36.031 * t9m13 - (t9 / 0.881)**2)
+<span class="ln">353</span>            a2 = t9m32 * 2.36e-10 * math.exp(-2.798 * t9m1)
+<span class="ln">354</span>            a3 = t9m32 * 2.03 * math.exp(-5.054 * t9m1)
+<span class="ln">355</span>            a4 = t9m23 * 1.15e4 * math.exp(-12.310 * t9m1)
+<span class="ln">356</span>            rate[11] = (1.07452e22 * rho * math.exp(utot[11])
+<span class="ln">357</span>                        * (a1 * r1 + a2 + a3 + a4))
+<span class="ln">358</span>            dratro[11] = 1.0 + dscr[11]
+<span class="ln">359</span>            dr1 = (c.cc13 * (-2.0 * t9m23 - 0.012 * t9m13 + 0.177 * t9p13
+<span class="ln">360</span>                             + 3.94 * t9p23) + 0.406 * t9)
+<span class="ln">361</span>            da1 = a1 * (c.cc13 * 36.031 * t9m13 - 2.0 * (t9 / 0.881)**2)
+<span class="ln">362</span>            dratt[11] = dsct[11] + rho / rate[11] * (
+<span class="ln">363</span>                dr1 * a1 + r1 * da1 + a2 * (2.798 * t9m1 - 1.5)
+<span class="ln">364</span>                + a3 * (5.054 * t9m1 - 1.5) + a4 * (12.310 * t9m1 - c.cc23))
+<span class="ln">365</span>            # Triple alpha.
+<span class="ln">366</span>            rate[12] = (1.565315e21 * rho**2 * t9m1 * t9m2 * 2.79e-8
+<span class="ln">367</span>                        * math.exp(-4.4027 * t9m1 + utot[12]))
+<span class="ln">368</span>            dratro[12] = 2.0 + dscr[12]
+<span class="ln">369</span>            dratt[12] = -3.0 + dsct[12] + 4.4027 * t9m1
+<span class="ln">370</span>
+<span class="ln">371</span>        # Label 100: rates times abundances.
+<span class="ln">372</span>        eg[1] = rate[1] * x * x
+<span class="ln">373</span>        if xh2 &gt; 1.0e-11:
+<span class="ln">374</span>            egdeut = rdeut * x * xh2
+<span class="ln">375</span>        else:
+<span class="ln">376</span>            egdeut = 0.0
+<span class="ln">377</span>        eg[2] = rate[2] * xhe3 * xhe3
+<span class="ln">378</span>        eg[3] = rate[3] * xhe3 * y
+<span class="ln">379</span>        eg[4] = rate[4] * x * xc12
+<span class="ln">380</span>        eg[5] = rate[5] * x * xc13
+<span class="ln">381</span>        eg[6] = rate[6] * x * xn14
+<span class="ln">382</span>        eg[7] = rate[7] * x * xo16
+<span class="ln">383</span>        eg[8] = rate[8] * y * xc13
+<span class="ln">384</span>        eg[10] = rate[10] * y * xc12
+<span class="ln">385</span>        eg[11] = rate[11] * y * xn14
+<span class="ln">386</span>        eg[12] = rate[12] * y**3
+<span class="ln">387</span>
+<span class="ln">388</span>        # Energies, MeV net of neutrinos, converted to erg.
+<span class="ln">389</span>        convert = 1.602177e-6
+<span class="ln">390</span>        dg[1] = eg[1] * 6.664 * convert
+<span class="ln">391</span>        if xh2 &gt; 1.0e-11:
+<span class="ln">392</span>            dgdeut = egdeut * qdeut * convert
+<span class="ln">393</span>        else:
+<span class="ln">394</span>            dgdeut = 0.0
+<span class="ln">395</span>        dg[2] = eg[2] * 12.860 * convert
+<span class="ln">396</span>        dg[3] = eg[3] * (1.586 + f1 * 17.394 + f2 * 11.499) * convert
+<span class="ln">397</span>        dg[4] = eg[4] * 3.457372 * convert
+<span class="ln">398</span>        dg[5] = eg[5] * 7.550628 * convert
+<span class="ln">399</span>        dg[6] = eg[6] * (9.054 + f3 * 4.966 + f4 * 12.128) * convert
+<span class="ln">400</span>        dg[7] = eg[7] * 3.553 * convert
+<span class="ln">401</span>        dg[8] = eg[8] * 2.216 * convert
+<span class="ln">402</span>        dg[10] = eg[10] * 7.162 * convert
+<span class="ln">403</span>        dg[11] = eg[11] * 5.815 * convert
+<span class="ln">404</span>        dg[12] = eg[12] * 7.275 * convert
+<span class="ln">405</span>        grab_mod.enghe3 = dg[2]
+<span class="ln">406</span>        grab_mod.he3all = dg[2] + dg[3]
+<span class="ln">407</span>        # Reactions 9 and 13 are zeroed.
+<span class="ln">408</span>        dratro[9] = 0.0
+<span class="ln">409</span>        dratt[9] = 0.0
+<span class="ln">410</span>        dg[9] = 0.0
+<span class="ln">411</span>        dratro[13] = 0.0
+<span class="ln">412</span>        dratt[13] = 0.0
+<span class="ln">413</span>        dg[13] = 0.0
+<span class="ln">414</span>
+<span class="ln">415</span>        # Total, and its absolute derivatives d eps/d ln rho, d eps/d ln T.
+<span class="ln">416</span>        # Question (see the page): the comment says relative derivatives.
+<span class="ln">417</span>        sum1 = 0.0
+<span class="ln">418</span>        sum2 = 0.0
+<span class="ln">419</span>        sum3 = 0.0
+<span class="ln">420</span>        for i in range(1, NRXNS + 1):  # loop 110
+<span class="ln">421</span>            sum1 = sum1 + dg[i]
+<span class="ln">422</span>            sum2 = sum2 + dg[i] * dratro[i]
+<span class="ln">423</span>            sum3 = sum3 + dg[i] * dratt[i]
+<span class="ln">424</span>        sum1 = sum1 + dgdeut
+<span class="ln">425</span>        sum2 = sum2 + dgdeut
+<span class="ln">426</span>        sum3 = sum3 + dgdeut * qrtdeut
+<span class="ln">427</span>        # Question (see the page): the hard-coded thresholds.
+<span class="ln">428</span>        if sum1 &lt;= 1.0e-12:
+<span class="ln">429</span>            en = -20.0
+<span class="ln">430</span>            pep = 0.0
+<span class="ln">431</span>            pet = 0.0
+<span class="ln">432</span>            for i in range(1, NRXNS + 1):  # loop 120
+<span class="ln">433</span>                eg[i] = 0.0
+<span class="ln">434</span>        else:
+<span class="ln">435</span>            pep = sum2
+<span class="ln">436</span>            pet = sum3
+<span class="ln">437</span>        for i in range(1, NRXNS + 1):  # loop 130
+<span class="ln">438</span>            if rate[i] &lt;= 1.0e-5:
+<span class="ln">439</span>                rate[i] = 0.0
+<span class="ln">440</span>
+<span class="ln">441</span>    # Label 200: rates per Gyr per amu, for the abundance routines.
+<span class="ln">442</span>    # Question (see the page): main.f passes an IU it never sets.
+<span class="ln">443</span>    hr1[iu] = rate[1] * C21
+<span class="ln">444</span>    hr2[iu] = rate[2] * C21
+<span class="ln">445</span>    hr3[iu] = rate[3] * C21
+<span class="ln">446</span>    hr4[iu] = rate[4] * C21
+<span class="ln">447</span>    hr5[iu] = rate[5] * C21
+<span class="ln">448</span>    hr6[iu] = rate[6] * C21
+<span class="ln">449</span>    hr7[iu] = rate[7] * C21
+<span class="ln">450</span>    hr8[iu] = rate[8] * C21
+<span class="ln">451</span>    hr9[iu] = rate[9] * C21
+<span class="ln">452</span>    hr10[iu] = rate[10] * C21
+<span class="ln">453</span>    hr11[iu] = rate[11] * C21
+<span class="ln">454</span>    hr12[iu] = rate[12] * C21
+<span class="ln">455</span>    hr13[iu] = rate[13] * C21
+<span class="ln">456</span>    hf1[iu] = f3
+<span class="ln">457</span>    hf2[iu] = f1
+<span class="ln">458</span>
+<span class="ln">459</span>    # Energy by branch: pp I (with deuterium), pp II, pp III; CNO.
+<span class="ln">460</span>    epp1 = dg[1] + dg[2] + dgdeut
+<span class="ln">461</span>    epp3 = eg[3] * f2 * (1.586 + 11.499) * convert
+<span class="ln">462</span>    epp2 = dg[3] - epp3
+<span class="ln">463</span>    ecn = dg[4] + dg[5] + dg[6] + dg[7]
+<span class="ln">464</span>    e3al = dg[12]
+<span class="ln">465</span>    ealpca = dg[8] + dg[10] + dg[11]
+<span class="ln">466</span>
+<span class="ln">467</span>    # Solar neutrino fluxes per gram at 1 AU, in 1e10 cm^-2 s^-1.
+<span class="ln">468</span>    flux = fluxes_mod.flux
+<span class="ln">469</span>    if nml.lsnu:
+<span class="ln">470</span>        if x &lt;= 1.0e-6:
+<span class="ln">471</span>            for i in range(1, 11):
+<span class="ln">472</span>                flux[i] = 0.0
+<span class="ln">473</span>        else:
+<span class="ln">474</span>            fourpiau2 = 2.812295e+27
+<span class="ln">475</span>            flux[1] = eg[1] / fourpiau2                      # pp
+<span class="ln">476</span>            flux[2] = (3.4848e-6 * rwe * t9m12 * (1.0 + 20.0 * t9)
+<span class="ln">477</span>                       * eg[1])                               # pep
+<span class="ln">478</span>            flux[2] = flux[2] * nml.sstandard[14] / fourpiau2
+<span class="ln">479</span>            q6hep = -6.1399
+<span class="ln">480</span>            flux[3] = 1.71724e+11 * rho * t9m23 * math.exp(q6hep * t9m13)
+<span class="ln">481</span>            flux[3] = (1.0 + 0.067862 * t9p13) * nml.sstandard[17] * flux[3]
+<span class="ln">482</span>            # Screening of He3 + p (ZPRD = 2), for the hep flux.
+<span class="ln">483</span>            utothe3p = _screen_weak_or_int(tm1 * 2.0, 3.08687, amu, xtr)
+<span class="ln">484</span>            flux[3] = flux[3] * math.exp(utothe3p)
+<span class="ln">485</span>            flux[3] = flux[3] * x * xhe3 / fourpiau2          # hep
+<span class="ln">486</span>            # Kept by main.f&#x27;s SAVE between the calls that set it.
+<span class="ln">487</span>            be7massfraction = eg[3] / (be7proton + be7electron)
+<span class="ln">488</span>            flux[4] = eg[3] * f1 / fourpiau2                  # Be7
+<span class="ln">489</span>            flux[5] = eg[3] * f2 / fourpiau2                  # B8
+<span class="ln">490</span>            flux[6] = eg[4] / fourpiau2                       # N13
+<span class="ln">491</span>            flux[7] = eg[6] / fourpiau2                       # O15
+<span class="ln">492</span>            flux[8] = eg[7] / fourpiau2                       # F17
+<span class="ln">493</span>            flux[9] = eg[2] / fourpiau2                       # &quot;fictional&quot;
+<span class="ln">494</span>            flux[10] = eg[3] / fourpiau2                      # &quot;fictional&quot;
+<span class="ln">495</span>            for k in range(1, 11):
+<span class="ln">496</span>                flux[k] = 1.0e-10 * flux[k]
+<span class="ln">497</span>                temp = flux[k]
+<span class="ln">498</span>                if temp &lt;= 0.0:
+<span class="ln">499</span>                    flux[k] = 0.0
+<span class="ln">500</span>
+<span class="ln">501</span>    # Neutrino losses, above TCUT(5).
+<span class="ln">502</span>    if tl &lt;= nml.tcut[5]:
+<span class="ln">503</span>        return (epp1, epp2, epp3, ecn, e3al, pep, pet, sum1,
+<span class="ln">504</span>                be7massfraction, ealpca, enu)
+<span class="ln">505</span>    zc = xc12 + xc13
+<span class="ln">506</span>    zo = xo16 + xo18
+<span class="ln">507</span>    t = 10.0**tl
+<span class="ln">508</span>    d = 10.0**dl
+<span class="ln">509</span>    if nml.lnulos1:
+<span class="ln">510</span>        # Itoh et al. 1996 (Grant Newsham 9/06).
+<span class="ln">511</span>        snu, dsnudt, dsnudd = neutrino(t, d, x, y, zc, zo, 0.0, 0.0, 0.0)
+<span class="ln">512</span>        enu = -snu
+<span class="ln">513</span>        # Question (see the page): relative derivatives added to absolute.
+<span class="ln">514</span>        dsnudt = -dsnudt * t / enu
+<span class="ln">515</span>        dsnudd = -dsnudd * d / enu
+<span class="ln">516</span>        sum1 = sum1 + enu
+<span class="ln">517</span>        pep = pep + dsnudd
+<span class="ln">518</span>        pet = pep + dsnudt  # Question (see the page): PEP, not PET.
+<span class="ln">519</span>    else:
+<span class="ln">520</span>        # The old fits: pair, photo- and plasma neutrinos.
+<span class="ln">521</span>        el = t9 / 5.9302
+<span class="ln">522</span>        eli = 1.0 / el
+<span class="ln">523</span>        ez = math.exp(c.cc13 * c.cln * (dl - 9.0)) * eli * (0.7937 + 0.2063 * x)
+<span class="ln">524</span>        ez3 = ez**3
+<span class="ln">525</span>        emue = 0.5 * (1.0 + x)
+<span class="ln">526</span>        ex1 = 0.0
+<span class="ln">527</span>        if t9 &gt;= 0.2:
+<span class="ln">528</span>            el2 = el * el
+<span class="ln">529</span>            polx10 = 1.0 + el2 * (-13.04 + el2 * (133.5 + el2 * (
+<span class="ln">530</span>                1534.0 + el2 * 918.6)))
+<span class="ln">531</span>            polx11 = V1[1] + ez * (V1[2] + ez * V1[3])
+<span class="ln">532</span>            polx12 = ez3 + eli * (V1[4] + eli * (V1[5] + eli * V1[6]))
+<span class="ln">533</span>            ex1 = (math.exp(-ez * V1[7] - eli - eli - c.cln * dl)
+<span class="ln">534</span>                   * polx10 * polx11 / polx12)
+<span class="ln">535</span>        polx21 = V2[1] + ez * (V2[2] + ez * V2[3])
+<span class="ln">536</span>        polx22 = ez3 + eli * (V2[4] + eli * (V2[5] + eli * V2[6]))
+<span class="ln">537</span>        ex2 = emue * el**5 * math.exp(-ez * V2[7]) * polx21 / polx22
+<span class="ln">538</span>        polx31 = V3[1] + ez * (V3[2] + ez * V3[3])
+<span class="ln">539</span>        polx32 = ez3 + eli * (V3[4] + eli * (V3[5] + eli * V3[6]))
+<span class="ln">540</span>        ex3 = (emue**3 * math.exp(-ez * V3[7] + c.cln * (dl + dl))
+<span class="ln">541</span>               * polx31 / polx32)
+<span class="ln">542</span>        enu = -(ex1 + ex2 + ex3)
+<span class="ln">543</span>        sum1 = sum1 + enu
+<span class="ln">544</span>        # Derivatives of the losses.
+<span class="ln">545</span>        qetnx = 0.0
+<span class="ln">546</span>        qednx = 0.0
+<span class="ln">547</span>        if t9 &gt;= 0.2:
+<span class="ln">548</span>            qedn = (ez * (V1[2] + 2.0 * ez * V1[3]) / polx11 - ez * V1[7]
+<span class="ln">549</span>                    - 3.0 * ez3 / polx12)
+<span class="ln">550</span>            qetn = -qedn + eli * (V1[4] + eli * (2.0 * V1[5]
+<span class="ln">551</span>                                                 + 3.0 * eli * V1[6])) / polx12
+<span class="ln">552</span>            qetnx = el2 * (-26.08 + el2 * (534.0 + el2 * (
+<span class="ln">553</span>                9204.0 + el2 * 7348.8))) / polx10
+<span class="ln">554</span>            qetnx = (qetnx + qetn + eli + eli) * ex1
+<span class="ln">555</span>            qednx = (-1.0 + c.cc13 * qedn) * ex1
+<span class="ln">556</span>        qedn = (ez * (V2[2] + 2.0 * ez * V2[3]) / polx21 - ez * V2[7]
+<span class="ln">557</span>                - 3.0 * ez3 / polx22)
+<span class="ln">558</span>        qetn = -qedn + eli * (V2[4] + eli * (2.0 * V2[5]
+<span class="ln">559</span>                                             + 3.0 * eli * V2[6])) / polx22
+<span class="ln">560</span>        qetnx = qetnx + (5.0 + qetn) * ex2
+<span class="ln">561</span>        qednx = qednx + c.cc13 * qedn * ex2
+<span class="ln">562</span>        qedn = (ez * (V3[2] + 2.0 * ez * V3[3]) / polx31 - ez * V3[7]
+<span class="ln">563</span>                - 3.0 * ez3 / polx32)
+<span class="ln">564</span>        qetn = -qedn + eli * (V3[4] + eli * (2.0 * V3[5]
+<span class="ln">565</span>                                             + 3.0 * eli * V3[6])) / polx32
+<span class="ln">566</span>        qetnx = qetnx + qetn * ex3
+<span class="ln">567</span>        qednx = qednx + (2.0 + c.cc13 * qedn) * ex3
+<span class="ln">568</span>        pet = pet - qetnx
+<span class="ln">569</span>        pep = pep - qednx
+<span class="ln">570</span>    return (epp1, epp2, epp3, ecn, e3al, pep, pet, sum1, be7massfraction,
+<span class="ln">571</span>            ealpca, enu)</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_screen_weak_or_int'><summary>Python version: _screen_weak_or_int</summary><pre class='doc'>Weak screening, or Graboske et al.&#x27;s intermediate form (as used for
+Be7 + p and He3 + p): UWK if at most WEAKSCREENING, else UINT.</pre><pre class='src'><span class="ln">84</span>def _screen_weak_or_int(uwk, z86, amu, xtr):
+<span class="ln">85</span>    &quot;&quot;&quot;Weak screening, or Graboske et al.&#x27;s intermediate form (as used for
+<span class="ln">86</span>    Be7 + p and He3 + p): UWK if at most WEAKSCREENING, else UINT.&quot;&quot;&quot;
+<span class="ln">87</span>    if uwk &lt;= nmlpar_mod.weakscreening:
+<span class="ln">88</span>        return uwk
+<span class="ln">89</span>    return 0.38 * xxl8 * xtr * z86 / (amu * z58 * z28)</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Wrong. "<code>QS0E</code>, <code>QQS0EE</code> and … <code>FO16</code>, <code>FC12</code> (<code>/CROSS/</code>, set in PARMIN from the namelist)": <a href="../yrec-map/remap.f.html#def-REMAP">REMAP</a> sets them (all 1, then, with <code>LNEWNUC</code>, from the namelist's cross-sections and their derivatives, relative to Solar Fusion I); PARMIN only declares <code>/CROSS/</code>. Fix: name REMAP.</li>
+<li>Missing question. In the pp/CNO loop, <code>DRATT</code> differentiates the bracket $R_1$ without the factors <code>QS0E(I)</code>, <code>QQS0EE(I)</code> on the $Q_3$, $Q_4$, $Q_5$ terms, so with <code>LNEWNUC</code> and factors other than 1 the temperature derivative does not match the rate. Fix: add a question.</li>
+<li>Missing (question 3). In reaction 8 ($^{13}$C($\alpha$,n)) the derivative terms <code>A2*(9.373*T9M1-1.5)</code> … lack the factor $T_9^{-3/2}$ that multiplies <code>A2</code>…<code>A5</code> in the rate. Fix: add to question 3.</li>
+<li>Unclear. Question 8: "<code>SUM1</code> $\le 10^{-12}$ zeroes everything": it zeroes <code>PEP</code>, <code>PET</code> and the <code>EG</code> array (so the fluxes), but <code>SUM1</code> itself and the <code>DG</code> array (so <code>EPP1</code>, <code>ECN</code>, …) are kept. Fix: say so.</li>
+<li>Missing. Step 5 does not state the deuterium cap: in the convective envelope (<code>IU</code> $\ge$ <code>JCZ</code>) and when <code>TAUCZ</code> $&gt; 1$, the rate per unit $X$ is limited so that $r X \le (N_A/A_D)/\tau_\mathrm{cz}$. Fix: one sentence.</li>
+<li>Missing (question 6). On the low-temperature path <code>RHO</code>, <code>T9</code> and the $^7$Be rates are also stale, and with <code>LSNU</code> they enter <code>FLUX(3)</code> and <code>BE7MASSFRACTION</code>. Fix: add a clause. (Checked: main.f skips shells with $\log T &lt; 6$; the <code>IU</code> of question 7 is never set in main.f, line 388.)</li>
+</ol>
+<p>Checked and right: the screening formulas, the eq. 3.14 rate form, the branchings, $Q$ values, <code>C21</code>, the Itoh-branch bug (question 1), the relative-derivative point (question 2), reaction 10's missing $T_9^{-2/3}$, the deuterium rate and derivative (question 4), and the MHP 5/90 comment (question 5).</p>
+<p>Revised: REMAP named for <code>/CROSS/</code>; the deuterium cap added to step 5; questions 3, 6 and 8 sharpened; question 9 (<code>QS0E</code>, <code>QQS0EE</code> missing from <code>DRATT</code>) added.</p></div></details>
+</main></body></html>

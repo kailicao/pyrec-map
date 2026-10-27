@@ -1,0 +1,204 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>momi.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ momi.f</span></header><main>
+<h1>momi.f</h1>
+<p class='muted'>92 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/momi.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>momi.py</code>, 57 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Computes the moment of inertia <code>HI</code> of each shell of a rotating, distorted model, and its derivative with respect to the angular velocity, <code>QIW</code> $= dI/d\Omega$. The comment: "Moment of inertia is calculated by the method used in Wai-Yuen Law's thesis (Yale, 1980) p.61", and "MOMI assumes that SHAPE has already been called".</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the shape parameters <code>ETA2</code> and <code>R0</code> per shell (from <a href="../yrec-map/shape.f.html#def-SHAPE">SHAPE</a>, probably the distortion parameter and the radius of the equivalent sphere, as the names suggest); $\log r$ (<code>HR</code>), $\log m$ (<code>HS</code>), the shell masses <code>HS2</code>, the angular velocities <code>OMEGA</code>, and the shell range <code>JSTART..JEND</code>.</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/hpoint.f.html#def-HPOINT">HPOINT</a>, <a href="../yrec-map/solid.f.html#def-SOLID">SOLID</a> and <a href="../yrec-map/starin.f.html#def-STARIN">STARIN</a>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/intmom.f.html#def-INTMOM">INTMOM</a>, which evaluates the integral at each shell.</li>
+<li><strong>Outputs:</strong> <code>HI</code> and <code>QIW</code> per shell.</li>
+<li><strong>Modules:</strong> <code>NMLPAR_MOD</code> (<code>WALPCZ</code>), <code>CONSTANTS_MOD</code> (<code>CLN</code>, <code>CC13</code>, <code>CC23</code>, and $\log G$, <code>CGL</code>), <code>DIMENSIONS_MOD</code> (<code>JSON</code>). The unused <code>/CCOUT/</code> and <code>/LUOUT/</code> of <code>rp_1</code> are no longer declared.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ul>
+<li><strong>Spherical shortcut.</strong> If <code>WALPCZ</code> $\ne 0$ (<code>WALPCZ</code> is the exponent of the rotation law $\Omega\, r^{\mathrm{WALPCZ}} =$ constant in the surface convection zone, as <a href="../yrec-map/getnewenv.f.html#def-GETNEWENV">GETNEWENV</a>'s comment says; <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a> keeps it between −2 and 0, so 0 is solid-body rotation), each shell is a thin spherical shell, $I = \tfrac23\,\Delta m\, r^2$, with $dI/d\Omega = 0$; the central shell is a sphere, $I = 0.4\,\Delta m\, r^2$, at the mean of the first two $\log r$.</li>
+<li><strong>Distorted shells.</strong> Otherwise, for each shell, with $r_0$ = <code>R0</code>, the parameter
+$$A = \frac{5}{3}\,\frac{\Omega^2\, r_0^3}{G\,m\,(2 + \eta_2)}$$
+(<code>CON</code> $=5/(3G)$), the ratio <code>R0R</code> $= r_0^5/r^3$, and <code>QR0R</code> $= d\ln r_0/d\ln r$ set to 1, go to <code>INTMOM</code>, which returns $I$ and $dI/d\Omega$ per unit mass; these are multiplied by <code>HS2</code>.</li>
+</ul>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused arguments <code>HD</code> and <code>M</code> removed.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Unused values.</strong> <code>R0P</code> and <code>RPHIP</code> (the previous shell's $\ln r_0$ and $\ln r$) and <code>H0</code> (the thin-shell moment of inertia) are computed in each pass but never used, and <code>QR0R</code> is fixed at 1. Were they meant for a derivative $d\ln r_0/d\ln r$ between shells?</li>
+<li><strong><code>WALPCZ</code> as a switch.</strong> The spherical shortcut is taken for every shell in <code>JSTART..JEND</code>, not only those in the convection zone, whenever the convection zone's rotation law is not solid-body (<code>WALPCZ</code> $\ne 0$). Why should that law switch off the distortion of all shells?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+SUBROUTINE MOMI(ETA2,HD,HR,HS,HS2,JSTART,JEND,OMEGA,R0,HI,QIW,M)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MOMI'>MOMI</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MOMI'><h3><span class='kind'>subroutine</span>MOMI</h3>
+<p class='muted'>lines 3–92 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/momi.f#L3-L92'>GitHub</a></p>
+<pre>SUBROUTINE MOMI(ETA2,HR,HS,HS2,JSTART,JEND,OMEGA,R0,HI,QIW)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+SUBROUTINE MOMI(ETA2,HD,HR,HS,HS2,JSTART,JEND,OMEGA,R0,HI,QIW,M)  ! KC 2025-05-31</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/intmom.f.html#def-INTMOM'>INTMOM</a> <span class='muted'>(intmom.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/hpoint.f.html#def-HPOINT'>HPOINT</a> <span class='muted'>(hpoint.f)</span> ×2</li>
+<li><a href='../yrec-map/solid.f.html#def-SOLID'>SOLID</a> <span class='muted'>(solid.f)</span></li>
+<li><a href='../yrec-map/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE MOMI(ETA2,HR,HS,HS2,JSTART,JEND,OMEGA,R0,HI,QIW)
+<span class="ln">4</span>C 10/15/26 MHP via Claude
+<span class="ln">5</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">6</span>C PARAMETER(JSON=5000) here.
+<span class="ln">7</span>      USE DIMENSIONS_MOD
+<span class="ln">8</span>C 10/14/26 MHP via Claude
+<span class="ln">9</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">10</span>      USE NMLPAR_MOD
+<span class="ln">11</span>C 10/14/26 MHP via Claude
+<span class="ln">12</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">13</span>      USE CONSTANTS_MOD
+<span class="ln">14</span>C 10/20/26 MHP via Claude
+<span class="ln">15</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">16</span>C explicit declarations.
+<span class="ln">17</span>      IMPLICIT NONE
+<span class="ln">18</span>      REAL*8 A,CON,ETA2,ETA2X,H0,HI,HIM,HR,HS,HS2,OMEGA,QIW,QIWM,QR0R,
+<span class="ln">19</span>     *       R0,R03,R0P,R0R,RAD,RPHI3,RPHIP
+<span class="ln">20</span>      INTEGER I,JEND,JSTART
+<span class="ln">21</span>
+<span class="ln">22</span>C 10/11/26 MHP via Claude
+<span class="ln">23</span>C code changed to remove LSCRIB from COMMON/CCOUT/: it was declared
+<span class="ln">24</span>C positionally in all 17 files sharing this block but never read or
+<span class="ln">25</span>C written in executable code anywhere, and no namelist file sets it.
+<span class="ln">26</span>C 10/12/26 MHP via Claude
+<span class="ln">27</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">28</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">29</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">30</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">31</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">32</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">33</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">34</span>C
+<span class="ln">35</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">36</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">37</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">38</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CCOUT/ declaration
+<span class="ln">39</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">40</span>C 9/25/26 MHP via Claude
+<span class="ln">41</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">42</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">43</span>C 10/13/26 MHP via Claude: removed the unused COMMON/IOUNITS/ declaration
+<span class="ln">44</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">45</span>C       DIMENSION HD(JSON),HR(JSON),HS2(JSON),R0(JSON),ETA2(JSON),HI(JSON)  ! KC 2025-05-31
+<span class="ln">46</span>      DIMENSION HR(JSON),HS2(JSON),R0(JSON),ETA2(JSON),HI(JSON)
+<span class="ln">47</span>      DIMENSION OMEGA(JSON),HS(JSON),QIW(JSON)
+<span class="ln">48</span>      SAVE
+<span class="ln">49</span>
+<span class="ln">50</span>C  FIND THE MOMENT OF INERTIA (HI) AND DI/D(OMEGA) (QIW).
+<span class="ln">51</span>C  MOMI ASSUMES THAT SHAPE HAS ALREADY BEEN CALLED.
+<span class="ln">52</span>C  MOMENT OF INERTIA IS CALCULATED BY THE METHOD USED IN WAI-YUEN LAW&#x27;S
+<span class="ln">53</span>C  THESIS(YALE,1980) P.61.
+<span class="ln">54</span>      IF(JSTART.EQ.1) THEN
+<span class="ln">55</span>         R0P = 0.0D0
+<span class="ln">56</span>         RPHIP = 0.0D0
+<span class="ln">57</span>      ELSE
+<span class="ln">58</span>         R0P = DLOG(R0(JSTART - 1))
+<span class="ln">59</span>         RPHIP = CLN*HR(JSTART - 1)
+<span class="ln">60</span>      ENDIF
+<span class="ln">61</span>      CON = CC13*5.0D0/DEXP(CLN*CGL)
+<span class="ln">62</span>      IF(WALPCZ.NE.0.0D0)THEN
+<span class="ln">63</span>         DO I = JSTART,JEND
+<span class="ln">64</span>            HI(I) = CC23*HS2(I)*EXP(CLN*2.0D0*HR(I))
+<span class="ln">65</span>            QIW(I) = 0.0D0
+<span class="ln">66</span>         END DO
+<span class="ln">67</span>         IF(JSTART.EQ.1)THEN
+<span class="ln">68</span>             RAD = 0.5D0*(HR(1)+HR(2))
+<span class="ln">69</span>             HI(1) = 0.4D0*HS2(1)*EXP(CLN*2.0D0*RAD)
+<span class="ln">70</span>         ENDIF
+<span class="ln">71</span>         RETURN
+<span class="ln">72</span>      ENDIF
+<span class="ln">73</span>      DO 20 I = JSTART,JEND
+<span class="ln">74</span>C  QR0R = D LN R0/ D LN R
+<span class="ln">75</span>C
+<span class="ln">76</span>         QR0R = 1.0D0
+<span class="ln">77</span>         H0 = CC23*HS2(I)*DEXP(CLN*2.0D0*HR(I))
+<span class="ln">78</span>         R03 = R0(I)**3
+<span class="ln">79</span>         RPHI3 = DEXP(CLN*3.0D0*HR(I))
+<span class="ln">80</span>         R0R = (R03/RPHI3)*R0(I)**2
+<span class="ln">81</span>         A = CON*OMEGA(I)**2*R03/(DEXP(CLN*HS(I))*(2.0D0+ETA2(I)))
+<span class="ln">82</span>         ETA2X = ETA2(I)
+<span class="ln">83</span>C  EVALUATE INTEGRAL AT THE ZONE CENTER
+<span class="ln">84</span>         CALL <a href="../yrec-map/intmom.f.html#def-INTMOM" title="INTMOM in intmom.f">INTMOM</a>(A,ETA2X,QR0R,R0R,HIM,QIWM)
+<span class="ln">85</span>         HI(I) = HIM*HS2(I)
+<span class="ln">86</span>         QIW(I) = QIWM*HS2(I)
+<span class="ln">87</span>         R0P = DLOG(R0(I))
+<span class="ln">88</span>         RPHIP = CLN*HR(I)
+<span class="ln">89</span>   20 CONTINUE
+<span class="ln">90</span>
+<span class="ln">91</span>      RETURN
+<span class="ln">92</span>      END</pre></details>
+<details class='py' id='py-momi'><summary>Python version: momi</summary><pre class='doc'>Compute the moment of inertia hi and dI/dOmega qiw of the shells
+jstart..jend (Law&#x27;s thesis, Yale 1980, p. 61), from the shapes found by
+SHAPE; thin spherical shells when WALPCZ is not 0.
+
+Translates: momi.f#MOMI (09c3b9b)
+
+Arguments: the shape parameters eta2 and r0; log r (hr), log m (hs),
+the shell masses hs2 and the angular velocities omega; the range
+jstart..jend. Arrays have index 0 unused.
+
+Sets in place: hi, qiw. Returns nothing.</pre><pre class='src'><span class="ln">11</span>def momi(eta2, hr, hs, hs2, jstart, jend, omega, r0, hi, qiw):
+<span class="ln">12</span>    &quot;&quot;&quot;Compute the moment of inertia hi and dI/dOmega qiw of the shells
+<span class="ln">13</span>    jstart..jend (Law&#x27;s thesis, Yale 1980, p. 61), from the shapes found by
+<span class="ln">14</span>    SHAPE; thin spherical shells when WALPCZ is not 0.
+<span class="ln">15</span>
+<span class="ln">16</span>    Translates: momi.f#MOMI (09c3b9b)
+<span class="ln">17</span>
+<span class="ln">18</span>    Arguments: the shape parameters eta2 and r0; log r (hr), log m (hs),
+<span class="ln">19</span>    the shell masses hs2 and the angular velocities omega; the range
+<span class="ln">20</span>    jstart..jend. Arrays have index 0 unused.
+<span class="ln">21</span>
+<span class="ln">22</span>    Sets in place: hi, qiw. Returns nothing.
+<span class="ln">23</span>    &quot;&quot;&quot;
+<span class="ln">24</span>    c = constants_mod
+<span class="ln">25</span>    # Question (see the page): r0p, rphip (and h0 below) are never used.
+<span class="ln">26</span>    if jstart == 1:
+<span class="ln">27</span>        r0p = 0.0
+<span class="ln">28</span>        rphip = 0.0
+<span class="ln">29</span>    else:
+<span class="ln">30</span>        r0p = math.log(r0[jstart - 1])
+<span class="ln">31</span>        rphip = c.cln * hr[jstart - 1]
+<span class="ln">32</span>    con = c.cc13 * 5.0 / math.exp(c.cln * c.cgl)
+<span class="ln">33</span>    # Question (see the page): WALPCZ as a switch for every shell.
+<span class="ln">34</span>    if nmlpar_mod.walpcz != 0.0:
+<span class="ln">35</span>        for i in range(jstart, jend + 1):
+<span class="ln">36</span>            hi[i] = c.cc23 * hs2[i] * math.exp(c.cln * 2.0 * hr[i])
+<span class="ln">37</span>            qiw[i] = 0.0
+<span class="ln">38</span>        if jstart == 1:
+<span class="ln">39</span>            rad = 0.5 * (hr[1] + hr[2])
+<span class="ln">40</span>            hi[1] = 0.4 * hs2[1] * math.exp(c.cln * 2.0 * rad)
+<span class="ln">41</span>        return
+<span class="ln">42</span>    for i in range(jstart, jend + 1):                    # loop 20
+<span class="ln">43</span>        # QR0R = d ln r0 / d ln r.
+<span class="ln">44</span>        qr0r = 1.0
+<span class="ln">45</span>        h0 = c.cc23 * hs2[i] * math.exp(c.cln * 2.0 * hr[i])
+<span class="ln">46</span>        r03 = r0[i]**3
+<span class="ln">47</span>        rphi3 = math.exp(c.cln * 3.0 * hr[i])
+<span class="ln">48</span>        r0r = (r03 / rphi3) * r0[i]**2
+<span class="ln">49</span>        a = con * omega[i]**2 * r03 / (math.exp(c.cln * hs[i])
+<span class="ln">50</span>                                       * (2.0 + eta2[i]))
+<span class="ln">51</span>        eta2x = eta2[i]
+<span class="ln">52</span>        # The integral at the zone centre.
+<span class="ln">53</span>        him, qiwm = intmom(a, eta2x, qr0r, r0r, 0.0, 0.0)
+<span class="ln">54</span>        hi[i] = him * hs2[i]
+<span class="ln">55</span>        qiw[i] = qiwm * hs2[i]
+<span class="ln">56</span>        r0p = math.log(r0[i])
+<span class="ln">57</span>        rphip = c.cln * hr[i]</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Unclear (question settled in part by the code).</strong> Question 2 asks what <code>WALPCZ</code> is. GETNEWENV's comment gives it: the exponent in $\Omega r^{\mathrm{WALPCZ}} =$ constant in the surface convection zone, which PARMIN keeps in $[-2, 0]$. Fix: say so in the method and narrow the question to why that law switches off distortion for every shell.</li>
+<li><strong>Missing.</strong> <code>H0</code> is also computed and unused. Fix: add to question 1.</li>
+</ol>
+<p>Revised: <code>WALPCZ</code> explained; questions 1 and 2 revised.</p></div></details>
+</main></body></html>

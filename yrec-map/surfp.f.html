@@ -1,0 +1,331 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>surfp.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ surfp.f</span></header><main>
+<h1>surfp.f</h1>
+<p class='muted'>154 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/surfp.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>surfp.py</code>, 135 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>SURFP</code> gives the pressure at $T = T_\mathrm{eff}$ in a model atmosphere, by interpolating a table of $\log P$ in $\log T_\mathrm{eff}$ and $\log g$. It is the outer boundary of the envelope integration with Kurucz atmospheres (<code>KTTAU = 3</code>).</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> $\log T_\mathrm{eff}$ (<code>TEFFL</code>) and $\log g$ (<code>GL</code>); the table in <code>ATMOS2_MOD</code> (<code>ATMPL(57,11)</code>, the grids <code>ATMTL</code>, <code>ATMGL</code>), read by <a href="../yrec-map/setups.f.html#def-SETUPS">SETUPS</a>; and in <code>FAC_MOD</code>, the lowest and highest valid gravity index for each temperature (<code>IMIN</code>, <code>IMINMAX</code>), also set by <code>SETUPS</code>.</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a>, for <code>KTTAU = 3</code>. Its siblings are <a href="../yrec-map/kcsurfp.f.html#def-KCSURFP">KCSURFP</a> (Kurucz–Castelli tables, <code>KTTAU = 5</code>) and <a href="../yrec-map/alsurfp.f.html#def-ALSURFP">ALSURFP</a> (Allard tables, <code>KTTAU = 4</code>).</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/inter3.f.html#def-INTER3">INTER3</a> (3-point Lagrange weights), <a href="../yrec-map/kspline.f.html#def-KSPLINE">KSPLINE</a> and <a href="../yrec-map/ksplint.f.html#def-KSPLINT">KSPLINT</a> (a natural cubic spline through four points).</li>
+<li><strong>Outputs:</strong> in <code>ATMPRT_MOD</code>, <code>AP</code> = $\log P$ and <code>AT</code> = $\log T_\mathrm{eff}$, read by <code>ENVINT</code> (and <a href="../yrec-map/qatm.f.html#def-QATM">QATM</a>, <a href="../yrec-map/massloss.f.html#def-MASSLOSS">MASSLOSS</a>); <code>JP</code> and <code>KP</code> in <code>FAC_MOD</code>, the table cell used. With <code>LPRT</code>, a line on <code>ISHORT</code> and <code>ISTOR</code> (units from <code>IOUNITS_MOD</code>).</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Stop the run if $\log T_\mathrm{eff} &lt; 3.5$ or $\log g &lt; -0.5$.</li>
+<li>Find four table temperatures around $T_\mathrm{eff}$.</li>
+<li>At each of them, interpolate $\log P$ in $\log g$: for $\log T &gt; 4.55$ linearly between the two highest gravities; for $4.5 &lt; \log T \le 4.55$ with the 3-point Lagrange formula on the three highest gravities; otherwise with a natural cubic spline through the four valid gravities nearest $\log g$ (the top four, a bracketing four, or the bottom four).</li>
+<li>Interpolate the four values in $\log T_\mathrm{eff}$ with a natural cubic spline through four points.</li>
+</ol>
+<p>The four-point spline, for points $x_1 &lt; \dots &lt; x_4$, is the cubic-spline formula of <a href="../yrec-map/splint.f.html">splint.f</a> with natural ends.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (<code>/ATMOS2/</code>, <code>/FAC/</code>, <code>/ATMPRT/</code> and <code>/LUOUT/</code> to <code>ATMOS2_MOD</code>, <code>FAC_MOD</code>, <code>ATMPRT_MOD</code> and <code>IOUNITS_MOD</code>; the unused parameters <code>NTC</code>, <code>NGC</code> dropped), <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The comment describes another method.</strong> The header says it interpolates "using a 4-point Lagrangian interpolator" and "will quit if the desired data point has Teff or log g more than one table point from the data". The code uses 4-point splines (the Lagrange calls <code>INTRP2</code> are commented out), and checks only the lower limits of $T_\mathrm{eff}$ and $g$. Extrapolation above the table's top is silent.</li>
+<li><strong>Hot temperatures.</strong> For $\log T &gt; 4.5$ only the two or three highest gravities are used, whatever $\log g$ is: probably because the table has no low-gravity values there. Is linear extrapolation to low gravity acceptable?</li>
+<li><strong>Hard-coded limits.</strong> 3.5, $-0.5$, 4.5 and 4.55 are written in the code and tie it to one table; a different table would need them changed.</li>
+<li><strong>Missing gravities outside the general case.</strong> G. Somers limited the general case's search to <code>IMINMAX(J)</code> "to prevent using -999", but the top-four branch (<code>GL ≥ ATMGL(NG-1)</code>) and the hot branches use the gravities <code>NG-3</code> … <code>NG</code> without checking <code>IMINMAX(J)</code>. Can those branches still read the table's missing values (-999)?</li>
+</ol></div>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-SURFP'>SURFP</a> <span class='muted'>subroutine</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-SURFP'><h3><span class='kind'>subroutine</span>SURFP</h3>
+<p class='muted'>lines 1–154 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/surfp.f#L1-L154'>GitHub</a></p>
+<pre>SUBROUTINE SURFP(TEFFL,GL,LPRT)</pre>
+<div class='notes'><p>$\log P$ at $T = T_\mathrm{eff}$ from the Kurucz atmosphere table, by interpolation in $\log g$ then $\log T_\mathrm{eff}$.</p></div>
+<p><strong>Uses modules</strong> <a href='../yrec-map/atmos2_mod.f.html#def-ATMOS2_MOD'>ATMOS2_MOD</a>, <a href='../yrec-map/atmprt_mod.f.html#def-ATMPRT_MOD'>ATMPRT_MOD</a>, <a href='../yrec-map/fac_mod.f.html#def-FAC_MOD'>FAC_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/inter3.f.html#def-INTER3'>INTER3</a> <span class='muted'>(inter3.f)</span></li>
+<li><a href='../yrec-map/kspline.f.html#def-KSPLINE'>KSPLINE</a> <span class='muted'>(kspline.f)</span> ×4</li>
+<li><a href='../yrec-map/ksplint.f.html#def-KSPLINT'>KSPLINT</a> <span class='muted'>(ksplint.f)</span> ×4</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">1</span>      SUBROUTINE SURFP(TEFFL,GL,LPRT)
+<span class="ln">2</span>C 10/14/26 MHP via Claude
+<span class="ln">3</span>C code changed to convert COMMON/FAC/ into FAC_MOD.
+<span class="ln">4</span>      USE FAC_MOD
+<span class="ln">5</span>C 10/14/26 MHP via Claude
+<span class="ln">6</span>C code changed to convert COMMON/ATMPRT/ into ATMPRT_MOD.
+<span class="ln">7</span>      USE ATMPRT_MOD
+<span class="ln">8</span>C 10/14/26 MHP via Claude
+<span class="ln">9</span>C code changed to convert COMMON/ATMOS2/ into ATMOS2_MOD.
+<span class="ln">10</span>      USE ATMOS2_MOD
+<span class="ln">11</span>C 10/14/26 MHP via Claude
+<span class="ln">12</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">13</span>      USE IOUNITS_MOD
+<span class="ln">14</span>C 10/20/26 MHP via Claude
+<span class="ln">15</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">16</span>C explicit declarations.
+<span class="ln">17</span>      IMPLICIT NONE
+<span class="ln">18</span>      REAL*8 DUM,FX,GL,PP,PTAB,QG,QGG,QS,QT,TEFFL,Y0,YG,YT
+<span class="ln">19</span>      INTEGER J,JJ,K,KK,KKK,N,NG,NT
+<span class="ln">20</span>      LOGICAL*4 LPRT
+<span class="ln">21</span>
+<span class="ln">22</span>C PARAMETERS NT AND NG FOR TABULATED SURFACE PRESSURES.
+<span class="ln">23</span>      PARAMETER(NT=57,NG=11)
+<span class="ln">24</span>C      CHARACTER*256 FATM
+<span class="ln">25</span>
+<span class="ln">26</span>C MHP 8/25 Removed file names from common block
+<span class="ln">27</span>C      COMMON/ATMOS2/ATMPL(NT,NG),ATMTL(NT),
+<span class="ln">28</span>C     *              ATMGL(NG),ATMZ,IOATM,FATM
+<span class="ln">29</span>C 9/25/26 MHP via Claude
+<span class="ln">30</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">31</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">32</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">33</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">34</span>C COMMON/IOUNITS/
+<span class="ln">35</span>      DIMENSION QT(4),QG(4),PP(4),DUM(3),QGG(3),QS(3),PTAB(4),
+<span class="ln">36</span>     *          YT(4),YG(4)
+<span class="ln">37</span>      SAVE
+<span class="ln">38</span>C SURFPL INTERPOLATES IN TEMPERATURE USING A 4-POINT LAGRANGIAN
+<span class="ln">39</span>C INTERPOLATOR, AND INTERPOLATES IN GRAVITY THE SAME WAY IF 4 OR
+<span class="ln">40</span>C MORE POINTS ARE AVAILABLE.  IT WILL QUIT IF THE DESIRED DATA POINT
+<span class="ln">41</span>C HAS TEFF OR LOG G MORE THAN ONE TABLE POINT FROM THE DATA.
+<span class="ln">42</span>C
+<span class="ln">43</span>C CHECK TO ENSURE THAT DATA IS WITHIN TABLE.
+<span class="ln">44</span>      IF(TEFFL.LT.3.5D0 .OR. GL.LT.-0.5D0)THEN
+<span class="ln">45</span>         WRITE(IOWR,911)TEFFL,GL
+<span class="ln">46</span>         WRITE(ISHORT,911)TEFFL,GL
+<span class="ln">47</span>  911    FORMAT(1X,&#x27;DESIRED ATMOSPHERE OUTSIDE TABLE RANGE&#x27;/
+<span class="ln">48</span>     *          &#x27; LOG TEFF&#x27;,F10.6,&#x27; LOG G&#x27;,F10.6/&#x27; RUN STOPPED&#x27;)
+<span class="ln">49</span>         STOP
+<span class="ln">50</span>      ENDIF
+<span class="ln">51</span>C TEMPERATURE INTERPOLATION FACTORS.
+<span class="ln">52</span>      DO J = 1,NT
+<span class="ln">53</span>         IF(TEFFL.LE.ATMTL(J))GOTO 10
+<span class="ln">54</span>      END DO
+<span class="ln">55</span>      J = NT
+<span class="ln">56</span>   10 CONTINUE
+<span class="ln">57</span>      JJ = MAX(1,J-2)
+<span class="ln">58</span>      JJ = MIN(NT-3,JJ)
+<span class="ln">59</span>      DO K = 1,4
+<span class="ln">60</span>         QT(K) = ATMTL(JJ+K-1)
+<span class="ln">61</span>      END DO
+<span class="ln">62</span>C      CALL INTRP2(QR,QT,TEFFL)
+<span class="ln">63</span>      JP = JJ
+<span class="ln">64</span>C GRAVITY INTERPOLATION FACTORS.
+<span class="ln">65</span>      DO 20 J = JJ,JJ+3
+<span class="ln">66</span>         N = J-JJ+1
+<span class="ln">67</span>C CHECK IF 4 LOG VALUES AVAILABLE - OTHERWISE, USE 3 POINT LAGRANGIAN
+<span class="ln">68</span>C OR LINEAR INTERPOLATION.
+<span class="ln">69</span>         IF(ATMTL(J).GT.4.5D0)THEN
+<span class="ln">70</span>            IF(ATMTL(J).GT.4.55D0)THEN
+<span class="ln">71</span>C LINEAR INTERPOLATION
+<span class="ln">72</span>               FX = (GL-ATMGL(NG-1))/(ATMGL(NG)-ATMGL(NG-1))
+<span class="ln">73</span>               PP(N)=ATMPL(J,NG-1)+FX*(ATMPL(J,NG)-ATMPL(J,NG-1))
+<span class="ln">74</span>               KP(N) = NG-1
+<span class="ln">75</span>            ELSE
+<span class="ln">76</span>C 3-POINT LAGRANGIAN INTERPOLATION.
+<span class="ln">77</span>               DO K = 1,3
+<span class="ln">78</span>                  QS(K) = ATMGL(NG-3+K)
+<span class="ln">79</span>               END DO
+<span class="ln">80</span>               CALL <a href="../yrec-map/inter3.f.html#def-INTER3" title="INTER3 in inter3.f">INTER3</a>(QS,QGG,DUM,GL)
+<span class="ln">81</span>               PP(N)=ATMPL(J,NG-2)*QGG(1)+ATMPL(J,NG-1)*QGG(2)+
+<span class="ln">82</span>     *               ATMPL(J,NG)*QGG(3)
+<span class="ln">83</span>               KP(N) = NG-2
+<span class="ln">84</span>            ENDIF
+<span class="ln">85</span>            GOTO 20
+<span class="ln">86</span>         ENDIF
+<span class="ln">87</span>         IF(GL.GE.ATMGL(NG-1))THEN
+<span class="ln">88</span>C DESIRED LOG G ABOVE SECOND TO TOP TABLE LOG G - USE TOP 4 LOG G VALUES.
+<span class="ln">89</span>            DO KK = 1,4
+<span class="ln">90</span>               QG(KK)=ATMGL(NG-4+KK)
+<span class="ln">91</span>               PTAB(KK) = ATMPL(J,NG-4+KK)
+<span class="ln">92</span>            END DO
+<span class="ln">93</span>C            CALL INTRP2(QR,QG,GL)
+<span class="ln">94</span>            CALL <a href="../yrec-map/kspline.f.html#def-KSPLINE" title="KSPLINE in kspline.f">KSPLINE</a>(QG,PTAB,YG)
+<span class="ln">95</span>            CALL <a href="../yrec-map/ksplint.f.html#def-KSPLINT" title="KSPLINT in ksplint.f">KSPLINT</a>(QG,PTAB,YG,GL,Y0)
+<span class="ln">96</span>C            PP(N) = ATMPL(J,NG-3)*QG(1)+ATMPL(J,NG-2)*QG(2)+
+<span class="ln">97</span>C     *              ATMPL(J,NG-1)*QG(3)+ATMPL(J,NG)*QG(4)
+<span class="ln">98</span>            PP(N) = Y0
+<span class="ln">99</span>            KP(N) = NG-3
+<span class="ln">100</span>            GOTO 20
+<span class="ln">101</span>         ENDIF
+<span class="ln">102</span>C GENERAL CASE - FIND 4 NEAREST POINTS IN GRAVITY THAT ARE IN THE TABLE.
+<span class="ln">103</span>C G Somers, I changed NG to IMINMAX in the next line. This prevents the
+<span class="ln">104</span>C code from using -999 to interpolate in some instances.
+<span class="ln">105</span>         DO K = IMINMAX(J)-3,IMIN(J),-1
+<span class="ln">106</span>            IF(GL.LT.ATMGL(K+2).AND.GL.GE.ATMGL(K+1))THEN
+<span class="ln">107</span>               KK = MAX(IMIN(J),K)
+<span class="ln">108</span>               KK = MIN(NG-3,KK)
+<span class="ln">109</span>               DO KKK = 1,4
+<span class="ln">110</span>                  QG(KKK) = ATMGL(KK+KKK-1)
+<span class="ln">111</span>                  PTAB(KKK) = ATMPL(J,KK+KKK-1)
+<span class="ln">112</span>               END DO
+<span class="ln">113</span>               CALL <a href="../yrec-map/kspline.f.html#def-KSPLINE" title="KSPLINE in kspline.f">KSPLINE</a>(QG,PTAB,YG)
+<span class="ln">114</span>               CALL <a href="../yrec-map/ksplint.f.html#def-KSPLINT" title="KSPLINT in ksplint.f">KSPLINT</a>(QG,PTAB,YG,GL,Y0)
+<span class="ln">115</span>               PP(N) = Y0
+<span class="ln">116</span>C               CALL INTRP2(QR,QG,GL)
+<span class="ln">117</span>C               PP(N) = ATMPL(J,KK)*QG(1)+ATMPL(J,KK+1)*QG(2)+
+<span class="ln">118</span>C     *                 ATMPL(J,KK+2)*QG(3)+ATMPL(J,KK+3)*QG(4)
+<span class="ln">119</span>               KP(N) = KK
+<span class="ln">120</span>               GOTO 20
+<span class="ln">121</span>            ENDIF
+<span class="ln">122</span>         END DO
+<span class="ln">123</span>C DESIRED LOG G BELOW 2ND TABLE ENTRY -USE FIRST 4 POINTS.
+<span class="ln">124</span>         DO K = 1,4
+<span class="ln">125</span>            QG(K) = ATMGL(K+IMIN(J)-1)
+<span class="ln">126</span>            PTAB(K) = ATMPL(J,K+IMIN(J)-1)
+<span class="ln">127</span>         END DO
+<span class="ln">128</span>         CALL <a href="../yrec-map/kspline.f.html#def-KSPLINE" title="KSPLINE in kspline.f">KSPLINE</a>(QG,PTAB,YG)
+<span class="ln">129</span>         CALL <a href="../yrec-map/ksplint.f.html#def-KSPLINT" title="KSPLINT in ksplint.f">KSPLINT</a>(QG,PTAB,YG,GL,Y0)
+<span class="ln">130</span>         PP(N) = Y0
+<span class="ln">131</span>C         CALL INTRP2(QR,QG,GL)
+<span class="ln">132</span>C         II = IMIN(J)
+<span class="ln">133</span>C         PP(N) = ATMPL(J,II)*QG(1)+ATMPL(J,II+1)*QG(2)+
+<span class="ln">134</span>C     *           ATMPL(J,II+2)*QG(3)+ATMPL(J,II+3)*QG(4)
+<span class="ln">135</span>         KP(N) = IMIN(J)
+<span class="ln">136</span>   20 CONTINUE
+<span class="ln">137</span>C INTERPOLATE IN TEMPERATURE TO FIND CORRECT LOG P.
+<span class="ln">138</span>      CALL <a href="../yrec-map/kspline.f.html#def-KSPLINE" title="KSPLINE in kspline.f">KSPLINE</a>(QT,PP,YT)
+<span class="ln">139</span>      CALL <a href="../yrec-map/ksplint.f.html#def-KSPLINT" title="KSPLINT in ksplint.f">KSPLINT</a>(QT,PP,YT,TEFFL,Y0)
+<span class="ln">140</span>C      AP = PP(1)*QT(1)+PP(2)*QT(2)+PP(3)*QT(3)+PP(4)*QT(4)
+<span class="ln">141</span>      AP = Y0
+<span class="ln">142</span>      AT = TEFFL
+<span class="ln">143</span>C WRITE OUT INFORMATION TO THE MODEL FILE.
+<span class="ln">144</span>      IF (LPRT) THEN
+<span class="ln">145</span>        WRITE(ISHORT,70)
+<span class="ln">146</span>        WRITE(ISTOR,70)
+<span class="ln">147</span>70      FORMAT(&#x27;********PRESSURE AT T=TEFF INTERPOLATED FROM TABULATED&#x27;
+<span class="ln">148</span>     *         ,  &#x27; VALUES********&#x27;)
+<span class="ln">149</span>        WRITE(ISHORT,71) TEFFL,AP
+<span class="ln">150</span>        WRITE(ISTOR,71) TEFFL,AP
+<span class="ln">151</span>71      FORMAT(&#x27; &#x27;,20X,&#x27;LOG (Teff) =&#x27;,F10.5,&#x27; LOG P =&#x27;,F10.5)
+<span class="ln">152</span>      ENDIF
+<span class="ln">153</span>      RETURN
+<span class="ln">154</span>      END</pre></details>
+<details class='py' id='py-surfp'><summary>Python version: surfp</summary><pre class='doc'>log P at T = Teff, interpolated in log g at four table temperatures
+around log Teff (linearly, by 3-point Lagrange or by a 4-point natural
+spline, by temperature), then in log Teff by a 4-point natural spline.
+
+Translates: surfp.f#SURFP (09c3b9b)
+
+Arguments: teffl (log Teff), gl (log g); lprt, to print the result on
+ISHORT and ISTOR. Sets atmprt_mod.ap (log P) and atmprt_mod.at
+(log Teff), and fac_mod.jp and fac_mod.kp[1..4] (the table cell used).
+None is returned.</pre><pre class='src'><span class="ln">27</span>def surfp(teffl, gl, lprt):
+<span class="ln">28</span>    &quot;&quot;&quot;log P at T = Teff, interpolated in log g at four table temperatures
+<span class="ln">29</span>    around log Teff (linearly, by 3-point Lagrange or by a 4-point natural
+<span class="ln">30</span>    spline, by temperature), then in log Teff by a 4-point natural spline.
+<span class="ln">31</span>
+<span class="ln">32</span>    Translates: surfp.f#SURFP (09c3b9b)
+<span class="ln">33</span>
+<span class="ln">34</span>    Arguments: teffl (log Teff), gl (log g); lprt, to print the result on
+<span class="ln">35</span>    ISHORT and ISTOR. Sets atmprt_mod.ap (log P) and atmprt_mod.at
+<span class="ln">36</span>    (log Teff), and fac_mod.jp and fac_mod.kp[1..4] (the table cell used).
+<span class="ln">37</span>    None is returned.
+<span class="ln">38</span>    &quot;&quot;&quot;
+<span class="ln">39</span>    qt = np.zeros(5)
+<span class="ln">40</span>    pp = np.zeros(5)
+<span class="ln">41</span>    qs = np.zeros(4)
+<span class="ln">42</span>    qgg = np.zeros(4)
+<span class="ln">43</span>    dum = np.zeros(4)
+<span class="ln">44</span>    qg = np.zeros(5)
+<span class="ln">45</span>    ptab = np.zeros(5)
+<span class="ln">46</span>    atmpl = atmos2_mod.atmpl
+<span class="ln">47</span>    atmtl = atmos2_mod.atmtl
+<span class="ln">48</span>    atmgl = atmos2_mod.atmgl
+<span class="ln">49</span>
+<span class="ln">50</span>    # Question (see the page): only the lower limits are checked, and they
+<span class="ln">51</span>    # are hard-coded.
+<span class="ln">52</span>    if teffl &lt; 3.5 or gl &lt; -0.5:
+<span class="ln">53</span>        for unit in (iounits_mod.iowr, iounits_mod.ishort):
+<span class="ln">54</span>            iounits_mod.write(unit, &quot; DESIRED ATMOSPHERE OUTSIDE TABLE RANGE&quot;)
+<span class="ln">55</span>            iounits_mod.write(unit, f&quot; LOG TEFF{teffl:10.6f} LOG G{gl:10.6f}&quot;)
+<span class="ln">56</span>            iounits_mod.write(unit, &quot; RUN STOPPED&quot;)  # format 911
+<span class="ln">57</span>        raise SystemExit()
+<span class="ln">58</span>
+<span class="ln">59</span>    # The four table temperatures around teffl.
+<span class="ln">60</span>    for j in range(1, NT + 1):
+<span class="ln">61</span>        if teffl &lt;= atmtl[j]:
+<span class="ln">62</span>            break  # to label 10
+<span class="ln">63</span>    else:
+<span class="ln">64</span>        j = NT
+<span class="ln">65</span>    jj = max(1, j - 2)  # label 10
+<span class="ln">66</span>    jj = min(NT - 3, jj)
+<span class="ln">67</span>    for k in range(1, 5):
+<span class="ln">68</span>        qt[k] = atmtl[jj + k - 1]
+<span class="ln">69</span>    fac_mod.jp = jj
+<span class="ln">70</span>
+<span class="ln">71</span>    # log P in log g at each of the four temperatures (loop 20).
+<span class="ln">72</span>    for j in range(jj, jj + 4):
+<span class="ln">73</span>        n = j - jj + 1
+<span class="ln">74</span>        if atmtl[j] &gt; 4.5:
+<span class="ln">75</span>            # Question (see the page): hot temperatures use only the
+<span class="ln">76</span>            # highest gravities, without checking IMINMAX(J).
+<span class="ln">77</span>            if atmtl[j] &gt; 4.55:
+<span class="ln">78</span>                fx = (gl - atmgl[NG - 1]) / (atmgl[NG] - atmgl[NG - 1])
+<span class="ln">79</span>                pp[n] = atmpl[j, NG - 1] + fx * (atmpl[j, NG]
+<span class="ln">80</span>                                                 - atmpl[j, NG - 1])
+<span class="ln">81</span>                fac_mod.kp[n] = NG - 1
+<span class="ln">82</span>            else:
+<span class="ln">83</span>                for k in range(1, 4):
+<span class="ln">84</span>                    qs[k] = atmgl[NG - 3 + k]
+<span class="ln">85</span>                inter3(qs, qgg, dum, gl)
+<span class="ln">86</span>                pp[n] = (atmpl[j, NG - 2] * qgg[1]
+<span class="ln">87</span>                         + atmpl[j, NG - 1] * qgg[2]
+<span class="ln">88</span>                         + atmpl[j, NG] * qgg[3])
+<span class="ln">89</span>                fac_mod.kp[n] = NG - 2
+<span class="ln">90</span>            continue
+<span class="ln">91</span>
+<span class="ln">92</span>        if gl &gt;= atmgl[NG - 1]:
+<span class="ln">93</span>            # The top four gravities.
+<span class="ln">94</span>            # Question (see the page): IMINMAX(J) is not checked here.
+<span class="ln">95</span>            for kk in range(1, 5):
+<span class="ln">96</span>                qg[kk] = atmgl[NG - 4 + kk]
+<span class="ln">97</span>                ptab[kk] = atmpl[j, NG - 4 + kk]
+<span class="ln">98</span>            pp[n] = _spline4(qg, ptab, gl)
+<span class="ln">99</span>            fac_mod.kp[n] = NG - 3
+<span class="ln">100</span>            continue
+<span class="ln">101</span>
+<span class="ln">102</span>        # General case: the four valid gravities bracketing gl.
+<span class="ln">103</span>        found = False
+<span class="ln">104</span>        for k in range(fac_mod.iminmax[j] - 3, fac_mod.imin[j] - 1, -1):
+<span class="ln">105</span>            if gl &lt; atmgl[k + 2] and gl &gt;= atmgl[k + 1]:
+<span class="ln">106</span>                kk = max(fac_mod.imin[j], k)
+<span class="ln">107</span>                kk = min(NG - 3, kk)
+<span class="ln">108</span>                for kkk in range(1, 5):
+<span class="ln">109</span>                    qg[kkk] = atmgl[kk + kkk - 1]
+<span class="ln">110</span>                    ptab[kkk] = atmpl[j, kk + kkk - 1]
+<span class="ln">111</span>                pp[n] = _spline4(qg, ptab, gl)
+<span class="ln">112</span>                fac_mod.kp[n] = kk
+<span class="ln">113</span>                found = True
+<span class="ln">114</span>                break
+<span class="ln">115</span>        if found:
+<span class="ln">116</span>            continue
+<span class="ln">117</span>
+<span class="ln">118</span>        # The lowest four valid gravities.
+<span class="ln">119</span>        for k in range(1, 5):
+<span class="ln">120</span>            qg[k] = atmgl[k + fac_mod.imin[j] - 1]
+<span class="ln">121</span>            ptab[k] = atmpl[j, k + fac_mod.imin[j] - 1]
+<span class="ln">122</span>        pp[n] = _spline4(qg, ptab, gl)
+<span class="ln">123</span>        fac_mod.kp[n] = fac_mod.imin[j]
+<span class="ln">124</span>
+<span class="ln">125</span>    # log P in log Teff.
+<span class="ln">126</span>    atmprt_mod.ap = _spline4(qt, pp, teffl)
+<span class="ln">127</span>    atmprt_mod.at = teffl
+<span class="ln">128</span>
+<span class="ln">129</span>    if lprt:
+<span class="ln">130</span>        for unit in (iounits_mod.ishort, iounits_mod.istor):
+<span class="ln">131</span>            iounits_mod.write(unit, &quot;********PRESSURE AT T=TEFF INTERPOLATED &quot;
+<span class="ln">132</span>                              &quot;FROM TABULATED VALUES********&quot;)  # format 70
+<span class="ln">133</span>        for unit in (iounits_mod.ishort, iounits_mod.istor):
+<span class="ln">134</span>            iounits_mod.write(unit, f&quot; {&#x27;&#x27;:20s}LOG (Teff) ={teffl:10.5f}&quot;
+<span class="ln">135</span>                              f&quot; LOG P ={atmprt_mod.ap:10.5f}&quot;)  # format 71</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_spline4'><summary>Python version: _spline4</summary><pre class='doc'>KSPLINE then KSPLINT on four points: the spline&#x27;s value at x.</pre><pre class='src'><span class="ln">20</span>def _spline4(qg, ptab, x):
+<span class="ln">21</span>    &quot;&quot;&quot;KSPLINE then KSPLINT on four points: the spline&#x27;s value at x.&quot;&quot;&quot;
+<span class="ln">22</span>    yg = np.zeros(5)
+<span class="ln">23</span>    kspline(qg, ptab, yg)
+<span class="ln">24</span>    return ksplint(qg, ptab, yg, x, 0.0)</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing (question).</strong> G. Somers limited the general case's search to <code>IMINMAX(J)</code> "to prevent using -999", but the top-four branch (<code>GL ≥ ATMGL(NG-1)</code>) and the hot branches use the gravities <code>NG-3</code>…<code>NG</code> without checking <code>IMINMAX(J)</code>. <strong>Fix:</strong> new question.</li>
+</ol>
+<p>Revised: new question 4.</p></div></details>
+</main></body></html>

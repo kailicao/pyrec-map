@@ -1,0 +1,876 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>calcad.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ calcad.f</span></header><main>
+<h1>calcad.f</h1>
+<p class='muted'>542 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/calcad.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>calcad.py</code>, 262 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file computes acoustic depths: the sound travel time from the surface to the center, $t_\mathrm{norm}$, and from the surface to the base of the convection zone, $t_\mathrm{CZ}$. It joins the interior model and a fresh envelope integration into one profile, computes the sound speed at each point from the equation of state, and integrates $dr/c_s$.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments, the interior model <code>HR</code>, <code>HD</code>, <code>HP</code>, <code>HT</code> ($\log r$, $\log\rho$, $\log P$, $\log T$), <code>HCOMP</code> (composition), <code>M</code> (last interior point), <code>JENV</code> (the base of the convection zone), <code>RCZL</code> ($\log r_\mathrm{CZ}/R_\odot$), <code>BL</code>, <code>TEFFL</code>, <code>FP</code>, <code>FT</code>, <code>HSTOT</code>, <code>DAGE</code> (the age), <code>CMIXL</code> (the mixing length, passed on to ENVINT).</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/wrtout.f.html#def-WRTOUT">WRTOUT</a>, when the options <code>LACOUT</code> and <code>LADON</code> are on and the model has a convective envelope (<code>JENV &gt; 1</code>).</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a> (the envelope, which fills <code>/ENVSTRUCT/</code>); for the sound speed, <a href="../yrec-map/esac06.f.html#def-ESAC06">ESAC06</a> (OPAL 2006 EOS) or <a href="../yrec-map/eqstat2.f.html#def-EQSTAT2">EQSTAT2</a>; <a href="../yrec-map/splinj.f.html#def-SPLINJ">SPLINJ</a> and <a href="../yrec-map/splint.f.html#def-SPLINT">SPLINT</a> to interpolate at $r_\mathrm{CZ}$; <a href="../yrec-map/boole.f.html#def-BOOLE">BOOLE</a> to integrate.</li>
+<li><strong>Outputs:</strong> in <code>/ACDPTH/</code>, <code>TNORM</code>, <code>TCZ</code>, <code>TAUCZN</code> $= t_\mathrm{CZ}/t_\mathrm{norm}$, <code>TATMOS</code> (always 0, see below) and <code>DELADJ</code> ($\nabla_\mathrm{ad}$ at each point). WRTOUT prints them in its output columns (its comment: columns 68–70). A line to <code>ISHORT</code> at every call; with <code>LCLCD</code>, the full profile to unit <code>ICLCD</code>.</li>
+<li><strong>Modules:</strong> <a href="../yrec-map/acdpth_mod.f.html#def-ACDPTH_MOD"><code>ACDPTH_MOD</code></a> (with ENVINT, <a href="../yrec-map/getopal95.f.html#def-GETOPAL95">GETOPAL95</a>, the main program, PARMIN, WRTOUT; it also holds the output switches <code>LCLCD</code>, <code>LADON</code>, <code>LACOUT</code>); <a href="../yrec-map/envstruct_mod.f.html#def-ENVSTRUCT_MOD"><code>ENVSTRUCT_MOD</code></a> (the envelope profile, filled by ENVINT); <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a> (the integration step sizes <code>ATMBEG</code> … <code>ENVMAX</code> and <code>ATMSTP</code>, <code>ENVSTP</code>, the spot parameters <code>SPOTF</code>, <code>SPOTX</code>, and the switch <code>LOPALE06</code>); <a href="../yrec-map/eos06misc_mod.f.html#def-EOS06MISC_MOD"><code>EOS06MISC_MOD</code></a> (ESAC06's output <code>EOS</code>); <code>COMP_MOD</code>, <code>CONSTANTS_MOD</code>, <code>IOUNITS_MOD</code> (the units <code>ISHORT</code>, <code>ICLCD</code>) and <code>DIMENSIONS_MOD</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>
+<p><strong>The envelope.</strong> Set the atmosphere and envelope step sizes to the fixed values <code>ATMSTP</code>, <code>ENVSTP</code>, then integrate the envelope with <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a> (with the model's mixing length <code>CMIXL</code>), from the surface to the interior's outer point, with
+$$\log R = \tfrac12(\log L - \log 4\pi - \log\sigma - 4\log T_\mathrm{eff}), \qquad \log g = \log G + \log M - 2\log R.$$
+For a spotted star (<code>SPOTF</code> $\ne 0$, <code>SPOTX</code> $\ne 1$) and only when <code>JENV = M</code>, the envelope uses the ambient temperature
+$$\log T_\mathrm{amb} = \log T_\mathrm{eff} - \tfrac14\log_{10}\!\left(f_s x_s^4 + 1 - f_s\right),$$
+with $f_s$ = <code>SPOTF</code> (the spot filling factor) and $x_s$ = <code>SPOTX</code> (probably the spot-to-ambient temperature ratio).</p>
+</li>
+<li>
+<p><strong>One profile.</strong> The interior points $1..M$, then envelope points $2..N_\mathrm{env}$, in linear units, $T$ in $10^6$ K.</p>
+</li>
+<li>
+<p><strong>Sound speed.</strong> With the OPAL 2006 EOS, $\Gamma_1$ = <code>EOS(8)</code> and $\nabla_\mathrm{ad} = 1/$<code>EOS(9)</code> (<code>EOS(9)</code> is $\Gamma_2/(\Gamma_2-1)$). Otherwise, from EQSTAT2's derivatives (<code>QDPJ</code>, <code>QDTJ</code>, probably $(\partial\ln\rho/\partial\ln P)_T$ and $(\partial\ln\rho/\partial\ln T)_P$) and $c_P$, by Cox and Giuli's chapter 9:
+$$\chi_\rho = \frac{1}{\mathtt{QDP}}, \quad \chi_T = -\chi_\rho\,\mathtt{QDT}, \quad c_V = c_P - \frac{P}{\rho T}\frac{\chi_T^2}{\chi_\rho}, \quad \Gamma_1 = \frac{\chi_\rho\,c_P}{c_V}.$$
+The code stores the inverse sound speed $1/c_s$, with $c_s = \sqrt{\Gamma_1 P/\rho}$.</p>
+</li>
+<li>
+<p><strong>Integrate</strong> with Boole's rule:
+$$t_\mathrm{norm} = \int_0^{R} \frac{dr}{c_s}, \qquad t_\mathrm{CZ} = \int_{r_\mathrm{CZ}}^{R} \frac{dr}{c_s},$$
+in seconds. For $t_\mathrm{CZ}$, the point just below $r_\mathrm{CZ}$ is replaced by $r_\mathrm{CZ}$ itself, with $1/c_s$ from a cubic spline through 7 neighboring points.</p>
+</li>
+<li>
+<p>$\tau_\mathrm{CZ,n} = t_\mathrm{CZ}/t_\mathrm{norm}$.</p>
+</li>
+</ol>
+<p>The atmosphere's acoustic depth (<code>TATMOS</code>) was computed by a section now commented out, so it is always 0.</p>
+<p><strong>Design.</strong> The header lists <code>IACAT</code>, <code>IJLAST</code> and other output switches, some marked "obsolete?" (<code>IACAT</code> and the other unused unit numbers are no longer in the module). Many local variables and arrays remain from the commented-out sections.</p>
+<p><strong>KC's changes.</strong> 2025-05-30: elements of <code>/ACDPTH/</code> and <code>/OPALEOS/</code> reordered; integer declarations and two <code>WRITE</code> statements fixed for compiler warnings (from <code>Makefile.legacy</code>). 2025-05-31: the unused arguments <code>LPRT</code>, <code>NKK</code>, <code>DDAGE</code> removed, and <code>ZTAB</code> removed from the call to ESAC06.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> The new argument <code>CMIXL</code>, passed on to ENVINT; otherwise declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>, unused blocks removed (among them a wrong <code>/LLOT95/</code> declaration that aliased <code>ZTAB</code> to an opacity value, harmless since nothing here reads it).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Step sizes not restored.</strong> The routine saves <code>ATMBEG</code>, <code>ATMMIN</code>, <code>ATMMAX</code>, <code>ENVBEG</code>, <code>ENVMIN</code>, <code>ENVMAX</code> in <code>ABEG0</code> … <code>EMAX0</code>, sets them to <code>ATMSTP</code>/<code>ENVSTP</code> for its own envelope integration, and never restores them. Later envelope integrations in the same run then use the fixed steps. <a href="../yrec-map/wrtmod.f.html#def-WRTMOD">WRTMOD</a>, whose code the comment says CALCAD copied, does restore them (<code>ATMBEG = ABEG0</code>, …). Is a restore missing at the end?</li>
+<li><strong>The last point.</strong> <code>K = M + NUMENV - 2</code> is passed to BOOLE as the number of points, but the profile has $M + N_\mathrm{env} - 1$ points, so the outermost point is left out of both integrals. Is this intended (the surface point having $c_s$ ill-defined)?</li>
+<li><strong>The interior's $Z$.</strong> <code>STARZ(I) = HCOMP(3,M)</code> for every interior point: the envelope's $Z$, not the local one. It is used only on the non-OPAL path (EQSTAT2). With diffusion, the interior $Z$ differs.</li>
+<li><strong>EOS errors ignored.</strong> ESAC06's alternate return <code>*999</code> jumps to the next statement, so a failed EOS call uses the <code>EOS</code> values of the previous point.</li>
+<li><strong><code>ICZ</code> may be stale.</strong> If no pair of points brackets $r_\mathrm{CZ}$, <code>ICZ</code> keeps its value from an earlier call (<code>SAVE</code>), or is undefined at the first call. Also the 7-point stencil <code>ICZ-3 … ICZ+3</code> is not checked against the end of the profile.</li>
+<li><strong>A short profile.</strong> If <code>K ≤ 3</code>, <code>NN = 2</code> and BOOLE returns 0, so <code>TAUCZN</code> divides by zero.</li>
+<li><strong>Spots only at <code>JENV = M</code>.</strong> The ambient temperature is used only when <code>JENV = M</code>, which is also exactly the case in which no convection zone is found (<code>TCZ</code> needs <code>JENV &lt; M</code>), so the spot correction applies only to stars for which <code>TCZ = 0</code>. Why that condition?</li>
+<li><strong>Output format.</strong> Format 67 has no space before "Acoustic depth of atmopshere" (also misspelled), and <code>TATMOS</code> is always 0. Should the atmosphere part be restored or removed?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+CALCAD: links together and integrates sound speed profiles, for acoustic
+depth to convection zone, acoustic depth of atmosphere
+INPUTS:
+HR: array of radii for the interiors solution
+RCZ: physical radius of the convection zone (logged), calculated in wrtout
+M: last interior point
+HD: interior&#x27;s density
+HP: interior pressure
+HT: interior temperature
+BL: logged luminosity
+FP: Rotational distortion, needed for envelope integration
+FT: Rotational distortion, needed for envelope integration
+HSTOT: needed for ENVINT
+LPRT: needed for ENVINT
+TEFFL: logged effective temperature
+HCOMP: vector of compositions for interior
+NKK: obsolete?
+DAGE: Age
+DDAGE: obsolete?
+
+
+
+
+OUTPUTS:
+Adjusts the values in the common block for acoustic depth:
+TAUCZN = acoustic depth to CZ / sound travel time from surface-center
+TCZ = acoustic depth to CZ (seconds)
+TNORM = sound travel time from surface to center (seconds)
+DELADJ = adiabatic gradient from OPAL 2006 EOS or SCV EOS
+
+
+
+
+
+COMMON BLOCKED THINGS:
+
+LCLCD = Logical flag for output of CALCAD files at AGEOUT ages
+AGEOUT(5) = Ages for which you want output. Hard coded in parmin</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-CALCAD'>CALCAD</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-CALCAD'><h3><span class='kind'>subroutine</span>CALCAD</h3>
+<p class='muted'>lines 48–509 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/calcad.f#L48-L509'>GitHub</a></p>
+<pre>SUBROUTINE CALCAD(HR, RCZL, M, HD, HP, HT, BL, FP, FT, HSTOT,</pre>
+<div class='notes'><p>Integrates the envelope, joins it to the interior, computes $1/c_s$ from the EOS and integrates it with <a href="../yrec-map/boole.f.html#def-BOOLE">BOOLE</a> to get the acoustic depth of the star and of its convection zone (<code>TNORM</code>, <code>TCZ</code>, <code>TAUCZN</code> in <code>/ACDPTH/</code>).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+CALCAD: links together and integrates sound speed profiles, for acoustic
+depth to convection zone, acoustic depth of atmosphere
+INPUTS:
+HR: array of radii for the interiors solution
+RCZ: physical radius of the convection zone (logged), calculated in wrtout
+M: last interior point
+HD: interior&#x27;s density
+HP: interior pressure
+HT: interior temperature
+BL: logged luminosity
+FP: Rotational distortion, needed for envelope integration
+FT: Rotational distortion, needed for envelope integration
+HSTOT: needed for ENVINT
+LPRT: needed for ENVINT
+TEFFL: logged effective temperature
+HCOMP: vector of compositions for interior
+NKK: obsolete?
+DAGE: Age
+DDAGE: obsolete?
+
+
+
+
+OUTPUTS:
+Adjusts the values in the common block for acoustic depth:
+TAUCZN = acoustic depth to CZ / sound travel time from surface-center
+TCZ = acoustic depth to CZ (seconds)
+TNORM = sound travel time from surface to center (seconds)
+DELADJ = adiabatic gradient from OPAL 2006 EOS or SCV EOS
+
+
+
+
+
+COMMON BLOCKED THINGS:
+
+LCLCD = Logical flag for output of CALCAD files at AGEOUT ages
+AGEOUT(5) = Ages for which you want output. Hard coded in parmin
+IACAT =
+IJLAST = Again, for output
+LJLAST = Again, for output
+LJWRT = ouput on/off toggle
+LADON = toggle on calcad imposed 4d interpolation in opacity
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/acdpth_mod.f.html#def-ACDPTH_MOD'>ACDPTH_MOD</a>, <a href='../yrec-map/comp_mod.f.html#def-COMP_MOD'>COMP_MOD</a>, <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/envstruct_mod.f.html#def-ENVSTRUCT_MOD'>ENVSTRUCT_MOD</a>, <a href='../yrec-map/eos06misc_mod.f.html#def-EOS06MISC_MOD'>EOS06MISC_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/boole.f.html#def-BOOLE'>BOOLE</a> <span class='muted'>(boole.f)</span> ×2</li>
+<li><a href='../yrec-map/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+<li><a href='../yrec-map/eqstat2.f.html#def-EQSTAT2'>EQSTAT2</a> <span class='muted'>(eqstat2.f)</span></li>
+<li><a href='../yrec-map/esac06.f.html#def-ESAC06'>ESAC06</a> <span class='muted'>(esac06.f)</span></li>
+<li><a href='../yrec-map/splinj.f.html#def-SPLINJ'>SPLINJ</a> <span class='muted'>(splinj.f)</span> ×2</li>
+<li><a href='../yrec-map/splint.f.html#def-SPLINT'>SPLINT</a> <span class='muted'>(splint.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/wrtout.f.html#def-WRTOUT'>WRTOUT</a> <span class='muted'>(wrtout.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">48</span>      SUBROUTINE CALCAD(HR, RCZL, M, HD, HP, HT, BL, FP, FT, HSTOT,
+<span class="ln">49</span>C      *                  LPRT, TEFFL, HCOMP, NKK, DAGE, DDAGE, JENV)  ! KC 2025-05-31
+<span class="ln">50</span>     *                  TEFFL, HCOMP, DAGE, JENV, CMIXL)
+<span class="ln">51</span>C 10/15/26 MHP via Claude
+<span class="ln">52</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">53</span>C PARAMETER(JSON=5000) here.
+<span class="ln">54</span>      USE DIMENSIONS_MOD
+<span class="ln">55</span>C 10/14/26 MHP via Claude
+<span class="ln">56</span>C code changed to convert COMMON/ACDPTH/ into ACDPTH_MOD.
+<span class="ln">57</span>      USE ACDPTH_MOD
+<span class="ln">58</span>C 10/14/26 MHP via Claude
+<span class="ln">59</span>C code changed to convert COMMON/ENVSTRUCT/ into ENVSTRUCT_MOD.
+<span class="ln">60</span>      USE ENVSTRUCT_MOD
+<span class="ln">61</span>C 10/14/26 MHP via Claude
+<span class="ln">62</span>C code changed to convert COMMON/COMP/ into COMP_MOD.
+<span class="ln">63</span>      USE COMP_MOD
+<span class="ln">64</span>C 10/14/26 MHP via Claude
+<span class="ln">65</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">66</span>      USE NMLPAR_MOD
+<span class="ln">67</span>C 10/14/26 MHP via Claude
+<span class="ln">68</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">69</span>      USE CONSTANTS_MOD
+<span class="ln">70</span>C 10/14/26 MHP via Claude
+<span class="ln">71</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">72</span>      USE IOUNITS_MOD
+<span class="ln">73</span>C 10/20/26 MHP via Claude
+<span class="ln">74</span>C code changed to convert COMMON/EOS06MISC/ into
+<span class="ln">75</span>C EOS06MISC_MOD.
+<span class="ln">76</span>      USE EOS06MISC_MOD
+<span class="ln">77</span>C 10/20/26 MHP via Claude
+<span class="ln">78</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">79</span>C explicit declarations.
+<span class="ln">80</span>      IMPLICIT NONE
+<span class="ln">81</span>      REAL*8 AMUJ,ATEFFL,BET14J,BETAIJ,BETAJ,BL,CHRH,CHT,CMIXL,CVJ,DAGE,
+<span class="ln">82</span>     *       DELAJ,EMUJ,ETAJ,FP,FPLJ,FT,FTLJ,FXIONJ,HCOMP,HD,HP,HR,
+<span class="ln">83</span>     *       HSTOT,HT,QAPJ,QATJ,QCPJ,QCPPJ,QCPTJ,QDPJ,QDTJ,QDTPJ,QDTTJ,
+<span class="ln">84</span>     *       RCZ,RCZL,RMUJ,STD,STDL,STP,STPL,STT,STTL,STX,STZ,TEFFL
+<span class="ln">85</span>      INTEGER IORDER,IRAD,JENV,KHI,KLO,M,MV,MX,NR,NT
+<span class="ln">86</span>      LOGICAL*4 LATMOJ,LCALCJ,LDERIJ
+<span class="ln">87</span>C 10/9/26 MHP via Claude
+<span class="ln">88</span>C code changed to add mx,mv,nr,nt (matching every other file that
+<span class="ln">89</span>C declares an OPAL 2006 EOS common block), needed below for
+<span class="ln">90</span>C COMMON/EOS06MISC/&#x27;s array dimensions; this file previously only
+<span class="ln">91</span>C needed COMMON/EEOS06/, which it hardcoded as eos(10) instead.
+<span class="ln">92</span>      PARAMETER (mx=5,mv=10,nr=169,nt=197)
+<span class="ln">93</span>      REAL*8 HOOD1(7), HOOD2(7), D(7), ANS(1)
+<span class="ln">94</span>      REAL*8 DUM1(4),DUM2(3),DUM3(3),DUM4(3)
+<span class="ln">95</span>      REAL*8 XJ,ZJ,GLJ,RLJ,PLIMJ, BJ
+<span class="ln">96</span>      REAL*8 ABEG0,AMIN0,AMAX0,EBEG0,EMIN0,EMAX0
+<span class="ln">97</span>C 10/15/26 MHP via Claude
+<span class="ln">98</span>C code changed to drop TNORM, TCZ and TAUCZN from this REAL*8 statement.
+<span class="ln">99</span>C All three are COMMON/ACDPTH/ members, declared at line 99 below, and
+<span class="ln">100</span>C explicitly typing a COMMON member is legal while doing the same to a
+<span class="ln">101</span>C USE-associated name is rejected, so they had to go before ACDPTH
+<span class="ln">102</span>C becomes a module.  Removing them changes nothing: IMPLICIT
+<span class="ln">103</span>C REAL*8(A-H,O-Z) already gives all three that type, T being in O-Z.
+<span class="ln">104</span>      REAL*8 STARR(JSON),START(JSON),STARD(JSON),STARX(JSON),STARP(JSON),
+<span class="ln">105</span>     *       STARZ(JSON),STARC(JSON),STARCZ(JSON),STARRZ(JSON)
+<span class="ln">106</span>C      REAL*8 ATMOSX, ATMOST(JSON),ATMOSD(JSON),ATMOSP(JSON),ADELAD(JSON),ATMOSC(JSON),
+<span class="ln">107</span>C     *       ATGAM1(JSON), ATMOSR(JSON),GM1(JSON)
+<span class="ln">108</span>      REAL*8 ATMOSX, GM1(JSON)
+<span class="ln">109</span>C KC 2025-05-30 addressed warning messages from Makefile.legacy
+<span class="ln">110</span>C       INTEGER I, K, N, U, ICZ, NN, IENDJ, FLG, V, IATCNT, KTSAV
+<span class="ln">111</span>      INTEGER I, K, P, U, ICZ, NN, IENDJ, FLG, V  ! IATCNT, KTSAV
+<span class="ln">112</span>      INTEGER IDUMJ, KATMJ,KENVJ,KSAHAJ,IXXJ
+<span class="ln">113</span>      DIMENSION RCZL(1), RCZ(1),HR(JSON), HD(JSON), HP(JSON), BJ(1),FPLJ(1),FTLJ(1),
+<span class="ln">114</span>     * FT(JSON),FP(JSON), HCOMP(15,JSON), HT(JSON)  ! HL(JSON)
+<span class="ln">115</span>      LOGICAL LPULPTJ,LPRTJ,LSBC0J  ! LTEST
+<span class="ln">116</span>
+<span class="ln">117</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">118</span>C       COMMON/ACDPTH/TAUCZN,DELADJ(JSON),TAUHE, TNORM, TCZ, WHE, ICLCD,
+<span class="ln">119</span>C 9/25/26 MHP via Claude
+<span class="ln">120</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">121</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">122</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">123</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">124</span>C COMMON/IOUNITS/
+<span class="ln">125</span>C 9/25/26 MHP via Claude
+<span class="ln">126</span>C code changed to remove dead IACAT, IJVS, IJENT, IJDEL unit
+<span class="ln">127</span>C reservations from COMMON/ACDPTH/ (declared but never opened anywhere)
+<span class="ln">128</span>C      *LCLCD, AGEOUT(5), IACAT, IJLAST, LJLAST, LJWRT, LADON, LAOLY, IJVS,
+<span class="ln">129</span>C 10/12/26 MHP via Claude
+<span class="ln">130</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">131</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">132</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">133</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">134</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">135</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">136</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">137</span>C
+<span class="ln">138</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">139</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">140</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">141</span>C 9/25/26 MHP via Claude
+<span class="ln">142</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">143</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">144</span>C 10/13/26 MHP via Claude: removed the unused COMMON/SCRTCH/ declaration
+<span class="ln">145</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">146</span>C 10/13/26 MHP via Claude: removed the unused COMMON/SOUND/ declaration
+<span class="ln">147</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">148</span>C 10/9/26 MHP via Claude
+<span class="ln">149</span>C code changed to merge COMMON/EEOS06/, COMMON/AAEOS06/, COMMON/BBEOS06/,
+<span class="ln">150</span>C and COMMON/BEOS06/ into COMMON/EOS06MISC/ (see esac06.f for the full
+<span class="ln">151</span>C rationale).
+<span class="ln">152</span>C 10/11/26 MHP via Claude
+<span class="ln">153</span>C code changed to remove an incorrect COMMON /LLOT95/ declaration from
+<span class="ln">154</span>C this file. Every other file declares it as
+<span class="ln">155</span>C   COMMON /LLOT95/CAPPA(NUMX,NUMT,NUMD),ZTAB
+<span class="ln">156</span>C so declaring only ZTAB here aliased it to CAPPA(1,1,1) -- an opacity
+<span class="ln">157</span>C value, not the table&#x27;s Z. Harmless to date only because this file&#x27;s
+<span class="ln">158</span>C two references to ZTAB are both in commented-out CALL ESAC06 lines
+<span class="ln">159</span>C (see below); nothing reads it. NOTE: if those calls are ever
+<span class="ln">160</span>C restored they need the real metallicity, which must come from the
+<span class="ln">161</span>C full block declaration or (better) be passed in as an argument.
+<span class="ln">162</span>C MHP 10/24 ADDED STOP CRITERIA FOR CENTRAL H,D,AND HE4
+<span class="ln">163</span>C 10/13/26 MHP via Claude: removed the unused COMMON/SETT/ declaration
+<span class="ln">164</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">165</span>C      COMMON/SETT/ENDAGE(50),SETDT(50),LENDAG(50),LSETDT(50)
+<span class="ln">166</span>C 10/13/26 MHP via Claude: removed the unused COMMON/ATMOS/ declaration
+<span class="ln">167</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">168</span>C 10/13/26 MHP via Claude: removed the unused COMMON/SCVEOS/ declaration
+<span class="ln">169</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">170</span>C MHP 8/25 Remove file names from common blocks
+<span class="ln">171</span>C 9/24/26 MHP via Claude
+<span class="ln">172</span>C code changed to remove the OPAL 1995/2001 equations of state
+<span class="ln">173</span>C Added for experimantal mass loss section
+<span class="ln">174</span>C G Somers 10/14, Add spot common block
+<span class="ln">175</span>C G Somers END
+<span class="ln">176</span>      SAVE
+<span class="ln">177</span>
+<span class="ln">178</span>
+<span class="ln">179</span>C Initialize values:
+<span class="ln">180</span>      TAUCZN=0.0D0
+<span class="ln">181</span>      TCZ= 0.0D0
+<span class="ln">182</span>      TNORM=0.0D0
+<span class="ln">183</span>      WHE= 0.0D0
+<span class="ln">184</span>      TAUHE = 0.0D0
+<span class="ln">185</span>      ATMOSX=0.0D0
+<span class="ln">186</span>      TATMOS = 0.0D0
+<span class="ln">187</span>C      KTSAV = 3
+<span class="ln">188</span>
+<span class="ln">189</span>C Need to calculate the sound speed in the envelope: first, stitch
+<span class="ln">190</span>C envelope and interior together (so that T, P, R all agree at fitting
+<span class="ln">191</span>C point. Then calculate sound speed in the envelope and interior
+<span class="ln">192</span>C and integrate.
+<span class="ln">193</span>
+<span class="ln">194</span>C First, do the envelope integration to make sure the values in ENVSTRUCT
+<span class="ln">195</span>C are up-to-date (this section of code grabbed from wrtmod). First, integrate the atm and store values with grey atm
+<span class="ln">196</span>      ABEG0 = ATMBEG
+<span class="ln">197</span>      AMIN0 = ATMMIN
+<span class="ln">198</span>      AMAX0 = ATMMAX
+<span class="ln">199</span>      EBEG0 = ENVBEG
+<span class="ln">200</span>      EMIN0 = ENVMIN
+<span class="ln">201</span>      EMAX0 = ENVMAX
+<span class="ln">202</span>      ATMBEG = ATMSTP
+<span class="ln">203</span>      ATMMIN = ATMSTP
+<span class="ln">204</span>      ATMMAX = ATMSTP
+<span class="ln">205</span>      ENVBEG = ENVSTP
+<span class="ln">206</span>      ENVMIN = ENVSTP
+<span class="ln">207</span>      ENVMAX = ENVSTP
+<span class="ln">208</span>      IDUMJ = 0
+<span class="ln">209</span>      BJ = DEXP(CLN*BL)
+<span class="ln">210</span>      FPLJ(1) = FP(M)
+<span class="ln">211</span>      FTLJ(1) = FT(M)
+<span class="ln">212</span>      KATMJ = 0
+<span class="ln">213</span>      KENVJ = 0
+<span class="ln">214</span>      KSAHAJ = 0
+<span class="ln">215</span>      LPULPTJ=.TRUE.
+<span class="ln">216</span>      IXXJ=0
+<span class="ln">217</span>      LPRTJ=.TRUE.
+<span class="ln">218</span>      LSBC0J = .FALSE.
+<span class="ln">219</span>      XJ = HCOMP(1,M)
+<span class="ln">220</span>      ZJ = HCOMP(3,M)
+<span class="ln">221</span>      RLJ = 0.5D0*(BL + CLSUNL - 4.0D0*TEFFL - C4PIL - CSIGL)
+<span class="ln">222</span>      GLJ = CGL + STOTAL - RLJ - RLJ
+<span class="ln">223</span>      PLIMJ = HP(M)
+<span class="ln">224</span>c      IF (KTTAU .EQ. 0) LAOLY = .TRUE.
+<span class="ln">225</span>c      IF (KTTAU .EQ. 3) LAOLY = .FALSE.      ! for grey atm intergration: stores values in common block
+<span class="ln">226</span>C      G Somers 10/14, FOR SPOTTED RUNS, FIND THE PRESSURE AT
+<span class="ln">227</span>C      THE AMBIENT TEMPERATURE ATEFFL
+<span class="ln">228</span>      IF(JENV.EQ.M.AND.SPOTF.NE.0.0.AND.SPOTX.NE.1.0)THEN
+<span class="ln">229</span>            ATEFFL = TEFFL - 0.25*LOG10(SPOTF * SPOTX**4.0 + 1.0 - SPOTF)
+<span class="ln">230</span>      ELSE
+<span class="ln">231</span>            ATEFFL = TEFFL
+<span class="ln">232</span>      ENDIF
+<span class="ln">233</span>      CALL <a href="../yrec-map/envint.f.html#def-ENVINT" title="ENVINT in envint.f">ENVINT</a>(BJ,FPLJ,FTLJ,GLJ,HSTOT,IXXJ,LPRTJ,LSBC0J,
+<span class="ln">234</span>     *         PLIMJ,RLJ,ATEFFL,XJ,ZJ,DUM1,IDUMJ,KATMJ,KENVJ,KSAHAJ,
+<span class="ln">235</span>     *         DUM2,DUM3,DUM4,LPULPTJ,CMIXL)
+<span class="ln">236</span>C      G Somers END
+<span class="ln">237</span>
+<span class="ln">238</span>
+<span class="ln">239</span>
+<span class="ln">240</span>C Stitch interior and envelope together, convert into ESAC06 units
+<span class="ln">241</span>      DO 34, I=1,M
+<span class="ln">242</span>            STARR(I)=DEXP(CLN*HR(I))            ! get unlogged units
+<span class="ln">243</span>            START(I)=DEXP(CLN*HT(I))/1.0D6      ! ESAC06 takes T in units of 10^6K
+<span class="ln">244</span>            STARD(I)=DEXP(CLN*HD(I))
+<span class="ln">245</span>            STARP(I)=DEXP(CLN*HP(I))
+<span class="ln">246</span>            STARX(I)=HCOMP(1,I)
+<span class="ln">247</span>            STARZ(I)=HCOMP(3,M)
+<span class="ln">248</span>34      CONTINUE
+<span class="ln">249</span>      DO 35, I=1,NUMENV-1
+<span class="ln">250</span>            STARR(M+I)=DEXP(CLN*ENVR(I+1))
+<span class="ln">251</span>            START(M+I)=DEXP(CLN*ENVT(I+1))/1.0D6
+<span class="ln">252</span>            STARD(M+I)=DEXP(CLN*ENVD(I+1))
+<span class="ln">253</span>            STARP(M+I)=DEXP(CLN*ENVP(I+1))
+<span class="ln">254</span>            STARX(M+I)=HCOMP(1,M)
+<span class="ln">255</span>            STARZ(M+I)=HCOMP(3,M)
+<span class="ln">256</span>35      CONTINUE
+<span class="ln">257</span>
+<span class="ln">258</span>
+<span class="ln">259</span>C Call EOS interpolator: Takes OPAL2006 EOS if possible. If OPAL06 is off, uses SCV
+<span class="ln">260</span>C For OPAL 2006 EOS:
+<span class="ln">261</span>      IF (LOPALE06) THEN
+<span class="ln">262</span>            IORDER=9
+<span class="ln">263</span>            IRAD=1
+<span class="ln">264</span>            DO 36, I=1,M+NUMENV-1
+<span class="ln">265</span>                  STX=STARX(I)
+<span class="ln">266</span>                  STT=START(I)
+<span class="ln">267</span>                  STD=STARD(I)
+<span class="ln">268</span>C                   CALL ESAC06(STX,ZTAB,STT,STD,IORDER,IRAD,*999)  ! KC 2025-05-31
+<span class="ln">269</span>                  CALL <a href="../yrec-map/esac06.f.html#def-ESAC06" title="ESAC06 in esac06.f">ESAC06</a>(STX,STT,STD,IORDER,IRAD,*999)
+<span class="ln">270</span>999                  CONTINUE
+<span class="ln">271</span>                  STARC(I)=1.0D0/SQRT(eos(8)*STARP(I)/STARD(I))
+<span class="ln">272</span>                  DELADJ(I)=1.0D0/eos(9)
+<span class="ln">273</span>                  GM1(I) = eos(8)
+<span class="ln">274</span>36            CONTINUE
+<span class="ln">275</span>      ENDIF
+<span class="ln">276</span>C For SCV EOS: (when OPAL06 is turned off, SCV on for backup, Yale if SCV is off)
+<span class="ln">277</span>      IF ( .NOT. LOPALE06) THEN
+<span class="ln">278</span>            DO 41, I=1,M+NUMENV-1
+<span class="ln">279</span>                  STX=STARX(I)
+<span class="ln">280</span>                  STT=START(I)*1.0D6
+<span class="ln">281</span>                  STD=STARD(I)
+<span class="ln">282</span>                  STDL=DLOG10(STARD(I))
+<span class="ln">283</span>                  STZ=STARZ(I)
+<span class="ln">284</span>                  STTL=DLOG10(STT)
+<span class="ln">285</span>                  STP=STARP(I)
+<span class="ln">286</span>                  STPL=DLOG10(STP)
+<span class="ln">287</span>                  LCALCJ = .TRUE.
+<span class="ln">288</span>C                  CALL EQSCVE(STTL,STT,STPL,STP,STDL,STD,STX,STZ,BETAJ,BETAIJ,BET14J,FXIONJ,RMUJ,
+<span class="ln">289</span>C     *                       AMUJ,EMUJ,ETAJ,QDTJ,QDPJ,QCPJ,DELAJ,LCALCJ)
+<span class="ln">290</span>                  LDERIJ = .FALSE.
+<span class="ln">291</span>                  LATMOJ = .TRUE.
+<span class="ln">292</span>                  CALL <a href="../yrec-map/eqstat2.f.html#def-EQSTAT2" title="EQSTAT2 in eqstat2.f">EQSTAT2</a>(STTL,STT,STPL,STP,STDL,STD,STX,STZ,BETAJ,BETAIJ,BET14J,FXIONJ,
+<span class="ln">293</span>     *                  RMUJ,AMUJ,EMUJ,ETAJ,QDTJ,QDPJ,QCPJ,DELAJ,QDTTJ,QDTPJ,QATJ,QAPJ,QCPTJ,QCPPJ,
+<span class="ln">294</span>     *                  LDERIJ,LATMOJ,KSAHAJ)
+<span class="ln">295</span>
+<span class="ln">296</span>C                  calculate gamma1 (taken from envint example, eqns in chap. 9 of Cox&amp; Giuli):
+<span class="ln">297</span>                  CHRH = 1.0D0/QDPJ
+<span class="ln">298</span>                   CHT = -CHRH*QDTJ
+<span class="ln">299</span>                  CVJ = QCPJ - EXP(CLN*(STPL-STDL-STTL))*CHT**2/CHRH
+<span class="ln">300</span>                  GM1(I) = CHRH*QCPJ/CVJ
+<span class="ln">301</span>                  STARC(I)=1.0D0/SQRT(GM1(I)*STARP(I)/STARD(I))
+<span class="ln">302</span>                  DELADJ(I) = DELAJ
+<span class="ln">303</span>41            CONTINUE
+<span class="ln">304</span>      ENDIF
+<span class="ln">305</span>
+<span class="ln">306</span>
+<span class="ln">307</span>
+<span class="ln">308</span>
+<span class="ln">309</span>C Integrate for the full acoustic depth for normalization
+<span class="ln">310</span>      K=NUMENV-1+M-1
+<span class="ln">311</span>      U=MOD((NUMENV-1+M-1),4)
+<span class="ln">312</span>      IF (U.NE.0) THEN
+<span class="ln">313</span>            NN=K+4-U+1
+<span class="ln">314</span>      ELSE
+<span class="ln">315</span>            NN=K+1
+<span class="ln">316</span>      ENDIF
+<span class="ln">317</span>      IF (K.LE.3) THEN
+<span class="ln">318</span>            K=4
+<span class="ln">319</span>            NN=1+1
+<span class="ln">320</span>      ENDIF
+<span class="ln">321</span>
+<span class="ln">322</span>      CALL <a href="../yrec-map/boole.f.html#def-BOOLE" title="BOOLE in boole.f">BOOLE</a>(STARR,STARC,K,NN,TNORM)
+<span class="ln">323</span>
+<span class="ln">324</span>
+<span class="ln">325</span>
+<span class="ln">326</span>
+<span class="ln">327</span>C Find the location of the CZ, but only if one exists
+<span class="ln">328</span>      IF (JENV.LT.M) THEN
+<span class="ln">329</span>            RCZ=DEXP(CLN*(RCZL+CRSUNL))
+<span class="ln">330</span>
+<span class="ln">331</span>
+<span class="ln">332</span>C      get the location of the convection zone, and count nonzero entries:
+<span class="ln">333</span>                  IENDJ=0
+<span class="ln">334</span>                  FLG=0
+<span class="ln">335</span>                  DO 22, I=1,K
+<span class="ln">336</span>                        IF (STARR(I).LE.RCZ(1) .AND. STARR(I+1).GE.RCZ(1)) THEN
+<span class="ln">337</span>                              ICZ = I
+<span class="ln">338</span>                        ENDIF
+<span class="ln">339</span>
+<span class="ln">340</span>C                  Interpolate to find Cs at the exact CZ radius
+<span class="ln">341</span>                        IF (I.EQ.ICZ .AND. FLG.EQ.0 .AND. ICZ.GT.3) THEN
+<span class="ln">342</span>                              FLG=1
+<span class="ln">343</span>                              DO 26 P=1,7
+<span class="ln">344</span>                                    HOOD1(P)=STARR(ICZ-4+P)
+<span class="ln">345</span>                                    HOOD2(P)=STARC(ICZ-4+P)
+<span class="ln">346</span>26                              CONTINUE
+<span class="ln">347</span>                              CALL <a href="../yrec-map/splinj.f.html#def-SPLINJ" title="SPLINJ in splinj.f">SPLINJ</a>(HOOD1,HOOD2,D,7)
+<span class="ln">348</span>                              CALL <a href="../yrec-map/splint.f.html#def-SPLINT" title="SPLINT in splint.f">SPLINT</a>(HOOD1,HOOD2,7,D,RCZ,ANS,KLO,KHI)
+<span class="ln">349</span>                              STARR(ICZ)=RCZ(1)
+<span class="ln">350</span>                              STARC(ICZ)=ANS(1)
+<span class="ln">351</span>                        ENDIF
+<span class="ln">352</span>                        IF (I.EQ.ICZ .AND. FLG.EQ.0 .AND. ICZ.LE.3) THEN
+<span class="ln">353</span>                              FLG=1
+<span class="ln">354</span>                              IF (ICZ .EQ. 1) THEN
+<span class="ln">355</span>                                    RCZ(1) = STARR(ICZ)
+<span class="ln">356</span>                                    ANS(1) = STARC(ICZ)
+<span class="ln">357</span>                              ELSE
+<span class="ln">358</span>                                    DO 66 P=1,7
+<span class="ln">359</span>                                          HOOD1(P)=STARR(ICZ-2+P)
+<span class="ln">360</span>                                          HOOD2(P)=STARC(ICZ-2+P)
+<span class="ln">361</span>66                                    CONTINUE
+<span class="ln">362</span>                                    CALL <a href="../yrec-map/splinj.f.html#def-SPLINJ" title="SPLINJ in splinj.f">SPLINJ</a>(HOOD1,HOOD2,D,7)
+<span class="ln">363</span>                                    CALL <a href="../yrec-map/splint.f.html#def-SPLINT" title="SPLINT in splint.f">SPLINT</a>(HOOD1,HOOD2,7,D,RCZ,ANS,KLO,KHI)
+<span class="ln">364</span>                                    STARR(ICZ)=RCZ(1)
+<span class="ln">365</span>                                    STARC(ICZ)=ANS(1)
+<span class="ln">366</span>                              ENDIF
+<span class="ln">367</span>                        ENDIF
+<span class="ln">368</span>
+<span class="ln">369</span>22                   CONTINUE
+<span class="ln">370</span>                  DO 27, I=1,K-ICZ+1
+<span class="ln">371</span>                        STARRZ(I)=STARR(ICZ-1+I)
+<span class="ln">372</span>                        STARCZ(I)=STARC(ICZ-1+I)
+<span class="ln">373</span>27                  CONTINUE
+<span class="ln">374</span>C Then call Boole from surface to cz:
+<span class="ln">375</span>            U=MOD((K-ICZ+1),4)
+<span class="ln">376</span>            V=K-ICZ+1
+<span class="ln">377</span>            IF (U.NE.0) THEN
+<span class="ln">378</span>                  NN=K-ICZ+1+4-U+1
+<span class="ln">379</span>            ELSE
+<span class="ln">380</span>                  NN=K-ICZ+1+1
+<span class="ln">381</span>            ENDIF
+<span class="ln">382</span>            CALL <a href="../yrec-map/boole.f.html#def-BOOLE" title="BOOLE in boole.f">BOOLE</a>(STARRZ,STARCZ,V,NN,TCZ)
+<span class="ln">383</span>      ELSE
+<span class="ln">384</span>            TCZ = 0.0d0
+<span class="ln">385</span>      ENDIF
+<span class="ln">386</span>
+<span class="ln">387</span>C Deal with the atmosphere seperately
+<span class="ln">388</span>C      Invert vectors and shift units
+<span class="ln">389</span>C      Adopt the atmosphere metallicity to be the same as the last envelope pt.
+<span class="ln">390</span>C      ATMOSX=STARX(M+NUMENV-1)
+<span class="ln">391</span>C Determine length of Atmosphere vector:
+<span class="ln">392</span>C      IATCNT=0
+<span class="ln">393</span>C      DO 56, I=1,JSON-1
+<span class="ln">394</span>C            IF(ACATMR(I) .NE. 0.0 .AND. ACATMR(I+1) .LE. 1.0D-7) THEN
+<span class="ln">395</span>C                   IATCNT=I
+<span class="ln">396</span>C                  GOTO 56
+<span class="ln">397</span>C            END IF
+<span class="ln">398</span>C56      CONTINUE
+<span class="ln">399</span>
+<span class="ln">400</span>
+<span class="ln">401</span>C Put the atmosphere in actual units, not differential
+<span class="ln">402</span>C      DO 39, I=1,IATCNT-1
+<span class="ln">403</span>C            ACATMR(IATCNT-I)=ACATMR(IATCNT-I+1)+ACATMR(IATCNT-I)
+<span class="ln">404</span>C39      CONTINUE
+<span class="ln">405</span>C      DO 40, I=1,IATCNT
+<span class="ln">406</span>C            ACATMR(I)=ACATMR(I)+STARR(M+NUMENV-1)
+<span class="ln">407</span>C40      CONTINUE
+<span class="ln">408</span>
+<span class="ln">409</span>C      DO 37,I=1,IATCNT
+<span class="ln">410</span>C            ATMOSD(I)=DEXP(CLN*ACATMD(IATCNT+1-I))
+<span class="ln">411</span>C            ATMOST(I)=DEXP(CLN*ACATMT(IATCNT+1-I))/1.0D6
+<span class="ln">412</span>C            ATMOSP(I)=DEXP(CLN*ACATMP(IATCNT+1-I))
+<span class="ln">413</span>C            ATMOSR(I)=ACATMR(IATCNT+1-I)
+<span class="ln">414</span>C37      CONTINUE
+<span class="ln">415</span>
+<span class="ln">416</span>C      Pass atm vectors to ESAC06
+<span class="ln">417</span>C      IORDER=9
+<span class="ln">418</span>C      IRAD=1
+<span class="ln">419</span>C      DO 38, I=1,IATCNT
+<span class="ln">420</span>C            CALL ESAC06(ATMOSX,ZTAB,ATMOST(I),ATMOSD(I),IORDER,IRAD,*998)
+<span class="ln">421</span>C998            CONTINUE
+<span class="ln">422</span>C            ATMOSC(I)=1.0D0/SQRT(eos(8)*ATMOSP(I)/ATMOSD(I))
+<span class="ln">423</span>C            ADELAD(I)=1.0D0/eos(9)
+<span class="ln">424</span>C            ATGAM1(I)= eos(8)
+<span class="ln">425</span>C38      CONTINUE
+<span class="ln">426</span>
+<span class="ln">427</span>
+<span class="ln">428</span>C       Then call Boole to do the integration:
+<span class="ln">429</span>C      U=MOD((IATCNT),4)
+<span class="ln">430</span>c      V=IATCNT
+<span class="ln">431</span>c      IF (U.NE.0) THEN
+<span class="ln">432</span>c            NN=V+4-U+1
+<span class="ln">433</span>c      ELSE
+<span class="ln">434</span>c            NN=V+1
+<span class="ln">435</span>c      ENDIF
+<span class="ln">436</span>c
+<span class="ln">437</span>c      CALL BOOLE(ATMOSR,ATMOSC,V,NN,TATMOS)
+<span class="ln">438</span>
+<span class="ln">439</span>C Output normalized acoustic depth
+<span class="ln">440</span>      TAUCZN=0.0D0
+<span class="ln">441</span>      TAUCZN=TCZ/TNORM
+<span class="ln">442</span>
+<span class="ln">443</span>C Output acoustic depth info to ISHORT
+<span class="ln">444</span>      WRITE(ISHORT,67)TCZ,TNORM,TAUCZN,TATMOS
+<span class="ln">445</span>67       FORMAT(1X,&#x27;Acoustic depth to CZ:&#x27;,F14.8,2X,&#x27;Acoustic depth to center&#x27;,
+<span class="ln">446</span>     *F13.7,2X,&#x27;Normalized taucz:&#x27;,F11.9, &#x27;Acoustic depth of atmopshere:&#x27;,F16.8,2X)
+<span class="ln">447</span>
+<span class="ln">448</span>C 555            CONTINUE
+<span class="ln">449</span>C--------------------------------------------------------------
+<span class="ln">450</span>C Save all vectors of interest when the end of a kind card is reached.
+<span class="ln">451</span>      IF(LCLCD)THEN
+<span class="ln">452</span>
+<span class="ln">453</span>            WRITE(UNIT=ICLCD,FMT=1506) NUMENV, M, ICZ
+<span class="ln">454</span>1506            FORMAT(1X, &#x27;Number of points in envelope:&#x27;,I5,2X,
+<span class="ln">455</span>     *      &#x27;Number of points in interior:&#x27;,I5,2X,&#x27;Index near Rcz:&#x27;
+<span class="ln">456</span>     *      ,I5,2X)
+<span class="ln">457</span>
+<span class="ln">458</span>                  DO 1505 I=1,M+NUMENV-1
+<span class="ln">459</span>                        IF (I .LE. K-ICZ+1) THEN
+<span class="ln">460</span>C KC 2025-05-30 addressed warning messages from Makefile.legacy
+<span class="ln">461</span>C                         WRITE(UNIT=ICLCD,FMT=1504),DAGE, STARR(I), STARC(I),
+<span class="ln">462</span>                        WRITE(UNIT=ICLCD,FMT=1504) DAGE, STARR(I), STARC(I),
+<span class="ln">463</span>     *                     STARRZ(I), STARCZ(I), DELADJ(I), GM1(I), STARP(I),
+<span class="ln">464</span>     *                     START(I),STARD(I),STARX(I)
+<span class="ln">465</span>
+<span class="ln">466</span>                        ELSE
+<span class="ln">467</span>C KC 2025-05-30 addressed warning messages from Makefile.legacy
+<span class="ln">468</span>C                         WRITE(UNIT=ICLCD,FMT=1504) DAGE, STARR(I), STARC(I),
+<span class="ln">469</span>                        WRITE(UNIT=ICLCD,FMT=1504) DAGE, STARR(I), STARC(I),
+<span class="ln">470</span>     *                     0.0d0, 0.0d0, DELADJ(I), GM1(I), STARP(I),
+<span class="ln">471</span>     *                     START(I),STARD(I),STARX(I)
+<span class="ln">472</span>
+<span class="ln">473</span>                        ENDIF
+<span class="ln">474</span>
+<span class="ln">475</span>
+<span class="ln">476</span>1505                  CONTINUE
+<span class="ln">477</span>1504                  FORMAT(1X,11E16.8)
+<span class="ln">478</span>c                  DO 1520 I=1,IATCNT
+<span class="ln">479</span>c                        WRITE(UNIT=IACAT,FMT=1521),DAGE, ATMOSR(I), ATMOSC(I),
+<span class="ln">480</span>c    *                     DELADJ(I), ATGAM1(I), ATMOSP(I), ATMOST(I), ATMOSX
+<span class="ln">481</span>c
+<span class="ln">482</span>c1520                  CONTINUE
+<span class="ln">483</span>c1521                  FORMAT(1X,8E16.8)
+<span class="ln">484</span>
+<span class="ln">485</span>
+<span class="ln">486</span>      ENDIF
+<span class="ln">487</span>
+<span class="ln">488</span>
+<span class="ln">489</span>
+<span class="ln">490</span>c      DO 444, I=1,JSON
+<span class="ln">491</span>c            ACATMR(I) =0.0d0
+<span class="ln">492</span>c            ACATMP(I) =0.0d0
+<span class="ln">493</span>c            ACATMT(I) =0.0d0
+<span class="ln">494</span>c            ACATMD(I) =0.0d0
+<span class="ln">495</span>c444      CONTINUE
+<span class="ln">496</span>
+<span class="ln">497</span>
+<span class="ln">498</span>
+<span class="ln">499</span>
+<span class="ln">500</span>
+<span class="ln">501</span>
+<span class="ln">502</span>
+<span class="ln">503</span>
+<span class="ln">504</span>
+<span class="ln">505</span>
+<span class="ln">506</span>C 50      CONTINUE
+<span class="ln">507</span>      RETURN
+<span class="ln">508</span>
+<span class="ln">509</span>      END</pre></details>
+<details class='py' id='py-calcad'><summary>Python version: calcad</summary><pre class='doc'>Join the interior model and a fresh envelope integration into one
+profile, compute 1/c_s from the equation of state, and integrate it to
+get the acoustic depth of the star (TNORM) and of its convection zone
+(TCZ), and their ratio TAUCZN.
+
+Translates: calcad.f#CALCAD (09c3b9b)
+
+Arguments: the interior model hr, hd, hp, ht (log r, log rho, log P,
+log T; arrays, index 0 unused); rczl, log r_CZ / R_sun (RCZL(1) in the
+Fortran, a scalar here); m, the last interior point; bl, log L; fp, ft,
+the rotational distortion; hstot; teffl, log Teff; hcomp[species,
+shell]; dage, the age; jenv, the base of the convection zone; cmixl,
+the mixing length (passed on to ENVINT).
+
+Returns nothing: the results go to acdpth_mod (tnorm, tcz, tauczn,
+tatmos, deladj).</pre><pre class='src'><span class="ln">35</span>def calcad(hr, rczl, m, hd, hp, ht, bl, fp, ft, hstot, teffl, hcomp, dage,
+<span class="ln">36</span>           jenv, cmixl):
+<span class="ln">37</span>    &quot;&quot;&quot;Join the interior model and a fresh envelope integration into one
+<span class="ln">38</span>    profile, compute 1/c_s from the equation of state, and integrate it to
+<span class="ln">39</span>    get the acoustic depth of the star (TNORM) and of its convection zone
+<span class="ln">40</span>    (TCZ), and their ratio TAUCZN.
+<span class="ln">41</span>
+<span class="ln">42</span>    Translates: calcad.f#CALCAD (09c3b9b)
+<span class="ln">43</span>
+<span class="ln">44</span>    Arguments: the interior model hr, hd, hp, ht (log r, log rho, log P,
+<span class="ln">45</span>    log T; arrays, index 0 unused); rczl, log r_CZ / R_sun (RCZL(1) in the
+<span class="ln">46</span>    Fortran, a scalar here); m, the last interior point; bl, log L; fp, ft,
+<span class="ln">47</span>    the rotational distortion; hstot; teffl, log Teff; hcomp[species,
+<span class="ln">48</span>    shell]; dage, the age; jenv, the base of the convection zone; cmixl,
+<span class="ln">49</span>    the mixing length (passed on to ENVINT).
+<span class="ln">50</span>
+<span class="ln">51</span>    Returns nothing: the results go to acdpth_mod (tnorm, tcz, tauczn,
+<span class="ln">52</span>    tatmos, deladj).
+<span class="ln">53</span>    &quot;&quot;&quot;
+<span class="ln">54</span>    global icz, abeg0, amin0, amax0, ebeg0, emin0, emax0
+<span class="ln">55</span>    c = constants_mod
+<span class="ln">56</span>    nml = nmlpar_mod
+<span class="ln">57</span>    acd = acdpth_mod
+<span class="ln">58</span>    env = envstruct_mod
+<span class="ln">59</span>    eos = eos06misc_mod.eos
+<span class="ln">60</span>
+<span class="ln">61</span>    starr = np.zeros(JSON + 1)
+<span class="ln">62</span>    start = np.zeros(JSON + 1)
+<span class="ln">63</span>    stard = np.zeros(JSON + 1)
+<span class="ln">64</span>    starx = np.zeros(JSON + 1)
+<span class="ln">65</span>    starp = np.zeros(JSON + 1)
+<span class="ln">66</span>    starz = np.zeros(JSON + 1)
+<span class="ln">67</span>    starc = np.zeros(JSON + 1)
+<span class="ln">68</span>    gm1 = np.zeros(JSON + 1)
+<span class="ln">69</span>    hood1 = np.zeros(8)
+<span class="ln">70</span>    hood2 = np.zeros(8)
+<span class="ln">71</span>    d = np.zeros(8)
+<span class="ln">72</span>    dum1 = np.zeros(5)
+<span class="ln">73</span>    dum2 = np.zeros(4)
+<span class="ln">74</span>    dum3 = np.zeros(4)
+<span class="ln">75</span>    dum4 = np.zeros(4)
+<span class="ln">76</span>    fxionj = np.zeros(4)
+<span class="ln">77</span>
+<span class="ln">78</span>    acd.tauczn = 0.0
+<span class="ln">79</span>    acd.tcz = 0.0
+<span class="ln">80</span>    acd.tnorm = 0.0
+<span class="ln">81</span>    acd.whe = 0.0
+<span class="ln">82</span>    acd.tauhe = 0.0
+<span class="ln">83</span>    acd.tatmos = 0.0
+<span class="ln">84</span>
+<span class="ln">85</span>    # The envelope, integrated with fixed step sizes.
+<span class="ln">86</span>    abeg0, amin0, amax0 = nml.atmbeg, nml.atmmin, nml.atmmax
+<span class="ln">87</span>    ebeg0, emin0, emax0 = nml.envbeg, nml.envmin, nml.envmax
+<span class="ln">88</span>    nml.atmbeg = nml.atmmin = nml.atmmax = nml.atmstp
+<span class="ln">89</span>    nml.envbeg = nml.envmin = nml.envmax = nml.envstp
+<span class="ln">90</span>    # Question (see the page): the step sizes are never restored.
+<span class="ln">91</span>    idumj = 0
+<span class="ln">92</span>    bj = math.exp(c.cln * bl)
+<span class="ln">93</span>    fplj = fp[m]
+<span class="ln">94</span>    ftlj = ft[m]
+<span class="ln">95</span>    katmj = 0
+<span class="ln">96</span>    kenvj = 0
+<span class="ln">97</span>    ksahaj = 0
+<span class="ln">98</span>    lpulptj = True
+<span class="ln">99</span>    ixxj = 0
+<span class="ln">100</span>    lprtj = True
+<span class="ln">101</span>    lsbc0j = False
+<span class="ln">102</span>    xj = hcomp[1, m]
+<span class="ln">103</span>    zj = hcomp[3, m]
+<span class="ln">104</span>    rlj = 0.5 * (bl + c.clsunl - 4.0 * teffl - c.c4pil - c.csigl)
+<span class="ln">105</span>    glj = c.cgl + comp_mod.stotal - rlj - rlj
+<span class="ln">106</span>    plimj = hp[m]
+<span class="ln">107</span>    # Question (see the page): spots only when JENV = M.
+<span class="ln">108</span>    if jenv == m and nml.spotf != 0.0 and nml.spotx != 1.0:
+<span class="ln">109</span>        ateffl = teffl - 0.25 * math.log10(
+<span class="ln">110</span>            nml.spotf * nml.spotx**4.0 + 1.0 - nml.spotf)
+<span class="ln">111</span>    else:
+<span class="ln">112</span>        ateffl = teffl
+<span class="ln">113</span>    rlj, idumj, katmj, kenvj, ksahaj = envint(
+<span class="ln">114</span>        bj, fplj, ftlj, glj, hstot, ixxj, lprtj, lsbc0j, plimj, rlj, ateffl,
+<span class="ln">115</span>        xj, zj, dum1, idumj, katmj, kenvj, ksahaj, dum2, dum3, dum4,
+<span class="ln">116</span>        lpulptj, cmixl)
+<span class="ln">117</span>    numenv = env.numenv
+<span class="ln">118</span>
+<span class="ln">119</span>    # One profile: interior points 1..M, then envelope points 2..NUMENV,
+<span class="ln">120</span>    # in linear units, T in 10^6 K (labels 34, 35).
+<span class="ln">121</span>    for i in range(1, m + 1):
+<span class="ln">122</span>        starr[i] = math.exp(c.cln * hr[i])
+<span class="ln">123</span>        start[i] = math.exp(c.cln * ht[i]) / 1.0e6
+<span class="ln">124</span>        stard[i] = math.exp(c.cln * hd[i])
+<span class="ln">125</span>        starp[i] = math.exp(c.cln * hp[i])
+<span class="ln">126</span>        starx[i] = hcomp[1, i]
+<span class="ln">127</span>        # Question (see the page): the envelope&#x27;s Z at every interior point.
+<span class="ln">128</span>        starz[i] = hcomp[3, m]
+<span class="ln">129</span>    for i in range(1, numenv):
+<span class="ln">130</span>        starr[m + i] = math.exp(c.cln * env.envr[i + 1])
+<span class="ln">131</span>        start[m + i] = math.exp(c.cln * env.envt[i + 1]) / 1.0e6
+<span class="ln">132</span>        stard[m + i] = math.exp(c.cln * env.envd[i + 1])
+<span class="ln">133</span>        starp[m + i] = math.exp(c.cln * env.envp[i + 1])
+<span class="ln">134</span>        starx[m + i] = hcomp[1, m]
+<span class="ln">135</span>        starz[m + i] = hcomp[3, m]
+<span class="ln">136</span>
+<span class="ln">137</span>    # Inverse sound speed and the adiabatic gradient (labels 36, 41).
+<span class="ln">138</span>    if nml.lopale06:
+<span class="ln">139</span>        iorder = 9
+<span class="ln">140</span>        irad = 1
+<span class="ln">141</span>        for i in range(1, m + numenv):
+<span class="ln">142</span>            # The Fortran&#x27;s alternate return (*999) lands on the next
+<span class="ln">143</span>            # statement, so a failed call goes on with the previous EOS.
+<span class="ln">144</span>            # Question (see the page): EOS errors ignored.
+<span class="ln">145</span>            esac06(starx[i], start[i], stard[i], iorder, irad)
+<span class="ln">146</span>            starc[i] = 1.0 / math.sqrt(eos[8] * starp[i] / stard[i])
+<span class="ln">147</span>            acd.deladj[i] = 1.0 / eos[9]
+<span class="ln">148</span>            gm1[i] = eos[8]
+<span class="ln">149</span>    if not nml.lopale06:
+<span class="ln">150</span>        for i in range(1, m + numenv):
+<span class="ln">151</span>            stx = starx[i]
+<span class="ln">152</span>            stt = start[i] * 1.0e6
+<span class="ln">153</span>            std = stard[i]
+<span class="ln">154</span>            stdl = math.log10(stard[i])
+<span class="ln">155</span>            stz = starz[i]
+<span class="ln">156</span>            sttl = math.log10(stt)
+<span class="ln">157</span>            stp = starp[i]
+<span class="ln">158</span>            stpl = math.log10(stp)
+<span class="ln">159</span>            lcalcj = True
+<span class="ln">160</span>            lderij = False
+<span class="ln">161</span>            latmoj = True
+<span class="ln">162</span>            # FXIONJ is a scalar in CALCAD but FXION(3) in EQSTAT2; here an
+<span class="ln">163</span>            # array, so that EQSTAT2 can fill it.
+<span class="ln">164</span>            (stt, stp, stdl, std, betaj, betaij, bet14j, rmuj, amuj, emuj,
+<span class="ln">165</span>             etaj, qdtj, qdpj, qcpj, delaj, qdttj, qdtpj, qatj, qapj, qcptj,
+<span class="ln">166</span>             qcppj, ksahaj) = eqstat2(
+<span class="ln">167</span>                sttl, stt, stpl, stp, stdl, std, stx, stz, 0.0, 0.0, 0.0,
+<span class="ln">168</span>                fxionj, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+<span class="ln">169</span>                0.0, 0.0, 0.0, 0.0, lderij, latmoj, ksahaj)
+<span class="ln">170</span>            chrh = 1.0 / qdpj
+<span class="ln">171</span>            cht = -chrh * qdtj
+<span class="ln">172</span>            cvj = qcpj - math.exp(c.cln * (stpl - stdl - sttl)) * cht**2 / chrh
+<span class="ln">173</span>            gm1[i] = chrh * qcpj / cvj
+<span class="ln">174</span>            starc[i] = 1.0 / math.sqrt(gm1[i] * starp[i] / stard[i])
+<span class="ln">175</span>            acd.deladj[i] = delaj
+<span class="ln">176</span>
+<span class="ln">177</span>    # t_norm: Boole&#x27;s rule on 1 + 4p points.
+<span class="ln">178</span>    # Question (see the page): K leaves out the outermost point.
+<span class="ln">179</span>    k = numenv - 1 + m - 1
+<span class="ln">180</span>    u = (numenv - 1 + m - 1) % 4
+<span class="ln">181</span>    if u != 0:
+<span class="ln">182</span>        nn = k + 4 - u + 1
+<span class="ln">183</span>    else:
+<span class="ln">184</span>        nn = k + 1
+<span class="ln">185</span>    # Question (see the page): a short profile gives TNORM = 0.
+<span class="ln">186</span>    if k &lt;= 3:
+<span class="ln">187</span>        k = 4
+<span class="ln">188</span>        nn = 1 + 1
+<span class="ln">189</span>    acd.tnorm = boole(starr, starc, k, nn, acd.tnorm)
+<span class="ln">190</span>
+<span class="ln">191</span>    # t_CZ: from r_CZ to the surface (label 22).
+<span class="ln">192</span>    if jenv &lt; m:
+<span class="ln">193</span>        rcz = math.exp(c.cln * (rczl + c.crsunl))
+<span class="ln">194</span>        ans = 0.0
+<span class="ln">195</span>        klo = khi = 0
+<span class="ln">196</span>        flg = 0
+<span class="ln">197</span>        for i in range(1, k + 1):
+<span class="ln">198</span>            if starr[i] &lt;= rcz and starr[i + 1] &gt;= rcz:
+<span class="ln">199</span>                icz = i
+<span class="ln">200</span>            # Question (see the page): ICZ may be stale, from an earlier
+<span class="ln">201</span>            # call, and then can match I before the bracket is found.
+<span class="ln">202</span>            if i == icz and flg == 0 and icz &gt; 3:
+<span class="ln">203</span>                flg = 1
+<span class="ln">204</span>                for p in range(1, 8):
+<span class="ln">205</span>                    hood1[p] = starr[icz - 4 + p]
+<span class="ln">206</span>                    hood2[p] = starc[icz - 4 + p]
+<span class="ln">207</span>                splinj(hood1, hood2, d, 7)
+<span class="ln">208</span>                ans, klo, khi = splint(hood1, hood2, 7, d, rcz, ans, klo, khi)
+<span class="ln">209</span>                starr[icz] = rcz
+<span class="ln">210</span>                starc[icz] = ans
+<span class="ln">211</span>            if i == icz and flg == 0 and icz &lt;= 3:
+<span class="ln">212</span>                flg = 1
+<span class="ln">213</span>                if icz == 1:
+<span class="ln">214</span>                    rcz = starr[icz]
+<span class="ln">215</span>                    ans = starc[icz]
+<span class="ln">216</span>                else:
+<span class="ln">217</span>                    for p in range(1, 8):
+<span class="ln">218</span>                        hood1[p] = starr[icz - 2 + p]
+<span class="ln">219</span>                        hood2[p] = starc[icz - 2 + p]
+<span class="ln">220</span>                    splinj(hood1, hood2, d, 7)
+<span class="ln">221</span>                    ans, klo, khi = splint(hood1, hood2, 7, d, rcz, ans,
+<span class="ln">222</span>                                           klo, khi)
+<span class="ln">223</span>                    starr[icz] = rcz
+<span class="ln">224</span>                    starc[icz] = ans
+<span class="ln">225</span>        for i in range(1, k - icz + 2):  # label 27
+<span class="ln">226</span>            starrz[i] = starr[icz - 1 + i]
+<span class="ln">227</span>            starcz[i] = starc[icz - 1 + i]
+<span class="ln">228</span>        u = (k - icz + 1) % 4
+<span class="ln">229</span>        v = k - icz + 1
+<span class="ln">230</span>        if u != 0:
+<span class="ln">231</span>            nn = k - icz + 1 + 4 - u + 1
+<span class="ln">232</span>        else:
+<span class="ln">233</span>            nn = k - icz + 1 + 1
+<span class="ln">234</span>        acd.tcz = boole(starrz, starcz, v, nn, acd.tcz)
+<span class="ln">235</span>    else:
+<span class="ln">236</span>        acd.tcz = 0.0
+<span class="ln">237</span>
+<span class="ln">238</span>    acd.tauczn = 0.0
+<span class="ln">239</span>    acd.tauczn = acd.tcz / acd.tnorm
+<span class="ln">240</span>
+<span class="ln">241</span>    # Question (see the page): format 67, and TATMOS always 0.
+<span class="ln">242</span>    iounits_mod.write(
+<span class="ln">243</span>        iounits_mod.ishort,
+<span class="ln">244</span>        f&quot; Acoustic depth to CZ:{acd.tcz:14.8f}  Acoustic depth to center&quot;
+<span class="ln">245</span>        f&quot;{acd.tnorm:13.7f}  Normalized taucz:{acd.tauczn:11.9f}&quot;
+<span class="ln">246</span>        f&quot;Acoustic depth of atmopshere:{acd.tatmos:16.8f}  &quot;)
+<span class="ln">247</span>
+<span class="ln">248</span>    if acd.lclcd:
+<span class="ln">249</span>        iounits_mod.write(
+<span class="ln">250</span>            iounits_mod.iclcd,
+<span class="ln">251</span>            f&quot; Number of points in envelope:{numenv:5d}  &quot;
+<span class="ln">252</span>            f&quot;Number of points in interior:{m:5d}  Index near Rcz:{icz:5d}  &quot;)
+<span class="ln">253</span>        for i in range(1, m + numenv):  # label 1505
+<span class="ln">254</span>            if i &lt;= k - icz + 1:
+<span class="ln">255</span>                row = (dage, starr[i], starc[i], starrz[i], starcz[i],
+<span class="ln">256</span>                       acd.deladj[i], gm1[i], starp[i], start[i], stard[i],
+<span class="ln">257</span>                       starx[i])
+<span class="ln">258</span>            else:
+<span class="ln">259</span>                row = (dage, starr[i], starc[i], 0.0, 0.0, acd.deladj[i],
+<span class="ln">260</span>                       gm1[i], starp[i], start[i], stard[i], starx[i])
+<span class="ln">261</span>            iounits_mod.write(iounits_mod.iclcd,
+<span class="ln">262</span>                              &quot; &quot; + &quot;&quot;.join(f&quot;{x:16.8E}&quot; for x in row))</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Missing. Question 1 (step sizes not restored): <a href="../yrec-map/wrtmod.f.html#def-WRTMOD">WRTMOD</a>, whose code the comment says CALCAD copied, does restore them (<code>ATMBEG = ABEG0</code>, …). Fix: add, which sharpens the question.</li>
+<li>Unclear. Question 7: <code>JENV = M</code> is also exactly the case in which no convection zone is found (<code>TCZ</code> needs <code>JENV &lt; M</code>), so the spot correction applies only to stars for which <code>TCZ = 0</code>. Fix: say so.</li>
+</ol>
+<p>Revised: WRTMOD's restore added to question 1; question 7 sharpened.</p></div></details>
+</main></body></html>

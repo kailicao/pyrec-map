@@ -1,0 +1,764 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>getopal95.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ getopal95.f</span></header><main>
+<h1>getopal95.f</h1>
+<p class='muted'>424 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/getopal95.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>getopal95.py</code>, 270 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>GETOPAL95</code> is the driver for the OPAL 1995 opacity tables ("7/98 MHP"): given $\rho$, $T$, $X$, $Z$, it finds the interpolation stencil and weights in $T$, $R = \rho/T_6^3$, $X$ and $Z$, handles the table's empty corner at high density, and calls a 2D, 3D or 4D interpolator depending on how far the composition is from the tables already prepared.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/getopac.f.html#def-GETOPAC">GETOPAC</a>, when <code>LOPAL95</code> is set (with $Z$ = 0.1 in metal-rich helium-burning cores).</li>
+<li><strong>Inputs:</strong> <code>DL</code>, <code>TL</code>, <code>X</code>, <code>Z</code>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/interp.f.html#def-INTERP">INTERP</a> (four-point Lagrange weights with derivative weights, for $T$ and $R$), <a href="../yrec-map/intrp2.f.html#def-INTRP2">INTRP2</a> (weights only, for $X$ and $Z$), and one of <a href="../yrec-map/op952d.f.html#def-OP952D">OP952D</a> (2D, in the table for the surface $X$ and $Z$), <a href="../yrec-map/op953d.f.html#def-OP953D">OP953D</a> (3D, in the tables for the model's $Z$) or <a href="../yrec-map/op954d.f.html#def-OP954D">OP954D</a> (4D, in the full set).</li>
+<li><strong>Outputs:</strong> <code>O</code>, <code>OL</code>, <code>QOD</code>, <code>QOT</code>, as from <code>GETOPAC</code>.</li>
+<li><strong>Modules</strong> (COMMON blocks until <code>rp_1</code>): the tables <code>LLOT95A_MOD</code> (the full set <code>CAPPA2</code>, indexed by a combined X–Z table number, and the grids <code>TGR</code>, <code>R0GR</code>, <code>XXG</code>, <code>ZZG</code>; read by <a href="../yrec-map/ll95tbl.f.html#def-LL95TBL">LL95TBL</a>), <code>LLOT95_MOD</code> (<code>CAPPA</code> at the model's $Z$, <code>ZTAB</code>, made by <a href="../yrec-map/op95ztab.f.html#def-OP95ZTAB">OP95ZTAB</a>), <code>LLOT95E_MOD</code> (<code>CAPPAE</code> at the surface $X$, <code>XOP95</code> (formerly <code>XTAB</code>), made by <a href="../yrec-map/op95xtab.f.html#def-OP95XTAB">OP95XTAB</a>); <code>OP95INTERP_MOD</code>, which merges the former <code>/OP95INDX/</code> (indices), <code>/OP95FACT/</code> (weights) and <code>/OP95EXT/</code> (extrapolation flags), shared with the <code>OP95*D</code> routines, $\log R$ now named <code>RHO_T63L</code> (formerly <code>RL</code>, which clashed with the radius elsewhere) and its edge value <code>RHO_T63LL</code> (formerly <code>RLL</code>); <code>ACDPTH_MOD</code> for the flags <code>LADON</code>, <code>LACOUT</code> (acoustic-depth output; shared with <a href="../yrec-map/calcad.f.html#def-CALCAD">CALCAD</a>, <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a>, <a href="../yrec-map/wrtout.f.html#def-WRTOUT">WRTOUT</a>).</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>$\log R = \log\rho - 3(\log T - 6)$ (<code>RHO_T63L</code>). The run stops if $\log T$ is outside the table. Below the smallest $\log R$, the weights are computed at the table edge and the value is extrapolated linearly later (<code>LEXTL</code>).</li>
+<li>Stencils in $\log T$ (<code>JT</code>) and $\log R$ (<code>JD</code>), each starting from the last one found.</li>
+<li><strong>Empty corner.</strong> Values of 9.9 or more mark missing entries. If the stencil's high-density, high-temperature corner is missing, each of the four temperatures gets its own density stencil (<code>LSHIFT</code>), and where even that is outside the data, its weights are computed at the last valid density and the value is extrapolated linearly (<code>LEXH</code>, <code>RLH</code>).</li>
+<li><strong>Which interpolation.</strong> If $Z$ is within a relative $10^{-4}$ of the model table's $Z$: 2D if $X$ is within $10^{-4}$ of the surface table's $X$, else 3D in $X$, $T$, $R$. Otherwise 4D. The 4D path is forced when acoustic-depth output is on (<code>LADON</code> and <code>LACOUT</code>, "JVS 04/11").</li>
+<li><strong>Missing high-$X$ tables.</strong> The $X$ nodes are 0, 0.1, 0.2, 0.35, 0.5, 0.7, 0.8, 0.9, 0.95, 1. For $X \ge 0.8$: if $0.04 \le Z &lt; 0.1$, the $X = 0.95$ table is absent and the stencil is 0.7, 0.8, 0.9 and the last node, set to $1 - Z$; if $Z \ge 0.1$, the last two are absent and the stencil is 0.5, 0.7, 0.8, 0.9. (In 3D the test is on the model table's $Z$, in 4D on each $Z$ node. <a href="../yrec-map/op95ztab.f.html#def-OP95ZTAB">OP95ZTAB</a> stops the run for $Z &gt; 0.08$, so the 3D case $Z \ge 0.1$ is never reached; the 4D path can still meet the node $Z = 0.1$.)</li>
+</ol>
+<p><strong>KC's changes.</strong> The elements of <code>/ACDPTH/</code> (now <code>ACDPTH_MOD</code>) were reordered (2025-05-30).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations and names only: COMMON blocks to modules (the three interpolation blocks merged into <code>OP95INTERP_MOD</code>), <code>IMPLICIT NONE</code>, <code>RL</code>, <code>RLL</code> and <code>XTAB</code> renamed <code>RHO_T63L</code>, <code>RHO_T63LL</code> and <code>XOP95</code>, and the unused parameters <code>NUMXZ</code> and <code>JSON</code> removed. The computation is unchanged; no question settled.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Wrong array in the empty-corner search.</strong> The stencil search for each temperature (<code>LSHIFT</code> block) tests <code>CAPPA2(IXX,ITT,J)</code>, with <code>IXX</code> = <code>JX(1,1)</code>, an index into the $X$ tables of <code>CAPPA</code>. <code>CAPPA2</code>'s first index is the combined X–Z table number (<code>OP954D</code> and <code>OP95ZTAB</code> use it so). Should it read <code>CAPPA(IXX,ITT,J)</code>?</li>
+<li><strong><code>LSHIFT</code> left over from the last call.</strong> When $X &lt; 0.2$ and <code>JT</code> ≤ 5, the code jumps past the line that resets <code>LSHIFT</code> and <code>LEXTH</code> to false, so their values from the previous call (the routine has <code>SAVE</code>) decide the density stencil. The flag <code>LCHK</code> set on that path is never used. Is a check missing there?</li>
+<li><strong>Stale <code>JX(1,1)</code> in the corner test.</strong> The empty-corner test uses <code>JX(1,1)</code> before it is updated for the current $X$ (that happens later, in the 3D and 4D branches). Intended?</li>
+<li><strong>Header vs code.</strong> The header says the facility uses "cubic spline interpolation"; the code uses four-point Lagrange weights throughout.</li>
+<li><strong>Negative index.</strong> In the <code>LSHIFT</code> search, <code>JD(I) = J - 3</code> can be zero or negative if the only valid densities are the first two. Can that happen?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>THIS IS THE INTERPOLATION FACILITY FOR THE LIVERMORE OPACITY TABLES
+USING CUBIC SPLINE INTERPLOATION SCHEME.   (FOR OPAL95)
+--------------------------------------------------------------
+SUBROUTINE GETOPAL95(DL,TL,X,Z,O,OL,QOD,QOT) DRIVER- GET CAPPA
+SUBROUTINE OP952D(O,OL,QOD,QOT) 2D INTERPOLATION IN (T,RHO)
+SUBROUTINE OP953D(O,OL,QOD,QOT) 3D INTERPOLATION IN (X,T,RHO)
+SUBROUTINE OP954D(O,OL,QOD,QOT) 4D INTERPOLATION IN (Z,X,T,RHO)
+SUBROUTINE LL95TBL READ IN ALL TABLES
+SUBROUTINE OP95ZTAB(Z) GENERATE TABLE AT FIXED Z
+SUBROUTINE OP95XTAB(X) GENERATE TABLE AT FIXED X,Z
+
+
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+GETOPAL95
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-GETOPAL95'>GETOPAL95</a> <span class='muted'>subroutine · THIS IS THE INTERPOLATION FACILITY FOR THE LIVERMORE OPACITY TABLES</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-GETOPAL95'><h3><span class='kind'>subroutine</span>GETOPAL95</h3>
+<p class='muted'>lines 17–424 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/getopal95.f#L17-L424'>GitHub</a></p>
+<pre>SUBROUTINE GETOPAL95(DL,TL,X,Z,O,OL,QOD,QOT)</pre>
+<div class='notes'><p>Driver for the OPAL 1995 opacities: stencils and weights in $T$, $R$, $X$, $Z$, the empty-corner handling, and the choice of 2D, 3D or 4D interpolation (method above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>THIS IS THE INTERPOLATION FACILITY FOR THE LIVERMORE OPACITY TABLES
+USING CUBIC SPLINE INTERPLOATION SCHEME.   (FOR OPAL95)
+--------------------------------------------------------------
+SUBROUTINE GETOPAL95(DL,TL,X,Z,O,OL,QOD,QOT) DRIVER- GET CAPPA
+SUBROUTINE OP952D(O,OL,QOD,QOT) 2D INTERPOLATION IN (T,RHO)
+SUBROUTINE OP953D(O,OL,QOD,QOT) 3D INTERPOLATION IN (X,T,RHO)
+SUBROUTINE OP954D(O,OL,QOD,QOT) 4D INTERPOLATION IN (Z,X,T,RHO)
+SUBROUTINE LL95TBL READ IN ALL TABLES
+SUBROUTINE OP95ZTAB(Z) GENERATE TABLE AT FIXED Z
+SUBROUTINE OP95XTAB(X) GENERATE TABLE AT FIXED X,Z
+
+
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+GETOPAL95
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/acdpth_mod.f.html#def-ACDPTH_MOD'>ACDPTH_MOD</a>, <a href='../yrec-map/llot95a_mod.f.html#def-LLOT95A_MOD'>LLOT95A_MOD</a>, <a href='../yrec-map/llot95e_mod.f.html#def-LLOT95E_MOD'>LLOT95E_MOD</a>, <a href='../yrec-map/llot95_mod.f.html#def-LLOT95_MOD'>LLOT95_MOD</a>, <a href='../yrec-map/op95interp_mod.f.html#def-OP95INTERP_MOD'>OP95INTERP_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/interp.f.html#def-INTERP'>INTERP</a> <span class='muted'>(interp.f)</span> ×5</li>
+<li><a href='../yrec-map/intrp2.f.html#def-INTRP2'>INTRP2</a> <span class='muted'>(intrp2.f)</span> ×3</li>
+<li><a href='../yrec-map/op952d.f.html#def-OP952D'>OP952D</a> <span class='muted'>(op952d.f)</span></li>
+<li><a href='../yrec-map/op953d.f.html#def-OP953D'>OP953D</a> <span class='muted'>(op953d.f)</span></li>
+<li><a href='../yrec-map/op954d.f.html#def-OP954D'>OP954D</a> <span class='muted'>(op954d.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span> ×2</li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">17</span>      SUBROUTINE GETOPAL95(DL,TL,X,Z,O,OL,QOD,QOT)
+<span class="ln">18</span>C 10/14/26 MHP via Claude
+<span class="ln">19</span>C code changed to convert COMMON/OP95INTERP/ into OP95INTERP_MOD.
+<span class="ln">20</span>      USE OP95INTERP_MOD
+<span class="ln">21</span>C 10/14/26 MHP via Claude
+<span class="ln">22</span>C code changed to convert COMMON/LLOT95A/ into LLOT95A_MOD.
+<span class="ln">23</span>      USE LLOT95A_MOD
+<span class="ln">24</span>C 10/14/26 MHP via Claude
+<span class="ln">25</span>C code changed to convert COMMON/ACDPTH/ into ACDPTH_MOD.
+<span class="ln">26</span>      USE ACDPTH_MOD
+<span class="ln">27</span>C 10/14/26 MHP via Claude
+<span class="ln">28</span>C code changed to convert COMMON/LLOT95E/ into LLOT95E_MOD.
+<span class="ln">29</span>      USE LLOT95E_MOD
+<span class="ln">30</span>C 10/14/26 MHP via Claude
+<span class="ln">31</span>C code changed to convert COMMON/LLOT95/ into LLOT95_MOD.
+<span class="ln">32</span>      USE LLOT95_MOD
+<span class="ln">33</span>C 10/20/26 MHP via Claude
+<span class="ln">34</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">35</span>C explicit declarations.
+<span class="ln">36</span>      IMPLICIT NONE
+<span class="ln">37</span>      REAL*8 A,B,C,DL,O,OL,QOD,QOT,RR,TL,X,Z,ZZ
+<span class="ln">38</span>      INTEGER I,IDD,ITT,IXX,J,JXX,K,NUMD,NUMT,NUMX,NUMZ
+<span class="ln">39</span>      LOGICAL*4 LCHK,LSHIFT
+<span class="ln">40</span>C 7/98 MHP DRIVER ROUTINE FOR OPACITY GIVEN RHO,T, X, AND Z.
+<span class="ln">41</span>      PARAMETER (NUMT=70)
+<span class="ln">42</span>      PARAMETER (NUMD=19)
+<span class="ln">43</span>      PARAMETER (NUMX=10)
+<span class="ln">44</span>      PARAMETER (NUMZ=13)
+<span class="ln">45</span>C JVS Need this one too:
+<span class="ln">46</span>C FULL SET OF TABLES: OPACITY AS A FUNCTION OF Z AND X, T, RHO/T6**3
+<span class="ln">47</span>C TABLES ARE INCREMENTED IN SETS OF NZ*NX.  SO THE TABLES FOR THE
+<span class="ln">48</span>C THIRD METAL ABUNDANCE (3 X 10**-4)BEGIN AT TABLE 21 AND END AT TABLE 30.
+<span class="ln">49</span>C FOR THE HIGH VALUES OF Z, THE NUMBER OF X TABLES IS NOT THE SAME (I.E.
+<span class="ln">50</span>C X&lt;0.9 FOR Z=0.1).
+<span class="ln">51</span>C FOR EACH COMPOSITION A FULL GRID IN (T,RHO/T6**3) IS RETAINED.
+<span class="ln">52</span>C AS ABOVE FOR THE MODEL Z.
+<span class="ln">53</span>C AS ABOVE FOR DESIRED SURFACE VALUE OF X.
+<span class="ln">54</span>C INDICES FOR INTERPOLATION IN Z,X,T, AND R; INTERPOLATION FACTORS FOR
+<span class="ln">55</span>C Z,X,T, AND R (AND DERIVATIVE FACTORS FOR T AND RHO); AND DATA FOR
+<span class="ln">56</span>C LINEAR EXTRAPOLATION WHEN OUTSIDE THE TABLE IN RHO.
+<span class="ln">57</span>C 10/9/26 MHP via Claude
+<span class="ln">58</span>C code changed to merge COMMON/OP95INDX/, COMMON/OP95FACT/, and
+<span class="ln">59</span>C COMMON/OP95EXT/ into COMMON/OP95INTERP/: all three are small
+<span class="ln">60</span>C interpolation-support arrays (not table data, unlike LLOT95/
+<span class="ln">61</span>C LLOT95E/LLOT95A, which hold the actual 2D/3D/4D opacity tables and
+<span class="ln">62</span>C are intentionally left separate), with no member name colliding
+<span class="ln">63</span>C with any dummy argument across the 6 files that declare any of
+<span class="ln">64</span>C them.
+<span class="ln">65</span>C 10/13/26 MHP via Claude
+<span class="ln">66</span>C code changed to rename COMMON/OP95INTERP/&#x27;s RL and RLL to RHO_T63L and
+<span class="ln">67</span>C RHO_T63LL.  RL is log(rho/T6**3), set here as RL = DL - 3*(TL-6); the
+<span class="ln">68</span>C old names clash with RL and RLL as used for radius throughout the rest
+<span class="ln">69</span>C of the code, which is why main.f declared only a 10-member prefix of
+<span class="ln">70</span>C this block to avoid importing them.  With the clash gone main.f can
+<span class="ln">71</span>C declare the full block, which a USE statement will require once this
+<span class="ln">72</span>C becomes a module.
+<span class="ln">73</span>C 10/13/26 MHP via Claude: removed the unused COMMON/IOUNITS/ declaration
+<span class="ln">74</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">75</span>C 9/25/26 MHP via Claude
+<span class="ln">76</span>C code changed to remove dead IACAT, IJVS, IJENT, IJDEL unit
+<span class="ln">77</span>C reservations from COMMON/ACDPTH/ (declared but never opened anywhere)
+<span class="ln">78</span>C      *LCLCD, AGEOUT(5), IACAT, IJLAST, LJLAST, LJWRT, LADON,LAOLY, IJVS,
+<span class="ln">79</span>C END JVS
+<span class="ln">80</span>      DIMENSION A(4),B(4),C(4)
+<span class="ln">81</span>      SAVE
+<span class="ln">82</span>C ENSURE THAT WE ARE WITHIN THE OPAL 95 TABLES.
+<span class="ln">83</span>C COMPUTE LOG R = RHO/T6**3
+<span class="ln">84</span>      RHO_T63L = DL - 3.0D0*(TL-6.0D0)
+<span class="ln">85</span>C  CHECK T
+<span class="ln">86</span>      IF(TL.LT.TGR(1) .OR. TL.GT.TGR(NUMT))THEN
+<span class="ln">87</span>         WRITE(*,5)TL
+<span class="ln">88</span> 5       FORMAT(&#x27; LOG T OF&#x27;,F11.6,&#x27;OUT OF OPAL 95 TABLE RANGE&#x27;)
+<span class="ln">89</span>         STOP
+<span class="ln">90</span>      ENDIF
+<span class="ln">91</span>C CHECK TO SEE IF EXTRAPOLATION BELOW THE FIRST TABLE ELEMENT
+<span class="ln">92</span>C IN DENSITY IS NEEDED.
+<span class="ln">93</span>      IF(RHO_T63L.LT.R0GR(1))THEN
+<span class="ln">94</span>         LEXTL = .TRUE.
+<span class="ln">95</span>      ELSE
+<span class="ln">96</span>         LEXTL = .FALSE.
+<span class="ln">97</span>      ENDIF
+<span class="ln">98</span>C  THIS SECTION IS REPLACED BY LINEAR EXTRAPOLATION IN R FROM THE
+<span class="ln">99</span>C  LAST TWO OPACITY VALUES.
+<span class="ln">100</span>C      IF(RHO_T63L.LT.(R0GR(1)-4.0D0) .OR. RHO_T63L.GT.(R0GR(NUMD)+1.0D0))THEN
+<span class="ln">101</span>C         WRITE(*,7)RHO_T63L,TL
+<span class="ln">102</span>C 7       FORMAT(&#x27; LOG R OF&#x27;,F11.6,&#x27; OUT OF OPAL 95 TABLE RANGE;TL&#x27;
+<span class="ln">103</span>C     *          ,F11.6)
+<span class="ln">104</span>C         STOP
+<span class="ln">105</span>C      ENDIF
+<span class="ln">106</span>C GET INTERPOLATION FACTORS IN T
+<span class="ln">107</span>      IF(TL.GE.TGR(JT+2))THEN
+<span class="ln">108</span>         DO I = JT+3,NUMT-1
+<span class="ln">109</span>            IF(TL.LT.TGR(I))THEN
+<span class="ln">110</span>               JT = I - 2
+<span class="ln">111</span>               GOTO 10
+<span class="ln">112</span>            ENDIF
+<span class="ln">113</span>         END DO
+<span class="ln">114</span>         JT = NUMT - 3
+<span class="ln">115</span> 10      CONTINUE
+<span class="ln">116</span>      ELSE
+<span class="ln">117</span>         DO I = JT+1,2,-1
+<span class="ln">118</span>            IF(TL.GT.TGR(I))THEN
+<span class="ln">119</span>               JT = I - 1
+<span class="ln">120</span>               GOTO 20
+<span class="ln">121</span>            ENDIF
+<span class="ln">122</span>         END DO
+<span class="ln">123</span>         JT = 1
+<span class="ln">124</span> 20      CONTINUE
+<span class="ln">125</span>      ENDIF
+<span class="ln">126</span>C T INTERPOLATION FACTORS
+<span class="ln">127</span>      DO I = 1,4
+<span class="ln">128</span>         A(I) = TGR(JT+I-1)
+<span class="ln">129</span>      END DO
+<span class="ln">130</span>C GET INTERPOLATION FACTORS IN T
+<span class="ln">131</span>      CALL <a href="../yrec-map/interp.f.html#def-INTERP" title="INTERP in interp.f">INTERP</a>(A,B,C,TL)
+<span class="ln">132</span>      DO I = 1,4
+<span class="ln">133</span>         BT(I) = B(I)
+<span class="ln">134</span>         BTT(I) = C(I)
+<span class="ln">135</span>      END DO
+<span class="ln">136</span>C GET INDICES IN RHO FOR EACH OF THE 4 T VALUES.
+<span class="ln">137</span>      IF(RHO_T63L.GE.R0GR(JD(1)+2))THEN
+<span class="ln">138</span>         DO I = JD(1)+3,NUMD-1
+<span class="ln">139</span>            IF(RHO_T63L.LT.R0GR(I))THEN
+<span class="ln">140</span>               JD(1) = I - 2
+<span class="ln">141</span>               GOTO 30
+<span class="ln">142</span>            ENDIF
+<span class="ln">143</span>         END DO
+<span class="ln">144</span>         JD(1) = NUMD - 3
+<span class="ln">145</span> 30      CONTINUE
+<span class="ln">146</span>      ELSE
+<span class="ln">147</span>         DO I = JD(1)+1,2,-1
+<span class="ln">148</span>            IF(RHO_T63L.GT.R0GR(I))THEN
+<span class="ln">149</span>               JD(1) = I - 1
+<span class="ln">150</span>               GOTO 40
+<span class="ln">151</span>            ENDIF
+<span class="ln">152</span>         END DO
+<span class="ln">153</span>         JD(1) = 1
+<span class="ln">154</span> 40      CONTINUE
+<span class="ln">155</span>      ENDIF
+<span class="ln">156</span>C NOW CHECK IF WITHIN PORTION OF TABLE WITH DATA.
+<span class="ln">157</span>C NOTE THAT A POINT CAN BE WITHIN THE TABLE AND STILL HAVE THE
+<span class="ln">158</span>C 4X4 MATRIX OF T,RHO AROUND IT OUTSIDE THE TABLE.
+<span class="ln">159</span>C CHECK LOW RHO, LOW T REGIME; SINCE THE EMPTY REGION DEPENDS ON Z AT
+<span class="ln">160</span>C LOW X, POSTPONE UNTIL YOU KNOW IF IT IS A 2D, 3D, OR 4D INTERPOLATION.
+<span class="ln">161</span>      IF(X.LT.0.2D0 .AND. JT. LE. 5)THEN
+<span class="ln">162</span>         LCHK = .TRUE.
+<span class="ln">163</span>         GOTO 60
+<span class="ln">164</span>      ELSE
+<span class="ln">165</span>         LCHK = .FALSE.
+<span class="ln">166</span>      ENDIF
+<span class="ln">167</span>C CHECK HIGH RHO, HIGH T REGIME(BECAUSE OF THE TABLE GEOMETRY, THE
+<span class="ln">168</span>C POINT WILL FALL OUTSIDE THE TABLE FIRST AT THE HIGHEST T).
+<span class="ln">169</span>      LSHIFT = .FALSE.
+<span class="ln">170</span>      LEXTH = .FALSE.
+<span class="ln">171</span>      IF(CAPPA(JX(1,1),JT+3,JD(1)+3) .GE. 9.9D0) THEN
+<span class="ln">172</span>         LSHIFT = .TRUE.
+<span class="ln">173</span>C NOW THERE ARE TWO POSSIBLE SOLUTIONS: WE CAN USE A DIFFERENT SET
+<span class="ln">174</span>C OF DENSITIES FOR EACH TEMPERATURE AND STAY WITHIN THE TABLE, OR
+<span class="ln">175</span>C THE DESIRED DENSITY COULD BE OUTSIDE THE TABLE AT ONE OR MORE
+<span class="ln">176</span>C TEMPERATURES.  IF THE DESIRED DENSITY IS OUTSIDE THE TABLE,
+<span class="ln">177</span>C LINEAR EXTRAPOLATION IN R AT FIXED T IS USED.
+<span class="ln">178</span>         DO K = 1,4
+<span class="ln">179</span>            IF(CAPPA(JX(1,1),JT+K-1,JD(1)+1).GE.9.9D0)THEN
+<span class="ln">180</span>               LEXTH = .TRUE.
+<span class="ln">181</span>               LEXH(K) = .TRUE.
+<span class="ln">182</span>            ELSE
+<span class="ln">183</span>               LEXH(K) = .FALSE.
+<span class="ln">184</span>            ENDIF
+<span class="ln">185</span>         END DO
+<span class="ln">186</span>C FIND 4 NEAREST ELEMENTS WITHIN THE TABLE AT EACH OF THE 4 TEMPERATURES.
+<span class="ln">187</span>         IXX = JX(1,1)
+<span class="ln">188</span>         IDD = JD(1)
+<span class="ln">189</span>         DO I = 1,4
+<span class="ln">190</span>            ITT = JT+I-1
+<span class="ln">191</span>            IF(CAPPA(IXX,ITT,IDD+3).GT.9.9D0)THEN
+<span class="ln">192</span>               DO J = IDD+2,1,-1
+<span class="ln">193</span>                  IF(CAPPA2(IXX,ITT,J).LE.9.9D0)THEN
+<span class="ln">194</span>                     JD(I) = J - 3
+<span class="ln">195</span>                     IDD = J - 3
+<span class="ln">196</span>                     GOTO 50
+<span class="ln">197</span>                  ENDIF
+<span class="ln">198</span>               END DO
+<span class="ln">199</span> 50            CONTINUE
+<span class="ln">200</span>            ELSE
+<span class="ln">201</span>               JD(I) = IDD
+<span class="ln">202</span>            ENDIF
+<span class="ln">203</span>         END DO
+<span class="ln">204</span>      ENDIF
+<span class="ln">205</span> 60   CONTINUE
+<span class="ln">206</span>C GET INTERPOLATION FACTORS IN RHO FOR EACH OF THE 4 T VALUES.
+<span class="ln">207</span>C ASSIGN ALL THE SAME VALUES IF GRID IN R IS SAME FOR ALL T.
+<span class="ln">208</span>      IF(.NOT.LSHIFT)THEN
+<span class="ln">209</span>         DO I = 1,4
+<span class="ln">210</span>            A(I) = R0GR(JD(1)+I-1)
+<span class="ln">211</span>         END DO
+<span class="ln">212</span>         IF(.NOT.LEXTL)THEN
+<span class="ln">213</span>            CALL <a href="../yrec-map/interp.f.html#def-INTERP" title="INTERP in interp.f">INTERP</a>(A,B,C,RHO_T63L)
+<span class="ln">214</span>         ELSE
+<span class="ln">215</span>            RHO_T63LL = R0GR(1)
+<span class="ln">216</span>            CALL <a href="../yrec-map/interp.f.html#def-INTERP" title="INTERP in interp.f">INTERP</a>(A,B,C,RHO_T63LL)
+<span class="ln">217</span>         ENDIF
+<span class="ln">218</span>         DO J = 1,4
+<span class="ln">219</span>            JD(J) = JD(1)
+<span class="ln">220</span>            DO I = 1,4
+<span class="ln">221</span>               BD(J,I) = B(I)
+<span class="ln">222</span>               BDD(J,I) = C(I)
+<span class="ln">223</span>            END DO
+<span class="ln">224</span>         END DO
+<span class="ln">225</span>      ELSE
+<span class="ln">226</span>         DO J = 1,4
+<span class="ln">227</span>            DO I = 1,4
+<span class="ln">228</span>               A(I) = R0GR(JD(J)+I-1)
+<span class="ln">229</span>            END DO
+<span class="ln">230</span>C IF EXTRAPOLATION IS BEING PERFORMED, ASSIGN R=REDGE
+<span class="ln">231</span>C AND EXTRAPOLATE LINEARLY LATER
+<span class="ln">232</span>            IF(.NOT.LEXH(J))THEN
+<span class="ln">233</span>               CALL <a href="../yrec-map/interp.f.html#def-INTERP" title="INTERP in interp.f">INTERP</a>(A,B,C,RHO_T63L)
+<span class="ln">234</span>            ELSE
+<span class="ln">235</span>               RR = R0GR(JD(J)+3)
+<span class="ln">236</span>               CALL <a href="../yrec-map/interp.f.html#def-INTERP" title="INTERP in interp.f">INTERP</a>(A,B,C,RR)
+<span class="ln">237</span>               RLH(J) = RR
+<span class="ln">238</span>            ENDIF
+<span class="ln">239</span>            DO I = 1,4
+<span class="ln">240</span>               BD(J,I) = B(I)
+<span class="ln">241</span>               BDD(J,I) = C(I)
+<span class="ln">242</span>            END DO
+<span class="ln">243</span>         END DO
+<span class="ln">244</span>      ENDIF
+<span class="ln">245</span>C DETERMINE WHETHER A 2D (RHO,T); 3D (X,RHO,T); OR 4D (Z,X,RHO,T)
+<span class="ln">246</span>C INTERPOLATION IS NEEDED TO GET THE OPACITY.
+<span class="ln">247</span>C JVS 04/11 force 4d interpolation for acoustic depth calculations
+<span class="ln">248</span>      IF (LADON .AND. LACOUT) GOTO 153  ! If we&#x27;re worrying about the acoustic depth, default to 4d interp
+<span class="ln">249</span>      IF(ABS(Z-ZTAB)/MAX(ZTAB,1.0D-6).LE.1.0D-4)THEN
+<span class="ln">250</span>         IF(ABS(X-XOP95).LE.1.0D-4)THEN
+<span class="ln">251</span>C 2D INTERPOLATION IN SURFACE TABLE
+<span class="ln">252</span>            CALL <a href="../yrec-map/op952d.f.html#def-OP952D" title="OP952D in op952d.f">OP952D</a>(O,OL,QOD,QOT)
+<span class="ln">253</span>            GOTO 9999
+<span class="ln">254</span>         ELSE
+<span class="ln">255</span>C 3D INTERPOLATION IN FIXED Z TABLE (X,T,RHO)
+<span class="ln">256</span>C GET INTERPOLATION FACTORS IN X.
+<span class="ln">257</span>         IF(X.GT.XXG(JX(1,1)+2))THEN
+<span class="ln">258</span>            DO I = JX(1,1)+3,NUMX-1
+<span class="ln">259</span>               IF(X.LT.XXG(I))THEN
+<span class="ln">260</span>                  JX(1,1) = I - 2
+<span class="ln">261</span>                  GOTO 70
+<span class="ln">262</span>               ENDIF
+<span class="ln">263</span>            END DO
+<span class="ln">264</span>            JX(1,1) = NUMX - 3
+<span class="ln">265</span> 70         CONTINUE
+<span class="ln">266</span>         ELSE
+<span class="ln">267</span>            DO I = JX(1,1)+1,2,-1
+<span class="ln">268</span>               IF(X.GE.XXG(I))THEN
+<span class="ln">269</span>                  JX(1,1) = I - 1
+<span class="ln">270</span>                  GOTO 80
+<span class="ln">271</span>               ENDIF
+<span class="ln">272</span>            END DO
+<span class="ln">273</span>            JX(1,1) = 1
+<span class="ln">274</span> 80         CONTINUE
+<span class="ln">275</span>         ENDIF
+<span class="ln">276</span>C CHECK FOR ABSENT TABLES AT HIGH X.
+<span class="ln">277</span>         IF(ZTAB.GE.0.04D0)THEN
+<span class="ln">278</span>            IF(X.GE.0.8D0)THEN
+<span class="ln">279</span>               IF(ZTAB.LT.0.1D0)THEN
+<span class="ln">280</span>C NO TABLE 9 (X=0.95)
+<span class="ln">281</span>                  JX(1,4) = NUMX
+<span class="ln">282</span>                  JX(1,3) = NUMX - 2
+<span class="ln">283</span>                  JX(1,2) = NUMX - 3
+<span class="ln">284</span>                  JX(1,1) = NUMX - 4
+<span class="ln">285</span>               ELSE
+<span class="ln">286</span>C NO TABLE 9 OR TABLE 10
+<span class="ln">287</span>                  JX(1,4) = NUMX - 2
+<span class="ln">288</span>                  JX(1,3) = NUMX - 3
+<span class="ln">289</span>                  JX(1,2) = NUMX - 4
+<span class="ln">290</span>                  JX(1,1) = NUMX - 5
+<span class="ln">291</span>               ENDIF
+<span class="ln">292</span>            ELSE
+<span class="ln">293</span>               JXX = JX(1,1) - 1
+<span class="ln">294</span>               DO I = 1,4
+<span class="ln">295</span>                  JX(1,I) = JXX + I
+<span class="ln">296</span>               END DO
+<span class="ln">297</span>            ENDIF
+<span class="ln">298</span>         ELSE
+<span class="ln">299</span>            JXX = JX(1,1) - 1
+<span class="ln">300</span>            DO I = 1,4
+<span class="ln">301</span>               JX(1,I) = JXX + I
+<span class="ln">302</span>            END DO
+<span class="ln">303</span>         ENDIF
+<span class="ln">304</span>C X INTERPOLATION FACTORS
+<span class="ln">305</span>         DO I = 1,4
+<span class="ln">306</span>            IXX = JX(1,I)
+<span class="ln">307</span>            A(I) = XXG(IXX)
+<span class="ln">308</span>         END DO
+<span class="ln">309</span>         IF(JX(1,4).EQ.NUMX)THEN
+<span class="ln">310</span>            A(4) = 1.0D0 - ZTAB
+<span class="ln">311</span>         ENDIF
+<span class="ln">312</span>C GET INTERPOLATION FACTORS IN X
+<span class="ln">313</span>         CALL <a href="../yrec-map/intrp2.f.html#def-INTRP2" title="INTRP2 in intrp2.f">INTRP2</a>(A,B,X)
+<span class="ln">314</span>         DO J = 1,4
+<span class="ln">315</span>            BX(1,J) = B(J)
+<span class="ln">316</span>         END DO
+<span class="ln">317</span>         CALL <a href="../yrec-map/op953d.f.html#def-OP953D" title="OP953D in op953d.f">OP953D</a>(O,OL,QOD,QOT)
+<span class="ln">318</span>         GOTO 9999
+<span class="ln">319</span>      ENDIF
+<span class="ln">320</span>      ENDIF
+<span class="ln">321</span>153      CONTINUE
+<span class="ln">322</span>C 4D INTERPOLATION IN Z,X,T,RHO
+<span class="ln">323</span>C GET NEAREST TABLES IN Z.
+<span class="ln">324</span>      IF(Z.GT.ZZG(JZ+2))THEN
+<span class="ln">325</span>c mhp 7/12 corrected typo
+<span class="ln">326</span>C         DO I = JZ+3,NUMT-1
+<span class="ln">327</span>         DO I = JZ+3,NUMZ-1
+<span class="ln">328</span>            IF(Z.LT.ZZG(I))THEN
+<span class="ln">329</span>               JZ = I - 2
+<span class="ln">330</span>               GOTO 110
+<span class="ln">331</span>            ENDIF
+<span class="ln">332</span>         END DO
+<span class="ln">333</span>         JZ = NUMZ - 3
+<span class="ln">334</span> 110     CONTINUE
+<span class="ln">335</span>      ELSE
+<span class="ln">336</span>         DO I = JZ+1,2,-1
+<span class="ln">337</span>            IF(Z.GE.ZZG(I))THEN
+<span class="ln">338</span>               JZ = I - 1
+<span class="ln">339</span>               GOTO 120
+<span class="ln">340</span>            ENDIF
+<span class="ln">341</span>         END DO
+<span class="ln">342</span>         JZ = 1
+<span class="ln">343</span> 120     CONTINUE
+<span class="ln">344</span>      ENDIF
+<span class="ln">345</span>C mhp 7/12 added failsafe
+<span class="ln">346</span>      JZ = MIN(JZ,NUMZ-3)
+<span class="ln">347</span>C Z INTERPOLATION FACTORS
+<span class="ln">348</span>      DO I = 1,4
+<span class="ln">349</span>         A(I) = ZZG(JZ+I-1)
+<span class="ln">350</span>      END DO
+<span class="ln">351</span>C INTERPOLATION FACTORS IN Z
+<span class="ln">352</span>      CALL <a href="../yrec-map/intrp2.f.html#def-INTRP2" title="INTRP2 in intrp2.f">INTRP2</a>(A,B,Z)
+<span class="ln">353</span>      DO I = 1,4
+<span class="ln">354</span>         BZ(I) = B(I)
+<span class="ln">355</span>      END DO
+<span class="ln">356</span>C GET NEAREST TABLES IN X AT EACH VALUE OF Z
+<span class="ln">357</span>      DO K = 1,4
+<span class="ln">358</span>         ZZ = ZZG(JZ+K-1)
+<span class="ln">359</span>         IXX = JX(K,1)
+<span class="ln">360</span>         IF(X.GT.XXG(IXX+2))THEN
+<span class="ln">361</span>            DO I = JX(K,1)+3,NUMX-1
+<span class="ln">362</span>               IF(X.LT.XXG(I))THEN
+<span class="ln">363</span>                  JX(K,1) = I - 2
+<span class="ln">364</span>                  GOTO 75
+<span class="ln">365</span>               ENDIF
+<span class="ln">366</span>            END DO
+<span class="ln">367</span>            JX(K,1) = NUMX - 3
+<span class="ln">368</span> 75         CONTINUE
+<span class="ln">369</span>         ELSE
+<span class="ln">370</span>            DO I = JX(K,1)+1,2,-1
+<span class="ln">371</span>               IF(X.GE.XXG(I))THEN
+<span class="ln">372</span>                  JX(K,1) = I - 1
+<span class="ln">373</span>                  GOTO 85
+<span class="ln">374</span>               ENDIF
+<span class="ln">375</span>            END DO
+<span class="ln">376</span>            JX(K,1) = 1
+<span class="ln">377</span> 85         CONTINUE
+<span class="ln">378</span>         ENDIF
+<span class="ln">379</span>C CHECK FOR ABSENT TABLES AT HIGH X.
+<span class="ln">380</span>         IF(ZZ.GE.0.04D0)THEN
+<span class="ln">381</span>            IF(X.GE.0.8D0)THEN
+<span class="ln">382</span>               IF(ZZ.LT.0.1D0)THEN
+<span class="ln">383</span>C NO TABLE 9 (X=0.95)
+<span class="ln">384</span>                  JX(K,4) = NUMX
+<span class="ln">385</span>                  JX(K,3) = NUMX - 2
+<span class="ln">386</span>                  JX(K,2) = NUMX - 3
+<span class="ln">387</span>                  JX(K,1) = NUMX - 4
+<span class="ln">388</span>               ELSE
+<span class="ln">389</span>C NO TABLE 9 OR TABLE 10
+<span class="ln">390</span>                  JX(K,4) = NUMX - 2
+<span class="ln">391</span>                  JX(K,3) = NUMX - 3
+<span class="ln">392</span>                  JX(K,2) = NUMX - 4
+<span class="ln">393</span>                  JX(K,1) = NUMX - 5
+<span class="ln">394</span>               ENDIF
+<span class="ln">395</span>            ELSE
+<span class="ln">396</span>               JXX = JX(K,1) - 1
+<span class="ln">397</span>               DO I = 1,4
+<span class="ln">398</span>                  JX(K,I) = JXX + I
+<span class="ln">399</span>               END DO
+<span class="ln">400</span>            ENDIF
+<span class="ln">401</span>         ELSE
+<span class="ln">402</span>            JXX = JX(K,1) - 1
+<span class="ln">403</span>            DO I = 1,4
+<span class="ln">404</span>               JX(K,I) = JXX + I
+<span class="ln">405</span>            END DO
+<span class="ln">406</span>         ENDIF
+<span class="ln">407</span>C X INTERPOLATION FACTORS
+<span class="ln">408</span>         DO I = 1,4
+<span class="ln">409</span>            IXX = JX(K,I)
+<span class="ln">410</span>            A(I) = XXG(IXX)
+<span class="ln">411</span>         END DO
+<span class="ln">412</span>         IF(JX(K,4).EQ.NUMX)THEN
+<span class="ln">413</span>            A(4) = 1.0D0 - ZZ
+<span class="ln">414</span>         ENDIF
+<span class="ln">415</span>C GET INTERPOLATION FACTORS IN X
+<span class="ln">416</span>         CALL <a href="../yrec-map/intrp2.f.html#def-INTRP2" title="INTRP2 in intrp2.f">INTRP2</a>(A,B,X)
+<span class="ln">417</span>         DO J = 1,4
+<span class="ln">418</span>            BX(K,J) = B(J)
+<span class="ln">419</span>         END DO
+<span class="ln">420</span>      END DO
+<span class="ln">421</span>      CALL <a href="../yrec-map/op954d.f.html#def-OP954D" title="OP954D in op954d.f">OP954D</a>(O,OL,QOD,QOT)
+<span class="ln">422</span> 9999 CONTINUE
+<span class="ln">423</span>      RETURN
+<span class="ln">424</span>      END</pre></details>
+<details class='py' id='py-getopal95'><summary>Python version: getopal95</summary><pre class='doc'>Opacity from the OPAL 1995 tables, given rho, T, X and Z.
+
+Finds the interpolation stencils and weights in T, R = rho/T6**3, X and
+Z, handles the tables&#x27; empty high-density corner, and calls the 2D, 3D
+or 4D interpolator.
+
+Translates: getopal95.f#GETOPAL95 (09c3b9b)
+
+Parameters
+----------
+dl, tl : float
+    log10 density and log10 temperature.
+x, z : float
+    Hydrogen and metal mass fractions.
+o, ol, qod, qot : float
+    Set here (passed in with any value).
+
+Returns
+-------
+o, ol, qod, qot
+    The opacity, its log10, and dlog(kappa)/dlog(rho) and
+    dlog(kappa)/dlog(T), as from the interpolators.</pre><pre class='src'><span class="ln">84</span>def getopal95(dl, tl, x, z, o, ol, qod, qot):
+<span class="ln">85</span>    &quot;&quot;&quot;Opacity from the OPAL 1995 tables, given rho, T, X and Z.
+<span class="ln">86</span>
+<span class="ln">87</span>    Finds the interpolation stencils and weights in T, R = rho/T6**3, X and
+<span class="ln">88</span>    Z, handles the tables&#x27; empty high-density corner, and calls the 2D, 3D
+<span class="ln">89</span>    or 4D interpolator.
+<span class="ln">90</span>
+<span class="ln">91</span>    Translates: getopal95.f#GETOPAL95 (09c3b9b)
+<span class="ln">92</span>
+<span class="ln">93</span>    Parameters
+<span class="ln">94</span>    ----------
+<span class="ln">95</span>    dl, tl : float
+<span class="ln">96</span>        log10 density and log10 temperature.
+<span class="ln">97</span>    x, z : float
+<span class="ln">98</span>        Hydrogen and metal mass fractions.
+<span class="ln">99</span>    o, ol, qod, qot : float
+<span class="ln">100</span>        Set here (passed in with any value).
+<span class="ln">101</span>
+<span class="ln">102</span>    Returns
+<span class="ln">103</span>    -------
+<span class="ln">104</span>    o, ol, qod, qot
+<span class="ln">105</span>        The opacity, its log10, and dlog(kappa)/dlog(rho) and
+<span class="ln">106</span>        dlog(kappa)/dlog(T), as from the interpolators.
+<span class="ln">107</span>    &quot;&quot;&quot;
+<span class="ln">108</span>    global lshift, lchk
+<span class="ln">109</span>    im = op95interp_mod
+<span class="ln">110</span>    tgr = llot95a_mod.tgr
+<span class="ln">111</span>    r0gr = llot95a_mod.r0gr
+<span class="ln">112</span>    zzg = llot95a_mod.zzg
+<span class="ln">113</span>    cappa = llot95_mod.cappa
+<span class="ln">114</span>    cappa2 = llot95a_mod.cappa2
+<span class="ln">115</span>    jd = im.jd
+<span class="ln">116</span>    jx = im.jx
+<span class="ln">117</span>
+<span class="ln">118</span>    # log R = log rho - 3 (log T - 6).
+<span class="ln">119</span>    im.rho_t63l = dl - 3.0 * (tl - 6.0)
+<span class="ln">120</span>    if tl &lt; tgr[1] or tl &gt; tgr[NUMT]:
+<span class="ln">121</span>        print(f&quot; LOG T OF{tl:11.6f}OUT OF OPAL 95 TABLE RANGE&quot;)   # format 5
+<span class="ln">122</span>        raise SystemExit
+<span class="ln">123</span>    # Extrapolation below the first density of the table?
+<span class="ln">124</span>    im.lextl = im.rho_t63l &lt; r0gr[1]
+<span class="ln">125</span>
+<span class="ln">126</span>    # Stencil in T, starting from the last one.
+<span class="ln">127</span>    if tl &gt;= tgr[im.jt + 2]:
+<span class="ln">128</span>        for i in range(im.jt + 3, NUMT):
+<span class="ln">129</span>            if tl &lt; tgr[i]:
+<span class="ln">130</span>                im.jt = i - 2
+<span class="ln">131</span>                break                                   # label 10
+<span class="ln">132</span>        else:
+<span class="ln">133</span>            im.jt = NUMT - 3
+<span class="ln">134</span>    else:
+<span class="ln">135</span>        for i in range(im.jt + 1, 1, -1):
+<span class="ln">136</span>            if tl &gt; tgr[i]:
+<span class="ln">137</span>                im.jt = i - 1
+<span class="ln">138</span>                break                                   # label 20
+<span class="ln">139</span>        else:
+<span class="ln">140</span>            im.jt = 1
+<span class="ln">141</span>    jt = im.jt
+<span class="ln">142</span>    for i in range(1, 5):
+<span class="ln">143</span>        a[i] = tgr[jt + i - 1]
+<span class="ln">144</span>    interp(a, b, c, tl)
+<span class="ln">145</span>    for i in range(1, 5):
+<span class="ln">146</span>        im.bt[i] = b[i]
+<span class="ln">147</span>        im.btt[i] = c[i]
+<span class="ln">148</span>
+<span class="ln">149</span>    # Stencil in R (for the first temperature).
+<span class="ln">150</span>    if im.rho_t63l &gt;= r0gr[jd[1] + 2]:
+<span class="ln">151</span>        for i in range(jd[1] + 3, NUMD):
+<span class="ln">152</span>            if im.rho_t63l &lt; r0gr[i]:
+<span class="ln">153</span>                jd[1] = i - 2
+<span class="ln">154</span>                break                                   # label 30
+<span class="ln">155</span>        else:
+<span class="ln">156</span>            jd[1] = NUMD - 3
+<span class="ln">157</span>    else:
+<span class="ln">158</span>        for i in range(jd[1] + 1, 1, -1):
+<span class="ln">159</span>            if im.rho_t63l &gt; r0gr[i]:
+<span class="ln">160</span>                jd[1] = i - 1
+<span class="ln">161</span>                break                                   # label 40
+<span class="ln">162</span>        else:
+<span class="ln">163</span>            jd[1] = 1
+<span class="ln">164</span>
+<span class="ln">165</span>    # The empty corner. At low X and low T the check is postponed (and
+<span class="ln">166</span>    # never made): GOTO 60 skips the reset of LSHIFT and LEXTH.
+<span class="ln">167</span>    if x &lt; 0.2 and jt &lt;= 5:
+<span class="ln">168</span>        # Question (see the page): LSHIFT and LEXTH keep their values from
+<span class="ln">169</span>        # the last call on this path; LCHK is never used.
+<span class="ln">170</span>        lchk = True
+<span class="ln">171</span>    else:
+<span class="ln">172</span>        lchk = False
+<span class="ln">173</span>        lshift = False
+<span class="ln">174</span>        im.lexth = False
+<span class="ln">175</span>        # Question (see the page): JX(1,1) is the X stencil of the last call.
+<span class="ln">176</span>        if cappa[jx[1, 1], jt + 3, jd[1] + 3] &gt;= 9.9:
+<span class="ln">177</span>            lshift = True
+<span class="ln">178</span>            for k in range(1, 5):
+<span class="ln">179</span>                if cappa[jx[1, 1], jt + k - 1, jd[1] + 1] &gt;= 9.9:
+<span class="ln">180</span>                    im.lexth = True
+<span class="ln">181</span>                    im.lexh[k] = True
+<span class="ln">182</span>                else:
+<span class="ln">183</span>                    im.lexh[k] = False
+<span class="ln">184</span>            # The four nearest densities with data at each temperature.
+<span class="ln">185</span>            ixx = jx[1, 1]
+<span class="ln">186</span>            idd = jd[1]
+<span class="ln">187</span>            for i in range(1, 5):
+<span class="ln">188</span>                itt = jt + i - 1
+<span class="ln">189</span>                if cappa[ixx, itt, idd + 3] &gt; 9.9:
+<span class="ln">190</span>                    for j in range(idd + 2, 0, -1):
+<span class="ln">191</span>                        # Question (see the page): CAPPA2 here, CAPPA above.
+<span class="ln">192</span>                        if cappa2[ixx, itt, j] &lt;= 9.9:
+<span class="ln">193</span>                            # Question (see the page): can be zero or less.
+<span class="ln">194</span>                            jd[i] = j - 3
+<span class="ln">195</span>                            idd = j - 3
+<span class="ln">196</span>                            break                       # label 50
+<span class="ln">197</span>                else:
+<span class="ln">198</span>                    jd[i] = idd
+<span class="ln">199</span>    # label 60
+<span class="ln">200</span>
+<span class="ln">201</span>    # Weights in R for each of the four temperatures.
+<span class="ln">202</span>    if not lshift:
+<span class="ln">203</span>        for i in range(1, 5):
+<span class="ln">204</span>            a[i] = r0gr[jd[1] + i - 1]
+<span class="ln">205</span>        if not im.lextl:
+<span class="ln">206</span>            interp(a, b, c, im.rho_t63l)
+<span class="ln">207</span>        else:
+<span class="ln">208</span>            im.rho_t63ll = r0gr[1]
+<span class="ln">209</span>            interp(a, b, c, im.rho_t63ll)
+<span class="ln">210</span>        for j in range(1, 5):
+<span class="ln">211</span>            jd[j] = jd[1]
+<span class="ln">212</span>            for i in range(1, 5):
+<span class="ln">213</span>                im.bd[j, i] = b[i]
+<span class="ln">214</span>                im.bdd[j, i] = c[i]
+<span class="ln">215</span>    else:
+<span class="ln">216</span>        for j in range(1, 5):
+<span class="ln">217</span>            for i in range(1, 5):
+<span class="ln">218</span>                a[i] = r0gr[jd[j] + i - 1]
+<span class="ln">219</span>            # Outside the data: weights at the edge, linear extrapolation
+<span class="ln">220</span>            # later.
+<span class="ln">221</span>            if not im.lexh[j]:
+<span class="ln">222</span>                interp(a, b, c, im.rho_t63l)
+<span class="ln">223</span>            else:
+<span class="ln">224</span>                rr = r0gr[jd[j] + 3]
+<span class="ln">225</span>                interp(a, b, c, rr)
+<span class="ln">226</span>                im.rlh[j] = rr
+<span class="ln">227</span>            for i in range(1, 5):
+<span class="ln">228</span>                im.bd[j, i] = b[i]
+<span class="ln">229</span>                im.bdd[j, i] = c[i]
+<span class="ln">230</span>
+<span class="ln">231</span>    # 2D, 3D or 4D? The 4D path is forced for acoustic-depth output
+<span class="ln">232</span>    # (&quot;JVS 04/11&quot;).
+<span class="ln">233</span>    if not (acdpth_mod.ladon and acdpth_mod.lacout):
+<span class="ln">234</span>        ztab = llot95_mod.ztab
+<span class="ln">235</span>        if abs(z - ztab) / max(ztab, 1.0e-6) &lt;= 1.0e-4:
+<span class="ln">236</span>            if abs(x - llot95e_mod.xop95) &lt;= 1.0e-4:
+<span class="ln">237</span>                # 2D in the surface table.
+<span class="ln">238</span>                o, ol, qod, qot = op952d(o, ol, qod, qot)
+<span class="ln">239</span>                return o, ol, qod, qot
+<span class="ln">240</span>            # 3D in the table at fixed Z (X, T, rho).
+<span class="ln">241</span>            _x_stencil(1, x, ztab)
+<span class="ln">242</span>            o, ol, qod, qot = op953d(o, ol, qod, qot)
+<span class="ln">243</span>            return o, ol, qod, qot
+<span class="ln">244</span>
+<span class="ln">245</span>    # label 153: 4D in Z, X, T, rho. Nearest tables in Z.
+<span class="ln">246</span>    if z &gt; zzg[im.jz + 2]:
+<span class="ln">247</span>        for i in range(im.jz + 3, NUMZ):            # &quot;mhp 7/12 corrected typo&quot;
+<span class="ln">248</span>            if z &lt; zzg[i]:
+<span class="ln">249</span>                im.jz = i - 2
+<span class="ln">250</span>                break                                   # label 110
+<span class="ln">251</span>        else:
+<span class="ln">252</span>            im.jz = NUMZ - 3
+<span class="ln">253</span>    else:
+<span class="ln">254</span>        for i in range(im.jz + 1, 1, -1):
+<span class="ln">255</span>            if z &gt;= zzg[i]:
+<span class="ln">256</span>                im.jz = i - 1
+<span class="ln">257</span>                break                                   # label 120
+<span class="ln">258</span>        else:
+<span class="ln">259</span>            im.jz = 1
+<span class="ln">260</span>    im.jz = min(im.jz, NUMZ - 3)                    # &quot;mhp 7/12 added failsafe&quot;
+<span class="ln">261</span>    for i in range(1, 5):
+<span class="ln">262</span>        a[i] = zzg[im.jz + i - 1]
+<span class="ln">263</span>    intrp2(a, b, z)
+<span class="ln">264</span>    for i in range(1, 5):
+<span class="ln">265</span>        im.bz[i] = b[i]
+<span class="ln">266</span>    # Nearest tables in X at each value of Z.
+<span class="ln">267</span>    for k in range(1, 5):
+<span class="ln">268</span>        _x_stencil(k, x, zzg[im.jz + k - 1])
+<span class="ln">269</span>    o, ol, qod, qot = op954d(o, ol, qod, qot)
+<span class="ln">270</span>    return o, ol, qod, qot</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_x_stencil'><summary>Python version: _x_stencil</summary><pre class='doc'>The X stencil JX(K,1..4) and its weights BX(K,1..4) at the Z value zz.
+
+The same block appears twice in the Fortran: for the 3D path (K = 1,
+with ZZ = ZTAB, labels 70 and 80) and for each Z node of the 4D path
+(labels 75 and 85). It is one helper here; the statements are those of
+the Fortran.</pre><pre class='src'><span class="ln">32</span>def _x_stencil(k, x, zz):
+<span class="ln">33</span>    &quot;&quot;&quot;The X stencil JX(K,1..4) and its weights BX(K,1..4) at the Z value zz.
+<span class="ln">34</span>
+<span class="ln">35</span>    The same block appears twice in the Fortran: for the 3D path (K = 1,
+<span class="ln">36</span>    with ZZ = ZTAB, labels 70 and 80) and for each Z node of the 4D path
+<span class="ln">37</span>    (labels 75 and 85). It is one helper here; the statements are those of
+<span class="ln">38</span>    the Fortran.
+<span class="ln">39</span>    &quot;&quot;&quot;
+<span class="ln">40</span>    jx = op95interp_mod.jx
+<span class="ln">41</span>    xxg = llot95a_mod.xxg
+<span class="ln">42</span>    if x &gt; xxg[jx[k, 1] + 2]:
+<span class="ln">43</span>        for i in range(jx[k, 1] + 3, NUMX):         # I = JX(K,1)+3, NUMX-1
+<span class="ln">44</span>            if x &lt; xxg[i]:
+<span class="ln">45</span>                jx[k, 1] = i - 2
+<span class="ln">46</span>                break
+<span class="ln">47</span>        else:
+<span class="ln">48</span>            jx[k, 1] = NUMX - 3
+<span class="ln">49</span>    else:
+<span class="ln">50</span>        for i in range(jx[k, 1] + 1, 1, -1):        # I = JX(K,1)+1, 2, -1
+<span class="ln">51</span>            if x &gt;= xxg[i]:
+<span class="ln">52</span>                jx[k, 1] = i - 1
+<span class="ln">53</span>                break
+<span class="ln">54</span>        else:
+<span class="ln">55</span>            jx[k, 1] = 1
+<span class="ln">56</span>    # Check for absent tables at high X.
+<span class="ln">57</span>    if zz &gt;= 0.04 and x &gt;= 0.8:
+<span class="ln">58</span>        if zz &lt; 0.1:
+<span class="ln">59</span>            # No table 9 (X = 0.95).
+<span class="ln">60</span>            jx[k, 4] = NUMX
+<span class="ln">61</span>            jx[k, 3] = NUMX - 2
+<span class="ln">62</span>            jx[k, 2] = NUMX - 3
+<span class="ln">63</span>            jx[k, 1] = NUMX - 4
+<span class="ln">64</span>        else:
+<span class="ln">65</span>            # No table 9 or table 10.
+<span class="ln">66</span>            jx[k, 4] = NUMX - 2
+<span class="ln">67</span>            jx[k, 3] = NUMX - 3
+<span class="ln">68</span>            jx[k, 2] = NUMX - 4
+<span class="ln">69</span>            jx[k, 1] = NUMX - 5
+<span class="ln">70</span>    else:
+<span class="ln">71</span>        jxx = jx[k, 1] - 1
+<span class="ln">72</span>        for i in range(1, 5):
+<span class="ln">73</span>            jx[k, i] = jxx + i
+<span class="ln">74</span>    # X interpolation factors.
+<span class="ln">75</span>    for i in range(1, 5):
+<span class="ln">76</span>        a[i] = xxg[jx[k, i]]
+<span class="ln">77</span>    if jx[k, 4] == NUMX:
+<span class="ln">78</span>        a[4] = 1.0 - zz
+<span class="ln">79</span>    intrp2(a, b, x)
+<span class="ln">80</span>    for j in range(1, 5):
+<span class="ln">81</span>        op95interp_mod.bx[k, j] = b[j]</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Unclear.</strong> Step 5: "the $X = 0.95$ table (and for $Z \ge 0.1$ also the next) is absent; the stencil skips it, and the last $X$ node is set to $1 - Z$." The node is set to $1 - Z$ only for $0.04 \le Z &lt; 0.1$, where the stencil is 0.7, 0.8, 0.9, $1 - Z$; for $Z \ge 0.1$ the stencil is 0.5, 0.7, 0.8, 0.9 (source lines 252–286, 355–389). Fix: give the nodes and both stencils.</li>
+</ol>
+<p>Otherwise checked: $\log R$, the range stop, <code>LEXTL</code>, the stencil searches, the empty-corner logic (<code>LSHIFT</code>, <code>LEXH</code>, <code>RLH</code>), the 2D/3D/4D choice and the forced 4D path, the callers and the COMMON blocks. All five questions are real; question 1 (<code>CAPPA2(IXX,ITT,J)</code> with an $X$ index, line 168) is an apparent bug, and <code>LCHK</code> is indeed never read anywhere.</p>
+<p>Revised: step 5 rewritten.</p></div></details>
+</main></body></html>

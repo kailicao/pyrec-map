@@ -1,0 +1,404 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>microdiff.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ microdiff.f</span></header><main>
+<h1>microdiff.f</h1>
+<p class='muted'>232 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/microdiff.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>microdiff.py</code>, 159 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>MICRODIFF</code> is the driver of YREC's newer treatment of gravitational settling (microscopic diffusion) of helium, metals and light elements. Its header (Garrett Somers, 05/2015) says it is adapted from <a href="../yrec-map/grsett.f.html#def-GRSETT">GRSETT</a>, "which is retained for backwards compatability", and "follows the formulism of Bahcall and Loeb 1989". It moves the model onto an equally spaced grid in radius, diffuses each species there, and maps the changes back onto the model's mass grid.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs (arguments):</strong> the time step <code>DT</code> (s), the composition <code>HCOMP(15,M)</code>, $d\ln P/dr$ (<code>HQPR</code>), $\log r$ (<code>HR</code>, cm), $\log\rho$ (<code>HD</code>), the unlogged mass <code>HS1</code> (g), $\log T$ (<code>HT</code>), the convection flags <code>LC</code>, the number of points <code>M</code> and the total mass <code>STOT</code>. <code>STOT</code> is in grams; <a href="../yrec-map/microdiff_setup.f.html#def-MICRODIFF_SETUP">MICRODIFF_SETUP</a> converts <code>DT</code>, <code>STOT</code>, <code>HS1</code> and <code>HQPR</code> in place and <a href="../yrec-map/microdiff_etm.f.html#def-MICRODIFF_ETM">MICRODIFF_ETM</a> converts them back. The temperature gradient $\nabla = d\ln T/d\ln P$ (<code>SDEL(2,·)</code> in <code>SCRTCH_MOD</code>), named in the header, is read not here but by <code>MICRODIFF_MTE</code>.</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/mix.f.html#def-MIX">MIX</a> (when the settling flags are on and <code>LNEWDIF</code> selects the new routine) and <a href="../yrec-map/rotmix.f.html#def-ROTMIX">ROTMIX</a> (the same inside the rotational-mixing step).</li>
+<li><strong>What it calls:</strong> the four parts of the method, in order: <a href="../yrec-map/microdiff_setup.f.html#def-MICRODIFF_SETUP">MICRODIFF_SETUP</a> (units and boundaries), <a href="../yrec-map/microdiff_mte.f.html#def-MICRODIFF_MTE">MICRODIFF_MTE</a> (model to equal grid), <a href="../yrec-map/microdiff_run.f.html#def-MICRODIFF_RUN">MICRODIFF_RUN</a> (once per diffused species) and <a href="../yrec-map/microdiff_etm.f.html#def-MICRODIFF_ETM">MICRODIFF_ETM</a> (equal grid back to model).</li>
+<li><strong>Output:</strong> the updated <code>HCOMP</code>, in place.</li>
+<li><strong>Modules:</strong> <code>NMLPAR_MOD</code>, for the namelist switches <code>LDIFY</code>, <code>LDIFZ</code> and <code>LDIFLI</code> (read by <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a> and shared with GRSETT, MIX, ROTMIX and the other MICRODIFF routines), and <code>DIMENSIONS_MOD</code> for <code>JSON</code>. The other members of <code>rp_1</code>'s <code>/GRAVST/</code>, <code>/GRAVS3/</code> and <code>/GRAVS4/</code> (<code>GRTOL</code>, <code>NITER_GS</code>, <code>FGRY</code>, <code>FGRZ</code>, <code>LTHOUL</code>, <code>LNEWDIF</code>) are in <code>NMLPAR_MOD</code> too, but not used here.</li>
+</ul>
+<p><strong>The method.</strong> After the set-up (which returns at once for a fully convective model, or one with no hydrogen or helium left), up to three kinds of species are diffused, each by a call to <code>MICRODIFF_RUN</code> that returns the <em>change</em> in abundance on the equal grid:</p>
+<ol>
+<li><strong>Hydrogen</strong> if <code>LDIFY</code>: column $j=1$ of the three-species vector <code>ESPEC</code> (X, Y, and a third species), with the metals as the third species, taken as iron ($A = 55.86$, $Z = 26$). Helium then follows from $Y = 1 - X - Z - X_4$ in <code>MICRODIFF_ETM</code>.</li>
+<li><strong>Metals</strong> if <code>LDIFZ</code>: column $j=3$, again as iron.</li>
+<li><strong>Light elements</strong> if <code>LDIFLI</code>: <code>NLIGHT = 3</code> species in <code>HCOMP</code> rows <code>CSLIGHT = 13, 14, 15</code>, with atomic weights 6.015, 7.016, 9.012 and charges 3, 3, 4 (⁶Li, ⁷Li and ⁹Be: <a href="../yrec-map/starin.f.html#def-STARIN">STARIN</a> fills these rows from <code>XLI6_INI</code>, <code>XLI7_INI</code> and <code>XBE9_INI</code>), each in turn as the third species.</li>
+</ol>
+<p>The changes <code>EDELX</code>, <code>EDELZ</code> and <code>EDELLI</code> are passed to <code>MICRODIFF_ETM</code>, which interpolates them back and applies them.</p>
+<p><strong>Grids.</strong> Variables prefixed <code>E</code> are on the equally spaced grid in radius; those also suffixed <code>_H</code> are at the midpoints between its points. Both are needed by the two-step Lax–Wendroff scheme.</p>
+<p><strong>KC's changes.</strong> 2025-05-30: <code>CSLIGHT</code> declared <code>INTEGER</code> (fixing <code>-Wconversion</code>); 2025-05-31: unused arguments dropped from the calls to <code>MICRODIFF_MTE</code> (<code>HTU</code>, <code>LC</code>) and <code>MICRODIFF_RUN</code> (<code>NLIGHT</code>, <code>CSLIGHT</code>).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (the unused <code>/CONST1/</code> and <code>/LUOUT/</code> dropped), <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Stale changes when a species is not diffused.</strong> <code>MICRODIFF_ETM</code> always applies <code>EDELX</code> (and <code>EDELZ</code> when <code>LDIFZ</code>). If <code>LDIFY</code> is false but <code>LDIFZ</code> or <code>LDIFLI</code> is true, <code>EDELX</code> is never set in this call; as a <code>SAVE</code>d local array it holds zeros only if the compiler zero-initializes static storage, or the values of an earlier call. Should <code>EDELX</code> be zeroed when <code>LDIFY</code> is false?</li>
+<li><strong>The last light-element point.</strong> In the light-element loop, <code>ESPEC(3,I) = ELI(II,NPT)</code> relies on <code>I</code> equalling <code>NPT</code> after the preceding <code>DO I=1,NPT-1</code> loop. It works in practice, but <code>ESPEC(3,NPT)</code> is clearer. Intended?</li>
+<li><strong>Iron for the metals.</strong> All metals are diffused as one species with iron's weight and charge. Is this a deliberate choice (the heaviest abundant element) rather than a mean metal?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+MICRODIFF
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MICRODIFF'>MICRODIFF</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MICRODIFF'><h3><span class='kind'>subroutine</span>MICRODIFF</h3>
+<p class='muted'>lines 4–232 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/microdiff.f#L4-L232'>GitHub</a></p>
+<pre>SUBROUTINE MICRODIFF(DT,HCOMP,HQPR,HR,HD,HS1,HT,LC,M,STOT)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+MICRODIFF
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/microdiff_etm.f.html#def-MICRODIFF_ETM'>MICRODIFF_ETM</a> <span class='muted'>(microdiff_etm.f)</span></li>
+<li><a href='../yrec-map/microdiff_mte.f.html#def-MICRODIFF_MTE'>MICRODIFF_MTE</a> <span class='muted'>(microdiff_mte.f)</span></li>
+<li><a href='../yrec-map/microdiff_run.f.html#def-MICRODIFF_RUN'>MICRODIFF_RUN</a> <span class='muted'>(microdiff_run.f)</span> ×3</li>
+<li><a href='../yrec-map/microdiff_setup.f.html#def-MICRODIFF_SETUP'>MICRODIFF_SETUP</a> <span class='muted'>(microdiff_setup.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/mix.f.html#def-MIX'>MIX</a> <span class='muted'>(mix.f)</span></li>
+<li><a href='../yrec-map/rotmix.f.html#def-ROTMIX'>ROTMIX</a> <span class='muted'>(rotmix.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE MICRODIFF(DT,HCOMP,HQPR,HR,HD,HS1,HT,LC,M,STOT)
+<span class="ln">5</span>C 10/15/26 MHP via Claude
+<span class="ln">6</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">7</span>C PARAMETER(JSON=5000) here.
+<span class="ln">8</span>      USE DIMENSIONS_MOD
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">11</span>      USE NMLPAR_MOD
+<span class="ln">12</span>C 10/20/26 MHP via Claude
+<span class="ln">13</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">14</span>C explicit declarations.
+<span class="ln">15</span>      IMPLICIT NONE
+<span class="ln">16</span>      REAL*8 ASLIGHT,DR,DT,EDELLI,EDELR,EDELR_H,EDELX,EDELZ,EDEN,EDEN_H,
+<span class="ln">17</span>     *       EDXDR,EDXDR_H,EHQPR,EHQPR_H,ELI,ELI_H,EM,EM_H,ER,ER_H,
+<span class="ln">18</span>     *       ESPEC,ESPEC_H,ETEM,ETEM_H,EX,EX_H,EY,EY_H,EZ,EZ_H,HCOMP,HD,
+<span class="ln">19</span>     *       HQPR,HR,HRU,HS1,HT,HTU,ODEN,OTEM,STOT,THEA,THEZ,ZSLIGHT
+<span class="ln">20</span>      INTEGER I,IBEGIN,IEND,II,J,M,NLIGHT,NPT
+<span class="ln">21</span>      LOGICAL*4 LALLCZ,LC
+<span class="ln">22</span>
+<span class="ln">23</span>C SET NLIGHT TO THE NUMBER OF LIGHT ELEMENTS TO BE DIFFUSED.
+<span class="ln">24</span>      PARAMETER (NLIGHT=3)
+<span class="ln">25</span>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+<span class="ln">26</span>C 10/12/26 MHP via Claude
+<span class="ln">27</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">28</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">29</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">30</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">31</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">32</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">33</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">34</span>C
+<span class="ln">35</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">36</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">37</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">38</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CONSTANTS/ declaration
+<span class="ln">39</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">40</span>C 10/13/26 MHP via Claude: removed the unused COMMON/IOUNITS/ declaration
+<span class="ln">41</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">42</span>      DIMENSION HCOMP(15,JSON),HQPR(JSON),HR(JSON),HS1(JSON),HT(JSON),
+<span class="ln">43</span>     *          HD(JSON),HRU(JSON),HTU(JSON),LC(JSON),ODEN(JSON),
+<span class="ln">44</span>C KC 2025-05-30 fixed -Wconversion
+<span class="ln">45</span>C      *          OTEM(JSON),CSLIGHT(NLIGHT),ASLIGHT(NLIGHT),ZSLIGHT(NLIGHT)
+<span class="ln">46</span>     *          OTEM(JSON),ASLIGHT(NLIGHT),ZSLIGHT(NLIGHT)
+<span class="ln">47</span>      INTEGER CSLIGHT(NLIGHT)
+<span class="ln">48</span>      DIMENSION EM(JSON),ER(JSON),EDEN(JSON),ETEM(JSON),EHQPR(JSON),
+<span class="ln">49</span>     *          EDELR(JSON),EX(JSON),EY(JSON),EZ(JSON),ELI(NLIGHT,JSON),
+<span class="ln">50</span>     *          ESPEC(3,JSON),EDXDR(JSON)
+<span class="ln">51</span>      DIMENSION EM_H(JSON),ER_H(JSON),EDEN_H(JSON),ETEM_H(JSON),EHQPR_H(JSON),
+<span class="ln">52</span>     *          EDELR_H(JSON),EX_H(JSON),EY_H(JSON),EZ_H(JSON),
+<span class="ln">53</span>     *          ELI_H(NLIGHT,JSON),ESPEC_H(3,JSON),EDXDR_H(JSON),
+<span class="ln">54</span>     *          EDELX(JSON),EDELZ(JSON),EDELLI(NLIGHT,JSON)
+<span class="ln">55</span>C
+<span class="ln">56</span>C     SET UP VECTORS FOR LIGHT ELEMENT DIFFUSION. THE LENGTH
+<span class="ln">57</span>C     OF EACH SHOULD EQUAL NLIGHT.
+<span class="ln">58</span>      DATA CSLIGHT/13,14,15/
+<span class="ln">59</span>      DATA ASLIGHT/6.015D0,7.016D0,9.012D0/
+<span class="ln">60</span>      DATA ZSLIGHT/3.0D0,3.0D0,4.0D0/
+<span class="ln">61</span>      SAVE
+<span class="ln">62</span>
+<span class="ln">63</span>C  GARRETT SOMERS - 05/2015
+<span class="ln">64</span>C  MICRODIFF IS AN UPDATED HELIUM, METAL, AND LIGHT ELEMENT DIFFUSION
+<span class="ln">65</span>C  ROUTINE. MUCH IS ADAPTED FROM GRSETT.F, WHICH IS RETAINED FOR BACKWARDS
+<span class="ln">66</span>C  COMPATABILITY. FOLLOWS THE FORMULISM OF BAHCALL AND LOEB 1989.
+<span class="ln">67</span>C
+<span class="ln">68</span>C  MICRODIFF PERFORMS THE FOLLOWING OPERATIONS:
+<span class="ln">69</span>C  1) TRANSFORMS PYHSICAL VARIABLES TO AN EQUALLY SPACED GRID IN RADIUS
+<span class="ln">70</span>C     (AND MANIPULATES THE MODEL VARIABLES INTO BAHCALL AND LOEB UNITS).
+<span class="ln">71</span>C  2) CALCULATES DIFFUSION COEFFICIENTS ALONG THE GRID FOR Y, Z, AND FOR
+<span class="ln">72</span>C     LIGHT ELEMENTS. THE DIFFUSION EQUATION HAS TWO TERMS : ONE THAT DEPENDS
+<span class="ln">73</span>C     ON DLNP/DR*DX/DR AND ONE THAT DEPENDS ON D^2X/DR^2. THE DIFFUSION
+<span class="ln">74</span>C     COEFFICIENTS ARE THEMSELVES FUNCTIONS OF BOTH THE THERMAL STRUCTURE,
+<span class="ln">75</span>C     ABUNDANCE, AND THE HYDROGEN GRADIENT.
+<span class="ln">76</span>C  3) SOLVES THIS DIFFUSION EQUATION IN TWO STEPS. THE FIRST TERM IS SOLVED
+<span class="ln">77</span>C     EXPLICITLY USING THE TWO-STEP LAX-WENDROFF SCHEME (NUMERICAL RECIPES,
+<span class="ln">78</span>C     PRESS ET AL. 1986,CAMBRIDGE UNIVERSITY PRESS,P.633). DIFFUSION
+<span class="ln">79</span>C     COEFFICIENTS ARE RECALCUALTED AT THE GRID MID-POINTS IN THE PROCESS.
+<span class="ln">80</span>C  4) THE SECOND TERM IS SOLVED IMPLICITLY, USING THE MODIFIED RUN OF
+<span class="ln">81</span>C     ABUNDANCE FOUND IN STEP 3) AS THE &#x27;INITIAL&#x27; RUN OF ABUNDANCE.
+<span class="ln">82</span>C     THE IMPLICIT SCHEME ITERATES ON THE DIFFUSION COEFFICIENTS UNTIL
+<span class="ln">83</span>C     THE SOLUTION CONVERGES TO WITHIN THE USER-SPECIFIED TOLERANCE GRTOL.
+<span class="ln">84</span>C  5) UPDATES ABUNDANCE ARRAYS, TRANSFORMS BACK TO THE MODEL GRID, AND EXITS
+<span class="ln">85</span>C
+<span class="ln">86</span>C  DT - TIMESTEP (SEC)
+<span class="ln">87</span>C  HCOMP - RUN OF MASS FRACTIONS OF SPECIES.HCOMP(1,..)=X,HCOMP(2,...)=Y
+<span class="ln">88</span>C          HCOMP(3,...)=Z
+<span class="ln">89</span>C  HQPR - DLNP/DR
+<span class="ln">90</span>C  HR - LOG RADIUS (CM)
+<span class="ln">91</span>C  HS1 - MASS (GM), UNLOGGED
+<span class="ln">92</span>C  HT - LOG TEMPERATURE (K)
+<span class="ln">93</span>C  LC - FLAG T/F FOR CONVECTION
+<span class="ln">94</span>C  M - NUMBER OF MODEL POINTS
+<span class="ln">95</span>C  [COMMON] SDEL(2,...) - DEL (=DLNT/DLNP)
+<span class="ln">96</span>C
+<span class="ln">97</span>C  OUTPUT VARIABLES :
+<span class="ln">98</span>C
+<span class="ln">99</span>C  NEW RUN OF HCOMP(1-N,...).
+<span class="ln">100</span>C
+<span class="ln">101</span>C  CONVERT MODEL QUANTITIES TO BAHCALL AND LOEB UNITS; LOCATE
+<span class="ln">102</span>C  BOUNDARIES OF CONVECTIVE CORE AND ENVELOPE IF APPLICABLE;
+<span class="ln">103</span>C  COLLECT PHYSICAL VARIABLES FOR DIFFCO CALCULATION.
+<span class="ln">104</span>C
+<span class="ln">105</span>      CALL <a href="../yrec-map/microdiff_setup.f.html#def-MICRODIFF_SETUP" title="MICRODIFF_SETUP in microdiff_setup.f">MICRODIFF_SETUP</a>(DT,HQPR,HR,HD,HS1,HT,LC,M,STOT,HCOMP,HRU,HTU,
+<span class="ln">106</span>     *            IBEGIN,IEND,LALLCZ,ODEN,OTEM)
+<span class="ln">107</span>C
+<span class="ln">108</span>C SKIP SETTLING FOR FULLY CONVECTIVE MODELS.
+<span class="ln">109</span>      IF(LALLCZ) RETURN
+<span class="ln">110</span>C  TRANSFORM TO AN EQUALLY SPACED GRID IN RADIUS.
+<span class="ln">111</span>C  NOTE : PREFIX E ALONE=VARIABLE AT EQUALLY SPACED GRID POINTS.
+<span class="ln">112</span>C         PREFIX E + SUFFIX _H= VARIABLE AT MIDPOINT BETWEEN EQUALLY
+<span class="ln">113</span>C         SPACED GRID POINTS.(BOTH ARE NEEDED FOR THE DIFFUSION TECHNIQUE).
+<span class="ln">114</span>C
+<span class="ln">115</span>C       CALL MICRODIFF_MTE(NLIGHT,CSLIGHT,HCOMP,HQPR,HRU,HS1,HTU,IBEGIN,
+<span class="ln">116</span>C      *               IEND,M,DR,NPT,LC,ODEN,OTEM,EM,ER,EDEN,ETEM,EHQPR,EDELR,  ! KC 2025-05-31
+<span class="ln">117</span>      CALL <a href="../yrec-map/microdiff_mte.f.html#def-MICRODIFF_MTE" title="MICRODIFF_MTE in microdiff_mte.f">MICRODIFF_MTE</a>(NLIGHT,CSLIGHT,HCOMP,HQPR,HRU,HS1,IBEGIN,
+<span class="ln">118</span>     *               IEND,M,DR,NPT,ODEN,OTEM,EM,ER,EDEN,ETEM,EHQPR,EDELR,
+<span class="ln">119</span>     *               EX,EY,EZ,ELI,EM_H,ER_H,EDEN_H,ETEM_H,EHQPR_H,EDELR_H,
+<span class="ln">120</span>     *               EX_H,EY_H,EZ_H,ELI_H)
+<span class="ln">121</span>C
+<span class="ln">122</span>C  PARTIALLY CONSTRUCT THE VECTORS ESPEC AND ESPEC_H, WHICH ARE THE
+<span class="ln">123</span>C  THREE SPECIES USED IN THE THOUL CALCULATION. 1=X, 2=Y, 3=METAL.
+<span class="ln">124</span>      DO I=1,NPT-1
+<span class="ln">125</span>         ESPEC(1,I) = EX(I)
+<span class="ln">126</span>         ESPEC(2,I) = EY(I)
+<span class="ln">127</span>         ESPEC_H(1,I) = EX_H(I)
+<span class="ln">128</span>         ESPEC_H(2,I) = EY_H(I)
+<span class="ln">129</span>      ENDDO
+<span class="ln">130</span>      ESPEC(1,NPT) = EX(NPT)
+<span class="ln">131</span>      ESPEC(2,NPT) = EY(NPT)
+<span class="ln">132</span>c
+<span class="ln">133</span>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+<span class="ln">134</span>C
+<span class="ln">135</span>C  WITH THE EQUAL GRID CALCULATED, RUN THE DIFFUSION ROUTINE FOR EACH
+<span class="ln">136</span>C  DESIRED ELEMENT. PASS IN EQUAL GRID AND THREE PARAMETERS:
+<span class="ln">137</span>C     J = THOUL COLUMN OF DIFFUSED SPECIES (1 FOR X, 3 OTHERWISE)
+<span class="ln">138</span>C     THEA = ATOMIC WEIGHT OF DIFFUSED SPECIES
+<span class="ln">139</span>C     THEZ = ATOMIC CHARGE OF DIFFUSED SPECIES
+<span class="ln">140</span>C  IN THE CASE OF HYDROGEN DIFFUSION, PASS IN THEA/THEZ FOR IRON SINCE
+<span class="ln">141</span>C  THESE VALUES ARE USED FOR THE METAL ABUNDANCE IN THOUL.
+<span class="ln">142</span>c
+<span class="ln">143</span>C     DIFFUSE HYDROGEN.
+<span class="ln">144</span>      IF(LDIFY)THEN
+<span class="ln">145</span>         J = 1
+<span class="ln">146</span>         THEA = 55.86D0
+<span class="ln">147</span>         THEZ = 26.0D0
+<span class="ln">148</span>C        SET ESPEC(3,*) TO THE HEAVY METAL ABUNDANCE.
+<span class="ln">149</span>         DO I=1,NPT-1
+<span class="ln">150</span>            ESPEC(3,I) = EZ(I)
+<span class="ln">151</span>            ESPEC_H(3,I) = EZ_H(I)
+<span class="ln">152</span>         ENDDO
+<span class="ln">153</span>         ESPEC(3,NPT) = EZ(NPT)
+<span class="ln">154</span>C        PASS THE EVEN GRID INTO MICRODIFF_RUN TO PERFORM THE DIFFUSION.
+<span class="ln">155</span>C          CALL MICRODIFF_RUN(NLIGHT,CSLIGHT,DR,DT,STOT,NPT,EM,ER,EDEN,ETEM,  ! KC 2025-05-31
+<span class="ln">156</span>         CALL <a href="../yrec-map/microdiff_run.f.html#def-MICRODIFF_RUN" title="MICRODIFF_RUN in microdiff_run.f">MICRODIFF_RUN</a>(DR,DT,STOT,NPT,EM,ER,EDEN,ETEM,
+<span class="ln">157</span>     *               EHQPR,EDELR,ESPEC,EDXDR,EM_H,ER_H,EDEN_H,ETEM_H,EHQPR_H,
+<span class="ln">158</span>     *               EDELR_H,ESPEC_H,EDXDR_H,THEA,THEZ,J)
+<span class="ln">159</span>C        STORE THE RUN OF CHANGES TO HYDROGEN
+<span class="ln">160</span>         DO I = 1,NPT
+<span class="ln">161</span>            EDELX(I) = ESPEC(1,I)
+<span class="ln">162</span>         ENDDO
+<span class="ln">163</span>C        RESTORE THE ORIGINAL ESPEC HYDROGEN VECTORS.
+<span class="ln">164</span>         DO I = 1,NPT-1
+<span class="ln">165</span>            ESPEC(1,I) = EX(I)
+<span class="ln">166</span>            ESPEC_H(1,I) = EX_H(I)
+<span class="ln">167</span>         ENDDO
+<span class="ln">168</span>         ESPEC(1,NPT) = EX(NPT)
+<span class="ln">169</span>      ENDIF
+<span class="ln">170</span>c
+<span class="ln">171</span>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+<span class="ln">172</span>C
+<span class="ln">173</span>C     DIFFUSE HEAVY METALS.
+<span class="ln">174</span>      IF(LDIFZ)THEN
+<span class="ln">175</span>         J = 3
+<span class="ln">176</span>         THEA = 55.86D0
+<span class="ln">177</span>         THEZ = 26.0D0
+<span class="ln">178</span>C        SET ESPEC(3,*) TO THE HEAVY METAL ABUNDANCE.
+<span class="ln">179</span>         DO I=1,NPT-1
+<span class="ln">180</span>            ESPEC(3,I) = EZ(I)
+<span class="ln">181</span>            ESPEC_H(3,I) = EZ_H(I)
+<span class="ln">182</span>         ENDDO
+<span class="ln">183</span>         ESPEC(3,NPT) = EZ(NPT)
+<span class="ln">184</span>C        PASS THE EVEN GRID INTO MICRODIFF_RUN TO PERFORM THE DIFFUSION.
+<span class="ln">185</span>C          CALL MICRODIFF_RUN(NLIGHT,CSLIGHT,DR,DT,STOT,NPT,EM,ER,EDEN,ETEM,  ! KC 2025-05-31
+<span class="ln">186</span>         CALL <a href="../yrec-map/microdiff_run.f.html#def-MICRODIFF_RUN" title="MICRODIFF_RUN in microdiff_run.f">MICRODIFF_RUN</a>(DR,DT,STOT,NPT,EM,ER,EDEN,ETEM,
+<span class="ln">187</span>     *               EHQPR,EDELR,ESPEC,EDXDR,EM_H,ER_H,EDEN_H,ETEM_H,EHQPR_H,
+<span class="ln">188</span>     *               EDELR_H,ESPEC_H,EDXDR_H,THEA,THEZ,J)
+<span class="ln">189</span>C        STORE THE RUN OF CHANGES TO HEAVY METALS
+<span class="ln">190</span>         DO I=1,NPT
+<span class="ln">191</span>            EDELZ(I) = ESPEC(3,I)
+<span class="ln">192</span>         ENDDO
+<span class="ln">193</span>C        THE ORIGINAL HEAVY VECTOR DOESN&#x27;T NEED RESTORATION, SINCE IT WILL
+<span class="ln">194</span>C        BE OVERWRITTEN BELOW.
+<span class="ln">195</span>      ENDIF
+<span class="ln">196</span>c
+<span class="ln">197</span>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+<span class="ln">198</span>C
+<span class="ln">199</span>C     DIFFUSE LIGHT ELEMENTS.
+<span class="ln">200</span>      IF(LDIFLI)THEN
+<span class="ln">201</span>C        ITERATE OVER THE DIFFUSION ROUTINES FOR EACH LIGHT ELEMENT.
+<span class="ln">202</span>         J = 3
+<span class="ln">203</span>         DO II = 1,NLIGHT
+<span class="ln">204</span>            THEA = ASLIGHT(II)
+<span class="ln">205</span>            THEZ = ZSLIGHT(II)
+<span class="ln">206</span>C           SET ESPEC(3,*) TO THE LIGHT ELEMENT ABUNDANCE.
+<span class="ln">207</span>            DO I=1,NPT-1
+<span class="ln">208</span>               ESPEC(3,I) = ELI(II,I)
+<span class="ln">209</span>               ESPEC_H(3,I) = ELI_H(II,I)
+<span class="ln">210</span>            ENDDO
+<span class="ln">211</span>            ESPEC(3,I) = ELI(II,NPT)
+<span class="ln">212</span>C           PASS THE EVEN GRID INTO MICRODIFF_RUN TO PERFORM THE DIFFUSION.
+<span class="ln">213</span>C             CALL MICRODIFF_RUN(NLIGHT,CSLIGHT,DR,DT,STOT,NPT,EM,ER,EDEN,ETEM,  ! KC 2025-05-31
+<span class="ln">214</span>            CALL <a href="../yrec-map/microdiff_run.f.html#def-MICRODIFF_RUN" title="MICRODIFF_RUN in microdiff_run.f">MICRODIFF_RUN</a>(DR,DT,STOT,NPT,EM,ER,EDEN,ETEM,
+<span class="ln">215</span>     *                  EHQPR,EDELR,ESPEC,EDXDR,EM_H,ER_H,EDEN_H,ETEM_H,
+<span class="ln">216</span>     *                  EHQPR_H,EDELR_H,ESPEC_H,EDXDR_H,THEA,THEZ,J)
+<span class="ln">217</span>C           STORE THE NEW RUN OF LIGHT METALS
+<span class="ln">218</span>            DO I=1,NPT
+<span class="ln">219</span>              EDELLI(II,I) = ESPEC(3,I)
+<span class="ln">220</span>            ENDDO
+<span class="ln">221</span>         ENDDO
+<span class="ln">222</span>      ENDIF
+<span class="ln">223</span>C
+<span class="ln">224</span>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+<span class="ln">225</span>
+<span class="ln">226</span>C TRANSFORM BACK TO ORIGINAL MODEL GRID; UPDATE HELIUM ARRAY USING
+<span class="ln">227</span>C X+Y+Z=1.  PRINT DIAGNOSTIC OUTPUT.
+<span class="ln">228</span>c
+<span class="ln">229</span>      CALL <a href="../yrec-map/microdiff_etm.f.html#def-MICRODIFF_ETM" title="MICRODIFF_ETM in microdiff_etm.f">MICRODIFF_ETM</a>(DT,ER,EDELX,EDELZ,EDELLI,IBEGIN,IEND,NPT,
+<span class="ln">230</span>     *     HCOMP,HQPR,HRU,HS1,HTU,M,STOT,NLIGHT,CSLIGHT)
+<span class="ln">231</span>      RETURN
+<span class="ln">232</span>      END</pre></details>
+<details class='py' id='py-microdiff'><summary>Python version: microdiff</summary><pre class='doc'>Settle hydrogen (LDIFY), the metals as iron (LDIFZ) and the light
+elements (LDIFLI) over one step: move the model onto an equally spaced
+grid in radius, diffuse each species there, and map the changes back.
+
+Translates: microdiff.f#MICRODIFF (09c3b9b)
+
+Arguments: the step dt (s); the model&#x27;s hcomp[k, j], hqpr (dlnP/dr),
+hr (log r), hd (log rho), hs1 (mass, g), ht (log T) and convective
+flags lc, with m shells; the total mass stot (g). Arrays have index 0
+unused.
+
+Sets in place: hcomp. hs1 and hqpr are converted to Bahcall and Loeb&#x27;s
+units and back.
+
+Returns (dt, stot): converted and converted back by the callees, so
+equal to the values passed in up to rounding.</pre><pre class='src'><span class="ln">64</span>def microdiff(dt, hcomp, hqpr, hr, hd, hs1, ht, lc, m, stot):
+<span class="ln">65</span>    &quot;&quot;&quot;Settle hydrogen (LDIFY), the metals as iron (LDIFZ) and the light
+<span class="ln">66</span>    elements (LDIFLI) over one step: move the model onto an equally spaced
+<span class="ln">67</span>    grid in radius, diffuse each species there, and map the changes back.
+<span class="ln">68</span>
+<span class="ln">69</span>    Translates: microdiff.f#MICRODIFF (09c3b9b)
+<span class="ln">70</span>
+<span class="ln">71</span>    Arguments: the step dt (s); the model&#x27;s hcomp[k, j], hqpr (dlnP/dr),
+<span class="ln">72</span>    hr (log r), hd (log rho), hs1 (mass, g), ht (log T) and convective
+<span class="ln">73</span>    flags lc, with m shells; the total mass stot (g). Arrays have index 0
+<span class="ln">74</span>    unused.
+<span class="ln">75</span>
+<span class="ln">76</span>    Sets in place: hcomp. hs1 and hqpr are converted to Bahcall and Loeb&#x27;s
+<span class="ln">77</span>    units and back.
+<span class="ln">78</span>
+<span class="ln">79</span>    Returns (dt, stot): converted and converted back by the callees, so
+<span class="ln">80</span>    equal to the values passed in up to rounding.
+<span class="ln">81</span>    &quot;&quot;&quot;
+<span class="ln">82</span>    global ibegin, iend, lallcz, dr, npt
+<span class="ln">83</span>    dt, stot, ibegin, iend, lallcz = microdiff_setup(
+<span class="ln">84</span>        dt, hqpr, hr, hd, hs1, ht, lc, m, stot, hcomp, hru, htu,
+<span class="ln">85</span>        ibegin, iend, lallcz, oden, otem)
+<span class="ln">86</span>    # Skip settling for fully convective models.
+<span class="ln">87</span>    if lallcz:
+<span class="ln">88</span>        return dt, stot
+<span class="ln">89</span>    # Transform to an equally spaced grid in radius (E: at the grid points,
+<span class="ln">90</span>    # E..._H: at the midpoints).
+<span class="ln">91</span>    dr, npt = microdiff_mte(NLIGHT, CSLIGHT, hcomp, hqpr, hru, hs1, ibegin,
+<span class="ln">92</span>                            iend, m, dr, npt, oden, otem, em, er, eden, etem,
+<span class="ln">93</span>                            ehqpr, edelr, ex, ey, ez, eli, em_h, er_h, eden_h,
+<span class="ln">94</span>                            etem_h, ehqpr_h, edelr_h, ex_h, ey_h, ez_h, eli_h)
+<span class="ln">95</span>    # The three species of the Thoul calculation: 1 = X, 2 = Y, 3 = metal.
+<span class="ln">96</span>    for i in range(1, npt):
+<span class="ln">97</span>        espec[1, i] = ex[i]
+<span class="ln">98</span>        espec[2, i] = ey[i]
+<span class="ln">99</span>        espec_h[1, i] = ex_h[i]
+<span class="ln">100</span>        espec_h[2, i] = ey_h[i]
+<span class="ln">101</span>    espec[1, npt] = ex[npt]
+<span class="ln">102</span>    espec[2, npt] = ey[npt]
+<span class="ln">103</span>    # Diffuse hydrogen, with the metals as iron for the third species.
+<span class="ln">104</span>    if nmlpar_mod.ldify:
+<span class="ln">105</span>        j = 1
+<span class="ln">106</span>        thea = 55.86
+<span class="ln">107</span>        thez = 26.0
+<span class="ln">108</span>        for i in range(1, npt):
+<span class="ln">109</span>            espec[3, i] = ez[i]
+<span class="ln">110</span>            espec_h[3, i] = ez_h[i]
+<span class="ln">111</span>        espec[3, npt] = ez[npt]
+<span class="ln">112</span>        microdiff_run(dr, dt, stot, npt, em, er, eden, etem, ehqpr, edelr,
+<span class="ln">113</span>                      espec, edxdr, em_h, er_h, eden_h, etem_h, ehqpr_h,
+<span class="ln">114</span>                      edelr_h, espec_h, edxdr_h, thea, thez, j)
+<span class="ln">115</span>        for i in range(1, npt + 1):
+<span class="ln">116</span>            edelx[i] = espec[1, i]
+<span class="ln">117</span>        # Restore the original hydrogen vectors.
+<span class="ln">118</span>        for i in range(1, npt):
+<span class="ln">119</span>            espec[1, i] = ex[i]
+<span class="ln">120</span>            espec_h[1, i] = ex_h[i]
+<span class="ln">121</span>        espec[1, npt] = ex[npt]
+<span class="ln">122</span>    # Diffuse the metals, as iron.
+<span class="ln">123</span>    # Question (see the page): iron for all the metals.
+<span class="ln">124</span>    if nmlpar_mod.ldifz:
+<span class="ln">125</span>        j = 3
+<span class="ln">126</span>        thea = 55.86
+<span class="ln">127</span>        thez = 26.0
+<span class="ln">128</span>        for i in range(1, npt):
+<span class="ln">129</span>            espec[3, i] = ez[i]
+<span class="ln">130</span>            espec_h[3, i] = ez_h[i]
+<span class="ln">131</span>        espec[3, npt] = ez[npt]
+<span class="ln">132</span>        microdiff_run(dr, dt, stot, npt, em, er, eden, etem, ehqpr, edelr,
+<span class="ln">133</span>                      espec, edxdr, em_h, er_h, eden_h, etem_h, ehqpr_h,
+<span class="ln">134</span>                      edelr_h, espec_h, edxdr_h, thea, thez, j)
+<span class="ln">135</span>        for i in range(1, npt + 1):
+<span class="ln">136</span>            edelz[i] = espec[3, i]
+<span class="ln">137</span>    # Diffuse the light elements, each in turn as the third species.
+<span class="ln">138</span>    if nmlpar_mod.ldifli:
+<span class="ln">139</span>        j = 3
+<span class="ln">140</span>        for ii in range(1, NLIGHT + 1):
+<span class="ln">141</span>            thea = ASLIGHT[ii]
+<span class="ln">142</span>            thez = ZSLIGHT[ii]
+<span class="ln">143</span>            for i in range(1, npt):
+<span class="ln">144</span>                espec[3, i] = eli[ii, i]
+<span class="ln">145</span>                espec_h[3, i] = eli_h[ii, i]
+<span class="ln">146</span>            # Question (see the page): the Fortran&#x27;s I after DO I=1,NPT-1,
+<span class="ln">147</span>            # that is max(npt, 1), stands for NPT.
+<span class="ln">148</span>            i = max(npt, 1)
+<span class="ln">149</span>            espec[3, i] = eli[ii, npt]
+<span class="ln">150</span>            microdiff_run(dr, dt, stot, npt, em, er, eden, etem, ehqpr,
+<span class="ln">151</span>                          edelr, espec, edxdr, em_h, er_h, eden_h, etem_h,
+<span class="ln">152</span>                          ehqpr_h, edelr_h, espec_h, edxdr_h, thea, thez, j)
+<span class="ln">153</span>            for i in range(1, npt + 1):
+<span class="ln">154</span>                edelli[ii, i] = espec[3, i]
+<span class="ln">155</span>    # Back to the model grid; helium by closure.
+<span class="ln">156</span>    dt, stot = microdiff_etm(dt, er, edelx, edelz, edelli, ibegin, iend, npt,
+<span class="ln">157</span>                             hcomp, hqpr, hru, hs1, htu, m, stot, NLIGHT,
+<span class="ln">158</span>                             CSLIGHT)
+<span class="ln">159</span>    return dt, stot</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong (small).</strong> "The temperature gradient … comes through <code>/SCRTCH/</code> (<code>SDEL(2,·)</code>)": MICRODIFF itself does not declare <code>/SCRTCH/</code>; its header says so, but <a href="../yrec-map/microdiff_mte.f.html">microdiff_mte.f</a> reads it. Fix: say that MICRODIFF_MTE reads it from <code>/SCRTCH/</code>.</li>
+<li><strong>Unclear.</strong> "probably ⁶Li, ⁷Li and ⁹Be, from these values": STARIN fills rows 13–15 from <code>XLI6_INI</code>, <code>XLI7_INI</code>, <code>XBE9_INI</code>, so it is a fact from the code. Fix: drop "probably", cite STARIN.</li>
+<li><strong>Missing.</strong> The units of <code>STOT</code> (g) and what the four calls convert. Fix: one line; <code>STOT</code> in grams, converted in place by SETUP and back by ETM.</li>
+</ol>
+<p>Revised: the line on <code>/SCRTCH/</code> moved to MICRODIFF_MTE; units of <code>STOT</code> added; the light elements stated from STARIN.</p></div></details>
+</main></body></html>

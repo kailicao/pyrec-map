@@ -1,0 +1,201 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>The star and its state · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ New structure (Fortran and Python) / The star and its state</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='fortran.html'>Language and style</a></li><li><a href='common-map.html'>The COMMON-block map</a></li><li><a href='kernels.html'>Kernels and settings</a></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><strong>The star and its state</strong></li><li><a href='structure.html'>The structure solver</a></li><li><a href='timestep.html'>Time stepping</a></li><li><a href='composition.html'>Composition and settling</a></li><li><a href='rotation.html'>Rotation and mass loss</a></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>The star and its state</h1>
+<p><em>In Python: <code>pyrec.star</code>, under Python below.</em></p>
+<h2>3.4 The model: <code>Star</code>, <code>ShellPhysics</code>, <code>EnvelopeSolution</code>, <code>StepStart</code></h2>
+<p><strong><code>Star</code>. Responsibility:</strong> one stellar model, the interior on its mass shells plus the scalars that describe it as a whole; the only owner of the arrays that <code>main.f</code> now declares locally and passes to every routine.</p>
+<pre><code class="language-fortran">type :: Star
+    !! One stellar model. Arrays are allocated to m shells, centre first.
+    integer :: m = 0                       !! Number of shells (M).
+    integer :: model = 0                   !! Model number (MODEL).
+    real(dp), allocatable :: hs(:)         !! (m,) log10 m [g]          (HS)
+    real(dp), allocatable :: hs1(:), hs2(:)!! (m,) m and dm [g]   (HS1, HS2)
+    real(dp), allocatable :: hr(:), hp(:)  !! (m,) log10 r [cm], P [dyn cm-2]
+    real(dp), allocatable :: ht(:), hd(:)  !! (m,) log10 T [K], rho [g cm-3]
+    real(dp), allocatable :: hl(:)         !! (m,) L/Lsun               (HL)
+    real(dp), allocatable :: hcomp(:,:)    !! (NSP, m) mass fractions (HCOMP)
+    logical,  allocatable :: lc(:)         !! (m,) Convective shell     (LC)
+    real(dp), allocatable :: omega(:)      !! (m,) [rad s-1]         (OMEGA)
+    real(dp), allocatable :: hjm(:), hi(:) !! (m,) j [cm2 s-1], I [g cm2]
+    real(dp), allocatable :: fp(:), ft(:)  !! (m,) Distortion factors f_P, f_T
+    real(dp) :: hstot, smass               !! log10 M [g]; M/Msun
+    real(dp) :: teffl, bl                  !! log10 Teff [K]; log10 L/Lsun
+    real(dp) :: age = 0, sage = 0          !! [Gyr] (DAGE, SAGE)
+    type(SurfaceComposition) :: surf       !! XENV, ZENV, ... (COMP_MOD)
+    type(ShellPhysics) :: phys             !! Per-shell physics.
+    type(EnvelopeSolution) :: env          !! The outer layers.
+contains
+    procedure :: rescale        !! (card, cfg, ierr) RSCALE, ZRAMP.
+    procedure :: shell_masses   !! () HS1, HS2 from HS and HSTOT.
+    procedure :: surface        !! () Surface composition and mu (COMP_MOD).
+    procedure :: total_j        !! () -&gt; real(dp) Total J [g cm2 s-1].
+    procedure :: copy_to        !! (start) Fill a StepStart.
+    procedure :: clear          !! () Deallocate everything.
+end type
+</code></pre>
+<p><code>ShellPhysics</code> holds what is evaluated on every shell and read by several stages: $c_P$, $\mu$, $\nabla$, $\nabla_\mathrm{ad}$, $\nabla_\mathrm{rad}$, the convective velocity, $Q_{\rho T}$, the energy generation and its derivatives, the thermal diffusivity and the viscosity (today the modules <code>TEMP_MOD</code>, <code>SCRTCH_MOD</code>, <code>ROTDER_MOD</code>, <code>GRAB_MOD</code>, <code>FLUXES_MOD</code>, formerly COMMON blocks; <code>/NEWEPS/</code> of <code>rp_1</code> became values returned by <code>ENGEB</code>); its method <code>update(star, physics)</code> is <a href="../yrec-map/physic.f.html#def-PHYSIC"><code>PHYSIC</code></a> with <a href="../yrec-map/viscos.f.html#def-VISCOS"><code>VISCOS</code></a>. <code>EnvelopeSolution</code> holds the integrated atmosphere and envelope (the modules <code>ENVSTRUCT_MOD</code>, <code>ATMSTRUCT_MOD</code>, <code>ENVPRT_MOD</code>, <code>ATMPRT_MOD</code>, <code>PULSE1_MOD</code>, <code>PULSE2_MOD</code>; at <code>rp_1</code> also <code>/ENVCZ/</code>), which the output and the analyses read; development's <code>KNOWN_ISSUES.md</code> (issue 11) already classes <code>/ENVSTRUCT/</code> and <code>/ATMSTRUCT/</code> among the "reconstructed solutions held for output". <code>StepStart</code> is the model at the start of a step (the modules <code>OLDMOD_MOD</code>, <code>OLDPHY_MOD</code>, <code>OLDROT_MOD</code>, <code>OLDROT2_MOD</code>, <code>OLDRAT_MOD</code>, <code>ENTROP_MOD</code>, <code>PREVCZ_MOD</code>; <code>/OLDAB/</code> and <code>/ORIGSTART/</code> of <code>rp_1</code> became an argument and locals of the main program): a <code>Star</code> of its own plus the rates of change $\dot{(\log T)}_0$, $\dot{(\log P)}_0$, $\dot{(\ln L)}_0$, $\dot{(\log r)}_0$, kept by the <code>Step</code> that needs it.</p>
+<p><strong>Replaces:</strong> the local arrays of <a href="../yrec-map/main.f.html"><code>main.f</code></a>, <a href="../yrec-map/rscale.f.html#def-RSCALE"><code>RSCALE</code></a>, <a href="../yrec-map/physic.f.html#def-PHYSIC"><code>PHYSIC</code></a>, <a href="../yrec-map/viscos.f.html#def-VISCOS"><code>VISCOS</code></a>, and the model part of <a href="../yrec-map/starin.f.html#def-STARIN"><code>STARIN</code></a> (the rest of <code>STARIN</code> is <code>Track%start</code>, <a href="run.html">Section 3.12</a>). Storing <code>hcomp</code> as <code>(NSP, m)</code> keeps it as today, with one shell's composition contiguous in memory (Fortran is column-major).</p>
+<h2>Python</h2>
+<p>The stubs of the new structure (signatures and docstrings, no bodies), each naming the routines it replaces in the current code.</p>
+<h3><code>pyrec/star/__init__.py</code></h3>
+<pre><code class="language-python">&quot;&quot;&quot;The model: one stellar model and the state its stages share.
+
+Imports `kernels`, `config` and `physics`. Shells are NumPy arrays of
+length m, centre first; ``hcomp`` is `(NSP, m)` as in YREC, so that one
+species over all shells is contiguous in NumPy's row-major order (the
+transposed choice of the Fortran design, which keeps one shell
+contiguous), which is what the vectorized physics reads.
+
+Modules
+-------
+model : Star, SurfaceComposition, ShellPhysics, EnvelopeSolution, StepStart.
+zones : ConvectionZones.
+
+&quot;&quot;&quot;
+from .model import EnvelopeSolution, ShellPhysics, Star, StepStart
+</code></pre>
+<h3><code>pyrec/star/model.py</code></h3>
+<ul>
+<li><code>ShellPhysics</code> replaces <a href="../yrec-map/physic.f.html#def-PHYSIC"><code>PHYSIC</code></a>, <a href="../yrec-map/viscos.f.html#def-VISCOS"><code>VISCOS</code></a>.</li>
+<li><code>Star</code> replaces <a href="../yrec-map/rscale.f.html#def-RSCALE"><code>RSCALE</code></a>, <a href="../yrec-map/starin.f.html#def-STARIN"><code>STARIN</code></a> (the model part).</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;One stellar model, its per-shell physics, its outer layers and the start of a step.
+
+Classes
+-------
+SurfaceComposition : XENV, ZENV, ... (COMP_MOD).
+ShellPhysics : What is evaluated on every shell and read by several stages.
+EnvelopeSolution : The integrated atmosphere and envelope, for output and analyses.
+Star : One stellar model.
+StepStart : The model at the start of a step, with its rates of change.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+
+from ..config import Config, KindCard
+from ..physics import Physics
+
+
+@dataclass(slots=True)
+class SurfaceComposition:
+    &quot;&quot;&quot;Surface composition and mean molecular weight (COMP_MOD; Y and He3 of COMP2_MOD).&quot;&quot;&quot;
+
+    xenv: float = 0.0
+    zenv: float = 0.0
+    yenv: float = 0.0
+    he3env: float = 0.0
+    amuenv: float = 0.0
+
+
+class ShellPhysics:
+    &quot;&quot;&quot;Per-shell physics: c_P, mu, the gradients, v_conv, Q_rhoT, eps and its derivatives, diffusivity, viscosity.
+
+    Attributes
+    ----------
+    cp, mu, grad, grad_ad, grad_rad, v_conv, qrt : np.ndarray, shape: `(m,)`, dtype: ``float64``
+    eps : np.ndarray, shape: `(3, m)`
+        Energy generation [erg g-1 s-1] and d/d ln rho, d/d ln T.
+    thdif, visc : np.ndarray, shape: `(m,)`
+
+    Replaces: physic.f#PHYSIC, viscos.f#VISCOS
+    &quot;&quot;&quot;
+
+    def update(self, star: &quot;Star&quot;, phys: Physics) -&gt; None:
+        &quot;&quot;&quot;Evaluate every shell, through the families' array kernels.&quot;&quot;&quot;
+        ...
+
+
+class EnvelopeSolution:
+    &quot;&quot;&quot;The integrated atmosphere and envelope (ENVSTRUCT_MOD, ATMSTRUCT_MOD, ENVPRT_MOD, PULSE1_MOD, ...), read by output and analyses.
+
+    Attributes
+    ----------
+    env : np.ndarray, shape: `(n_q, n_env)`
+    atm : np.ndarray, shape: `(n_q, n_atm)`
+    &quot;&quot;&quot;
+
+
+class Star:
+    &quot;&quot;&quot;One stellar model: the interior on its mass shells and the scalars of the whole.
+
+    Attributes
+    ----------
+    m, model : int
+        Number of shells; model number.
+    hs, hs1, hs2 : np.ndarray, shape: `(m,)`
+        log10 m [g]; m and dm [g].
+    hr, hp, ht, hd : np.ndarray, shape: `(m,)`
+        log10 r [cm], P [dyn cm-2], T [K], rho [g cm-3].
+    hl : np.ndarray, shape: `(m,)`
+        L/Lsun.
+    hcomp : np.ndarray, shape: `(NSP, m)`
+        Mass fractions; rows named by ``kernels.constants.Species``.
+    lc : np.ndarray, shape: `(m,)`, dtype: ``bool``
+        Convective shell.
+    omega, hjm, hi, fp, ft : np.ndarray, shape: `(m,)`
+        [rad s-1]; j [cm2 s-1], I [g cm2]; distortion factors f_P, f_T.
+    hstot, smass, teffl, bl, age, sage : float
+        log10 M [g]; M/Msun; log10 Teff; log10 L/Lsun; [Gyr] (DAGE, SAGE).
+    surf : SurfaceComposition
+    phys : ShellPhysics
+    env : EnvelopeSolution
+
+    Methods
+    -------
+    rescale, shell_masses, surface, total_j, copy_to, clear.
+
+    Replaces: rscale.f#RSCALE, starin.f#STARIN (the model part)
+    &quot;&quot;&quot;
+
+    def __init__(self, m: int) -&gt; None:
+        &quot;&quot;&quot;Allocate the arrays to ``m`` shells (no JSON = 5000).&quot;&quot;&quot;
+        ...
+
+    def rescale(self, card: KindCard, cfg: Config) -&gt; None:
+        &quot;&quot;&quot;Rescale mass, X, Z, core mass (RSCALE, ZRAMP).&quot;&quot;&quot;
+        ...
+
+    def shell_masses(self) -&gt; None:
+        &quot;&quot;&quot;``hs1``, ``hs2`` from ``hs`` and ``hstot``.&quot;&quot;&quot;
+        ...
+
+    def surface(self) -&gt; None:
+        &quot;&quot;&quot;Surface composition and mu.&quot;&quot;&quot;
+        ...
+
+    @property
+    def total_j(self) -&gt; float:
+        &quot;&quot;&quot;Total angular momentum [g cm2 s-1].&quot;&quot;&quot;
+        ...
+
+    @property
+    def tc(self) -&gt; float:
+        &quot;&quot;&quot;log10 central T (CENT_MOD).&quot;&quot;&quot;
+        ...
+
+    def copy_to(self, start: &quot;StepStart&quot;) -&gt; None:
+        &quot;&quot;&quot;Fill a StepStart.&quot;&quot;&quot;
+        ...
+
+    def clear(self) -&gt; None:
+        &quot;&quot;&quot;Free the arrays.&quot;&quot;&quot;
+        ...
+
+
+class StepStart:
+    &quot;&quot;&quot;The model at the start of a step and its rates of change (OLDMOD_MOD, OLDPHY_MOD, OLDROT_MOD, ...; /OLDAB/ at rp_1, now the argument HCOMPS).
+
+    Attributes
+    ----------
+    star : Star
+    dtl, dpl, dll, drl : np.ndarray, shape: `(m,)`
+        Rates of change of log T, log P, ln L, log r, for the next guess.
+    &quot;&quot;&quot;
+</code></pre>
+
+</main></body></html>

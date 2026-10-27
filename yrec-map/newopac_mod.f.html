@@ -1,0 +1,105 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>newopac_mod.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ newopac_mod.f</span></header><main>
+<h1>newopac_mod.f</h1>
+<p class='muted'>37 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/newopac_mod.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>newopac_mod.py</code>, 11 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>NEWOPAC_MOD</code> holds two switches of the opacity setup, shared by 4 routines. It replaces what is left of <code>COMMON/NEWOPAC/</code> (MHP via Claude, 10/14/26), into which <code>/MISCOPAC/</code> and <code>/NWLAOL/</code> had been merged on 9/24/26: the opacity choices and their $Z$ and temperature limits (<code>ZOPAL951</code>, <code>TMOLMIN</code>, <code>TMOLMAX</code>, <code>LALEX06</code>, <code>LOPAL95</code>) are namelist variables now in <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a>, and the members of obsolete tables (<code>ZLAOL1</code>, <code>ZOPAL1</code>, <code>ZALEX1</code>, <code>ZKUR1</code>, <code>LLAOL89</code>, <code>LOPAL92</code>, <code>LKUR90</code>, <code>LALEX95</code> and their pairs) were removed with those options.</p>
+<p><strong>What its variables hold, who sets them, who reads them.</strong> Both are <code>LOGICAL*4</code>.</p>
+<ul>
+<li><code>L2Z</code>: whether two opacity tables in $Z$ are needed, <code>LZRAMP .OR. LDIFZ</code>, set by <a href="../yrec-map/setupopac.f.html#def-SETUPOPAC"><code>SETUPOPAC</code></a>; read by <a href="../yrec-map/getopac.f.html#def-GETOPAC"><code>GETOPAC</code></a> in its test of whether the local $Z$ is covered by the tables (a $Z$ far from <code>ZENV</code> is accepted only with <code>L2Z</code> or <code>LOPAL95</code>).</li>
+<li><code>LLAOL</code>: the switch of the obsolete LAOL opacities, initially <code>.FALSE.</code> (moved from PARMIN's <code>DATA</code> statement) and set nowhere, so <a href="../yrec-map/starin.f.html#def-STARIN"><code>STARIN</code></a> always takes the element fractions from <code>VNEW</code> rather than from the LAOL tables (its comment: "to maintain backward compatibility").</li>
+</ul>
+<p><strong>Design.</strong> A blanket <code>USE NEWOPAC_MOD</code>; <a href="../yrec-map/parmin.f.html#def-PARMIN"><code>PARMIN</code></a> still uses the module but reads neither member. The module header calls <code>LLAOL</code> a namelist variable, but it is in no namelist (so also at <code>rp_1</code>).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> New file: <code>L2Z</code> of <code>COMMON/NEWOPAC/</code> and <code>LLAOL</code> of <code>/NWLAOL/</code> as a module; the namelist members moved to <code>NMLPAR_MOD</code>, those of removed opacity tables deleted.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A switch that cannot be turned on.</strong> <code>LLAOL</code> is set nowhere, and the LAOL tables it served were removed. Can it go, with STARIN's test?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+NEWOPAC_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/14/26 MHP via Claude
+code changed to convert COMMON/NEWOPAC/ into this module.
+
+Imported with a blanket USE, the convention for the conversion.
+All 4 files declared this block identically, so the USE imports
+exactly the names the declaration already made global in each
+scoping unit and cannot change meaning.
+
+The types restate what the implicit rules supplied: L is
+LOGICAL*4, I/J/K/M/N are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while
+ifort Classic predates it.  That matches COMMON&#x27;s semantics.
+
+1 of the 2 members carry an initializer, migrated
+from parmin.f&#x27;s DATA statements because DATA on a USE-associated
+name is rejected.  The literal text is copied verbatim: these
+are namelist variables whose DATA supplied a default the
+namelist read could override, and a module initializer is
+applied once at load time, before PARMIN runs, which is the
+same thing.  Rewriting a literal such as 0.9828 as 0.9828D0
+would change its stored value, so that is deliberately not
+done here; see KNOWN_ISSUES.md issue 23.</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-NEWOPAC_MOD'>NEWOPAC_MOD</a> <span class='muted'>module · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-NEWOPAC_MOD'><h3><span class='kind'>module</span>NEWOPAC_MOD</h3>
+<p class='muted'>lines 29–37 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/newopac_mod.f#L29-L37'>GitHub</a></p>
+<pre>MODULE NEWOPAC_MOD</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+NEWOPAC_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/14/26 MHP via Claude
+code changed to convert COMMON/NEWOPAC/ into this module.
+
+Imported with a blanket USE, the convention for the conversion.
+All 4 files declared this block identically, so the USE imports
+exactly the names the declaration already made global in each
+scoping unit and cannot change meaning.
+
+The types restate what the implicit rules supplied: L is
+LOGICAL*4, I/J/K/M/N are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while
+ifort Classic predates it.  That matches COMMON&#x27;s semantics.
+
+1 of the 2 members carry an initializer, migrated
+from parmin.f&#x27;s DATA statements because DATA on a USE-associated
+name is rejected.  The literal text is copied verbatim: these
+are namelist variables whose DATA supplied a default the
+namelist read could override, and a module initializer is
+applied once at load time, before PARMIN runs, which is the
+same thing.  Rewriting a literal such as 0.9828 as 0.9828D0
+would change its stored value, so that is deliberately not
+done here; see KNOWN_ISSUES.md issue 23.</pre></details>
+<details><summary>Used by (4 units)</summary><p><a href='../yrec-map/getopac.f.html#def-GETOPAC'>GETOPAC</a>, <a href='../yrec-map/parmin.f.html#def-PARMIN'>PARMIN</a>, <a href='../yrec-map/setupopac.f.html#def-SETUPOPAC'>SETUPOPAC</a>, <a href='../yrec-map/starin.f.html#def-STARIN'>STARIN</a></p></details>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">29</span>      MODULE NEWOPAC_MOD
+<span class="ln">30</span>
+<span class="ln">31</span>      IMPLICIT NONE
+<span class="ln">32</span>      SAVE
+<span class="ln">33</span>
+<span class="ln">34</span>      LOGICAL*4 :: L2Z
+<span class="ln">35</span>      LOGICAL*4 :: LLAOL = .FALSE.
+<span class="ln">36</span>
+<span class="ln">37</span>      END MODULE NEWOPAC_MOD</pre></details>
+<details class='py' id='py-_module_level_'><summary>Python version: newopac_mod.py</summary><pre class='src'><span class="ln">1</span>&quot;&quot;&quot;Python version of newopac_mod.f (YREC 09c3b9b): two switches of the
+<span class="ln">2</span>opacity setup, formerly parts of COMMON/NEWOPAC/ and /NWLAOL/.
+<span class="ln">3</span>
+<span class="ln">4</span>Translates: newopac_mod.f#NEWOPAC_MOD (09c3b9b)
+<span class="ln">5</span>
+<span class="ln">6</span>Routines that USE NEWOPAC_MOD import this module and write
+<span class="ln">7</span>``newopac_mod.&lt;name&gt;``.
+<span class="ln">8</span>&quot;&quot;&quot;
+<span class="ln">9</span>
+<span class="ln">10</span>l2z = False     # two opacity tables in Z needed: lzramp or ldifz (setupopac)
+<span class="ln">11</span>llaol = False   # obsolete LAOL opacities; set nowhere (initializer)</pre></details>
+</section>
+</main></body></html>

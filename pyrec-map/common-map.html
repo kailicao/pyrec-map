@@ -1,0 +1,177 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>The COMMON-block map · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ New structure (Fortran and Python) / The COMMON-block map</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='fortran.html'>Language and style</a></li><li><strong>The COMMON-block map</strong></li><li><a href='kernels.html'>Kernels and settings</a></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><a href='timestep.html'>Time stepping</a></li><li><a href='composition.html'>Composition and settling</a></li><li><a href='rotation.html'>Rotation and mass loss</a></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>The COMMON-block map</h1>
+<p><em>In Python: <code>pyrec</code>, under Python below.</em></p>
+<h2>6.4 What replaces the COMMON blocks</h2>
+<p>Each block's contents go to the type that owns them, grouped by physics. Settings go into <code>Config</code>'s parts, state into the objects of <a href="overview.html">Section 3</a>, and the work arrays of one method become private components of its type. Mutable settings change owner: a switch that a routine turns off in the middle of a run (<code>LDIFY</code>, <code>LPTIME</code>, <code>KTTAU</code>) becomes state of the object that turns it off, so <code>Config</code> stays as read.</p>
+<p><strong>The map follows YREC's development branch (09c3b9b).</strong> rp_1 had 243 COMMON blocks; the development branch has none: it made the remaining blocks into 87 modules (<code>…_MOD</code>), merged some of them on the way, and turned others into arguments or local variables. The blocks of the options it removed (the MHD, OPAL 1995 and OPAL 2001 equations of state; the OPAL 1992, LAOL 1989, Alexander 1995 and Kurucz 1990 opacity tables, apart from LAOL's pure-$Z$ table; the Monte Carlo loop) went with them, and so did their rows here. Most settings are now in two modules: <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a> holds the namelist members of 62 former blocks, and <a href="../yrec-map/nmlbypass_mod.f.html#def-NMLBYPASS_MOD"><code>NMLBYPASS_MOD</code></a> the namelist variables that <code>PARMIN</code> only uses to derive others (from six blocks). Each row below names the modules of 09c3b9b and, in parentheses, the blocks of rp_1 they came from; every module of 09c3b9b appears once, apart from <code>NMLPAR_MOD</code>, <code>NMLBYPASS_MOD</code> and <code>IOUNITS_MOD</code>, which are split by topic. Where a block "became arguments" or "became local", the page of the routine that now owns the values says so in its "Changed since <code>rp_1</code>" line.</p>
+<table>
+<thead>
+<tr>
+<th>What it holds</th>
+<th>In 09c3b9b (from rp_1's blocks)</th>
+<th>New home</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Physical constants</td>
+<td><a href="../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD"><code>CONSTANTS_MOD</code></a> (<code>/CONST/</code>–<code>/CONST3/</code>, without <code>CMIXL</code>; <code>C_2</code> from <code>/CWIND/</code>), <a href="../yrec-map/confac_mod.f.html#def-CONFAC_MOD"><code>CONFAC_MOD</code></a>, <a href="../yrec-map/qenvmix_mod.f.html#def-QENVMIX_MOD"><code>QENVMIX_MOD</code></a> (<code>CMIXL</code> for <code>QENV</code> only; elsewhere <code>CMIXL</code> is now an argument)</td>
+<td><code>constants</code> (named parameters); <code>CMIXL</code> goes to <code>Config%conv</code></td>
+</tr>
+<tr>
+<td>Array sizes</td>
+<td><a href="../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD"><code>DIMENSIONS_MOD</code></a> (<code>JSON = 5000</code>, declared in 123 files at rp_1)</td>
+<td>a parameter of <code>kinds</code> until the arrays are allocated from the model's size (an inference: the design does not yet say)</td>
+</tr>
+<tr>
+<td>I/O units and output switches</td>
+<td><a href="../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD"><code>IOUNITS_MOD</code></a> (the units of ten blocks, <code>/LUNUM/</code> and <code>/LUOUT/</code> among them, merged with <code>/IOUNITS/</code>), <a href="../yrec-map/ccout_mod.f.html#def-CCOUT_MOD"><code>CCOUT_MOD</code></a>; in <code>NMLPAR_MOD</code>, the switches of <code>/CCOUT1/</code>, <code>/CCOUT2/</code>, <code>/CHRONE/</code>, <code>/TRACK/</code>, <code>/PO/</code> and part of <code>/PULSE/</code>; <code>/ROTPRT/</code> and the rest of <code>/PULSE/</code> became arguments, <code>/DESC/</code> a local of <code>PARMIN</code></td>
+<td><code>Config%io</code>; units from <code>newunit=</code> held by the writers</td>
+</tr>
+<tr>
+<td>Numerical controls</td>
+<td><a href="../yrec-map/ctol_mod.f.html#def-CTOL_MOD"><code>CTOL_MOD</code></a> (<code>FCORR</code>), <a href="../yrec-map/intpar_mod.f.html#def-INTPAR_MOD"><code>INTPAR_MOD</code></a>, <a href="../yrec-map/errmom_mod.f.html#def-ERRMOM_MOD"><code>ERRMOM_MOD</code></a>, <a href="../yrec-map/dwmax_mod.f.html#def-DWMAX_MOD"><code>DWMAX_MOD</code></a>; in <code>NMLPAR_MOD</code>, the settings of <code>/CTOL/</code>, <code>/CTLIM/</code>, <code>/INTATM/</code>, <code>/INTENV/</code>, <code>/BURTOL/</code>, <code>/CT2/</code>, <code>/CT3/</code>, <code>/NEWENG/</code>, <code>/GOVS/</code>, <code>/DIFUS/</code>; in <code>NMLBYPASS_MOD</code>, <code>/NEWPARAM/</code></td>
+<td><code>Config%num</code>; <code>LPTIME</code> of <code>/CT3/</code> as <code>TimeStepper%use_structure</code> (<code>NEWPARAM</code>'s newer names are read by <code>read_namelists</code> and mapped, as <code>REMAP</code> does)</td>
+</tr>
+<tr>
+<td>Composition settings</td>
+<td><a href="../yrec-map/comp2_mod.f.html#def-COMP2_MOD"><code>COMP2_MOD</code></a>; in <code>NMLPAR_MOD</code> and <code>NMLBYPASS_MOD</code>, <code>/NEWCMP/</code>, <code>/NEWMX/</code>, <code>/VNEWCB/</code>, <code>/FLAG/</code>; <code>/I2O/</code> became the argument <code>COMPMIX</code></td>
+<td><code>Config%comp</code>; the surface $Y$, ³He of <code>COMP2_MOD</code> go to <code>Star%surf</code></td>
+</tr>
+<tr>
+<td>Run cards and per-run values</td>
+<td><a href="../yrec-map/runloop_mod.f.html#def-RUNLOOP_MOD"><code>RUNLOOP_MOD</code></a> (<code>/CKIND/</code> and <code>/SETT/</code> merged), <a href="../yrec-map/label_mod.f.html#def-LABEL_MOD"><code>LABEL_MOD</code></a>, <a href="../yrec-map/cenv_mod.f.html#def-CENV_MOD"><code>CENV_MOD</code></a>; in <code>NMLPAR_MOD</code>, the settings of <code>/CKIND/</code>, <code>/SETT/</code>, <code>/NEWXYM/</code>, <code>/CORE/</code>, <code>/HEFLSH/</code>, <code>/ZRAMP/</code>, <code>/CENV/</code>; <code>NK</code> of <code>/ZRAMP/</code> became an argument</td>
+<td><code>KindCard</code> (<code>Config%cards</code>), and <code>Track</code> for the current card (<code>NK</code>); the triangle sizes of <code>CENV_MOD</code> go to <code>SurfaceBC</code></td>
+</tr>
+<tr>
+<td>Convection settings</td>
+<td><a href="../yrec-map/dpmix_mod.f.html#def-DPMIX_MOD"><code>DPMIX_MOD</code></a> (<code>IOV1</code>, <code>IOV2</code>, <code>IOVIM</code>); the settings of <code>/DPMIX/</code> in <code>NMLPAR_MOD</code></td>
+<td><code>Config%conv</code>; <code>IOVIM</code> becomes an argument</td>
+</tr>
+<tr>
+<td>EOS settings</td>
+<td><a href="../yrec-map/debhu_mod.f.html#def-DEBHU_MOD"><code>DEBHU_MOD</code></a>, <a href="../yrec-map/ccr_mod.f.html#def-CCR_MOD"><code>CCR_MOD</code></a>; in <code>NMLPAR_MOD</code>, <code>LOPALE06</code>, <code>LSCV</code>, <code>LNUMDERIV</code>, <code>LDH</code>, <code>ETADH0</code>, <code>ETADH1</code>; in <code>IOUNITS_MOD</code>, the units of <code>/OPALEOS/</code> and <code>/SCV2/</code>; <code>/LREADCO/</code> is gone (the OPAL table is read once by <code>SETEOS06</code>)</td>
+<td><code>Config%eos</code>; the Debye–Hückel and relativistic values to <code>YaleEos</code>; the one-time read to <code>OpalEosTable</code></td>
+</tr>
+<tr>
+<td>Opacity settings</td>
+<td><a href="../yrec-map/newopac_mod.f.html#def-NEWOPAC_MOD"><code>NEWOPAC_MOD</code></a> (<code>L2Z</code>, and <code>LLAOL</code> of <code>/NWLAOL/</code>); in <code>NMLPAR_MOD</code>, the settings of <code>/NEWOPAC/</code> and <code>/MISCOPAC/</code>; in <code>IOUNITS_MOD</code>, the units of <code>/LOPAL95/</code>, <code>/ALEX06/</code>, <code>/MISCOPAC/</code>; <code>/OPTAB/</code>, which was only written, is gone</td>
+<td><code>Config%opac</code>; <code>OPTOL</code> to <code>OpacityBlend</code></td>
+</tr>
+<tr>
+<td>Nuclear settings</td>
+<td><a href="../yrec-map/cross_mod.f.html#def-CROSS_MOD"><code>CROSS_MOD</code></a>; in <code>NMLPAR_MOD</code>, <code>SSTANDARD</code>, <code>LNEWNUC</code>, <code>/WEAK/</code>, <code>/BURNSCS/</code>; in <code>NMLBYPASS_MOD</code>, <code>/NEWCROSS/</code>, <code>/XSECT/</code>; the derivatives of <code>/NULOSS/</code> became arguments</td>
+<td><code>Config%nuc</code>, copied once into <code>ReactionRates</code>, <code>LightElements</code>, <code>NeutrinoLosses</code></td>
+</tr>
+<tr>
+<td>Settling settings and state</td>
+<td>in <code>NMLPAR_MOD</code>, <code>/GRAVST/</code>, <code>/GRAVS2/</code>, <code>/GRAVS3/</code>, <code>/GRAVS4/</code>, <code>/CMIXING/</code></td>
+<td><code>Config%sett</code>; <code>LDIFY</code> as <code>SettlingBase%active</code></td>
+</tr>
+<tr>
+<td>Settling work arrays</td>
+<td><a href="../yrec-map/gravez_mod.f.html#def-GRAVEZ_MOD"><code>GRAVEZ_MOD</code></a>; <code>/GRAVSZ/</code> became arguments; <code>/GSCOF/</code> is gone</td>
+<td><code>GrsettSettling</code> (private)</td>
+</tr>
+<tr>
+<td>Rotation settings</td>
+<td><a href="../yrec-map/difad_mod.f.html#def-DIFAD_MOD"><code>DIFAD_MOD</code></a>; in <code>NMLPAR_MOD</code> (some in <code>NMLBYPASS_MOD</code>), the settings of <code>/ROT/</code>, <code>/SBROT/</code>, <code>/NOTRAN/</code>, <code>/MAG/</code>, <code>/VMULT/</code>, <code>/VMULT2/</code>, <code>/VARFC/</code>, <code>/CWIND/</code>, <code>/PMMWIND/</code>; <code>/CWIND/</code> retired (<code>STRUCTFACTOR</code> returned by <code>AMCALC</code>, <code>C_2</code> to <code>CONSTANTS_MOD</code>), <code>VFC</code> of <code>/VARFC/</code> an argument, <code>/ADVEC/</code> local</td>
+<td><code>Config%rot</code>; the factors of <code>DIFAD_MOD</code> become constants of <code>RotationTransport</code> (<a href="tunables.html">Section 5</a>)</td>
+</tr>
+<tr>
+<td>Disk locking</td>
+<td><a href="../yrec-map/disk_mod.f.html#def-DISK_MOD"><code>DISK_MOD</code></a> (<code>SAGE</code>); <code>LDISK</code>, <code>TDISK</code>, <code>PDISK</code> in <code>NMLPAR_MOD</code></td>
+<td><code>Config%rot</code> (<code>TDISK</code>, <code>PDISK</code>, <code>LDISK</code>); <code>SAGE</code> to <code>Star</code></td>
+</tr>
+<tr>
+<td>Surface and atmosphere settings</td>
+<td><a href="../yrec-map/atmos_mod.f.html#def-ATMOS_MOD"><code>ATMOS_MOD</code></a>; in <code>NMLPAR_MOD</code> (<code>ENVGEN</code>'s partly in <code>NMLBYPASS_MOD</code>), the settings of <code>/ATMOS/</code>, <code>/ALATM03/</code>, <code>/SPOTS/</code>, <code>/ENVGEN/</code>; <code>/ALATM04/</code>, which held only dummies, is gone</td>
+<td><code>Config%surf</code>; <code>KTTAU</code>'s change on failure becomes <code>AtmosphereSwitch</code> state</td>
+</tr>
+<tr>
+<td>Mass-loss settings and state</td>
+<td><a href="../yrec-map/masschg2_mod.f.html#def-MASSCHG2_MOD"><code>MASSCHG2_MOD</code></a>; <code>/MASSCHG/</code> in <code>NMLPAR_MOD</code>; <code>/MASSCHG3/</code> is gone (its values are zeroed locals, <code>LSOLWIND</code> a namelist entry)</td>
+<td><code>Config%mloss</code>; <code>MASSCHG2_MOD</code> (entropies, <code>SMASS0</code>) becomes arguments of <code>MassLoss%apply</code> and a component read by <code>StructureSolver</code></td>
+</tr>
+<tr>
+<td>Calibration</td>
+<td><a href="../yrec-map/cent_mod.f.html#def-CENT_MOD"><code>CENT_MOD</code></a>; <code>/CALSUN/</code> and <code>/CALSTAR/</code> retired (their values are arguments, owned by the main program; the settings of <code>/CALS2/</code>, <code>/CALSTAR/</code> in <code>NMLPAR_MOD</code>)</td>
+<td><code>SolarCalibr</code>, <code>StarCalibr</code>; the central values of <code>CENT_MOD</code> are <code>Star</code> properties</td>
+</tr>
+<tr>
+<td>The model</td>
+<td><a href="../yrec-map/comp_mod.f.html#def-COMP_MOD"><code>COMP_MOD</code></a>, <a href="../yrec-map/roten_mod.f.html#def-ROTEN_MOD"><code>ROTEN_MOD</code></a>, <a href="../yrec-map/quadd_mod.f.html#def-QUADD_MOD"><code>QUADD_MOD</code></a>, <a href="../yrec-map/quadru_mod.f.html#def-QUADRU_MOD"><code>QUADRU_MOD</code></a>, <a href="../yrec-map/ovrtrn_mod.f.html#def-OVRTRN_MOD"><code>OVRTRN_MOD</code></a>; <code>DAGE</code> of <code>/THEAGE/</code> became an argument</td>
+<td><code>Star</code> and <code>Star%surf</code>; the quadrupole to <code>Distortion</code>; <code>TAUCZ</code> to <code>OverturnAnal</code>, <code>FRACSTEP</code> to <code>RotationStep</code></td>
+</tr>
+<tr>
+<td>Start of the step</td>
+<td><a href="../yrec-map/oldmod_mod.f.html#def-OLDMOD_MOD"><code>OLDMOD_MOD</code></a>, <a href="../yrec-map/oldphy_mod.f.html#def-OLDPHY_MOD"><code>OLDPHY_MOD</code></a>, <a href="../yrec-map/oldrot_mod.f.html#def-OLDROT_MOD"><code>OLDROT_MOD</code></a>, <a href="../yrec-map/oldrot2_mod.f.html#def-OLDROT2_MOD"><code>OLDROT2_MOD</code></a>, <a href="../yrec-map/oldrat_mod.f.html#def-OLDRAT_MOD"><code>OLDRAT_MOD</code></a>, <a href="../yrec-map/entrop_mod.f.html#def-ENTROP_MOD"><code>ENTROP_MOD</code></a>, <a href="../yrec-map/prevcz_mod.f.html#def-PREVCZ_MOD"><code>PREVCZ_MOD</code></a>, <a href="../yrec-map/liov_mod.f.html#def-LIOV_MOD"><code>LIOV_MOD</code></a>; <code>/OLDAB/</code> became the argument <code>HCOMPS</code>, <code>/ORIGSTART/</code> locals of the main program, <code>/PREVMID/</code> saved locals of <code>MIDMOD</code>, <code>/PREVMU/</code> a local of <code>VCIRC</code></td>
+<td><code>StepStart</code>, held by <code>Step</code>; <code>PSCAL0</code>, <code>PSCAL1</code> of <code>LIOV_MOD</code> to <code>LightElements</code></td>
+</tr>
+<tr>
+<td>Per-shell physics</td>
+<td><a href="../yrec-map/temp_mod.f.html#def-TEMP_MOD"><code>TEMP_MOD</code></a>, <a href="../yrec-map/temp2_mod.f.html#def-TEMP2_MOD"><code>TEMP2_MOD</code></a>, <a href="../yrec-map/mdphy_mod.f.html#def-MDPHY_MOD"><code>MDPHY_MOD</code></a>, <a href="../yrec-map/scrtch_mod.f.html#def-SCRTCH_MOD"><code>SCRTCH_MOD</code></a>, <a href="../yrec-map/rotder_mod.f.html#def-ROTDER_MOD"><code>ROTDER_MOD</code></a>, <a href="../yrec-map/grab_mod.f.html#def-GRAB_MOD"><code>GRAB_MOD</code></a>, <a href="../yrec-map/fluxes_mod.f.html#def-FLUXES_MOD"><code>FLUXES_MOD</code></a>, <a href="../yrec-map/pualpha_mod.f.html#def-PUALPHA_MOD"><code>PUALPHA_MOD</code></a>, <a href="../yrec-map/sound_mod.f.html#def-SOUND_MOD"><code>SOUND_MOD</code></a>; <code>/NEWEPS/</code> and <code>/BE7/</code> became values returned by <code>ENGEB</code></td>
+<td><code>ShellPhysics</code>; the mid-step copies (<code>MDPHY_MOD</code>) and velocities (<code>TEMP2_MOD</code>) to <code>RotationTransport</code>; <code>PUALPHA</code> to <code>PointState</code></td>
+</tr>
+<tr>
+<td>Burning results</td>
+<td><a href="../yrec-map/burn_mod.f.html#def-BURN_MOD"><code>BURN_MOD</code></a>, <a href="../yrec-map/newrat_mod.f.html#def-NEWRAT_MOD"><code>NEWRAT_MOD</code></a>, <a href="../yrec-map/deuter_mod.f.html#def-DEUTER_MOD"><code>DEUTER_MOD</code></a>; <code>/BSBURN/</code> became saved locals of the dead <code>BURSMIX</code></td>
+<td>returned by <code>ReactionRates%eval</code>, <code>Deuterium</code>, <code>LightElements</code></td>
+</tr>
+<tr>
+<td>The outer layers</td>
+<td><a href="../yrec-map/envstruct_mod.f.html#def-ENVSTRUCT_MOD"><code>ENVSTRUCT_MOD</code></a>, <a href="../yrec-map/atmstruct_mod.f.html#def-ATMSTRUCT_MOD"><code>ATMSTRUCT_MOD</code></a>, <a href="../yrec-map/envprt_mod.f.html#def-ENVPRT_MOD"><code>ENVPRT_MOD</code></a>, <a href="../yrec-map/atmprt_mod.f.html#def-ATMPRT_MOD"><code>ATMPRT_MOD</code></a>, <a href="../yrec-map/pulse1_mod.f.html#def-PULSE1_MOD"><code>PULSE1_MOD</code></a>, <a href="../yrec-map/pulse2_mod.f.html#def-PULSE2_MOD"><code>PULSE2_MOD</code></a>; <code>/STCH/</code> became locals of <code>GETTAU</code>, <code>/JTEST/</code> and <code>/ENVCZ/</code> are no longer shared blocks</td>
+<td><code>EnvelopeSolution</code>; the store-file values of <code>/STCH/</code> to <code>StoreFile</code>; those of <code>/JTEST/</code> to <code>OverturnAnal</code></td>
+</tr>
+<tr>
+<td>Outputs at chosen ages</td>
+<td><a href="../yrec-map/acdpth_mod.f.html#def-ACDPTH_MOD"><code>ACDPTH_MOD</code></a></td>
+<td><code>AGEOUT</code>, <code>LCLCD</code> to <code>Config%io</code>; the acoustic results to <code>AcousticAnal</code></td>
+</tr>
+<tr>
+<td>Rotation work arrays</td>
+<td><a href="../yrec-map/intvar_mod.f.html#def-INTVAR_MOD"><code>INTVAR_MOD</code></a>, <a href="../yrec-map/vfact_mod.f.html#def-VFACT_MOD"><code>VFACT_MOD</code></a>, <a href="../yrec-map/taukh_mod.f.html#def-TAUKH_MOD"><code>TAUKH_MOD</code></a>, <a href="../yrec-map/difad2_mod.f.html#def-DIFAD2_MOD"><code>DIFAD2_MOD</code></a>, <a href="../yrec-map/difad3_mod.f.html#def-DIFAD3_MOD"><code>DIFAD3_MOD</code></a>, <a href="../yrec-map/egridder_mod.f.html#def-EGRIDDER_MOD"><code>EGRIDDER_MOD</code></a>; <code>/INTFAC/</code> (<code>FACI</code>) became an argument owned by <code>SECULR</code>; <code>/INTVR2/</code>, <code>/DIFAD4/</code>, <code>/DIFADDT/</code>, <code>/EGRIDCHI/</code> are no longer shared blocks</td>
+<td><code>RotationTransport</code> (private)</td>
+</tr>
+<tr>
+<td>Solver work arrays</td>
+<td><a href="../yrec-map/tridi_mod.f.html#def-TRIDI_MOD"><code>TRIDI_MOD</code></a>, <a href="../yrec-map/splin_mod.f.html#def-SPLIN_MOD"><code>SPLIN_MOD</code></a>, <a href="../yrec-map/egrid_mod.f.html#def-EGRID_MOD"><code>EGRID_MOD</code></a></td>
+<td>locals of <code>numerics</code> and <code>ChiGrid</code></td>
+</tr>
+<tr>
+<td>OPAL EOS 2006</td>
+<td><a href="../yrec-map/aeos06_mod.f.html#def-AEOS06_MOD"><code>AEOS06_MOD</code></a>, <a href="../yrec-map/eeeos06_mod.f.html#def-EEEOS06_MOD"><code>EEEOS06_MOD</code></a>, <a href="../yrec-map/eos06misc_mod.f.html#def-EOS06MISC_MOD"><code>EOS06MISC_MOD</code></a> (<code>/EEOS06/</code>, <code>/AAEOS06/</code>, <code>/BBEOS06/</code>, <code>/BEOS06/</code>); <code>/EEEEOS06/</code> became saved locals</td>
+<td><code>OpalEos</code> (its <code>OpalEosTable</code>)</td>
+</tr>
+<tr>
+<td>SCV EOS</td>
+<td><a href="../yrec-map/scveos_mod.f.html#def-SCVEOS_MOD"><code>SCVEOS_MOD</code></a></td>
+<td><code>ScvEos</code></td>
+</tr>
+<tr>
+<td>OPAL95 opacities</td>
+<td><a href="../yrec-map/llot95_mod.f.html#def-LLOT95_MOD"><code>LLOT95_MOD</code></a>, <a href="../yrec-map/llot95a_mod.f.html#def-LLOT95A_MOD"><code>LLOT95A_MOD</code></a>, <a href="../yrec-map/llot95e_mod.f.html#def-LLOT95E_MOD"><code>LLOT95E_MOD</code></a>, <a href="../yrec-map/op95interp_mod.f.html#def-OP95INTERP_MOD"><code>OP95INTERP_MOD</code></a> (<code>/OP95INDX/</code>, <code>/OP95FACT/</code>, <code>/OP95EXT/</code>)</td>
+<td><code>Opal95Opacity</code></td>
+</tr>
+<tr>
+<td>Pure-$Z$ opacity (LAOL 1989)</td>
+<td><a href="../yrec-map/zlaol_mod.f.html#def-ZLAOL_MOD"><code>ZLAOL_MOD</code></a>, <a href="../yrec-map/zslaol_mod.f.html#def-ZSLAOL_MOD"><code>ZSLAOL_MOD</code></a></td>
+<td><code>Laol89Opacity</code>, now the pure-$Z$ table only</td>
+</tr>
+<tr>
+<td>Alexander 2006 opacities</td>
+<td><a href="../yrec-map/alot06_mod.f.html#def-ALOT06_MOD"><code>ALOT06_MOD</code></a>, <a href="../yrec-map/alot06all_mod.f.html#def-ALOT06ALL_MOD"><code>ALOT06ALL_MOD</code></a>, <a href="../yrec-map/galot06_mod.f.html#def-GALOT06_MOD"><code>GALOT06_MOD</code></a></td>
+<td><code>Alex06Opacity</code></td>
+</tr>
+<tr>
+<td>Atmosphere tables</td>
+<td><a href="../yrec-map/atmos2_mod.f.html#def-ATMOS2_MOD"><code>ATMOS2_MOD</code></a>, <a href="../yrec-map/atmos2c_mod.f.html#def-ATMOS2C_MOD"><code>ATMOS2C_MOD</code></a>, <a href="../yrec-map/fac_mod.f.html#def-FAC_MOD"><code>FAC_MOD</code></a>, <a href="../yrec-map/alatm01_mod.f.html#def-ALATM01_MOD"><code>ALATM01_MOD</code></a>, <a href="../yrec-map/alatm02_mod.f.html#def-ALATM02_MOD"><code>ALATM02_MOD</code></a>, <a href="../yrec-map/alatm05_mod.f.html#def-ALATM05_MOD"><code>ALATM05_MOD</code></a></td>
+<td><code>KuruczAtmosphere</code>, <code>CastelliAtmosphere</code>, <code>AllardAtmosphere</code></td>
+</tr>
+</tbody>
+</table>
+<p>A module per block, as in the development branch (its <code>F90_CONVERSION_PLAN.md</code>; no <code>COMMON</code> statement is left since its issue 37, <a href="overview.html">Section 7.3</a>), is the first half of this map: it makes the data explicit but still global. The second half, done type by type in <a href="overview.html">Section 7.2</a>, moves each module's variables into the derived type above and deletes the module.</p>
+
+</main></body></html>

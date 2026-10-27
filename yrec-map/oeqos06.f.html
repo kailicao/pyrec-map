@@ -1,0 +1,283 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>oeqos06.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ oeqos06.f</span></header><main>
+<h1>oeqos06.f</h1>
+<p class='muted'>132 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/oeqos06.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>oeqos06.py</code>, 72 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> The interface to the 2006 OPAL equation of state ("LLP, October 17, 2006"), with the same arguments and outputs as <code>OEQOS</code> and <code>OEQOS01</code> (removed since <code>rp_1</code>); it is now the only OPAL equation of state. Its inline comments document the entries of <code>EOS</code> it uses: <code>EOS(5)</code> is $c_V = dE/dT_6$ at constant volume, <code>EOS(6)</code> is $\partial\log P/\partial\log\rho$ at constant $T_6$, <code>EOS(7)</code> is $\partial\log P/\partial\log T_6$ at constant $\rho$, <code>EOS(8)</code> is $\Gamma_1$, and <code>EOS(9)</code> is $\Gamma_2/(\Gamma_2-1)$.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> <code>T10</code> $=\log T$, <code>P10</code> $=\log P$, <code>XC</code>, <code>Z</code>; the tables read by <a href="../yrec-map/readcoeos06.f.html#def-READCOEOS06">READCOEOS06</a>.</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/eqstat2.f.html#def-EQSTAT2">EQSTAT2</a>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/rhoofp06.f.html#def-RHOOFP06">RHOOFP06</a>, <a href="../yrec-map/esac06.f.html#def-ESAC06">ESAC06</a> (<code>IORDER = 9</code>) and <a href="../yrec-map/mu.f.html#def-MU">MU</a>.</li>
+<li><strong>Outputs:</strong> $T$, $P$, $\log\rho$ and $\rho$, <code>BETA</code>, <code>BETAI</code>, <code>BETA14</code>, <code>RMU</code>, <code>AMU</code>, <code>EMU</code>, <code>QDT</code>, <code>QDP</code>, <code>QCP</code>, <code>DELA</code>, and the alternate return.</li>
+<li><strong>Modules:</strong> <code>EOS06MISC_MOD</code> (the result <code>EOS(10)</code>, formerly <code>/EEOS06/</code>; shared with ESAC06, RADSUB06, READCOEOS06, RHOOFP06, T6RINTEOS06 and <a href="../yrec-map/calcad.f.html#def-CALCAD">CALCAD</a>), <code>CONSTANTS_MOD</code> (<code>CGAS</code>), <code>IOUNITS_MOD</code> (<code>ISHORT</code>). The unused <code>/COMP/</code>, <code>/CTLIM/</code>, <code>/CONST1/</code> and <code>/CCOUT2/</code> of <code>rp_1</code> are no longer declared.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Density.</strong> From $T$ and $P$ (given as logs <code>T10</code>, <code>P10</code>), with $T_6 = T/10^6$ K and $P_{12} = P/10^{12}$ dyn cm⁻², the table routine finds $\rho(P, T, X)$ (<code>RHOOFP…</code>), with radiation included (<code>IRAD = 1</code>). A value $\le -998$ means failure.</li>
+<li>
+<p><strong>Thermodynamics.</strong> The table routine <code>ESAC…</code> fills the array <code>EOS</code> at $(X, T_6, \rho)$. From it:
+$$\texttt{QDP} = \left(\frac{\partial\ln\rho}{\partial\ln P}\right)_T = \frac{1}{\chi_\rho},\qquad \texttt{QDT} = \left(\frac{\partial\ln\rho}{\partial\ln T}\right)_P = -\frac{\chi_T}{\chi_\rho},$$
+$$c_P = 10^{6}\,\frac{c_V\,\Gamma_1}{\chi_\rho}\ \ (\texttt{QCP};\ c_V\ \text{per}\ 10^6\ \mathrm{K}\ \text{in the table}),\qquad \nabla_\mathrm{ad} = \frac{\Gamma_2 - 1}{\Gamma_2}\ \ (\texttt{DELA}),$$
+where $\chi_\rho = (\partial\ln P/\partial\ln\rho)_T$, $\chi_T = (\partial\ln P/\partial\ln T)_\rho$.</p>
+</li>
+<li>
+<p><strong>Radiation.</strong> $1-\beta = aT^4/(3P)$, coded as <code>BETA14</code> $= 2.521971383\times10^{-3}\,T_6^4/P_{12}$; <code>BETA</code> $=\beta$, <code>BETAI</code> $= 1/\beta$.</p>
+</li>
+<li><strong>Mean molecular weight.</strong> <code>RMU</code> $= \beta P/(\rho T)$; <a href="../yrec-map/mu.f.html#def-MU">MU</a> gives the ion and electron terms <code>AMU</code> and <code>EMU</code>; if <code>EMU</code> $\le 0$, it is set to zero and <code>AMU</code> $=$ <code>RMU</code>$/\mathcal{R}$.</li>
+</ol>
+<p>The alternate return (<code>RETURN 1</code>) tells the caller to fall back on another equation of state when the point is outside the table or the table fails.</p>
+<p><strong>Range.</strong> $0.00187 \le T_6 \le 200$.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused argument <code>ZTAB</code> removed from the calls to <code>RHOOFP06</code> and <code>ESAC06</code>.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>; the unused parameters <code>IVARX</code>, <code>CNVS</code> and <code>ZERO</code> removed (question 2 updated).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The pressure check.</strong> The check that the table reproduces the input pressure is commented out (as it was in <code>OEQOS01</code>, while <code>OEQOS</code> stopped on it; both removed since <code>rp_1</code>).</li>
+<li><strong>Unused parameters.</strong> <code>MX</code>, <code>MV</code>, <code>NR</code>, <code>NT</code> (the table's dimensions; <code>NT = 197</code> here, 191 in <code>OEQOS01</code> at <code>rp_1</code>; <code>MV</code> sized <code>/EEOS06/</code>'s <code>EOS</code>, now in <code>EOS06MISC_MOD</code>) are declared but not used in this routine, and <code>ZTAB</code> is set but, since KC's change, no longer passed on.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+2006 OPAL Equation of State
+
+LLP   October 17, 2006
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+Routines associated with 2001 OPAL EOS
+
+SUBROUTINE OEOS06
+SUBROUTINE ESAC06
+SUBROUTINE T6RINTEOS06
+SUBROUTINE READCOEOS06
+FUNCTION QUADEOS06
+FUNCTION GMASS06
+SUBROUTINE RADSUB06
+FUNCTION RHOOFP06
+SUBROUTINE EQBOUND06
+SUBROUTINE MU is also used
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+OEQOS06
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-OEQOS06'>OEQOS06</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-OEQOS06'><h3><span class='kind'>subroutine</span>OEQOS06</h3>
+<p class='muted'>lines 30–132 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/oeqos06.f#L30-L132'>GitHub</a></p>
+<pre>SUBROUTINE OEQOS06(T10,T,P10,P,D10,D,XC,Z,BETA,BETAI,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+2006 OPAL Equation of State
+
+LLP   October 17, 2006
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+Routines associated with 2001 OPAL EOS
+
+SUBROUTINE OEOS06
+SUBROUTINE ESAC06
+SUBROUTINE T6RINTEOS06
+SUBROUTINE READCOEOS06
+FUNCTION QUADEOS06
+FUNCTION GMASS06
+SUBROUTINE RADSUB06
+FUNCTION RHOOFP06
+SUBROUTINE EQBOUND06
+SUBROUTINE MU is also used
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+OEQOS06
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/eos06misc_mod.f.html#def-EOS06MISC_MOD'>EOS06MISC_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/esac06.f.html#def-ESAC06'>ESAC06</a> <span class='muted'>(esac06.f)</span></li>
+<li><a href='../yrec-map/mu.f.html#def-MU'>MU</a> <span class='muted'>(mu.f)</span></li>
+<li><a href='../yrec-map/rhoofp06.f.html#def-RHOOFP06'>RHOOFP06</a> <span class='muted'>(rhoofp06.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/eqstat2.f.html#def-EQSTAT2'>EQSTAT2</a> <span class='muted'>(eqstat2.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">30</span>      SUBROUTINE OEQOS06(T10,T,P10,P,D10,D,XC,Z,BETA,BETAI,
+<span class="ln">31</span>     1 BETA14,RMU,AMU,EMU,QDT,QDP,QCP,DELA,*)
+<span class="ln">32</span>C 10/14/26 MHP via Claude
+<span class="ln">33</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">34</span>      USE CONSTANTS_MOD
+<span class="ln">35</span>C 10/14/26 MHP via Claude
+<span class="ln">36</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">37</span>      USE IOUNITS_MOD
+<span class="ln">38</span>C 10/20/26 MHP via Claude
+<span class="ln">39</span>C code changed to convert COMMON/EOS06MISC/ into
+<span class="ln">40</span>C EOS06MISC_MOD.
+<span class="ln">41</span>      USE EOS06MISC_MOD
+<span class="ln">42</span>C 10/20/26 MHP via Claude
+<span class="ln">43</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">44</span>C explicit declarations.
+<span class="ln">45</span>      IMPLICIT NONE
+<span class="ln">46</span>      REAL*8 AMU,BETA,BETA14,BETAI,D,D10,DELA,EMU,P,P10,P12,QCP,QDP,QDT,
+<span class="ln">47</span>     *       R,RHOOFP06,RMU,RMU2,T,T10,T6,X,XC,Z,ZTAB
+<span class="ln">48</span>      INTEGER IORDER,IRAD,MV,MX,NR,NT
+<span class="ln">49</span>
+<span class="ln">50</span>
+<span class="ln">51</span>      parameter (mx=5,mv=10,nr=169,nt=197)
+<span class="ln">52</span>
+<span class="ln">53</span>C       DIMENSION ATOMWT(4)
+<span class="ln">54</span>C 10/13/26 MHP via Claude: removed the unused COMMON/COMP/ declaration
+<span class="ln">55</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">56</span>C 10/13/26 MHP via Claude: removed the unused COMMON/NMLPAR/ declaration
+<span class="ln">57</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">58</span>C 10/13/26 MHP via Claude
+<span class="ln">59</span>C code changed to drop COMMON/CTLIM/, declared here but never used.
+<span class="ln">60</span>C 9/25/26 MHP via Claude
+<span class="ln">61</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">62</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">63</span>C 9/25/26 MHP via Claude
+<span class="ln">64</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">65</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">66</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">67</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">68</span>C COMMON/IOUNITS/
+<span class="ln">69</span>
+<span class="ln">70</span>C 10/9/26 MHP via Claude
+<span class="ln">71</span>C code changed to merge COMMON/EEOS06/, COMMON/AAEOS06/, COMMON/BBEOS06/,
+<span class="ln">72</span>C and COMMON/BEOS06/ into COMMON/EOS06MISC/ (see esac06.f for the full
+<span class="ln">73</span>C rationale).
+<span class="ln">74</span>
+<span class="ln">75</span>C      DATA NZP1/12/
+<span class="ln">76</span>C      DATA ATOMWT/0.9921D0,0.24975D0,0.08322D0,0.4995D0/
+<span class="ln">77</span>
+<span class="ln">78</span>      SAVE
+<span class="ln">79</span>C
+<span class="ln">80</span>      iorder=9  ! gives all 1st and 2nd order data. See instructions
+<span class="ln">81</span>c                  in esac01.
+<span class="ln">82</span>c     NOTE: irad=0 does not add radiation; irad=1 adds radiation
+<span class="ln">83</span>      irad=1     ! does add radiation  corrections
+<span class="ln">84</span>
+<span class="ln">85</span>      T=10.0D0**T10
+<span class="ln">86</span>      P=10.0D0**P10
+<span class="ln">87</span>      T6=T/1.0D6
+<span class="ln">88</span>      P12=P/1.0D12
+<span class="ln">89</span>      IF(T6.LT.0.001870D0.OR.T6.GT.200.0D0)RETURN 1
+<span class="ln">90</span>      X=XC
+<span class="ln">91</span>      ZTAB=Z
+<span class="ln">92</span>
+<span class="ln">93</span>C       R=RHOOFP06(X,ZTAB,T6,P12,IRAD)  ! KC 2025-05-31
+<span class="ln">94</span>      R=<a href="../yrec-map/rhoofp06.f.html#def-RHOOFP06" title="RHOOFP06 in rhoofp06.f">RHOOFP06</a>(X,T6,P12,IRAD)
+<span class="ln">95</span>      IF(R.LE.-998.0D0)THEN
+<span class="ln">96</span>         RETURN 1
+<span class="ln">97</span>      ENDIF
+<span class="ln">98</span>      D=R
+<span class="ln">99</span>      D10=DLOG10(D)
+<span class="ln">100</span>
+<span class="ln">101</span>C       CALL ESAC06(X,ZTAB,T6,R,IORDER,IRAD,*999)  ! KC 2025-05-31
+<span class="ln">102</span>      CALL <a href="../yrec-map/esac06.f.html#def-ESAC06" title="ESAC06 in esac06.f">ESAC06</a>(X,T6,R,IORDER,IRAD,*999)
+<span class="ln">103</span>
+<span class="ln">104</span>c      IF(ABS((P12-EOS(1))/P12).GT.0.5D-6)THEN
+<span class="ln">105</span>c         WRITE(ISHORT,*)&#x27;***** RUN TERMINATED --ERROR IN OEQOS06 PTOT&#x27;
+<span class="ln">106</span>c         WRITE(ISHORT,*) &#x27;P12,EOS(1) Differ: P12,EOS(1),T6,R,X,ZTAB=&#x27;,
+<span class="ln">107</span>c     *         P12,EOS(1),T6,R,X,ZTAB
+<span class="ln">108</span>c         STOP &#x27; ERROR IN OEQOS06 PTOT&#x27;
+<span class="ln">109</span>c      ENDIF
+<span class="ln">110</span>
+<span class="ln">111</span>      QDP=1.0D0/EOS(6)                ! O2006 EOS(6) is dlogP/dlogRho at const T6
+<span class="ln">112</span>      QDT= -EOS(7)/ EOS(6)            ! O2006 EOS(7) is dlogp/dlogT6 at const Rho
+<span class="ln">113</span>      QCP=1.0D6*EOS(5)*EOS(8)/EOS(6)  ! O2006 EOS(5) is the specific heat. dE/dT6
+<span class="ln">114</span>                                      !              at const Vol
+<span class="ln">115</span>                                      ! O2006 EOS(8) is gamma1
+<span class="ln">116</span>      DELA=1.0D0/EOS(9)               ! O2006 EOS(9) is gamma2/(gamma2-1)
+<span class="ln">117</span>
+<span class="ln">118</span>      BETA14=(2.521971383D-3*T6*T6)*(T6*T6/P12)
+<span class="ln">119</span>      BETA=1.0D0-BETA14
+<span class="ln">120</span>      BETAI=1.0D0/BETA
+<span class="ln">121</span>      RMU=P*BETA/(D*T)
+<span class="ln">122</span>      CALL <a href="../yrec-map/mu.f.html#def-MU" title="MU in mu.f">MU</a>(T,P,D,XC,Z,RMU2,AMU,EMU,BETA)
+<span class="ln">123</span>      IF(EMU.LE.0.0D0)THEN
+<span class="ln">124</span>      EMU=0.0D0
+<span class="ln">125</span>      AMU=RMU/CGAS-EMU
+<span class="ln">126</span>      ENDIF
+<span class="ln">127</span>
+<span class="ln">128</span>      RETURN
+<span class="ln">129</span>  999 WRITE(ISHORT, *)&#x27;WARNNING... OPAL TBL FAIL&#x27;
+<span class="ln">130</span>
+<span class="ln">131</span>      RETURN 1
+<span class="ln">132</span>      END</pre></details>
+<details class='py' id='py-oeqos06'><summary>Python version: oeqos06</summary><pre class='doc'>From log T and log P, find the density in the 2006 OPAL tables
+(RHOOFP06, radiation included), the thermodynamic derivatives (ESAC06),
+the radiation pressure fraction and the mean-molecular-weight terms
+(MU). Fails (alt1) outside 0.00187 &lt;= T6 &lt;= 200 or where the table
+fails, so that the caller falls back on another equation of state.
+
+Translates: oeqos06.f#OEQOS06 (09c3b9b)
+
+Arguments: t10 = log T, p10 = log P, the composition xc (X) and z; the
+others are passed in with any value.
+
+Returns (t, p, d10, d, beta, betai, beta14, rmu, amu, emu, qdt, qdp,
+qcp, dela, alt1): T and P unlogged, log rho and rho, beta = 1 - aT^4/3P,
+1/beta and 1 - beta, the mean-molecular-weight terms, dln rho/dln T at
+constant P, dln rho/dln P at constant T, c_P, nabla_ad, and alt1, True
+when the Fortran takes its alternate return (RETURN 1).</pre><pre class='src'><span class="ln">17</span>def oeqos06(t10, t, p10, p, d10, d, xc, z, beta, betai, beta14, rmu, amu,
+<span class="ln">18</span>            emu, qdt, qdp, qcp, dela):
+<span class="ln">19</span>    &quot;&quot;&quot;From log T and log P, find the density in the 2006 OPAL tables
+<span class="ln">20</span>    (RHOOFP06, radiation included), the thermodynamic derivatives (ESAC06),
+<span class="ln">21</span>    the radiation pressure fraction and the mean-molecular-weight terms
+<span class="ln">22</span>    (MU). Fails (alt1) outside 0.00187 &lt;= T6 &lt;= 200 or where the table
+<span class="ln">23</span>    fails, so that the caller falls back on another equation of state.
+<span class="ln">24</span>
+<span class="ln">25</span>    Translates: oeqos06.f#OEQOS06 (09c3b9b)
+<span class="ln">26</span>
+<span class="ln">27</span>    Arguments: t10 = log T, p10 = log P, the composition xc (X) and z; the
+<span class="ln">28</span>    others are passed in with any value.
+<span class="ln">29</span>
+<span class="ln">30</span>    Returns (t, p, d10, d, beta, betai, beta14, rmu, amu, emu, qdt, qdp,
+<span class="ln">31</span>    qcp, dela, alt1): T and P unlogged, log rho and rho, beta = 1 - aT^4/3P,
+<span class="ln">32</span>    1/beta and 1 - beta, the mean-molecular-weight terms, dln rho/dln T at
+<span class="ln">33</span>    constant P, dln rho/dln P at constant T, c_P, nabla_ad, and alt1, True
+<span class="ln">34</span>    when the Fortran takes its alternate return (RETURN 1).
+<span class="ln">35</span>    &quot;&quot;&quot;
+<span class="ln">36</span>    def out(alt1):
+<span class="ln">37</span>        return (t, p, d10, d, beta, betai, beta14, rmu, amu, emu, qdt, qdp,
+<span class="ln">38</span>                qcp, dela, alt1)
+<span class="ln">39</span>
+<span class="ln">40</span>    iorder = 9   # all first and second order data
+<span class="ln">41</span>    irad = 1     # adds radiation corrections
+<span class="ln">42</span>    t = 10.0**t10
+<span class="ln">43</span>    p = 10.0**p10
+<span class="ln">44</span>    t6 = t / 1.0e6
+<span class="ln">45</span>    p12 = p / 1.0e12
+<span class="ln">46</span>    if t6 &lt; 0.001870 or t6 &gt; 200.0:
+<span class="ln">47</span>        return out(True)                                 # RETURN 1
+<span class="ln">48</span>    x = xc
+<span class="ln">49</span>    ztab = z
+<span class="ln">50</span>    r = rhoofp06(x, t6, p12, irad)
+<span class="ln">51</span>    if r &lt;= -998.0:
+<span class="ln">52</span>        return out(True)                                 # RETURN 1
+<span class="ln">53</span>    d = r
+<span class="ln">54</span>    d10 = math.log10(d)
+<span class="ln">55</span>    if esac06(x, t6, r, iorder, irad):
+<span class="ln">56</span>        iounits_mod.write(iounits_mod.ishort, &quot; WARNNING... OPAL TBL FAIL&quot;)
+<span class="ln">57</span>        return out(True)                                 # label 999
+<span class="ln">58</span>    # Question (see the page): the pressure check is commented out.
+<span class="ln">59</span>    eos = eos06misc_mod.eos
+<span class="ln">60</span>    qdp = 1.0 / eos[6]                 # EOS(6): dlogP/dlogRho at const T6
+<span class="ln">61</span>    qdt = -eos[7] / eos[6]             # EOS(7): dlogP/dlogT6 at const Rho
+<span class="ln">62</span>    qcp = 1.0e6 * eos[5] * eos[8] / eos[6]   # EOS(5): dE/dT6, EOS(8): Gamma1
+<span class="ln">63</span>    dela = 1.0 / eos[9]                # EOS(9): Gamma2/(Gamma2-1)
+<span class="ln">64</span>    beta14 = (2.521971383e-3 * t6 * t6) * (t6 * t6 / p12)
+<span class="ln">65</span>    beta = 1.0 - beta14
+<span class="ln">66</span>    betai = 1.0 / beta
+<span class="ln">67</span>    rmu = p * beta / (d * t)
+<span class="ln">68</span>    rmu2, amu, emu = mu(t, p, d, xc, z, 0.0, amu, emu, beta)
+<span class="ln">69</span>    if emu &lt;= 0.0:
+<span class="ln">70</span>        emu = 0.0
+<span class="ln">71</span>        amu = rmu / constants_mod.cgas - emu
+<span class="ln">72</span>    return out(False)</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked against the code (the entries, the range, <code>NT = 197</code>, the commented-out pressure check). Nothing to fix.</p>
+<p>Revised: no change.</p></div></details>
+</main></body></html>

@@ -1,0 +1,415 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>convec.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ convec.f</span></header><main>
+<h1>convec.f</h1>
+<p class='muted'>209 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/convec.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>convec.py</code>, 139 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file finds the convective and radiative regions of a model: the boundaries of each convection zone, without and with overshoot, the edge of the convective core (<code>JCORE</code>) and the base of the convective envelope (<code>JENV</code>), and the radiative regions between them. Its header stresses that overshoot here means "overmixing": overshoot shells are mixed with the convection zone but keep the radiative temperature gradient.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>LC</code> (convective or not, per shell, from <a href="../yrec-map/coefft.f.html#def-COEFFT">COEFFT</a> via the structure solution), <code>M</code>, and the model (<code>HCOMP</code>, <code>HD</code>, <code>HP</code>, <code>HR</code>, <code>HS</code>, <code>HT</code>), which only <a href="../yrec-map/oversh.f.html#def-OVERSH">OVERSH</a> uses; the overshoot switches <code>LOVSTC</code>, <code>LOVSTE</code>, <code>LOVSTM</code> (core, envelope, intermediate zones) in <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a>; the unit <code>ISHORT</code> from <a href="../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD"><code>IOUNITS_MOD</code></a>.</li>
+<li><strong>Who calls it:</strong> the main program (<a href="../yrec-map/main.f.html#def-_file_level_">main.f</a>), <a href="../yrec-map/mix.f.html#def-MIX">MIX</a>, <a href="../yrec-map/getw.f.html#def-GETW">GETW</a> and <a href="../yrec-map/ovrot.f.html#def-OVROT">OVROT</a>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/oversh.f.html#def-OVERSH">OVERSH</a>, which moves the zone edges outward by the overshoot distance.</li>
+<li><strong>Outputs:</strong> <code>MXZON0</code>, <code>NZONE0</code> (the zones without overshoot), <code>MXZONE</code>, <code>NZONE</code> (with overshoot, after merging zones that overlap), <code>MRZONE</code>, <code>NRZONE</code> (the radiative regions), <code>JCORE</code>, <code>JENV</code> (both before overshoot). <a href="../yrec-map/mix.f.html#def-MIX">MIX</a> uses the zones to treat burning in radiative and convective regions differently; <a href="../yrec-map/ovrot.f.html#def-OVROT">OVROT</a> (which sets the flags <code>LCZ</code> from them), <a href="../yrec-map/rotmix.f.html#def-ROTMIX">ROTMIX</a> and <a href="../yrec-map/midmod.f.html#def-MIDMOD">MIDMOD</a> also loop over the radiative regions; <code>JENV</code> is used throughout the code.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Scan the shells for runs of convective shells; a run of a single shell is ignored (the test <code>I1.NE.I-1</code>). At most 11 zones: as soon as the 11th is stored, the routine prints "TOO MANY MIX ZONES" (whether or not more follow) and stops the scan.</li>
+<li>No zone: <code>JCORE = 1</code>, <code>JENV = M</code>, one radiative region. One zone covering the whole star: fully convective, <code>JCORE = JENV = 1</code>, <code>NRZONE = 0</code> (<code>MRZONE</code> is left as it was; every reader loops from 1 to <code>NRZONE</code>, so none reads it), and overshoot and merging are skipped.</li>
+<li><code>JCORE</code> is the top of a zone starting at shell 1; <code>JENV</code> the bottom of a zone ending at shell <code>M</code>.</li>
+<li>If any overshoot switch is on, call OVERSH, then merge zones whose (overshot) edges now meet, with a message to <code>ISHORT</code>.</li>
+<li>The radiative regions: below the first zone, between zones, above the last.</li>
+</ol>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>An index error.</strong> For a radiative region above the last convection zone, the code sets <code>MRZONE(1,2) = M</code> instead of <code>MRZONE(NRZONE,2) = M</code>. When that region is the only one (a convective core under a radiative envelope), the two are the same element and nothing goes wrong. When it is the second or a later one (a radiative surface and at least two radiative regions, e.g. a radiative core, a thin convection zone and a radiative surface), the top region's upper edge keeps an old value and the first region's upper edge becomes <code>M</code>. <a href="../yrec-map/mix.f.html#def-MIX">MIX</a> then burns the shells of the convection zones above the first region one by one, as radiative, before it treats each zone as a unit, and ROTMIX and MIDMOD treat those shells as radiative too (OVROT sets the convective flags after the radiative ones, so its <code>LCZ</code> comes out right). This looks like a bug. KC's check <code>I .GT. 0</code> in <a href="../yrec-map/ovrot.f.html#def-OVROT">OVROT</a> (2025-05-30, "to avoid runtime error") guards a loop over the same <code>MRZONE</code>, and may be related.</li>
+<li><strong>The header's wording.</strong> It says <code>JCORE</code> and <code>JENV</code> are "the edges of the surface and central convection zones respectively"; the code makes <code>JCORE</code> the core's edge and <code>JENV</code> the envelope's base (the reverse order).</li>
+<li><strong>One-shell zones.</strong> A single convective shell is treated as radiative. Is this a deliberate filter against noise in <code>LC</code>?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+CONVEC
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-CONVEC'>CONVEC</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-CONVEC'><h3><span class='kind'>subroutine</span>CONVEC</h3>
+<p class='muted'>lines 4–209 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/convec.f#L4-L209'>GitHub</a></p>
+<pre>SUBROUTINE CONVEC(HCOMP,HD,HP,HR,HS,HT,LC,M,MRZONE,MXZONE,MXZON0,</pre>
+<div class='notes'><p>Finds the convection zones (without and with overshoot, merging overlaps), the radiative regions between them, and <code>JCORE</code>, <code>JENV</code>.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+CONVEC
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/oversh.f.html#def-OVERSH'>OVERSH</a> <span class='muted'>(oversh.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/getw.f.html#def-GETW'>GETW</a> <span class='muted'>(getw.f)</span></li>
+<li><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span></li>
+<li><a href='../yrec-map/mix.f.html#def-MIX'>MIX</a> <span class='muted'>(mix.f)</span> ×2</li>
+<li><a href='../yrec-map/ovrot.f.html#def-OVROT'>OVROT</a> <span class='muted'>(ovrot.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE CONVEC(HCOMP,HD,HP,HR,HS,HT,LC,M,MRZONE,MXZONE,MXZON0,
+<span class="ln">5</span>     *                  JCORE,JENV,NRZONE,NZONE,NZONE0)
+<span class="ln">6</span>C 10/15/26 MHP via Claude
+<span class="ln">7</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">8</span>C PARAMETER(JSON=5000) here.
+<span class="ln">9</span>      USE DIMENSIONS_MOD
+<span class="ln">10</span>C 10/14/26 MHP via Claude
+<span class="ln">11</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">12</span>      USE NMLPAR_MOD
+<span class="ln">13</span>C 10/14/26 MHP via Claude
+<span class="ln">14</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">15</span>      USE IOUNITS_MOD
+<span class="ln">16</span>C 10/20/26 MHP via Claude
+<span class="ln">17</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">18</span>C explicit declarations.
+<span class="ln">19</span>      IMPLICIT NONE
+<span class="ln">20</span>      REAL*8 HCOMP,HD,HP,HR,HS,HT
+<span class="ln">21</span>      INTEGER I,I1,J,J2,JCORE,JENV,K,K1,M,MRZONE,MXZON0,MXZONE,NRZONE,
+<span class="ln">22</span>     *       NZONE,NZONE0
+<span class="ln">23</span>      LOGICAL*4 LC,LCC
+<span class="ln">24</span>C 10/12/26 MHP via Claude
+<span class="ln">25</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">26</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">27</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">28</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">29</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">30</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">31</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">32</span>C
+<span class="ln">33</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">34</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">35</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">36</span>C 10/13/26 MHP via Claude: removed the unused COMMON/DPMIX/ declaration
+<span class="ln">37</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">38</span>C 9/25/26 MHP via Claude
+<span class="ln">39</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">40</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">41</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">42</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">43</span>C COMMON/IOUNITS/
+<span class="ln">44</span>
+<span class="ln">45</span>      DIMENSION HCOMP(15,JSON),HD(JSON),HP(JSON),HR(JSON),HS(JSON),
+<span class="ln">46</span>     *          HT(JSON),LC(JSON),MRZONE(13,2),MXZONE(12,2),MXZON0(12,2)
+<span class="ln">47</span>      SAVE
+<span class="ln">48</span>C CONVEC DETERMINES THE BOUNDARIES OF CONVECTIVE REGIONS WITH AND
+<span class="ln">49</span>C    WITHOUT OVERSHOOT.
+<span class="ln">50</span>C *IMPORTANT NOTE*
+<span class="ln">51</span>C IN THE EVOLUTION CODE, OVERSHOOT IS ASSUMED TO BE OVERMIXING :
+<span class="ln">52</span>C    SHELLS IN THE OVERSHOOT REGION ARE MIXED WITH THE ADJACENT CONVECTION
+<span class="ln">53</span>C    ZONE, BUT STILL USE THE RADIATIVE TEMPERATURE GRADIENT.
+<span class="ln">54</span>C
+<span class="ln">55</span>C INPUT VARIABLES :
+<span class="ln">56</span>C
+<span class="ln">57</span>C HCOMP,HD,HP,HR,HS,HT : MASS FRACTIONS OF SPECIES, AND RUN OF
+<span class="ln">58</span>C    DENSITY,PRESSURE,RADIUS, MASS, AND TEMPERATURE RESPECTIVELY.
+<span class="ln">59</span>C    USED TO DETERMINE THE EXTENT OF OVERSHOOT REGIONS.
+<span class="ln">60</span>C LC : FLAG THAT IS T IF A SHELL IS CONVECTIVE AND F IF IT IS RADIATIVE.
+<span class="ln">61</span>C LOVSTC,LOVSTE,LOVSTM : FLAGS SET T IF OVERSHOOT IS TO BE COMPUTED FOR
+<span class="ln">62</span>C    CENTRAL, SURFACE, AND INTERMEDIATE CONVECTION ZONES RESPECTIVELY.
+<span class="ln">63</span>C M : NUMBER OF SHELLS IN THE MODEL.
+<span class="ln">64</span>C
+<span class="ln">65</span>C OUTPUT VARIABLES :
+<span class="ln">66</span>C
+<span class="ln">67</span>C JCORE, JENV : IDS OF THE EDGES OF THE SURFACE AND CENTRAL CONVECTION
+<span class="ln">68</span>C    ZONES RESPECTIVELY. JCORE=1 AND JENV=M IF THE ZONES IN QUESTION
+<span class="ln">69</span>C    DON&#x27;T EXIST.
+<span class="ln">70</span>C MXZON0,MXZONE : ARRAYS GIVING THE STARTING AND ENDING SHELLS IN MIXED
+<span class="ln">71</span>C    REGIONS.  MXZON0 REFERS TO THE BOUNDARIES WITHOUT OVERSHOOT, AND
+<span class="ln">72</span>C    MXZONE REFERS TO THE BOUNDARIES WITH OVERSHOOT.  THE ZONES ARE STORED
+<span class="ln">73</span>C    IN PAIRS, I.E. ELEMENTS (3,1) AND (3,2) ARE THE FIRST AND LAST
+<span class="ln">74</span>C    MIXED SHELLS IN THE THIRD CONVECTION ZONE OUT FROM THE CENTER.
+<span class="ln">75</span>C NZONE,NZONE0 : NUMBER OF DISTINCT MIXED REGIONS WITH AND WITHOUT
+<span class="ln">76</span>C    OVERSHOOT.  THEY CAN BE DIFFERENT BECAUSE OVERSHOOT CAN CAUSE TWO
+<span class="ln">77</span>C    NEARBY CONVECTION ZONES TO MERGE.
+<span class="ln">78</span>C MRZONE,NRZONE : THE LOCATIONS OF RADIATIVE REGIONS AND THE NUMBER OF
+<span class="ln">79</span>C    CONTIGUOUS RADIATIVE REGIONS.  NEEDED BECAUSE MIX TREATS BURNING
+<span class="ln">80</span>C    IN RADIATIVE AND CONVECTIVE REGIONS DIFFERENTLY.  THESE ARE DEFINED IN
+<span class="ln">81</span>C    THE SAME WAY AS THE ANALOGOUS CONVECTIVE VARIABLES.
+<span class="ln">82</span>C
+<span class="ln">83</span>C LOCATE BOUNDARIES OF STANDARD CONVECTION ZONES
+<span class="ln">84</span>
+<span class="ln">85</span>      J = 1
+<span class="ln">86</span>      LCC = .FALSE.
+<span class="ln">87</span>      LC(M+1) = .FALSE.
+<span class="ln">88</span>      DO 11 I = 1,M + 1
+<span class="ln">89</span>         IF(.NOT.LC(I)) GO TO 10
+<span class="ln">90</span>C CONVECTION ZONE
+<span class="ln">91</span>         IF(LCC) GO TO 11
+<span class="ln">92</span>C START OF CONVECTION ZONE
+<span class="ln">93</span>         LCC = .TRUE.
+<span class="ln">94</span>         I1 = I
+<span class="ln">95</span>         GO TO 11
+<span class="ln">96</span>   10    IF(.NOT.LCC) GO TO 11
+<span class="ln">97</span>C   END OF CONVECTION ZONE
+<span class="ln">98</span>         LCC = .FALSE.
+<span class="ln">99</span>         IF(I1.NE.I-1)THEN
+<span class="ln">100</span>            MXZONE(J,1) = I1
+<span class="ln">101</span>            MXZONE(J,2) = I - 1
+<span class="ln">102</span>            J = J + 1
+<span class="ln">103</span>         ENDIF
+<span class="ln">104</span>         IF(J.LT.12) GO TO 11
+<span class="ln">105</span>         WRITE(ISHORT,661)
+<span class="ln">106</span>  661    FORMAT(&#x27; -----TOO MANY MIX ZONES&#x27;)
+<span class="ln">107</span>         GO TO 12
+<span class="ln">108</span>   11 CONTINUE
+<span class="ln">109</span>   12 CONTINUE
+<span class="ln">110</span>
+<span class="ln">111</span>C MHP 5/91 LOGIC CHANGE TO AVOID PROBLEMS IF NO CZ IN MODEL(NZONE=0)
+<span class="ln">112</span>C SKIP REST OF SR IF THERE ARE NO CONVECTION ZONES.
+<span class="ln">113</span>      IF(J.EQ.1)THEN
+<span class="ln">114</span>         JCORE = 1
+<span class="ln">115</span>         JENV = M
+<span class="ln">116</span>         NZONE0 = 0
+<span class="ln">117</span>         NZONE = 0
+<span class="ln">118</span>         NRZONE = 1
+<span class="ln">119</span>         MRZONE(1,1) = 1
+<span class="ln">120</span>         MRZONE(1,2) = M
+<span class="ln">121</span>         GOTO 9999
+<span class="ln">122</span>      ENDIF
+<span class="ln">123</span>      NZONE = J-1
+<span class="ln">124</span>      DO 20 I = 1,NZONE
+<span class="ln">125</span>         MXZON0(I,1) = MXZONE(I,1)
+<span class="ln">126</span>         MXZON0(I,2) = MXZONE(I,2)
+<span class="ln">127</span>   20 CONTINUE
+<span class="ln">128</span>      NZONE0 = NZONE
+<span class="ln">129</span>C FIND OUTER EDGE OF THE CONVECTIVE CORE (JCORE) AND INNER EDGE OF THE
+<span class="ln">130</span>C CONVECTIVE ENVELOPE (JENV) BEFORE OVERSHOOT.
+<span class="ln">131</span>      IF(MXZONE(1,1).EQ.1) THEN
+<span class="ln">132</span>C CENTRAL CONVECTION ZONE EXISTS IF TRUE.
+<span class="ln">133</span>         IF(MXZONE(1,2).EQ.M)THEN
+<span class="ln">134</span>C FULLY CONVECTIVE STAR IF TRUE.
+<span class="ln">135</span>            JCORE = 1
+<span class="ln">136</span>            JENV = 1
+<span class="ln">137</span>            NRZONE = 0
+<span class="ln">138</span>            GOTO 9999
+<span class="ln">139</span>         ELSE
+<span class="ln">140</span>            JCORE = MXZONE(1,2)
+<span class="ln">141</span>         ENDIF
+<span class="ln">142</span>      ELSE
+<span class="ln">143</span>         JCORE = 1
+<span class="ln">144</span>      ENDIF
+<span class="ln">145</span>      IF(MXZONE(NZONE,2).EQ.M) THEN
+<span class="ln">146</span>C SURFACE CONVECTION ZONE EXISTS IF TRUE.
+<span class="ln">147</span>         JENV = MXZONE(NZONE,1)
+<span class="ln">148</span>      ELSE
+<span class="ln">149</span>         JENV = M
+<span class="ln">150</span>      ENDIF
+<span class="ln">151</span>C  ADD CONVECTIVE OVERSHOOT IF NEEDED; THE SIZE OF THE OVERSHOOT REGION IS
+<span class="ln">152</span>C  COMPUTED AND THE EDGES IN MXZONE ARE MOVED TO THE EDGES OF THE
+<span class="ln">153</span>C  OVERSHOOT REGIONS.
+<span class="ln">154</span>      IF(.NOT.LOVSTC .AND. .NOT.LOVSTE .AND. .NOT.LOVSTM) GOTO 100
+<span class="ln">155</span>      CALL <a href="../yrec-map/oversh.f.html#def-OVERSH" title="OVERSH in oversh.f">OVERSH</a>(HCOMP,HD,HP,HR,HS,HT,M,MXZONE,MXZON0,NZONE)
+<span class="ln">156</span>C  CHECK FOR MERGERS OF NEARBY CONVECTION ZONES CAUSED BY OVERSHOOT.
+<span class="ln">157</span>      IF(NZONE.EQ.1)GOTO 100
+<span class="ln">158</span>      J = 1
+<span class="ln">159</span>   85 CONTINUE
+<span class="ln">160</span>C  CHECK IF &#x27;TOP&#x27; OF ONE REGION IS ABOVE &#x27;BOTTOM&#x27; OF THE NEXT ONE.
+<span class="ln">161</span>      IF(MXZONE(J,2).GE.MXZONE(J+1,1))THEN
+<span class="ln">162</span>C  IF THIS OCCURS, TWO CONVECTION ZONES HAVE MERGED.
+<span class="ln">163</span>         WRITE(ISHORT,93)((MXZONE(K,K1),K1=1,2),K=J,J+1),MXZONE(J,1),
+<span class="ln">164</span>     *              MXZONE(J+1,2)
+<span class="ln">165</span>   93    FORMAT(2X,&#x27;CONVECTION ZONES MERGED DUE TO OVERSHOOT&#x27;/2X,
+<span class="ln">166</span>     *          &#x27;OLD&#x27;,2(&#x27;[&#x27;,I3,&#x27;-&#x27;,I3,&#x27;]&#x27;),&#x27; NEW&#x27;,&#x27;[&#x27;,I3,&#x27;-&#x27;,I3,&#x27;]&#x27;)
+<span class="ln">167</span>         MXZONE(J+1,1) = MXZONE(J,1)
+<span class="ln">168</span>         DO 90 K = J,NZONE-1
+<span class="ln">169</span>            DO 95 J2 = 1,2
+<span class="ln">170</span>               MXZONE(K,J2) = MXZONE(K+1,J2)
+<span class="ln">171</span>   95       CONTINUE
+<span class="ln">172</span>   90    CONTINUE
+<span class="ln">173</span>         NZONE = NZONE - 1
+<span class="ln">174</span>         IF(J.LE.NZONE-1)THEN
+<span class="ln">175</span>            GOTO 85
+<span class="ln">176</span>         ELSE
+<span class="ln">177</span>            GOTO 100
+<span class="ln">178</span>         ENDIF
+<span class="ln">179</span>      ENDIF
+<span class="ln">180</span>      J = J + 1
+<span class="ln">181</span>      IF(J.LE.NZONE-1) GOTO 85
+<span class="ln">182</span>  100 CONTINUE
+<span class="ln">183</span>C NOW DETERMINE THE NUMBER OF RADIATIVE REGIONS.
+<span class="ln">184</span>C CHECK FOR A RADIATIVE REGION BELOW THE FIRST CONVECTION ZONE.
+<span class="ln">185</span>      IF(MXZONE(1,1).GT.1)THEN
+<span class="ln">186</span>         NRZONE = 1
+<span class="ln">187</span>         MRZONE(1,1) = 1
+<span class="ln">188</span>         MRZONE(1,2) = MXZONE(1,1)-1
+<span class="ln">189</span>      ELSE
+<span class="ln">190</span>         NRZONE = 0
+<span class="ln">191</span>      ENDIF
+<span class="ln">192</span>C LOCATE ALL RADIATIVE REGIONS BETWEEN CONVECTION ZONES.
+<span class="ln">193</span>      IF(NZONE.GT.1)THEN
+<span class="ln">194</span>         DO 110 I = 1, NZONE-1
+<span class="ln">195</span>            NRZONE = NRZONE + 1
+<span class="ln">196</span>            MRZONE(NRZONE,1) = MXZONE(I,2) + 1
+<span class="ln">197</span>            MRZONE(NRZONE,2) = MXZONE(I+1,1) - 1
+<span class="ln">198</span>  110    CONTINUE
+<span class="ln">199</span>      ENDIF
+<span class="ln">200</span>C CHECK FOR A RADIATIVE REGION ABOVE THE LAST CONVECTION ZONE.
+<span class="ln">201</span>      IF(MXZONE(NZONE,2).LT.M)THEN
+<span class="ln">202</span>         NRZONE = NRZONE + 1
+<span class="ln">203</span>         MRZONE(NRZONE,1) = MXZONE(NZONE,2) + 1
+<span class="ln">204</span>         MRZONE(1,2) = M
+<span class="ln">205</span>      ENDIF
+<span class="ln">206</span> 9999 CONTINUE
+<span class="ln">207</span>
+<span class="ln">208</span>      RETURN
+<span class="ln">209</span>      END</pre></details>
+<details class='py' id='py-convec'><summary>Python version: convec</summary><pre class='doc'>Find the convection zones, without overshoot (mxzon0, nzone0) and
+with it (mxzone, nzone, merging zones that overlap), the radiative
+regions between them (mrzone, nrzone), the edge of the convective
+core jcore and the base of the convective envelope jenv (both before
+overshoot). Overshoot is overmixing: the overshoot shells are mixed
+with the zone but keep the radiative gradient.
+
+Translates: convec.f#CONVEC (09c3b9b)
+
+Arguments: the model hcomp, hd, hp, hr, hs, ht (used only by oversh);
+lc[1..m], convective or not (lc[m+1] is set to False here); m, the
+number of shells; the zone arrays mrzone[k, 1..2], mxzone[k, 1..2],
+mxzon0[k, 1..2] (changed in place); jcore, jenv, nrzone, nzone,
+nzone0, passed in (with any value).
+
+Returns (jcore, jenv, nrzone, nzone, nzone0).</pre><pre class='src'><span class="ln">9</span>def convec(hcomp, hd, hp, hr, hs, ht, lc, m, mrzone, mxzone, mxzon0,
+<span class="ln">10</span>           jcore, jenv, nrzone, nzone, nzone0):
+<span class="ln">11</span>    &quot;&quot;&quot;Find the convection zones, without overshoot (mxzon0, nzone0) and
+<span class="ln">12</span>    with it (mxzone, nzone, merging zones that overlap), the radiative
+<span class="ln">13</span>    regions between them (mrzone, nrzone), the edge of the convective
+<span class="ln">14</span>    core jcore and the base of the convective envelope jenv (both before
+<span class="ln">15</span>    overshoot). Overshoot is overmixing: the overshoot shells are mixed
+<span class="ln">16</span>    with the zone but keep the radiative gradient.
+<span class="ln">17</span>
+<span class="ln">18</span>    Translates: convec.f#CONVEC (09c3b9b)
+<span class="ln">19</span>
+<span class="ln">20</span>    Arguments: the model hcomp, hd, hp, hr, hs, ht (used only by oversh);
+<span class="ln">21</span>    lc[1..m], convective or not (lc[m+1] is set to False here); m, the
+<span class="ln">22</span>    number of shells; the zone arrays mrzone[k, 1..2], mxzone[k, 1..2],
+<span class="ln">23</span>    mxzon0[k, 1..2] (changed in place); jcore, jenv, nrzone, nzone,
+<span class="ln">24</span>    nzone0, passed in (with any value).
+<span class="ln">25</span>
+<span class="ln">26</span>    Returns (jcore, jenv, nrzone, nzone, nzone0).
+<span class="ln">27</span>    &quot;&quot;&quot;
+<span class="ln">28</span>    n = nmlpar_mod
+<span class="ln">29</span>
+<span class="ln">30</span>    # The standard convection zones; a run of a single shell is ignored.
+<span class="ln">31</span>    # Question (see the page): one-shell zones treated as radiative.
+<span class="ln">32</span>    j = 1
+<span class="ln">33</span>    lcc = False
+<span class="ln">34</span>    lc[m + 1] = False
+<span class="ln">35</span>    for i in range(1, m + 2):
+<span class="ln">36</span>        if lc[i]:
+<span class="ln">37</span>            if not lcc:
+<span class="ln">38</span>                # The start of a convection zone.
+<span class="ln">39</span>                lcc = True
+<span class="ln">40</span>                i1 = i
+<span class="ln">41</span>            continue
+<span class="ln">42</span>        # label 10
+<span class="ln">43</span>        if not lcc:
+<span class="ln">44</span>            continue
+<span class="ln">45</span>        # The end of a convection zone.
+<span class="ln">46</span>        lcc = False
+<span class="ln">47</span>        if i1 != i - 1:
+<span class="ln">48</span>            mxzone[j, 1] = i1
+<span class="ln">49</span>            mxzone[j, 2] = i - 1
+<span class="ln">50</span>            j = j + 1
+<span class="ln">51</span>        if j &lt; 12:
+<span class="ln">52</span>            continue
+<span class="ln">53</span>        iounits_mod.write(iounits_mod.ishort, &#x27; -----TOO MANY MIX ZONES&#x27;)
+<span class="ln">54</span>        break  # GOTO 12
+<span class="ln">55</span>    # label 12
+<span class="ln">56</span>
+<span class="ln">57</span>    # MHP 5/91: no convection zone.
+<span class="ln">58</span>    if j == 1:
+<span class="ln">59</span>        jcore = 1
+<span class="ln">60</span>        jenv = m
+<span class="ln">61</span>        nzone0 = 0
+<span class="ln">62</span>        nzone = 0
+<span class="ln">63</span>        nrzone = 1
+<span class="ln">64</span>        mrzone[1, 1] = 1
+<span class="ln">65</span>        mrzone[1, 2] = m
+<span class="ln">66</span>        return jcore, jenv, nrzone, nzone, nzone0  # GOTO 9999
+<span class="ln">67</span>    nzone = j - 1
+<span class="ln">68</span>    for i in range(1, nzone + 1):
+<span class="ln">69</span>        mxzon0[i, 1] = mxzone[i, 1]
+<span class="ln">70</span>        mxzon0[i, 2] = mxzone[i, 2]
+<span class="ln">71</span>    nzone0 = nzone
+<span class="ln">72</span>
+<span class="ln">73</span>    # The outer edge of the convective core (JCORE) and the inner edge of
+<span class="ln">74</span>    # the convective envelope (JENV), before overshoot.
+<span class="ln">75</span>    if mxzone[1, 1] == 1:
+<span class="ln">76</span>        if mxzone[1, 2] == m:
+<span class="ln">77</span>            # A fully convective star (MRZONE is left as it was).
+<span class="ln">78</span>            jcore = 1
+<span class="ln">79</span>            jenv = 1
+<span class="ln">80</span>            nrzone = 0
+<span class="ln">81</span>            return jcore, jenv, nrzone, nzone, nzone0  # GOTO 9999
+<span class="ln">82</span>        else:
+<span class="ln">83</span>            jcore = mxzone[1, 2]
+<span class="ln">84</span>    else:
+<span class="ln">85</span>        jcore = 1
+<span class="ln">86</span>    if mxzone[nzone, 2] == m:
+<span class="ln">87</span>        jenv = mxzone[nzone, 1]
+<span class="ln">88</span>    else:
+<span class="ln">89</span>        jenv = m
+<span class="ln">90</span>
+<span class="ln">91</span>    # Overshoot, if any switch is on: oversh moves the edges in mxzone;
+<span class="ln">92</span>    # then merge zones whose edges now meet.
+<span class="ln">93</span>    if n.lovstc or n.lovste or n.lovstm:
+<span class="ln">94</span>        oversh(hcomp, hd, hp, hr, hs, ht, m, mxzone, mxzon0, nzone)
+<span class="ln">95</span>        if nzone != 1:
+<span class="ln">96</span>            j = 1
+<span class="ln">97</span>            while True:  # label 85
+<span class="ln">98</span>                if mxzone[j, 2] &gt;= mxzone[j + 1, 1]:
+<span class="ln">99</span>                    # Two convection zones have merged.
+<span class="ln">100</span>                    iounits_mod.write(
+<span class="ln">101</span>                        iounits_mod.ishort,
+<span class="ln">102</span>                        &#x27;  CONVECTION ZONES MERGED DUE TO OVERSHOOT\n&#x27;
+<span class="ln">103</span>                        f&#x27;  OLD[{mxzone[j, 1]:3d}-{mxzone[j, 2]:3d}]&#x27;
+<span class="ln">104</span>                        f&#x27;[{mxzone[j + 1, 1]:3d}-{mxzone[j + 1, 2]:3d}]&#x27;
+<span class="ln">105</span>                        f&#x27; NEW[{mxzone[j, 1]:3d}-{mxzone[j + 1, 2]:3d}]&#x27;)
+<span class="ln">106</span>                    mxzone[j + 1, 1] = mxzone[j, 1]
+<span class="ln">107</span>                    for k in range(j, nzone):
+<span class="ln">108</span>                        for j2 in range(1, 3):
+<span class="ln">109</span>                            mxzone[k, j2] = mxzone[k + 1, j2]
+<span class="ln">110</span>                    nzone = nzone - 1
+<span class="ln">111</span>                    if j &lt;= nzone - 1:
+<span class="ln">112</span>                        continue  # GOTO 85
+<span class="ln">113</span>                    break  # GOTO 100
+<span class="ln">114</span>                j = j + 1
+<span class="ln">115</span>                if j &lt;= nzone - 1:
+<span class="ln">116</span>                    continue  # GOTO 85
+<span class="ln">117</span>                break
+<span class="ln">118</span>    # label 100: the radiative regions.
+<span class="ln">119</span>    # Below the first convection zone.
+<span class="ln">120</span>    if mxzone[1, 1] &gt; 1:
+<span class="ln">121</span>        nrzone = 1
+<span class="ln">122</span>        mrzone[1, 1] = 1
+<span class="ln">123</span>        mrzone[1, 2] = mxzone[1, 1] - 1
+<span class="ln">124</span>    else:
+<span class="ln">125</span>        nrzone = 0
+<span class="ln">126</span>    # Between convection zones.
+<span class="ln">127</span>    if nzone &gt; 1:
+<span class="ln">128</span>        for i in range(1, nzone):
+<span class="ln">129</span>            nrzone = nrzone + 1
+<span class="ln">130</span>            mrzone[nrzone, 1] = mxzone[i, 2] + 1
+<span class="ln">131</span>            mrzone[nrzone, 2] = mxzone[i + 1, 1] - 1
+<span class="ln">132</span>    # Above the last convection zone.
+<span class="ln">133</span>    if mxzone[nzone, 2] &lt; m:
+<span class="ln">134</span>        nrzone = nrzone + 1
+<span class="ln">135</span>        mrzone[nrzone, 1] = mxzone[nzone, 2] + 1
+<span class="ln">136</span>        # Question (see the page): MRZONE(1,2), not MRZONE(NRZONE,2).
+<span class="ln">137</span>        mrzone[1, 2] = m
+<span class="ln">138</span>    # label 9999
+<span class="ln">139</span>    return jcore, jenv, nrzone, nzone, nzone0</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Wrong. Question 1 says the index error (<code>MRZONE(1,2) = M</code> for the top radiative region) affects "stars with a convective core and a radiative envelope". In that case <code>NRZONE</code> is 1 when the line runs, so <code>MRZONE(1,2)</code> is the right element. The error bites only when the top region is the second or a later one (a radiative surface with at least two radiative regions, e.g. a radiative core, a thin convection zone and a radiative surface). Then the first region's top becomes <code>M</code>, so <a href="../yrec-map/mix.f.html#def-MIX">MIX</a> burns the shells of the zones above shell by shell (as radiative) before treating each zone as a unit, and ROTMIX and MIDMOD treat them as radiative too (OVROT, which sets the convective flags last, is not affected). Fix: say so; note that KC's 2025-05-30 check <code>I .GT. 0</code> in <a href="../yrec-map/ovrot.f.html#def-OVROT">OVROT</a> loops over the same <code>MRZONE</code> (possibly related).</li>
+<li>Wrong. Question 2 is garbled ("<code>NZONE</code> is set, but <code>MXZON0</code> is"). On the fully convective path <code>NZONE</code>, <code>NZONE0</code> and <code>MXZON0</code> are all set (one zone, 1 to <code>M</code>); only <code>MRZONE</code> is left as it was, with <code>NRZONE = 0</code>, and overshoot and merging are skipped. All readers loop <code>1, NRZONE</code>, so nothing reads <code>MRZONE</code>. Fix: state it under the method; drop the question.</li>
+<li>Missing. The readers of <code>MRZONE</code>, <code>NRZONE</code>: MIX, <a href="../yrec-map/ovrot.f.html#def-OVROT">OVROT</a> (sets <code>LCZ</code>), <a href="../yrec-map/rotmix.f.html#def-ROTMIX">ROTMIX</a> and <a href="../yrec-map/midmod.f.html#def-MIDMOD">MIDMOD</a>. Fix: add to the outputs.</li>
+<li>Unclear. "more prints TOO MANY MIX ZONES": the message is printed as soon as the 11th zone is stored, whether or not more follow. Fix: reword.</li>
+</ol>
+<p>Revised: question 1 corrected (when the index error bites, its effect on MIX, the possible link to KC's OVROT check); the fully convective path stated and question 2 dropped; the readers of <code>MRZONE</code> added; the zone limit reworded.</p></div></details>
+</main></body></html>

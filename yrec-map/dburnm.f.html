@@ -1,0 +1,309 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>dburnm.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ dburnm.f</span></header><main>
+<h1>dburnm.f</h1>
+<p class='muted'>160 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/dburnm.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>dburnm.py</code>, 99 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> The same deuterium burning as <a href="../yrec-map/dburn.f.html#def-DBURN">DBURN</a>, for the substeps of a model in the middle of a time step: it is called by <a href="../yrec-map/midmod.f.html#def-MIDMOD">MIDMOD</a> with rates interpolated to the substep and with the accreted mass scaled to the substep's share ("unlike the routine called by MIX, the timestep here is only a portion of the total model DT"). Its header still says "DBURN".</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> as DBURN, plus <code>DRATEM</code>, <code>DRATEM0</code> (the rates at the end and start of the substep, interpolated in MIDMOD from <code>DRATE0</code>, <code>DRATE</code> with the fraction <code>FAC2</code>) and <code>FAC2</code> itself. <code>DT</code> is in seconds (MIDMOD's <code>FAC2 = DT/DELTS</code>), converted to Gyr with <code>DTT = DT*1.0D-9/CSECYR</code> (<code>CSECYR</code> from <code>CONSTANTS_MOD</code>, formerly <code>/CONST3/</code>). The other module data are DBURN's: <code>HCOMPP</code> from <code>OLDMOD_MOD</code>, <code>FMASSACC</code> from <code>DEUTER_MOD</code>, <code>LMDOT</code> and <code>COMPACC</code> from <code>NMLPAR_MOD</code>.</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/midmod.f.html#def-MIDMOD">MIDMOD</a>.</li>
+<li><strong>Output:</strong> <code>HCOMP</code> (H, $^3$He, D) over the shell or zone.</li>
+</ul>
+<p><strong>The method.</strong> As in DBURN: mass-weighted means over the zone, substeps with $X_D \leftarrow X_D e^{-2r_k\Delta t/n}$, then $\Delta X = \tfrac12\Delta X_D$ and $\Delta X_3 = -\tfrac32\Delta X_D$. The differences from DBURN:</p>
+<ul>
+<li>the threshold for zeroing deuterium is $10^{-14}$ (DBURN: $10^{-11}$) and does not include the accreted D;</li>
+<li>with accretion, the substep's share of the accreted matter is $f_a$ = <code>FAC2*FMASSACC</code>, and the new mean is
+$$X_D = \frac{X_{D,\mathrm{old}} + f_a X_{D,\mathrm{acc}}}{1 + f_a},$$
+written as a weighting by fractions. But <code>FMASSACC</code> is the accreted mass in grams (<a href="../yrec-map/mdot.f.html#def-MDOT">MDOT</a> sets it to <code>DELM</code>), so $f_a$ is in grams too (question 2).</li>
+</ul>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>, and the unused <code>/CONST1/</code> gone.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Two copies.</strong> DBURN and DBURNM share almost all their code but differ in the time unit of <code>DT</code>, the threshold ($10^{-11}$ against $10^{-14}$) and the accretion weighting; neither tests <code>DMDT0 &gt; 0</code> in its accretion branch. Which behavior is right, and can the two become one routine in the overhaul? See also the questions on <a href="../yrec-map/dburn.f.html#def-DBURN">DBURN</a>.</li>
+<li><strong>The accretion weighting.</strong> <code>FMASSA = FAC2*FMASSACC</code> is a mass in grams, yet the means divide by <code>1 + FMASSA</code>, as if it were a fraction of the zone's mass. The accreted matter then gets nearly all the weight, so $X_D$, $X$ and $^3$He of the surface zone jump towards the accreted values. DBURN weights by the zone's mass <code>SUMM</code> (grams) instead. This looks like a bug: should it be <code>(XH2NO*SUMM + XH2NA*FMASSA)/(SUMM + FMASSA)</code>?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+DBURN - COMPUTE THE ABUNDANCE CHANGES RESULTING FROM DEUTERIUM BURNING
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-DBURNM'>DBURNM</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-DBURNM'><h3><span class='kind'>subroutine</span>DBURNM</h3>
+<p class='muted'>lines 4–160 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/dburnm.f#L4-L160'>GitHub</a></p>
+<pre>SUBROUTINE DBURNM(IBEGIN,IEND,M,HS2,HCOMP,DT,DRATEM,DRATEM0,FAC2)</pre>
+<div class='notes'><p>Deuterium burning over a substep in MIDMOD, with interpolated rates and the substep's share of accretion; otherwise as <a href="../yrec-map/dburn.f.html#def-DBURN">DBURN</a>.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+DBURN - COMPUTE THE ABUNDANCE CHANGES RESULTING FROM DEUTERIUM BURNING
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/deuter_mod.f.html#def-DEUTER_MOD'>DEUTER_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/oldmod_mod.f.html#def-OLDMOD_MOD'>OLDMOD_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/midmod.f.html#def-MIDMOD'>MIDMOD</a> <span class='muted'>(midmod.f)</span> ×2</li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE DBURNM(IBEGIN,IEND,M,HS2,HCOMP,DT,DRATEM,DRATEM0,FAC2)
+<span class="ln">5</span>C 10/15/26 MHP via Claude
+<span class="ln">6</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">7</span>C PARAMETER(JSON=5000) here.
+<span class="ln">8</span>      USE DIMENSIONS_MOD
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/OLDMOD/ into OLDMOD_MOD.
+<span class="ln">11</span>      USE OLDMOD_MOD
+<span class="ln">12</span>C 10/14/26 MHP via Claude
+<span class="ln">13</span>C code changed to convert COMMON/DEUTER/ into DEUTER_MOD.
+<span class="ln">14</span>      USE DEUTER_MOD
+<span class="ln">15</span>C 10/14/26 MHP via Claude
+<span class="ln">16</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">17</span>      USE NMLPAR_MOD
+<span class="ln">18</span>C 10/14/26 MHP via Claude
+<span class="ln">19</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">20</span>      USE CONSTANTS_MOD
+<span class="ln">21</span>C 10/20/26 MHP via Claude
+<span class="ln">22</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">23</span>C explicit declarations.
+<span class="ln">24</span>      IMPLICIT NONE
+<span class="ln">25</span>      REAL*8 DELRATE,DRATEM,DRATEM0,DT,DTT,DXH2,DXH2A,DXH2O,FAC2,FMASSA,
+<span class="ln">26</span>     *       FSTEP,HCOMP,HS2,R0,RATE,RATE0,RATE1,SUMM,SUMR0,SUMR1,TSTEP,
+<span class="ln">27</span>     *       X,X2NEW,XH2,XH2N,XH2NA,XH2NACC,XH2NO,XHE3,XHE3N,XN
+<span class="ln">28</span>      INTEGER I,IBEGIN,IEND,ISTEP,M
+<span class="ln">29</span>C 9/25/26 MHP via Claude
+<span class="ln">30</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">31</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">32</span>C 9/24/26 MHP via Claude
+<span class="ln">33</span>C code changed to remove dead CMIXL from COMMON/CONST3/; it is now
+<span class="ln">34</span>C passed as an explicit argument where actually used
+<span class="ln">35</span>C 10/12/26 MHP via Claude
+<span class="ln">36</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">37</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">38</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">39</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">40</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">41</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">42</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">43</span>C
+<span class="ln">44</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">45</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">46</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">47</span>C       DATA C21/5.240358E-8/
+<span class="ln">48</span>      DIMENSION HS2(JSON),HCOMP(15,JSON),DRATEM(JSON),DRATEM0(JSON)
+<span class="ln">49</span>      SAVE
+<span class="ln">50</span>      DTT = DT*1.0D-9/CSECYR
+<span class="ln">51</span>      IF(IBEGIN.EQ.IEND)THEN
+<span class="ln">52</span>         X = HCOMPP(1,IBEGIN)
+<span class="ln">53</span>         XH2 = HCOMPP(12,IBEGIN)
+<span class="ln">54</span>         XHE3 = HCOMPP(4,IBEGIN)
+<span class="ln">55</span>         RATE0 = DRATEM0(IBEGIN)
+<span class="ln">56</span>         RATE1 = DRATEM(IBEGIN)
+<span class="ln">57</span>      ELSE
+<span class="ln">58</span>         SUMM = 0.0D0
+<span class="ln">59</span>         SUMR0 = 0.0D0
+<span class="ln">60</span>         SUMR1 = 0.0D0
+<span class="ln">61</span>         X = 0.0D0
+<span class="ln">62</span>         XH2 = 0.0D0
+<span class="ln">63</span>         XHE3 = 0.0D0
+<span class="ln">64</span>         DO I = IBEGIN,IEND
+<span class="ln">65</span>            SUMM = SUMM + HS2(I)
+<span class="ln">66</span>            SUMR0 = SUMR0 + HS2(I)*DRATEM0(I)
+<span class="ln">67</span>            SUMR1 = SUMR1 + HS2(I)*DRATEM(I)
+<span class="ln">68</span>            X = X + HCOMPP(1,I)*HS2(I)
+<span class="ln">69</span>            XH2 = XH2 + HCOMPP(12,I)*HS2(I)
+<span class="ln">70</span>            XHE3 = XHE3 + HCOMPP(4,I)*HS2(I)
+<span class="ln">71</span>         END DO
+<span class="ln">72</span>         RATE0 = SUMR0/SUMM
+<span class="ln">73</span>         RATE1 = SUMR1/SUMM
+<span class="ln">74</span>         X = X/SUMM
+<span class="ln">75</span>         XH2 = XH2/SUMM
+<span class="ln">76</span>         XHE3 = XHE3/SUMM
+<span class="ln">77</span>      ENDIF
+<span class="ln">78</span>      IF(XH2.LT.1.0D-14)THEN
+<span class="ln">79</span>         DO I = IBEGIN,IEND
+<span class="ln">80</span>            HCOMP(12,I) = 0.0D0
+<span class="ln">81</span>         END DO
+<span class="ln">82</span>         GOTO 9999
+<span class="ln">83</span>      ENDIF
+<span class="ln">84</span>C BURN DEUTERIUM IN A SERIES OF SMALL STEPS,
+<span class="ln">85</span>C INCREMENTING THE BURNING RATE FROM THE STARTING
+<span class="ln">86</span>C TO ENDING VALUES.
+<span class="ln">87</span>C RESTRICT THE MAXIMUM BURNING TO 0.5 IN THE
+<span class="ln">88</span>C NATURAL LOG (&lt;1% ERROR FROM A SIMPLE SUM
+<span class="ln">89</span>C OF DISCRETE STEPS OF THIS SIZE).
+<span class="ln">90</span>C MHP 10/02 INITIALIZE RATE
+<span class="ln">91</span>      RATE = MAX(RATE0,RATE1)
+<span class="ln">92</span>      ISTEP = INT(RATE*DTT/0.1D0)+1
+<span class="ln">93</span>      FSTEP = DFLOAT(ISTEP)
+<span class="ln">94</span>      TSTEP = DTT/FSTEP
+<span class="ln">95</span>      R0 = RATE0
+<span class="ln">96</span>      DELRATE = (RATE1-RATE0)/FSTEP
+<span class="ln">97</span>      XH2NO = XH2
+<span class="ln">98</span>      DO I = 1,ISTEP
+<span class="ln">99</span>         RATE = R0 + 0.5D0*DELRATE
+<span class="ln">100</span>         XH2NO = XH2NO*EXP(-2.0D0*RATE*TSTEP)
+<span class="ln">101</span>         R0 = R0 + DELRATE
+<span class="ln">102</span>      END DO
+<span class="ln">103</span>C INCLUDE MASS ACCRETION FROM DEUTERIUM BURNING
+<span class="ln">104</span>      IF(LMDOT .AND. IEND.EQ.M)THEN
+<span class="ln">105</span>C ACCRETED MATTER IS EXPOSED TO BURNING FOR, ON
+<span class="ln">106</span>C AVERAGE. 1/2 OF THE TIMESTEP.  FMASSACC IS
+<span class="ln">107</span>C DEFINED AS DMDT*DT/ORIGINAL CZ MASS.
+<span class="ln">108</span>C BURN BOTH THE ACCRETED D AND THE ORIGINAL D
+<span class="ln">109</span>C SEPARATELY AND FIND THE NEW MASS-WEIGHTED
+<span class="ln">110</span>C AVERAGE D.  NOTE THAT ACCRETION OF ELEMENTS
+<span class="ln">111</span>C 1-11 HAS ALREADY BEEN TREATED.
+<span class="ln">112</span>         R0 = RATE0
+<span class="ln">113</span>         XH2NACC = COMPACC(12)
+<span class="ln">114</span>         XH2NA = 0.0D0
+<span class="ln">115</span>         DO I = 1,ISTEP
+<span class="ln">116</span>            RATE = R0 + 0.5D0*DELRATE
+<span class="ln">117</span>C FULLY BURN PRIOR ACCRETED MATTER
+<span class="ln">118</span>            XH2NA = XH2NA*EXP(-2.0D0*RATE*TSTEP)
+<span class="ln">119</span>C EXPOSE NEWLY ACCRETED MATTER TO 1/2 BURNING
+<span class="ln">120</span>            X2NEW = XH2NACC/FSTEP*EXP(-RATE*TSTEP)
+<span class="ln">121</span>            XH2NA = XH2NA + X2NEW
+<span class="ln">122</span>            R0 = R0 + DELRATE
+<span class="ln">123</span>         END DO
+<span class="ln">124</span>C NOW PERFORM A WEIGHTED SUM OF THE ORIGINAL
+<span class="ln">125</span>C AND NEWLY ACCRETED MATTER
+<span class="ln">126</span>C UNLIKE THE ROUTINE CALLED BY MIX, THE TIMESTEP
+<span class="ln">127</span>C HERE IS ONLY A PORTION OF THE TOTAL MODEL DT.
+<span class="ln">128</span>C DO ONLY THE SMALLER TIMESTEP PORTION OF THE
+<span class="ln">129</span>C TOTAL MASS ACCRETION.
+<span class="ln">130</span>         FMASSA = FAC2*FMASSACC
+<span class="ln">131</span>         DXH2O = XH2NO - XH2
+<span class="ln">132</span>         DXH2A = XH2NA - COMPACC(12)
+<span class="ln">133</span>         XH2N = (XH2NO+XH2NA*FMASSA)/(1.0D0+FMASSA)
+<span class="ln">134</span>         XN = X + 0.5D0*(DXH2O+DXH2A*FMASSA)/(1.0D0+FMASSA)
+<span class="ln">135</span>         XHE3N = XHE3 -1.5D0*(DXH2O+DXH2A*FMASSA)/(1.0D0+FMASSA)
+<span class="ln">136</span>C      IF(IEND.EQ.M)THEN
+<span class="ln">137</span>C      WRITE(*,911)IBEGIN,IEND,DRATEM0(IBEGIN),RATE0,RATE1,XH2,XH2N,
+<span class="ln">138</span>C     *            XHE3,XHE3N
+<span class="ln">139</span>C      ENDIF
+<span class="ln">140</span>C 911  FORMAT(&#x27;DBURNM: MIDMOD Deuterium Burning #1&#x27;, 2I5,1P7E12.3)
+<span class="ln">141</span>      ELSE
+<span class="ln">142</span>C INCREMENT H,D,HE3 WITHOUT MASS ACCRETION
+<span class="ln">143</span>         DXH2 = XH2NO - XH2
+<span class="ln">144</span>         XH2N = XH2NO
+<span class="ln">145</span>         XN = X + 0.5D0*DXH2
+<span class="ln">146</span>         XHE3N = XHE3 - 1.5D0*DXH2
+<span class="ln">147</span>C      IF(IEND.EQ.M)THEN
+<span class="ln">148</span>C      WRITE(*,912)IBEGIN,IEND,DRATEM0(IBEGIN),RATE0,RATE1,XH2,XH2N,
+<span class="ln">149</span>C     *            XHE3,XHE3N
+<span class="ln">150</span>C 912  FORMAT(&#x27;DBURNM: MIDMOD Deuterium Burning #2&#x27;, 2I5,1P7E12.3)
+<span class="ln">151</span>C      ENDIF
+<span class="ln">152</span>      ENDIF
+<span class="ln">153</span>      DO I = IBEGIN,IEND
+<span class="ln">154</span>         HCOMP(1,I) = XN
+<span class="ln">155</span>         HCOMP(4,I) = XHE3N
+<span class="ln">156</span>         HCOMP(12,I) = XH2N
+<span class="ln">157</span>      END DO
+<span class="ln">158</span> 9999 CONTINUE
+<span class="ln">159</span>      RETURN
+<span class="ln">160</span>      END</pre></details>
+<details class='py' id='py-dburnm'><summary>Python version: dburnm</summary><pre class='doc'>As DBURN, for a substep: burn deuterium in shells ibegin..iend with
+rates interpolated to the substep, and the substep&#x27;s share fac2 of the
+accreted matter at the surface.
+
+Translates: dburnm.f#DBURNM (09c3b9b)
+
+Arguments: ibegin, iend, the shells; m, the number of shells; hs2, the
+shell masses; hcomp[species, shell], changed in place (H, 3He, D); dt,
+the substep (s); dratem, dratem0, the rates at the end and start of the
+substep; fac2, the substep&#x27;s fraction of the step.
+
+Returns nothing.</pre><pre class='src'><span class="ln">12</span>def dburnm(ibegin, iend, m, hs2, hcomp, dt, dratem, dratem0, fac2):
+<span class="ln">13</span>    &quot;&quot;&quot;As DBURN, for a substep: burn deuterium in shells ibegin..iend with
+<span class="ln">14</span>    rates interpolated to the substep, and the substep&#x27;s share fac2 of the
+<span class="ln">15</span>    accreted matter at the surface.
+<span class="ln">16</span>
+<span class="ln">17</span>    Translates: dburnm.f#DBURNM (09c3b9b)
+<span class="ln">18</span>
+<span class="ln">19</span>    Arguments: ibegin, iend, the shells; m, the number of shells; hs2, the
+<span class="ln">20</span>    shell masses; hcomp[species, shell], changed in place (H, 3He, D); dt,
+<span class="ln">21</span>    the substep (s); dratem, dratem0, the rates at the end and start of the
+<span class="ln">22</span>    substep; fac2, the substep&#x27;s fraction of the step.
+<span class="ln">23</span>
+<span class="ln">24</span>    Returns nothing.
+<span class="ln">25</span>    &quot;&quot;&quot;
+<span class="ln">26</span>    hcompp = oldmod_mod.hcompp
+<span class="ln">27</span>    dtt = dt * 1.0e-9 / constants_mod.csecyr
+<span class="ln">28</span>    if ibegin == iend:
+<span class="ln">29</span>        x = hcompp[1, ibegin]
+<span class="ln">30</span>        xh2 = hcompp[12, ibegin]
+<span class="ln">31</span>        xhe3 = hcompp[4, ibegin]
+<span class="ln">32</span>        rate0 = dratem0[ibegin]
+<span class="ln">33</span>        rate1 = dratem[ibegin]
+<span class="ln">34</span>    else:
+<span class="ln">35</span>        summ = 0.0
+<span class="ln">36</span>        sumr0 = 0.0
+<span class="ln">37</span>        sumr1 = 0.0
+<span class="ln">38</span>        x = 0.0
+<span class="ln">39</span>        xh2 = 0.0
+<span class="ln">40</span>        xhe3 = 0.0
+<span class="ln">41</span>        for i in range(ibegin, iend + 1):
+<span class="ln">42</span>            summ = summ + hs2[i]
+<span class="ln">43</span>            sumr0 = sumr0 + hs2[i] * dratem0[i]
+<span class="ln">44</span>            sumr1 = sumr1 + hs2[i] * dratem[i]
+<span class="ln">45</span>            x = x + hcompp[1, i] * hs2[i]
+<span class="ln">46</span>            xh2 = xh2 + hcompp[12, i] * hs2[i]
+<span class="ln">47</span>            xhe3 = xhe3 + hcompp[4, i] * hs2[i]
+<span class="ln">48</span>        rate0 = sumr0 / summ
+<span class="ln">49</span>        rate1 = sumr1 / summ
+<span class="ln">50</span>        x = x / summ
+<span class="ln">51</span>        xh2 = xh2 / summ
+<span class="ln">52</span>        xhe3 = xhe3 / summ
+<span class="ln">53</span>
+<span class="ln">54</span>    if xh2 &lt; 1.0e-14:
+<span class="ln">55</span>        for i in range(ibegin, iend + 1):
+<span class="ln">56</span>            hcomp[12, i] = 0.0
+<span class="ln">57</span>        return  # label 9999
+<span class="ln">58</span>
+<span class="ln">59</span>    rate = max(rate0, rate1)
+<span class="ln">60</span>    istep = int(rate * dtt / 0.1) + 1
+<span class="ln">61</span>    fstep = float(istep)
+<span class="ln">62</span>    tstep = dtt / fstep
+<span class="ln">63</span>    r0 = rate0
+<span class="ln">64</span>    delrate = (rate1 - rate0) / fstep
+<span class="ln">65</span>    xh2no = xh2
+<span class="ln">66</span>    for i in range(1, istep + 1):
+<span class="ln">67</span>        rate = r0 + 0.5 * delrate
+<span class="ln">68</span>        xh2no = xh2no * math.exp(-2.0 * rate * tstep)
+<span class="ln">69</span>        r0 = r0 + delrate
+<span class="ln">70</span>
+<span class="ln">71</span>    compacc = nmlpar_mod.compacc
+<span class="ln">72</span>    if nmlpar_mod.lmdot and iend == m:
+<span class="ln">73</span>        r0 = rate0
+<span class="ln">74</span>        xh2nacc = compacc[12]
+<span class="ln">75</span>        xh2na = 0.0
+<span class="ln">76</span>        for i in range(1, istep + 1):
+<span class="ln">77</span>            rate = r0 + 0.5 * delrate
+<span class="ln">78</span>            xh2na = xh2na * math.exp(-2.0 * rate * tstep)
+<span class="ln">79</span>            x2new = xh2nacc / fstep * math.exp(-rate * tstep)
+<span class="ln">80</span>            xh2na = xh2na + x2new
+<span class="ln">81</span>            r0 = r0 + delrate
+<span class="ln">82</span>        fmassa = fac2 * deuter_mod.fmassacc
+<span class="ln">83</span>        dxh2o = xh2no - xh2
+<span class="ln">84</span>        dxh2a = xh2na - compacc[12]
+<span class="ln">85</span>        # Question (see the page): fmassa is a mass in grams, weighted
+<span class="ln">86</span>        # here as if it were a fraction of the zone&#x27;s mass.
+<span class="ln">87</span>        xh2n = (xh2no + xh2na * fmassa) / (1.0 + fmassa)
+<span class="ln">88</span>        xn = x + 0.5 * (dxh2o + dxh2a * fmassa) / (1.0 + fmassa)
+<span class="ln">89</span>        xhe3n = xhe3 - 1.5 * (dxh2o + dxh2a * fmassa) / (1.0 + fmassa)
+<span class="ln">90</span>    else:
+<span class="ln">91</span>        dxh2 = xh2no - xh2
+<span class="ln">92</span>        xh2n = xh2no
+<span class="ln">93</span>        xn = x + 0.5 * dxh2
+<span class="ln">94</span>        xhe3n = xhe3 - 1.5 * dxh2
+<span class="ln">95</span>
+<span class="ln">96</span>    for i in range(ibegin, iend + 1):
+<span class="ln">97</span>        hcomp[1, i] = xn
+<span class="ln">98</span>        hcomp[4, i] = xhe3n
+<span class="ln">99</span>        hcomp[12, i] = xh2n</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Wrong. "the accreted fraction is $f_a$ = <code>FAC2*FMASSACC</code> … a weighting by fractions": <code>FMASSACC</code> is the accreted mass in grams (<a href="../yrec-map/mdot.f.html#def-MDOT">MDOT</a> sets it to <code>DELM</code>), so $f_a$ is a mass in grams, and $(X_{D,\mathrm{old}} + f_aX_{D,\mathrm{acc}})/(1+f_a)$ gives the accreted matter nearly all the weight; DBURN weights by the zone's mass <code>SUMM</code> instead. This looks like a bug. Fix: correct the method and make it a question of its own.</li>
+<li>Settled. "<code>DTT = DT*1.0D-9/CSECYR</code>: from seconds to Gyr, probably": MIDMOD's <code>DT</code> is in seconds (<code>FAC2 = DT/DELTS</code>). Fix: drop "probably".</li>
+<li>Missing. As in DBURN, the accretion branch does not test <code>DMDT0 &gt; 0</code>. Fix: mention in question 1 (two copies).</li>
+</ol>
+<p>Revised: the accretion weighting corrected in the method and made question 2 (an apparent bug); <code>DT</code> in seconds stated; the missing <code>DMDT0</code> test added to question 1.</p></div></details>
+</main></body></html>

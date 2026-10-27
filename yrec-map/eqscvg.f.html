@@ -1,0 +1,613 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>eqscvg.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ eqscvg.f</span></header><main>
+<h1>eqscvg.f</h1>
+<p class='muted'>337 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/eqscvg.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>eqscvg.py</code>, 212 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>EQSCVG</code> evaluates the Saumon–Chabrier–Van Horn (SCV) equation of state for a general composition, by combining its pure-hydrogen, pure-helium and metal tables. The header calls them "the general abundance tables".</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/eqscve.f.html#def-EQSCVE">EQSCVE</a>, when $X$ or $Z$ differs from the envelope values by more than $10^{-5}$.</li>
+<li><strong>Inputs and outputs:</strong> as for <code>EQSCVE</code>: <code>TL</code>, <code>T</code>, <code>P</code>, <code>BETA</code>, <code>X</code>, <code>Z</code> in; <code>DL</code>, <code>D</code>, <code>QDT</code>, <code>QDP</code>, <code>QCP</code>, <code>DELA</code>, <code>FXION</code>, <code>LCALC</code> out.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/interp.f.html#def-INTERP">INTERP</a>, for four-point Lagrange weights and their derivative weights.</li>
+<li><strong>Modules:</strong> <code>SCVEOS_MOD</code> (the tables <code>TABLEX</code>, <code>TABLEY</code>, <code>TABLEZ</code>, <code>SMIX</code>, the grid <code>TLOGX</code>, <code>TABLENV</code>'s pressure column, and the indices <code>IDTSCV</code>, <code>IDP</code>), shared with <code>EQSCVE</code>, <a href="../yrec-map/eqstat2.f.html#def-EQSTAT2">EQSTAT2</a> and the setup routines (see <code>eqscve.f</code>); <code>CONSTANTS_MOD</code> for <code>CLN</code>.</li>
+</ul>
+<p><strong>The method.</strong> All interpolation is four-point Lagrange in $\log P_\mathrm{gas}$ and $\log T$ (weights <code>FP</code>, <code>FT</code>; <code>FTD</code> are the weights of the $\log T$ derivative).</p>
+<ol>
+<li>
+<p><strong>Density</strong> by additive volumes, with $\rho_X$, $\rho_Y$, $\rho_Z$ from the three tables (column 4 of <code>TABLEX</code>, <code>TABLEY</code>, <code>TABLEZ</code>):
+$$\frac{1}{\rho} = \frac{X}{\rho_X} + \frac{Y}{\rho_Y} + \frac{Z}{\rho_Z}.$$</p>
+</li>
+<li>
+<p><strong>Derivatives</strong> as volume-weighted means, with weights $w_k = X_k\rho/\rho_k$:
+$$Q_{\rho P,0} = \sum_k w_k Q_{\rho P,k}, \qquad Q_{\rho T,0} = \sum_k w_k Q_{\rho T,k}.$$</p>
+</li>
+<li>
+<p><strong>Specific heat</strong> from the entropy: with $S = XS_X + YS_Y + S_\mathrm{mix}$ and the tabulated $\partial\ln S_k/\partial\ln T$,
+$$c_{P,0} = XS_X\frac{\partial\ln S_X}{\partial\ln T} + YS_Y\frac{\partial\ln S_Y}{\partial\ln T} + S_\mathrm{mix}\frac{\partial\ln S_\mathrm{mix}}{\partial\ln T} + Z\left(\frac{\partial U_Z}{\partial T} + \frac{P_\mathrm{gas}Q_{\rho T,Z}^2}{Q_{\rho P,Z}\,\rho_Z T}\right),$$
+then $\partial U/\partial T = c_{P,0} - P_\mathrm{gas}Q_{\rho T,0}^2/(Q_{\rho P,0}\,\rho T)$.</p>
+</li>
+<li>
+<p><strong>Radiation</strong> is added as in <code>EQSCVE</code>: $Q_{\rho P} = Q_{\rho P,0}/\beta$, $\chi_T = -\beta Q_{\rho T,0}/Q_{\rho P,0} + 4(1-\beta)$, $Q_{\rho T} = -\chi_T Q_{\rho P}$, $\partial U/\partial T \mathrel{+}= 12P_\mathrm{rad}/(\rho T)$, and
+$$c_P = \frac{\partial U}{\partial T} + \frac{P\,Q_{\rho T}^2}{Q_{\rho P}\,\rho T},\qquad \nabla_\mathrm{ad} = -\frac{P\,Q_{\rho T}}{\rho T\,c_P}.$$</p>
+</li>
+<li>
+<p><strong>Ionization fractions</strong> as in <code>EQSCVE</code>.</p>
+</li>
+</ol>
+<p><strong>KC's changes.</strong> Unused arguments and the array <code>ATOMWT</code> were removed (2025-05-31).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (<code>/SCVEOS/</code> to <code>SCVEOS_MOD</code>, where the index <code>IDT</code> is now <code>IDTSCV</code>; <code>/CONST1/</code>, <code>/CONST2/</code> to <code>CONSTANTS_MOD</code>), the unused <code>/COMP/</code> removed, <code>IMPLICIT NONE</code>. No question is settled.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>H$_2$ counted once</strong> in the hydrogen ionization fraction, as in <code>EQSCVE</code> (question 1 there).</li>
+<li><strong>No smoothing.</strong> Unlike <code>EQSCVE</code>, there is no blending when the stencil changes, so the outputs can jump between stencils. Is that acceptable for non-envelope compositions?</li>
+<li><strong>One pressure grid.</strong> The searches start from the indices <code>IDTSCV</code>, <code>IDP</code> left by the last call (of this routine or <code>EQSCVE</code>), which only costs time. But the pressure stencil and its abscissae are taken from <code>TABLENV</code>'s row <code>IDTSCV</code> and used for all four rows of <code>TABLEX</code>, <code>TABLEY</code>, <code>TABLEZ</code> and <code>SMIX</code>. Do all these tables share one pressure grid? (Question 3 in <code>EQSCVE</code>.)</li>
+<li><strong>A stray string.</strong> A comment line before the $Q_{\rho T}$ block ends with <code>zdiffOPEOSfinalewkop95zscv1.full</code>, probably a file name pasted by mistake.</li>
+<li><strong>Logarithm of $S_\mathrm{mix}$.</strong> $\partial\ln S_\mathrm{mix}/\partial\ln T$ is taken from $\log_{10}$ of the interpolated <code>SMIX</code> values; it fails if <code>SMIX</code> is zero or negative anywhere in the stencil. Can it be?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>SUBROUTINE FOR INTERPOLATING IN THE GENERAL ABUNDANCE TABLES OF THE SCV
+EQUATION OF STATE.
+SUBROUTINE EQSCVG(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+*AMU,EMU,ETA,QDT,QDP,QCP,DELA,LCALC)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-EQSCVG'>EQSCVG</a> <span class='muted'>subroutine · SUBROUTINE FOR INTERPOLATING IN THE GENERAL ABUNDANCE TABLES OF THE SCV</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-EQSCVG'><h3><span class='kind'>subroutine</span>EQSCVG</h3>
+<p class='muted'>lines 5–337 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/eqscvg.f#L5-L337'>GitHub</a></p>
+<pre>SUBROUTINE EQSCVG(TL,T,P,DL,D,X,Z,BETA,FXION,QDT,QDP,QCP,DELA,LCAL</pre>
+<div class='notes'><p>SCV equation of state for any $X$, $Z$ by additive volumes, with $c_P$ from the tabulated entropies (equations above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>SUBROUTINE FOR INTERPOLATING IN THE GENERAL ABUNDANCE TABLES OF THE SCV
+EQUATION OF STATE.
+SUBROUTINE EQSCVG(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+*AMU,EMU,ETA,QDT,QDP,QCP,DELA,LCALC)  ! KC 2025-05-31</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/scveos_mod.f.html#def-SCVEOS_MOD'>SCVEOS_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/interp.f.html#def-INTERP'>INTERP</a> <span class='muted'>(interp.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/eqscve.f.html#def-EQSCVE'>EQSCVE</a> <span class='muted'>(eqscve.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">5</span>      SUBROUTINE EQSCVG(TL,T,P,DL,D,X,Z,BETA,FXION,QDT,QDP,QCP,DELA,LCALC)
+<span class="ln">6</span>C 10/14/26 MHP via Claude
+<span class="ln">7</span>C code changed to convert COMMON/SCVEOS/ into SCVEOS_MOD.
+<span class="ln">8</span>      USE SCVEOS_MOD
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">11</span>      USE CONSTANTS_MOD
+<span class="ln">12</span>C 10/20/26 MHP via Claude
+<span class="ln">13</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">14</span>C explicit declarations.
+<span class="ln">15</span>      IMPLICIT NONE
+<span class="ln">16</span>      REAL*8 BETA,BETM1,D,DDX,DDY,DDZ,DELA,DENX,DENXL,DENY,DENYL,DENZ,
+<span class="ln">17</span>     *       DENZL,DL,FP,FPD,FT,FTD,FXION,P,PGAS,PP,PRAD,QCP,QCP0,QDP,
+<span class="ln">18</span>     *       QDP0,QDPX,QDPY,QDPZ,QDT,QDT0,QDTX,QDTY,QDTZ,QPT,QPT0,QR,
+<span class="ln">19</span>     *       QSMT,QST0,QSTX,QSTY,QUT,QUTZ,QUTZL,S0,SM,SX,SXL,SY,SYL,T,
+<span class="ln">20</span>     *       TEMP,TL,UR,X,XHEP,XHEPP,XHP,XTF_H1,XTF_H2,XTF_HE,XTF_HEP,
+<span class="ln">21</span>     *       XTF_HEPP,XTF_HE_E,XTF_HP,XTF_H_E,Y,Z
+<span class="ln">22</span>      INTEGER I,II,J,JJ,JJJ,K,NTS
+<span class="ln">23</span>      LOGICAL*4 LCALC
+<span class="ln">24</span>
+<span class="ln">25</span>      PARAMETER (NTS=63)
+<span class="ln">26</span>C 9/25/26 MHP via Claude
+<span class="ln">27</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">28</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">29</span>C 10/13/26 MHP via Claude: removed the unused COMMON/NMLPAR/ declaration
+<span class="ln">30</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">31</span>C 10/13/26 MHP via Claude: removed the unused COMMON/COMP/ declaration
+<span class="ln">32</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">33</span>C       DIMENSION ATOMWT(4),QR(4),FT(4),FTD(4),  ! KC 2025-05-31
+<span class="ln">34</span>      DIMENSION QR(4),FT(4),FTD(4),
+<span class="ln">35</span>     *     FP(4),FPD(4),TEMP(4,3),FXION(3)
+<span class="ln">36</span>C       DATA ATOMWT/0.9921D0,0.24975D0,0.08322D0,0.4995D0/
+<span class="ln">37</span>C       DATA CMH,CMHE,CBOLTZ/1.67357D-24,6.646442D-24,1.380658D-16/
+<span class="ln">38</span>      SAVE
+<span class="ln">39</span>
+<span class="ln">40</span>C FIND GAS PRESSURE (WHICH IS THE QUANTITY WHICH IS TABULATED).
+<span class="ln">41</span>      BETM1 = 1.0D0 - BETA
+<span class="ln">42</span>      PP = DLOG10(BETA*P)
+<span class="ln">43</span>C  CHECK IF THE POINT IS WITHIN THE TABLE
+<span class="ln">44</span>      IF(TL.LT.TLOGX(1) .OR. TL.GT.TLOGX(NTS) .OR. PP.LT.4.0D0)THEN
+<span class="ln">45</span>         LCALC = .FALSE.
+<span class="ln">46</span>         RETURN
+<span class="ln">47</span>      ENDIF
+<span class="ln">48</span>C  FIND NEAREST POINTS IN TEMPERATURE.
+<span class="ln">49</span>      IF(TL.LT.TLOGX(IDTSCV+1))THEN
+<span class="ln">50</span>C SEARCH DOWN TO FIND NEAREST 4 TABLE ELEMENTS
+<span class="ln">51</span>         DO I = IDTSCV,1,-1
+<span class="ln">52</span>            IF(TL.GT.TLOGX(I))THEN
+<span class="ln">53</span>               II = I - 1
+<span class="ln">54</span>               GOTO 10
+<span class="ln">55</span>            ENDIF
+<span class="ln">56</span>         END DO
+<span class="ln">57</span>         II = 1
+<span class="ln">58</span>  10     CONTINUE
+<span class="ln">59</span>         IDTSCV = MAX(1,II)
+<span class="ln">60</span>         IDTSCV = MIN(NTS-3,IDTSCV)
+<span class="ln">61</span>      ELSE
+<span class="ln">62</span>C SEARCH UP FOR NEAREST 4 TABLE ELEMENTS
+<span class="ln">63</span>         DO I = IDTSCV+2,NTS
+<span class="ln">64</span>            IF(TL.LT.TLOGX(I))THEN
+<span class="ln">65</span>               II = I - 2
+<span class="ln">66</span>               GOTO 20
+<span class="ln">67</span>            ENDIF
+<span class="ln">68</span>         END DO
+<span class="ln">69</span>         II = NTS - 3
+<span class="ln">70</span>  20     CONTINUE
+<span class="ln">71</span>         IDTSCV = MAX(1,II)
+<span class="ln">72</span>         IDTSCV = MIN(NTS-3,IDTSCV)
+<span class="ln">73</span>      ENDIF
+<span class="ln">74</span>C  FIND NEAREST POINTS IN PRESSURE.
+<span class="ln">75</span>      JJJ = MIN(NPTSX(IDTSCV)-3,IDP)
+<span class="ln">76</span>      IF(PP.LT.TABLENV(IDTSCV,JJJ+1,1))THEN
+<span class="ln">77</span>C SEARCH DOWN TO FIND NEAREST 4 TABLE ELEMENTS
+<span class="ln">78</span>         DO J = JJJ,1,-1
+<span class="ln">79</span>            IF(PP.GT.TABLENV(IDTSCV,J,1))THEN
+<span class="ln">80</span>               JJ = J - 1
+<span class="ln">81</span>               GOTO 30
+<span class="ln">82</span>            ENDIF
+<span class="ln">83</span>         END DO
+<span class="ln">84</span>         JJ = 1
+<span class="ln">85</span>  30     CONTINUE
+<span class="ln">86</span>         IDP = MAX(1,JJ)
+<span class="ln">87</span>         IDP = MIN(NPTSX(IDTSCV)-3,IDP)
+<span class="ln">88</span>      ELSE
+<span class="ln">89</span>C SEARCH UP FOR NEAREST 4 TABLE ELEMENTS.  NOTE SEARCH IS DONE AT LOWEST
+<span class="ln">90</span>C TEMPERATURE POINT (WITH THE MINIMUM RANGE IN P).
+<span class="ln">91</span>         DO J = JJJ+2,NPTSX(IDTSCV)
+<span class="ln">92</span>            IF(PP.LT.TABLENV(IDTSCV,J,1))THEN
+<span class="ln">93</span>               JJ = J - 2
+<span class="ln">94</span>               GOTO 40
+<span class="ln">95</span>            ENDIF
+<span class="ln">96</span>         END DO
+<span class="ln">97</span>C POINT IS OUTSIDE TABLE; RETURN.
+<span class="ln">98</span>c         WRITE(*,5)TL,PL
+<span class="ln">99</span>         LCALC = .FALSE.
+<span class="ln">100</span>         RETURN
+<span class="ln">101</span>  40     CONTINUE
+<span class="ln">102</span>         IDP = MIN(NPTSX(IDTSCV)-3,JJ)
+<span class="ln">103</span>      ENDIF
+<span class="ln">104</span>      LCALC = .TRUE.
+<span class="ln">105</span>      DO K = 1,4
+<span class="ln">106</span>         QR(K) = TLOGX(K+IDTSCV-1)
+<span class="ln">107</span>      END DO
+<span class="ln">108</span>      CALL <a href="../yrec-map/interp.f.html#def-INTERP" title="INTERP in interp.f">INTERP</a>(QR,FT,FTD,TL)
+<span class="ln">109</span>      DO K = 1,4
+<span class="ln">110</span>         QR(K) = TABLENV(IDTSCV,IDP+K-1,1)
+<span class="ln">111</span>      END DO
+<span class="ln">112</span>      CALL <a href="../yrec-map/interp.f.html#def-INTERP" title="INTERP in interp.f">INTERP</a>(QR,FP,FPD,PP)
+<span class="ln">113</span>      Y = 1.0D0 - X - Z
+<span class="ln">114</span>C INCLUDE RADIATION PRESSURE IN THE EQUATION OF STATE.
+<span class="ln">115</span>      PRAD = BETM1*P
+<span class="ln">116</span>      PGAS = BETA*P
+<span class="ln">117</span>C DENSITY FOR X=1, Y=1, Z=1
+<span class="ln">118</span>C INTERPOLATE IN PRESSURE AT 4 DIFFERENT TEMPERATURE POINTS.
+<span class="ln">119</span>      DO I = 1,4
+<span class="ln">120</span>         II = IDTSCV+I-1
+<span class="ln">121</span>         TEMP(I,1)=FP(1)*TABLEX(II,IDP,4) +
+<span class="ln">122</span>     *   FP(2)*TABLEX(II,IDP+1,4) + FP(3)*TABLEX(II,IDP+2,4)
+<span class="ln">123</span>     *   + FP(4)*TABLEX(II,IDP+3,4)
+<span class="ln">124</span>         TEMP(I,2)=FP(1)*TABLEY(II,IDP,4) +
+<span class="ln">125</span>     *   FP(2)*TABLEY(II,IDP+1,4) + FP(3)*TABLEY(II,IDP+2,4)
+<span class="ln">126</span>     *   + FP(4)*TABLEY(II,IDP+3,4)
+<span class="ln">127</span>         TEMP(I,3)=FP(1)*TABLEZ(II,IDP,4) +
+<span class="ln">128</span>     *   FP(2)*TABLEZ(II,IDP+1,4) + FP(3)*TABLEZ(II,IDP+2,4)
+<span class="ln">129</span>     *   + FP(4)*TABLEZ(II,IDP+3,4)
+<span class="ln">130</span>      END DO
+<span class="ln">131</span>C INTERPOLATE IN TEMPERATURE
+<span class="ln">132</span>      DENXL= FT(1)*TEMP(1,1) + FT(2)*TEMP(2,1) + FT(3)*TEMP(3,1)
+<span class="ln">133</span>     *         + FT(4)*TEMP(4,1)
+<span class="ln">134</span>      DENX = EXP(CLN*DENXL)
+<span class="ln">135</span>      DENYL= FT(1)*TEMP(1,2) + FT(2)*TEMP(2,2) + FT(3)*TEMP(3,2)
+<span class="ln">136</span>     *         + FT(4)*TEMP(4,2)
+<span class="ln">137</span>      DENY = EXP(CLN*DENYL)
+<span class="ln">138</span>      DENZL= FT(1)*TEMP(1,3) + FT(2)*TEMP(2,3) + FT(3)*TEMP(3,3)
+<span class="ln">139</span>     *         + FT(4)*TEMP(4,3)
+<span class="ln">140</span>      DENZ = EXP(CLN*DENZL)
+<span class="ln">141</span>C  DENSITY
+<span class="ln">142</span>      D = 1.0D0/(X/DENX + Y/DENY + Z/DENZ)
+<span class="ln">143</span>      DL = LOG10(D)
+<span class="ln">144</span>      DDX = X*D/DENX
+<span class="ln">145</span>      DDY = Y*D/DENY
+<span class="ln">146</span>      DDZ = Z*D/DENZ
+<span class="ln">147</span>C D LN RHO/ D LN P = QDP
+<span class="ln">148</span>C FOR GAS PRESSURE QDP(TOT) = QDP(X)*X*RHO/RHO(X)+QDP(Y)*Y*RHO/RHO(Y)
+<span class="ln">149</span>C FOR RADIATION PRESSURE QDP = 0, SO QDP(TOT) = QDP(GAS)*P/PGAS
+<span class="ln">150</span>C INTERPOLATE IN PRESSURE AT 4 DIFFERENT TEMPERATURE POINTS.
+<span class="ln">151</span>      DO I = 1,4
+<span class="ln">152</span>         II = IDTSCV+I-1
+<span class="ln">153</span>         TEMP(I,1)=FP(1)*TABLEX(II,IDP,8) +
+<span class="ln">154</span>     *   FP(2)*TABLEX(II,IDP+1,8) + FP(3)*TABLEX(II,IDP+2,8)
+<span class="ln">155</span>     *   + FP(4)*TABLEX(II,IDP+3,8)
+<span class="ln">156</span>         TEMP(I,2)=FP(1)*TABLEY(II,IDP,8) +
+<span class="ln">157</span>     *   FP(2)*TABLEY(II,IDP+1,8) + FP(3)*TABLEY(II,IDP+2,8)
+<span class="ln">158</span>     *   + FP(4)*TABLEY(II,IDP+3,8)
+<span class="ln">159</span>         TEMP(I,3)=FP(1)*TABLEZ(II,IDP,13) +
+<span class="ln">160</span>     *   FP(2)*TABLEZ(II,IDP+1,13) + FP(3)*TABLEZ(II,IDP+2,13)
+<span class="ln">161</span>     *   + FP(4)*TABLEZ(II,IDP+3,13)
+<span class="ln">162</span>      END DO
+<span class="ln">163</span>C INTERPOLATE IN TEMPERATURE
+<span class="ln">164</span>      QDPX= FT(1)*TEMP(1,1) + FT(2)*TEMP(2,1) + FT(3)*TEMP(3,1)
+<span class="ln">165</span>     *         + FT(4)*TEMP(4,1)
+<span class="ln">166</span>      QDPY= FT(1)*TEMP(1,2) + FT(2)*TEMP(2,2) + FT(3)*TEMP(3,2)
+<span class="ln">167</span>     *         + FT(4)*TEMP(4,2)
+<span class="ln">168</span>      QDPZ= FT(1)*TEMP(1,3) + FT(2)*TEMP(2,3) + FT(3)*TEMP(3,3)
+<span class="ln">169</span>     *         + FT(4)*TEMP(4,3)
+<span class="ln">170</span>      QDP0 = QDPX*DDX + QDPY*DDY + QDPZ*DDZ
+<span class="ln">171</span>      QDP = QDP0/BETA
+<span class="ln">172</span>C D LN RHO/ D LN T = QDT (NOTE : D LN P/ D LN T = QPT)
+<span class="ln">173</span>C FOR GAS PRESSURE, CORRECT AS PER QDP
+<span class="ln">174</span>C FOR RADIATION PRESSURE, USE QDT = -QDP*QPT.  CORRECT QPT FOR
+<span class="ln">175</span>C RADIATION PRESSURE AND USE THE CORRECTED QDP, QPT TO GET QDT.
+<span class="ln">176</span>C INTERPOLATE IN PRESSURE AT 4 DIFFERENT TEMPERATURE POINTS.zdiffOPEOSfinalewkop95zscv1.full
+<span class="ln">177</span>      DO I = 1,4
+<span class="ln">178</span>         II = IDTSCV+I-1
+<span class="ln">179</span>         TEMP(I,1)=FP(1)*TABLEX(II,IDP,7) +
+<span class="ln">180</span>     *   FP(2)*TABLEX(II,IDP+1,7) + FP(3)*TABLEX(II,IDP+2,7)
+<span class="ln">181</span>     *   + FP(4)*TABLEX(II,IDP+3,7)
+<span class="ln">182</span>         TEMP(I,2)=FP(1)*TABLEY(II,IDP,7) +
+<span class="ln">183</span>     *   FP(2)*TABLEY(II,IDP+1,7) + FP(3)*TABLEY(II,IDP+2,7)
+<span class="ln">184</span>     *   + FP(4)*TABLEY(II,IDP+3,7)
+<span class="ln">185</span>         TEMP(I,3)=FP(1)*TABLEZ(II,IDP,10) +
+<span class="ln">186</span>     *   FP(2)*TABLEZ(II,IDP+1,10) + FP(3)*TABLEZ(II,IDP+2,10)
+<span class="ln">187</span>     *   + FP(4)*TABLEZ(II,IDP+3,10)
+<span class="ln">188</span>      END DO
+<span class="ln">189</span>C INTERPOLATE IN TEMPERATURE
+<span class="ln">190</span>      QDTX= FT(1)*TEMP(1,1) + FT(2)*TEMP(2,1) + FT(3)*TEMP(3,1)
+<span class="ln">191</span>     *         + FT(4)*TEMP(4,1)
+<span class="ln">192</span>      QDTY= FT(1)*TEMP(1,2) + FT(2)*TEMP(2,2) + FT(3)*TEMP(3,2)
+<span class="ln">193</span>     *         + FT(4)*TEMP(4,2)
+<span class="ln">194</span>      QDTZ= FT(1)*TEMP(1,3) + FT(2)*TEMP(2,3) + FT(3)*TEMP(3,3)
+<span class="ln">195</span>     *         + FT(4)*TEMP(4,3)
+<span class="ln">196</span>      QDT0 = QDTX*DDX + QDTY*DDY + QDTZ*DDZ
+<span class="ln">197</span>      QPT0 = -QDT0/QDP0
+<span class="ln">198</span>      QPT = QPT0*BETA + 4.0D0*BETM1
+<span class="ln">199</span>      QDT = -QPT*QDP
+<span class="ln">200</span>C  CP = S*(D LN S/ D LN T)|P IS TABULATED. USE
+<span class="ln">201</span>C  CP = DU/DT + P*(D LN RHO/D LN T)**2/RHO/T/(D LN RHO/ D LN P)
+<span class="ln">202</span>C  TO FIND DU/DT.  THEN INCLUDE THE EFFECTS OF RADIATION PRESSURE
+<span class="ln">203</span>C  ON DU/DT AND THE OTHER TERMS AND GET A CORRECTED CP.
+<span class="ln">204</span>C CP (GAS PRESSURE ONLY).
+<span class="ln">205</span>C NOTE THAT UNLIKE THE ENVELOPE TABLE, WE NEED TO INTERPOLATE IN
+<span class="ln">206</span>C ENTROPY S, D LN S/D LNT, AND ENTROPY OF MIXING, THEN CALCULATE
+<span class="ln">207</span>C DU/DT
+<span class="ln">208</span>C  ENTROPY AND ENTROPY OF MIXING
+<span class="ln">209</span>C INTERPOLATE IN PRESSURE AT 4 DIFFERENT TEMPERATURE POINTS.
+<span class="ln">210</span>      DO I = 1,4
+<span class="ln">211</span>         II = IDTSCV+I-1
+<span class="ln">212</span>         TEMP(I,1)=FP(1)*TABLEX(II,IDP,5) +
+<span class="ln">213</span>     *   FP(2)*TABLEX(II,IDP+1,5) + FP(3)*TABLEX(II,IDP+2,5)
+<span class="ln">214</span>     *   + FP(4)*TABLEX(II,IDP+3,5)
+<span class="ln">215</span>         TEMP(I,2)=FP(1)*TABLEY(II,IDP,5) +
+<span class="ln">216</span>     *   FP(2)*TABLEY(II,IDP+1,5) + FP(3)*TABLEY(II,IDP+2,5)
+<span class="ln">217</span>     *   + FP(4)*TABLEY(II,IDP+3,5)
+<span class="ln">218</span>         TEMP(I,3)=FP(1)*SMIX(II,IDP) +
+<span class="ln">219</span>     *   FP(2)*SMIX(II,IDP+1) + FP(3)*SMIX(II,IDP+2)
+<span class="ln">220</span>     *   + FP(4)*SMIX(II,IDP+3)
+<span class="ln">221</span>      END DO
+<span class="ln">222</span>C INTERPOLATE IN TEMPERATURE
+<span class="ln">223</span>      SXL= FT(1)*TEMP(1,1) + FT(2)*TEMP(2,1) + FT(3)*TEMP(3,1)
+<span class="ln">224</span>     *         + FT(4)*TEMP(4,1)
+<span class="ln">225</span>      SX = EXP(CLN*SXL)
+<span class="ln">226</span>      SYL= FT(1)*TEMP(1,2) + FT(2)*TEMP(2,2) + FT(3)*TEMP(3,2)
+<span class="ln">227</span>     *         + FT(4)*TEMP(4,2)
+<span class="ln">228</span>      SY = EXP(CLN*SYL)
+<span class="ln">229</span>      SM= FT(1)*TEMP(1,3) + FT(2)*TEMP(2,3) + FT(3)*TEMP(3,3)
+<span class="ln">230</span>     *         + FT(4)*TEMP(4,3)
+<span class="ln">231</span>      QSMT = FTD(1)*LOG10(TEMP(1,3)) + FTD(2)*LOG10(TEMP(2,3))
+<span class="ln">232</span>     *     + FTD(3)*LOG10(TEMP(3,3))
+<span class="ln">233</span>     *         + FTD(4)*LOG10(TEMP(4,3))
+<span class="ln">234</span>      S0 = X*SX + Y*SY + SM
+<span class="ln">235</span>C D LN S/ D LN T (X AND Y) AND DU/DT (Z)
+<span class="ln">236</span>C INTERPOLATE IN PRESSURE AT 4 DIFFERENT TEMPERATURE POINTS.
+<span class="ln">237</span>      DO I = 1,4
+<span class="ln">238</span>         II = IDTSCV+I-1
+<span class="ln">239</span>         TEMP(I,1)=FP(1)*TABLEX(II,IDP,9) +
+<span class="ln">240</span>     *   FP(2)*TABLEX(II,IDP+1,9) + FP(3)*TABLEX(II,IDP+2,9)
+<span class="ln">241</span>     *   + FP(4)*TABLEX(II,IDP+3,9)
+<span class="ln">242</span>         TEMP(I,2)=FP(1)*TABLEY(II,IDP,9) +
+<span class="ln">243</span>     *   FP(2)*TABLEY(II,IDP+1,9) + FP(3)*TABLEY(II,IDP+2,9)
+<span class="ln">244</span>     *   + FP(4)*TABLEY(II,IDP+3,9)
+<span class="ln">245</span>         TEMP(I,3)=FP(1)*TABLEZ(II,IDP,7) +
+<span class="ln">246</span>     *   FP(2)*TABLEZ(II,IDP+1,7) + FP(3)*TABLEZ(II,IDP+2,7)
+<span class="ln">247</span>     *   + FP(4)*TABLEZ(II,IDP+3,7)
+<span class="ln">248</span>      END DO
+<span class="ln">249</span>C INTERPOLATE IN TEMPERATURE
+<span class="ln">250</span>      QSTX= FT(1)*TEMP(1,1) + FT(2)*TEMP(2,1) + FT(3)*TEMP(3,1)
+<span class="ln">251</span>     *         + FT(4)*TEMP(4,1)
+<span class="ln">252</span>      QSTY= FT(1)*TEMP(1,2) + FT(2)*TEMP(2,2) + FT(3)*TEMP(3,2)
+<span class="ln">253</span>     *         + FT(4)*TEMP(4,2)
+<span class="ln">254</span>      QUTZL= FT(1)*TEMP(1,3) + FT(2)*TEMP(2,3) + FT(3)*TEMP(3,3)
+<span class="ln">255</span>     *         + FT(4)*TEMP(4,3)
+<span class="ln">256</span>      QUTZ = EXP(CLN*QUTZL)
+<span class="ln">257</span>      QST0 = X*SX*QSTX + Y*SY*QSTY + SM*QSMT
+<span class="ln">258</span>      QCP0 = QST0 + Z*(QUTZ + PGAS*QDTZ**2/QDPZ/DENZ/T)
+<span class="ln">259</span>C NOW FIND DU/DT FROM THE ORIGINAL TABLE.
+<span class="ln">260</span>      QUT = QCP0 - PGAS*QDT0**2/QDP0/D/T
+<span class="ln">261</span>C CORRECT DU/DT FOR RADIATION
+<span class="ln">262</span>      UR = 3.0D0*PRAD/D
+<span class="ln">263</span>      QUT = QUT + 4.0D0*UR/T
+<span class="ln">264</span>C CORRECT CP FOR RADIATION PRESSURE
+<span class="ln">265</span>      QCP = QUT + P*QDT**2/QDP/D/T
+<span class="ln">266</span>C ADIABATIC TEMPERATURE GRADIENT
+<span class="ln">267</span>      DELA = -P*QDT/D/T/QCP
+<span class="ln">268</span>
+<span class="ln">269</span>C Get fractions of total particles (including electrons), as follows:
+<span class="ln">270</span>C   XTF_H2  the fraction that is neutral hydrogen molecules, and
+<span class="ln">271</span>C   XTF_He  the fraction thst is neutral helium).
+<span class="ln">272</span>C   These are in column 2 respectively of the SCV hydrogen and
+<span class="ln">273</span>C   Helium tables.
+<span class="ln">274</span>C INTERPOLATE IN PRESSURE AT 4 DIFFERENT TEMPERATURE POINTS.
+<span class="ln">275</span>      DO I = 1,4
+<span class="ln">276</span>         II = IDTSCV+I-1
+<span class="ln">277</span>         TEMP(I,1)=FP(1)*TABLEX(II,IDP,2) +
+<span class="ln">278</span>     *   FP(2)*TABLEX(II,IDP+1,2) + FP(3)*TABLEX(II,IDP+2,2)
+<span class="ln">279</span>     *   + FP(4)*TABLEX(II,IDP+3,2)
+<span class="ln">280</span>         TEMP(I,2)=FP(1)*TABLEY(II,IDP,2) +
+<span class="ln">281</span>     *   FP(2)*TABLEY(II,IDP+1,2) + FP(3)*TABLEY(II,IDP+2,2)
+<span class="ln">282</span>     *   + FP(4)*TABLEY(II,IDP+3,2)
+<span class="ln">283</span>      END DO
+<span class="ln">284</span>C INTERPOLATE IN TEMPERATURE
+<span class="ln">285</span>      XTF_H2 = FT(1)*TEMP(1,1) + FT(2)*TEMP(2,1) + FT(3)*TEMP(3,1)
+<span class="ln">286</span>     *         + FT(4)*TEMP(4,1)
+<span class="ln">287</span>      XTF_He = FT(1)*TEMP(1,2) + FT(2)*TEMP(2,2) + FT(3)*TEMP(3,2)
+<span class="ln">288</span>     *         + FT(4)*TEMP(4,2)
+<span class="ln">289</span>
+<span class="ln">290</span>C Get more fractions of total particles (including electrons), as follows:
+<span class="ln">291</span>C   XTF_H1  the fraction that is neutral hydrogen atoms, and
+<span class="ln">292</span>C   XTF_HeP  the fraction thst is singly ionized helium).
+<span class="ln">293</span>C   These are in column 3 respectively of the SCV hydrogen and
+<span class="ln">294</span>C   Helium tables.
+<span class="ln">295</span>C INTERPOLATE IN PRESSURE AT 4 DIFFERENT TEMPERATURE POINTS.
+<span class="ln">296</span>      DO I = 1,4
+<span class="ln">297</span>         II = IDTSCV+I-1
+<span class="ln">298</span>         TEMP(I,1)=FP(1)*TABLEX(II,IDP,3) +
+<span class="ln">299</span>     *   FP(2)*TABLEX(II,IDP+1,3) + FP(3)*TABLEX(II,IDP+2,3)
+<span class="ln">300</span>     *   + FP(4)*TABLEX(II,IDP+3,3)
+<span class="ln">301</span>         TEMP(I,2)=FP(1)*TABLEY(II,IDP,3) +
+<span class="ln">302</span>     *   FP(2)*TABLEY(II,IDP+1,3) + FP(3)*TABLEY(II,IDP+2,3)
+<span class="ln">303</span>     *   + FP(4)*TABLEY(II,IDP+3,3)
+<span class="ln">304</span>      END DO
+<span class="ln">305</span>C INTERPOLATE IN TEMPERATURE
+<span class="ln">306</span>      XTF_H1 = FT(1)*TEMP(1,1) + FT(2)*TEMP(2,1) + FT(3)*TEMP(3,1)
+<span class="ln">307</span>     *         + FT(4)*TEMP(4,1)
+<span class="ln">308</span>      XTF_HeP = FT(1)*TEMP(1,2) + FT(2)*TEMP(2,2) + FT(3)*TEMP(3,2)
+<span class="ln">309</span>     *         + FT(4)*TEMP(4,2)
+<span class="ln">310</span>
+<span class="ln">311</span>C At tis time we can calculate the ramaining particles fractions using conservation
+<span class="ln">312</span>C of particles and coservation of charge.  The variable names are:
+<span class="ln">313</span>C  XTF_H_e  the hycrogen related fraction that is electrons
+<span class="ln">314</span>C  XTF_HP   the hydrogen ralated fraction that is H+ ions
+<span class="ln">315</span>C  XTF_He_e the helium related fraction that is electrons
+<span class="ln">316</span>C  XTF_HePP the helium related fraction that is doubly ionized helium (He++)
+<span class="ln">317</span>C Particle and charge conservation yields:
+<span class="ln">318</span>      XTF_H_e = .5D0*(1D0 - XTF_H2 - XTF_H1)
+<span class="ln">319</span>      XTF_HP = XTF_H_e
+<span class="ln">320</span>      XTF_He_e = (1D0/3D0)*(2D0 - 2D0*XTF_He - XTF_HeP)
+<span class="ln">321</span>      XTF_HePP = 1D0 - XTF_He - XTF_HeP - XTF_He_e
+<span class="ln">322</span>
+<span class="ln">323</span>C We are seeking the fraction XHP of hydrogen nuclei that are singly ionized,
+<span class="ln">324</span>C the fraction XHeP of helium huclei that are singly ionized and XHePP, the
+<span class="ln">325</span>C helium fraction that is doubly ionized.
+<span class="ln">326</span>      XHP = XTF_HP / (XTF_H2 + XTF_H1 + XTF_HP)
+<span class="ln">327</span>      XHeP = XTF_HeP / (XTF_He + XTF_HeP + XTF_HePP)
+<span class="ln">328</span>      XHePP = XTF_HePP / (XTF_He + XTF_HeP + XTF_HePP)
+<span class="ln">329</span>
+<span class="ln">330</span>C In the same order, these are the desired elements of array XION(3)
+<span class="ln">331</span>      FXION(1) = XHP
+<span class="ln">332</span>      FXION(2) = XHeP
+<span class="ln">333</span>      FXION(3) = XHePP
+<span class="ln">334</span>
+<span class="ln">335</span>      RETURN    ! Primay exit. Success. LCALC is true.
+<span class="ln">336</span>
+<span class="ln">337</span>      END</pre></details>
+<details class='py' id='py-eqscvg'><summary>Python version: eqscvg</summary><pre class='doc'>The SCV equation of state for any X, Z: density by additive volumes
+of the H, He and metal tables, derivatives as volume-weighted means,
+c_P from the tabulated entropies, then radiation and the H and He
+ionization fractions (equations on the page). Called by eqscve.
+
+Translates: eqscvg.f#EQSCVG (09c3b9b)
+
+Arguments: tl, t (log T, T), p (total pressure), x, z, beta (Pgas/P);
+dl, d, qdt, qdp, qcp, dela and lcalc are only set. Array changed in
+place: fxion (H+, He+, He++ fractions, index 0 unused).
+
+Returns (dl, d, qdt, qdp, qcp, dela, lcalc). Outside the table, lcalc
+is False and the others are returned as passed in.</pre><pre class='src'><span class="ln">49</span>def eqscvg(tl, t, p, dl, d, x, z, beta, fxion, qdt, qdp, qcp, dela, lcalc):
+<span class="ln">50</span>    &quot;&quot;&quot;The SCV equation of state for any X, Z: density by additive volumes
+<span class="ln">51</span>    of the H, He and metal tables, derivatives as volume-weighted means,
+<span class="ln">52</span>    c_P from the tabulated entropies, then radiation and the H and He
+<span class="ln">53</span>    ionization fractions (equations on the page). Called by eqscve.
+<span class="ln">54</span>
+<span class="ln">55</span>    Translates: eqscvg.f#EQSCVG (09c3b9b)
+<span class="ln">56</span>
+<span class="ln">57</span>    Arguments: tl, t (log T, T), p (total pressure), x, z, beta (Pgas/P);
+<span class="ln">58</span>    dl, d, qdt, qdp, qcp, dela and lcalc are only set. Array changed in
+<span class="ln">59</span>    place: fxion (H+, He+, He++ fractions, index 0 unused).
+<span class="ln">60</span>
+<span class="ln">61</span>    Returns (dl, d, qdt, qdp, qcp, dela, lcalc). Outside the table, lcalc
+<span class="ln">62</span>    is False and the others are returned as passed in.
+<span class="ln">63</span>    &quot;&quot;&quot;
+<span class="ln">64</span>    c = constants_mod
+<span class="ln">65</span>    scv = scveos_mod
+<span class="ln">66</span>    # The gas pressure is the tabulated quantity.
+<span class="ln">67</span>    betm1 = 1.0 - beta
+<span class="ln">68</span>    pp = math.log10(beta * p)
+<span class="ln">69</span>    # Is the point within the table?
+<span class="ln">70</span>    if tl &lt; scv.tlogx[1] or tl &gt; scv.tlogx[NTS] or pp &lt; 4.0:
+<span class="ln">71</span>        lcalc = False
+<span class="ln">72</span>        return dl, d, qdt, qdp, qcp, dela, lcalc
+<span class="ln">73</span>
+<span class="ln">74</span>    # Nearest 4 points in temperature, searching from the last stencil
+<span class="ln">75</span>    # (left by this routine or eqscve).
+<span class="ln">76</span>    if tl &lt; scv.tlogx[scv.idtscv + 1]:
+<span class="ln">77</span>        for i in range(scv.idtscv, 0, -1):
+<span class="ln">78</span>            if tl &gt; scv.tlogx[i]:
+<span class="ln">79</span>                ii = i - 1
+<span class="ln">80</span>                break                              # go to 10
+<span class="ln">81</span>        else:
+<span class="ln">82</span>            ii = 1
+<span class="ln">83</span>    else:
+<span class="ln">84</span>        for i in range(scv.idtscv + 2, NTS + 1):
+<span class="ln">85</span>            if tl &lt; scv.tlogx[i]:
+<span class="ln">86</span>                ii = i - 2
+<span class="ln">87</span>                break                              # go to 20
+<span class="ln">88</span>        else:
+<span class="ln">89</span>            ii = NTS - 3
+<span class="ln">90</span>    scv.idtscv = max(1, ii)
+<span class="ln">91</span>    scv.idtscv = min(NTS - 3, scv.idtscv)
+<span class="ln">92</span>    idt = scv.idtscv
+<span class="ln">93</span>
+<span class="ln">94</span>    # Nearest 4 points in pressure, searched in the row idt (the lowest
+<span class="ln">95</span>    # temperature of the stencil, with the smallest range in P).
+<span class="ln">96</span>    nptsx = scv.nptsx[idt]
+<span class="ln">97</span>    jjj = min(nptsx - 3, scv.idp)
+<span class="ln">98</span>    if pp &lt; scv.tablenv[idt, jjj + 1, 1]:
+<span class="ln">99</span>        for j in range(jjj, 0, -1):
+<span class="ln">100</span>            if pp &gt; scv.tablenv[idt, j, 1]:
+<span class="ln">101</span>                jj = j - 1
+<span class="ln">102</span>                break                              # go to 30
+<span class="ln">103</span>        else:
+<span class="ln">104</span>            jj = 1
+<span class="ln">105</span>        scv.idp = max(1, jj)
+<span class="ln">106</span>        scv.idp = min(nptsx - 3, scv.idp)
+<span class="ln">107</span>    else:
+<span class="ln">108</span>        for j in range(jjj + 2, nptsx + 1):
+<span class="ln">109</span>            if pp &lt; scv.tablenv[idt, j, 1]:
+<span class="ln">110</span>                jj = j - 2
+<span class="ln">111</span>                break                              # go to 40
+<span class="ln">112</span>        else:
+<span class="ln">113</span>            # The point is above the table: return.
+<span class="ln">114</span>            lcalc = False
+<span class="ln">115</span>            return dl, d, qdt, qdp, qcp, dela, lcalc
+<span class="ln">116</span>        scv.idp = min(nptsx - 3, jj)               # label 40
+<span class="ln">117</span>    idp = scv.idp
+<span class="ln">118</span>    lcalc = True
+<span class="ln">119</span>
+<span class="ln">120</span>    # Lagrange weights in log T and log Pgas.
+<span class="ln">121</span>    for k in range(1, 5):
+<span class="ln">122</span>        qr[k] = scv.tlogx[k + idt - 1]
+<span class="ln">123</span>    interp(qr, ft, ftd, tl)
+<span class="ln">124</span>    for k in range(1, 5):
+<span class="ln">125</span>        # Question (see the page): row idt&#x27;s pressures for all 4 rows.
+<span class="ln">126</span>        qr[k] = scv.tablenv[idt, idp + k - 1, 1]
+<span class="ln">127</span>    interp(qr, fp, fpd, pp)
+<span class="ln">128</span>    y = 1.0 - x - z
+<span class="ln">129</span>    # Radiation pressure.
+<span class="ln">130</span>    prad = betm1 * p
+<span class="ln">131</span>    pgas = beta * p
+<span class="ln">132</span>
+<span class="ln">133</span>    # Densities for X=1, Y=1, Z=1 (column 4; log10 in the tables).
+<span class="ln">134</span>    denxl = _in_t(_rows(scv.tablex, 4))
+<span class="ln">135</span>    denx = math.exp(c.cln * denxl)
+<span class="ln">136</span>    denyl = _in_t(_rows(scv.tabley, 4))
+<span class="ln">137</span>    deny = math.exp(c.cln * denyl)
+<span class="ln">138</span>    denzl = _in_t(_rows(scv.tablez, 4))
+<span class="ln">139</span>    denz = math.exp(c.cln * denzl)
+<span class="ln">140</span>    # Density by additive volumes, and the volume weights.
+<span class="ln">141</span>    d = 1.0 / (x / denx + y / deny + z / denz)
+<span class="ln">142</span>    dl = math.log10(d)
+<span class="ln">143</span>    ddx = x * d / denx
+<span class="ln">144</span>    ddy = y * d / deny
+<span class="ln">145</span>    ddz = z * d / denz
+<span class="ln">146</span>
+<span class="ln">147</span>    # d ln rho / d ln P (gas): columns 8, 8 and 13.
+<span class="ln">148</span>    qdpx = _in_t(_rows(scv.tablex, 8))
+<span class="ln">149</span>    qdpy = _in_t(_rows(scv.tabley, 8))
+<span class="ln">150</span>    qdpz = _in_t(_rows(scv.tablez, 13))
+<span class="ln">151</span>    qdp0 = qdpx * ddx + qdpy * ddy + qdpz * ddz
+<span class="ln">152</span>    qdp = qdp0 / beta
+<span class="ln">153</span>
+<span class="ln">154</span>    # d ln rho / d ln T (gas): columns 7, 7 and 10; then radiation.
+<span class="ln">155</span>    qdtx = _in_t(_rows(scv.tablex, 7))
+<span class="ln">156</span>    qdty = _in_t(_rows(scv.tabley, 7))
+<span class="ln">157</span>    qdtz = _in_t(_rows(scv.tablez, 10))
+<span class="ln">158</span>    qdt0 = qdtx * ddx + qdty * ddy + qdtz * ddz
+<span class="ln">159</span>    qpt0 = -qdt0 / qdp0
+<span class="ln">160</span>    qpt = qpt0 * beta + 4.0 * betm1
+<span class="ln">161</span>    qdt = -qpt * qdp
+<span class="ln">162</span>
+<span class="ln">163</span>    # Entropies (column 5, log10) and the entropy of mixing.
+<span class="ln">164</span>    temp[:, 1] = _rows(scv.tablex, 5)
+<span class="ln">165</span>    temp[:, 2] = _rows(scv.tabley, 5)
+<span class="ln">166</span>    temp[:, 3] = _rows(scv.smix, None, ncol=2)
+<span class="ln">167</span>    sxl = _in_t(temp[:, 1])
+<span class="ln">168</span>    sx = math.exp(c.cln * sxl)
+<span class="ln">169</span>    syl = _in_t(temp[:, 2])
+<span class="ln">170</span>    sy = math.exp(c.cln * syl)
+<span class="ln">171</span>    sm = _in_t(temp[:, 3])
+<span class="ln">172</span>    # Question (see the page): log10 of SMIX fails if it is &lt;= 0.
+<span class="ln">173</span>    qsmt = (ftd[1] * math.log10(temp[1, 3]) + ftd[2] * math.log10(temp[2, 3])
+<span class="ln">174</span>            + ftd[3] * math.log10(temp[3, 3])
+<span class="ln">175</span>            + ftd[4] * math.log10(temp[4, 3]))
+<span class="ln">176</span>    s0 = x * sx + y * sy + sm                      # unused, as in the Fortran
+<span class="ln">177</span>
+<span class="ln">178</span>    # d ln S / d ln T for X and Y (column 9), dU/dT for Z (column 7, log10).
+<span class="ln">179</span>    qstx = _in_t(_rows(scv.tablex, 9))
+<span class="ln">180</span>    qsty = _in_t(_rows(scv.tabley, 9))
+<span class="ln">181</span>    qutzl = _in_t(_rows(scv.tablez, 7))
+<span class="ln">182</span>    qutz = math.exp(c.cln * qutzl)
+<span class="ln">183</span>    qst0 = x * sx * qstx + y * sy * qsty + sm * qsmt
+<span class="ln">184</span>    qcp0 = qst0 + z * (qutz + pgas * qdtz ** 2 / qdpz / denz / t)
+<span class="ln">185</span>    # dU/dT for the gas, then corrected for radiation.
+<span class="ln">186</span>    qut = qcp0 - pgas * qdt0 ** 2 / qdp0 / d / t
+<span class="ln">187</span>    ur = 3.0 * prad / d
+<span class="ln">188</span>    qut = qut + 4.0 * ur / t
+<span class="ln">189</span>    # c_P with radiation pressure, and the adiabatic gradient.
+<span class="ln">190</span>    qcp = qut + p * qdt ** 2 / qdp / d / t
+<span class="ln">191</span>    dela = -p * qdt / d / t / qcp
+<span class="ln">192</span>
+<span class="ln">193</span>    # Fractions of all particles (electrons included): neutral H2 and
+<span class="ln">194</span>    # neutral He (column 2), neutral H atoms and He+ (column 3).
+<span class="ln">195</span>    xtf_h2 = _in_t(_rows(scv.tablex, 2))
+<span class="ln">196</span>    xtf_he = _in_t(_rows(scv.tabley, 2))
+<span class="ln">197</span>    xtf_h1 = _in_t(_rows(scv.tablex, 3))
+<span class="ln">198</span>    xtf_hep = _in_t(_rows(scv.tabley, 3))
+<span class="ln">199</span>    # The rest from conservation of particles and of charge.
+<span class="ln">200</span>    xtf_h_e = 0.5 * (1.0 - xtf_h2 - xtf_h1)
+<span class="ln">201</span>    xtf_hp = xtf_h_e
+<span class="ln">202</span>    xtf_he_e = (1.0 / 3.0) * (2.0 - 2.0 * xtf_he - xtf_hep)
+<span class="ln">203</span>    xtf_hepp = 1.0 - xtf_he - xtf_hep - xtf_he_e
+<span class="ln">204</span>    # Fractions of H nuclei singly ionized, of He nuclei singly and doubly.
+<span class="ln">205</span>    # Question (see the page): H2 counted once among the H nuclei.
+<span class="ln">206</span>    xhp = xtf_hp / (xtf_h2 + xtf_h1 + xtf_hp)
+<span class="ln">207</span>    xhep = xtf_hep / (xtf_he + xtf_hep + xtf_hepp)
+<span class="ln">208</span>    xhepp = xtf_hepp / (xtf_he + xtf_hep + xtf_hepp)
+<span class="ln">209</span>    fxion[1] = xhp
+<span class="ln">210</span>    fxion[2] = xhep
+<span class="ln">211</span>    fxion[3] = xhepp
+<span class="ln">212</span>    return dl, d, qdt, qdp, qcp, dela, lcalc</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_rows'><summary>Python version: _rows</summary><pre class='doc'>The block the Fortran writes out for each quantity: Lagrange
+interpolation in log Pgas (weights fp) of column col of a table, at
+the 4 temperatures of the stencil. Returns the values at rows 1-4.
+ncol=2 for a table with no column index (SMIX).</pre><pre class='src'><span class="ln">24</span>def _rows(table, col, ncol=3):
+<span class="ln">25</span>    &quot;&quot;&quot;The block the Fortran writes out for each quantity: Lagrange
+<span class="ln">26</span>    interpolation in log Pgas (weights fp) of column col of a table, at
+<span class="ln">27</span>    the 4 temperatures of the stencil. Returns the values at rows 1-4.
+<span class="ln">28</span>    ncol=2 for a table with no column index (SMIX).&quot;&quot;&quot;
+<span class="ln">29</span>    scv = scveos_mod
+<span class="ln">30</span>    out = np.zeros(5)
+<span class="ln">31</span>    for i in range(1, 5):
+<span class="ln">32</span>        ii = scv.idtscv + i - 1
+<span class="ln">33</span>        idp = scv.idp
+<span class="ln">34</span>        if ncol == 2:
+<span class="ln">35</span>            out[i] = sum(fp[k] * table[ii, idp + k - 1] for k in range(1, 5))
+<span class="ln">36</span>        else:
+<span class="ln">37</span>            out[i] = sum(fp[k] * table[ii, idp + k - 1, col]
+<span class="ln">38</span>                         for k in range(1, 5))
+<span class="ln">39</span>    return out</pre></details>
+<details class='py' id='py-_in_t'><summary>Python version: _in_t</summary><pre class='doc'>Interpolate in temperature: sum of the weights ft (or w) times the
+values at the 4 temperatures.</pre><pre class='src'><span class="ln">42</span>def _in_t(vals, w=None):
+<span class="ln">43</span>    &quot;&quot;&quot;Interpolate in temperature: sum of the weights ft (or w) times the
+<span class="ln">44</span>    values at the 4 temperatures.&quot;&quot;&quot;
+<span class="ln">45</span>    w = ft if w is None else w
+<span class="ln">46</span>    return w[1] * vals[1] + w[2] * vals[2] + w[3] * vals[3] + w[4] * vals[4]</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Unclear (question 3).</strong> "Stale stencil search. The temperature search starts from <code>IDT</code>, which <code>EQSCVE</code> may have set for another point". The searches go down or up from any starting <code>IDT</code> until they bracket the point, so a starting value left by another point only costs time; it does not give a wrong stencil. The real point is the second half (the pressure stencil found on row <code>IDT</code> only). Fix: rewrite the question around the shared pressure grid.</li>
+<li>Otherwise correct: the additive-volume density, the volume-weighted derivatives, the entropy-based $c_P$ (with <code>FTD</code> derivative weights on $\log_{10}$ <code>SMIX</code>) and the radiation terms match the code; the $c_P$ formula here equals <code>EQSCVE</code>'s, since $Q_{\rho T}\chi_T = -Q_{\rho T}^2/Q_{\rho P}$.</li>
+</ol>
+<p>Revised: question 3 rewritten.</p></div></details>
+</main></body></html>

@@ -1,0 +1,205 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>lax_wendrof1.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ lax_wendrof1.f</span></header><main>
+<h1>lax_wendrof1.f</h1>
+<p class='muted'>76 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/lax_wendrof1.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>lax_wendrof1.py</code>, 68 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>LAX_WENDROF1</code> is the first (half) step of the two-step Lax–Wendroff scheme that <a href="../yrec-map/grsett.f.html#def-GRSETT"><code>GRSETT</code></a> uses for the explicit, gravitational-settling term of the diffusion equation. It returns the change in the hydrogen abundance at the midpoints of an equally spaced radial grid over half a time step, and the same for the metals when metal diffusion is on.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/grsett.f.html#def-GRSETT"><code>GRSETT</code></a> (helium settling) and <a href="../yrec-map/microdiff_run.f.html#def-MICRODIFF_RUN"><code>MICRODIFF_RUN</code></a> (the microscopic-diffusion driver), each followed by <a href="../yrec-map/lax_wendrof2.f.html#def-LAX_WENDROF2"><code>LAX_WENDROF2</code></a>.</li>
+<li><strong>Arguments:</strong> <code>DT</code> (time step, s), <code>ECOD1</code> (on the equal grid: the first term's coefficient, which <a href="../yrec-map/setup_grsett.f.html#def-SETUP_GRSETT"><code>SETUP_GRSETT</code></a> builds as $d\ln P/dr$ times a function of $X$, so it acts as a flux), <code>EM</code> (the mass at each grid point), <code>NPT</code>, <code>STOT</code> (total mass), <code>LDOLI</code>; output <code>EX_H</code>.</li>
+<li><strong>Modules:</strong> <code>CONSTANTS_MOD</code> ($4\pi$); <code>NMLPAR_MOD</code> (the switch <code>LDIFZ</code> for metal diffusion); <code>GRAVEZ_MOD</code>, the metals' arrays on the equal grid (<code>ECOD1Z</code> in, <code>EZ_H</code> out), shared with <code>GRSETT</code>, <code>LAX_WENDROF2</code>, <a href="../yrec-map/model_to_equal.f.html#def-MODEL_TO_EQUAL"><code>MODEL_TO_EQUAL</code></a> and <a href="../yrec-map/equal_to_model.f.html#def-EQUAL_TO_MODEL"><code>EQUAL_TO_MODEL</code></a>.</li>
+</ul>
+<p><strong>The method.</strong> With $F_i$ = <code>ECOD1(I)</code>, $m_i$ = <code>EM(I)</code>, $M$ = <code>STOT</code>:</p>
+<p>$$\Delta X_{i+1/2} = \frac{\Delta t}{2}\,4\pi\,\frac{F_{i+1}-F_i}{m_{i+1}-m_i}\quad (i = 1..N-1),$$</p>
+<p>stored in <code>EX_H(I)</code>, where at the centre ($i = 1$) the code takes $F_1 = 0$, $m_1 = 0$, and at the surface ($i = N-1$) $F_N = 0$, $m_N = M$: so the flux is taken as zero at the centre and at the surface. The same formulas, with <code>ECOD1Z</code> and <code>EZ_H</code>, are applied to the metals when <code>LDIFZ</code> is true and <code>LDOLI</code> is false.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (<code>/CONST1/</code> to <code>CONSTANTS_MOD</code>, <code>LDIFZ</code> from <code>/GRAVS3/</code> to <code>NMLPAR_MOD</code>, <code>/GRAVEZ/</code> to <code>GRAVEZ_MOD</code>), <code>JSON</code> from <code>DIMENSIONS_MOD</code>, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Only the flux difference.</strong> The half step of the textbook Lax–Wendroff scheme (as the <code>GRSETT</code> comment writes it) also averages the neighbouring values, $X_{j+1/2}^{n+1/2} = \tfrac12(X_j + X_{j+1}) - \dots$; here only the increment is computed, and <code>GRSETT</code> uses it to update the coefficients. Is this the intended variant?</li>
+<li><strong>Index placement.</strong> The central formula uses $m_2$ (the mass between points 1 and 2 when $m_1 = 0$), but the surface one uses $M - m_{N-1}$, which spans two intervals if $m_N &lt; M$. Are the boundary masses consistent with the midpoint grid?</li>
+</ol></div>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-LAX_WENDROF1'>LAX_WENDROF1</a> <span class='muted'>subroutine</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-LAX_WENDROF1'><h3><span class='kind'>subroutine</span>LAX_WENDROF1</h3>
+<p class='muted'>lines 1–76 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/lax_wendrof1.f#L1-L76'>GitHub</a></p>
+<pre>SUBROUTINE LAX_WENDROF1(DT,ECOD1,EM,NPT,STOT,EX_H,LDOLI)</pre>
+<div class='notes'><p>Half-step change of $X$ (and $Z$) from the difference of the settling fluxes (above).</p></div>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/gravez_mod.f.html#def-GRAVEZ_MOD'>GRAVEZ_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/grsett.f.html#def-GRSETT'>GRSETT</a> <span class='muted'>(grsett.f)</span></li>
+<li><a href='../yrec-map/microdiff_run.f.html#def-MICRODIFF_RUN'>MICRODIFF_RUN</a> <span class='muted'>(microdiff_run.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">1</span>      SUBROUTINE LAX_WENDROF1(DT,ECOD1,EM,NPT,STOT,EX_H,LDOLI)
+<span class="ln">2</span>C 10/15/26 MHP via Claude
+<span class="ln">3</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">4</span>C PARAMETER(JSON=5000) here.
+<span class="ln">5</span>      USE DIMENSIONS_MOD
+<span class="ln">6</span>C 10/14/26 MHP via Claude
+<span class="ln">7</span>C code changed to convert COMMON/GRAVEZ/ into GRAVEZ_MOD.
+<span class="ln">8</span>      USE GRAVEZ_MOD
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">11</span>      USE NMLPAR_MOD
+<span class="ln">12</span>C 10/14/26 MHP via Claude
+<span class="ln">13</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">14</span>      USE CONSTANTS_MOD
+<span class="ln">15</span>C 10/20/26 MHP via Claude
+<span class="ln">16</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">17</span>C explicit declarations.
+<span class="ln">18</span>      IMPLICIT NONE
+<span class="ln">19</span>      REAL*8 DEX_H,DEZ_H,DT,DT2,ECOD1,EM,EMASS,EX_H,STOT
+<span class="ln">20</span>      INTEGER I,NPT
+<span class="ln">21</span>      LOGICAL*4 LDOLI
+<span class="ln">22</span>
+<span class="ln">23</span>C 9/25/26 MHP via Claude
+<span class="ln">24</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">25</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">26</span>C 10/12/26 MHP via Claude
+<span class="ln">27</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">28</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">29</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">30</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">31</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">32</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">33</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">34</span>C
+<span class="ln">35</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">36</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">37</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">38</span>      DIMENSION ECOD1(JSON),EM(JSON),EX_H(JSON)
+<span class="ln">39</span>      SAVE
+<span class="ln">40</span>
+<span class="ln">41</span>C VARIABLES : ECOD1 IS RUN OF DIFFUSION COEFFICIENTS, EM IS RUN OF MASSES,
+<span class="ln">42</span>C AND EX_H IS RUN OF CHANGES IN THE HYDROGEN ABUNDANCE.
+<span class="ln">43</span>      DT2 = 0.5D0*DT*C4PI
+<span class="ln">44</span>C CENTRAL BOUNDARY CONDITION
+<span class="ln">45</span>      EMASS=EM(2)
+<span class="ln">46</span>      DEX_H = DT2*ECOD1(2)/EMASS
+<span class="ln">47</span>      EX_H(1) = DEX_H
+<span class="ln">48</span>C GENERAL CASE
+<span class="ln">49</span>      DO 10 I = 2,NPT-2
+<span class="ln">50</span>         EMASS=EM(I+1)-EM(I)
+<span class="ln">51</span>         DEX_H = DT2*(ECOD1(I+1)-ECOD1(I))/EMASS
+<span class="ln">52</span>         EX_H(I) = DEX_H
+<span class="ln">53</span>   10 CONTINUE
+<span class="ln">54</span>C SURFACE BOUNDARY CONDITION.
+<span class="ln">55</span>      EMASS = STOT-EM(NPT-1)
+<span class="ln">56</span>      DEX_H = -DT2*ECOD1(NPT-1)/EMASS
+<span class="ln">57</span>      EX_H(NPT-1) = DEX_H
+<span class="ln">58</span>C METAL DIFFUSION
+<span class="ln">59</span>      IF(LDIFZ.AND..NOT.LDOLI)THEN
+<span class="ln">60</span>C CENTRAL BOUNDARY CONDITION
+<span class="ln">61</span>         EMASS=EM(2)
+<span class="ln">62</span>         DEZ_H = DT2*ECOD1Z(2)/EMASS
+<span class="ln">63</span>         EZ_H(1) = DEZ_H
+<span class="ln">64</span>C GENERAL CASE
+<span class="ln">65</span>         DO I = 2,NPT-2
+<span class="ln">66</span>            EMASS=EM(I+1)-EM(I)
+<span class="ln">67</span>            DEZ_H = DT2*(ECOD1Z(I+1)-ECOD1Z(I))/EMASS
+<span class="ln">68</span>            EZ_H(I) = DEZ_H
+<span class="ln">69</span>         END DO
+<span class="ln">70</span>C SURFACE BOUNDARY CONDITION.
+<span class="ln">71</span>         EMASS = STOT-EM(NPT-1)
+<span class="ln">72</span>         DEZ_H = -DT2*ECOD1Z(NPT-1)/EMASS
+<span class="ln">73</span>         EZ_H(NPT-1) = DEZ_H
+<span class="ln">74</span>      ENDIF
+<span class="ln">75</span>      RETURN
+<span class="ln">76</span>      END</pre></details>
+<details class='py' id='py-lax_wendrof1'><summary>Python version: lax_wendrof1</summary><pre class='doc'>First (half) step of the Lax-Wendroff scheme for settling.
+
+The change in X at the midpoints of the equal grid over half a time
+step, from the difference of the settling fluxes, with zero flux at
+the centre and the surface; the same for Z (``gravez_mod.ez_h`` from
+``gravez_mod.ecod1z``) when metal diffusion is on and ``ldoli`` is
+false. LAX_WENDROF2 follows.
+
+Translates: lax_wendrof1.f#LAX_WENDROF1 (09c3b9b)
+
+Parameters
+----------
+dt : float
+    Time step (s).
+ecod1 : ndarray
+    The settling coefficients (fluxes) on the equal grid, 1..npt.
+em : ndarray
+    The mass at each grid point, 1..npt.
+npt : int
+    Number of grid points.
+stot : float
+    Total mass.
+ex_h : ndarray
+    Set in place: the half-step changes in X, ``ex_h[1..npt-1]``.
+ldoli : bool
+    True skips the metals.
+
+Sets ``gravez_mod.ez_h[1..npt-1]`` with metal diffusion. Nothing is
+returned.</pre><pre class='src'><span class="ln">9</span>def lax_wendrof1(dt, ecod1, em, npt, stot, ex_h, ldoli):
+<span class="ln">10</span>    &quot;&quot;&quot;First (half) step of the Lax-Wendroff scheme for settling.
+<span class="ln">11</span>
+<span class="ln">12</span>    The change in X at the midpoints of the equal grid over half a time
+<span class="ln">13</span>    step, from the difference of the settling fluxes, with zero flux at
+<span class="ln">14</span>    the centre and the surface; the same for Z (``gravez_mod.ez_h`` from
+<span class="ln">15</span>    ``gravez_mod.ecod1z``) when metal diffusion is on and ``ldoli`` is
+<span class="ln">16</span>    false. LAX_WENDROF2 follows.
+<span class="ln">17</span>
+<span class="ln">18</span>    Translates: lax_wendrof1.f#LAX_WENDROF1 (09c3b9b)
+<span class="ln">19</span>
+<span class="ln">20</span>    Parameters
+<span class="ln">21</span>    ----------
+<span class="ln">22</span>    dt : float
+<span class="ln">23</span>        Time step (s).
+<span class="ln">24</span>    ecod1 : ndarray
+<span class="ln">25</span>        The settling coefficients (fluxes) on the equal grid, 1..npt.
+<span class="ln">26</span>    em : ndarray
+<span class="ln">27</span>        The mass at each grid point, 1..npt.
+<span class="ln">28</span>    npt : int
+<span class="ln">29</span>        Number of grid points.
+<span class="ln">30</span>    stot : float
+<span class="ln">31</span>        Total mass.
+<span class="ln">32</span>    ex_h : ndarray
+<span class="ln">33</span>        Set in place: the half-step changes in X, ``ex_h[1..npt-1]``.
+<span class="ln">34</span>    ldoli : bool
+<span class="ln">35</span>        True skips the metals.
+<span class="ln">36</span>
+<span class="ln">37</span>    Sets ``gravez_mod.ez_h[1..npt-1]`` with metal diffusion. Nothing is
+<span class="ln">38</span>    returned.
+<span class="ln">39</span>    &quot;&quot;&quot;
+<span class="ln">40</span>    ecod1z = gravez_mod.ecod1z
+<span class="ln">41</span>    ez_h = gravez_mod.ez_h
+<span class="ln">42</span>    dt2 = 0.5 * dt * constants_mod.c4pi
+<span class="ln">43</span>    # Central boundary condition (F_1 = 0, m_1 = 0).
+<span class="ln">44</span>    emass = em[2]
+<span class="ln">45</span>    dex_h = dt2 * ecod1[2] / emass
+<span class="ln">46</span>    ex_h[1] = dex_h
+<span class="ln">47</span>    # General case (loop 10).
+<span class="ln">48</span>    for i in range(2, npt - 1):
+<span class="ln">49</span>        emass = em[i + 1] - em[i]
+<span class="ln">50</span>        dex_h = dt2 * (ecod1[i + 1] - ecod1[i]) / emass
+<span class="ln">51</span>        ex_h[i] = dex_h
+<span class="ln">52</span>    # Surface boundary condition (F_N = 0, m_N = M).
+<span class="ln">53</span>    # Question (see the page): this mass spans M - m_{N-1}.
+<span class="ln">54</span>    emass = stot - em[npt - 1]
+<span class="ln">55</span>    dex_h = -dt2 * ecod1[npt - 1] / emass
+<span class="ln">56</span>    ex_h[npt - 1] = dex_h
+<span class="ln">57</span>    # Metal diffusion.
+<span class="ln">58</span>    if nmlpar_mod.ldifz and not ldoli:
+<span class="ln">59</span>        emass = em[2]
+<span class="ln">60</span>        dez_h = dt2 * ecod1z[2] / emass
+<span class="ln">61</span>        ez_h[1] = dez_h
+<span class="ln">62</span>        for i in range(2, npt - 1):
+<span class="ln">63</span>            emass = em[i + 1] - em[i]
+<span class="ln">64</span>            dez_h = dt2 * (ecod1z[i + 1] - ecod1z[i]) / emass
+<span class="ln">65</span>            ez_h[i] = dez_h
+<span class="ln">66</span>        emass = stot - em[npt - 1]
+<span class="ln">67</span>        dez_h = -dt2 * ecod1z[npt - 1] / emass
+<span class="ln">68</span>        ez_h[npt - 1] = dez_h</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Unclear (format).</strong> The notation $\Delta X^{(i)}_{1/2}$ mixes index and midpoint. Fix: write $\Delta X_{i+1/2}$, with $F_1 = 0$, $m_1 = 0$ at the centre and $F_N = 0$, $m_N \to M$ at the surface.</li>
+</ol>
+<p>Revised: notation $\Delta X_{i+1/2}$ with the boundary values.</p></div></details>
+</main></body></html>

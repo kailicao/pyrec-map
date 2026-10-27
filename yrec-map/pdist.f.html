@@ -1,0 +1,258 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>pdist.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ pdist.f</span></header><main>
+<h1>pdist.f</h1>
+<p class='muted'>125 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/pdist.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>pdist.py</code>, 74 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Decides when to write a model for pulsation calculations: it "calculates the distance the star has travelled in the HR diagram; if far enough, output pulsation model". When the accumulated distance passes a threshold, it opens three new output files named after the run and the model number, and sets <code>LPULSE</code> so that the output routines write the model to them.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the previous point (<code>POL1</code> $=\log L$, <code>POT1</code> $=\log T_\mathrm{eff}$, <code>POA1</code> = age) and the running total <code>POLEN</code>; the current <code>BL</code> ($\log L/L_\odot$), <code>TEFFL</code>, <code>MODELN</code>, the run index <code>NK</code> and the age <code>DAGE</code> (arguments); the weights <code>POA</code>, <code>POB</code>, <code>POC</code> and the threshold <code>POMAX</code> in <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD">NMLPAR_MOD</a> (namelist <code>CONTROL</code>, read by <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a>); the base file names <code>FPMOD</code>, <code>FPENV</code>, <code>FPATM</code> (arguments, since MHP 8/25).</li>
+<li><strong>Who calls it:</strong> the main program in <a href="../yrec-map/main.f.html">main.f</a>, after each model when <code>LPOUT</code> is set.</li>
+<li><strong>Outputs:</strong> <code>POLEN</code> and the previous point updated; <code>LPULSE</code> in <code>NMLPAR_MOD</code>; the units <code>IOPMOD</code>, <code>IOPENV</code>, <code>IOPATM</code> (from <a href="../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD">IOUNITS_MOD</a>) opened as <code>&lt;FPMOD&gt;NN_MMMM</code> and so on, with <code>NN</code> = <code>NK</code> (the main program's loop over runs, <code>DO 200 NK = 1, NUMRUN</code>) and <code>MMMM</code> the model number; a line to <code>IOWR</code> and <code>ISHORT</code>. While <code>LPULSE</code> is true, <a href="../yrec-map/wrtmod.f.html#def-WRTMOD">WRTMOD</a> writes the model to <code>IOPMOD</code> and passes <code>LPULPT</code> on to <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a>, which writes the atmosphere and envelope to <code>IOPATM</code> and <code>IOPENV</code> from the points <a href="../yrec-map/qatm.f.html#def-QATM">QATM</a> and <a href="../yrec-map/qenv.f.html#def-QENV">QENV</a> store.</li>
+</ul>
+<p><strong>The method.</strong> The squared step in the HR diagram and in age, with weights $a, b, c$, is accumulated:
+$$\ell^2 \mathrel{+}= (a\,\Delta\log L)^2 + (b\,\Delta\log T_\mathrm{eff})^2 + (c\,\Delta t)^2 .$$
+When $\ell^2 \ge$ <code>POMAX</code>, the files are opened and $\ell^2$ is reset to zero; otherwise the three units are closed and <code>LPULSE</code> is set false.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> <code>NK</code> and <code>DAGE</code> are now arguments (from <code>/ZRAMP/</code> and <code>/THEAGE/</code> before; main.f is the only caller); the other COMMON blocks to modules, <code>IMPLICIT NONE</code>; the unused <code>/PULSE/</code> members and dead <code>/LUNUM/</code> units dropped.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>POMAX</code> is a squared distance.</strong> The sum is of squares (printed as "LEN SQ"), so <code>POMAX</code> = 0.1 means a distance of about 0.32. Is the namelist documentation clear about this?</li>
+<li><strong>Two different lines.</strong> The same format writes the step's differences (<code>TM1</code>–<code>TM3</code>) to <code>IOWR</code> but their weighted squares (<code>TMP1</code>–<code>TMP3</code>) to <code>ISHORT</code>, under the same labels "D L", "D Te", "D AGE".</li>
+<li><strong><code>STATUS='NEW'</code>.</strong> The files are opened as new, so rerunning a model sequence in the same directory stops at the first existing pulsation file.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+PDIST
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+calculates the distance the star has travelled in the HR diagram
+if far enough, output pulsation model
+MHP 8/25 passed file names directly and removed common block with file names
+10/9/26 MHP via Claude
+code changed to pass NK as an explicit argument instead of via
+COMMON/ZRAMP/, which this file otherwise never used (NK was its only
+member ever referenced here). See the CALL PDIST site in main.f,
+which already has NK as its own local run-index variable.</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-PDIST'>PDIST</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-PDIST'><h3><span class='kind'>subroutine</span>PDIST</h3>
+<p class='muted'>lines 14–125 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/pdist.f#L14-L125'>GitHub</a></p>
+<pre>SUBROUTINE PDIST(POL1,POT1,POA1,POLEN,BL,TEFFL,MODELN,NK,FPATM,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+PDIST
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+calculates the distance the star has travelled in the HR diagram
+if far enough, output pulsation model
+MHP 8/25 passed file names directly and removed common block with file names
+10/9/26 MHP via Claude
+code changed to pass NK as an explicit argument instead of via
+COMMON/ZRAMP/, which this file otherwise never used (NK was its only
+member ever referenced here). See the CALL PDIST site in main.f,
+which already has NK as its own local run-index variable.</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">14</span>      SUBROUTINE PDIST(POL1,POT1,POA1,POLEN,BL,TEFFL,MODELN,NK,FPATM,
+<span class="ln">15</span>     * FPENV,FPMOD,DAGE)
+<span class="ln">16</span>C 10/14/26 MHP via Claude
+<span class="ln">17</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">18</span>      USE NMLPAR_MOD
+<span class="ln">19</span>C 10/14/26 MHP via Claude
+<span class="ln">20</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">21</span>      USE IOUNITS_MOD
+<span class="ln">22</span>C 10/20/26 MHP via Claude
+<span class="ln">23</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">24</span>C explicit declarations.
+<span class="ln">25</span>      IMPLICIT NONE
+<span class="ln">26</span>      REAL*8 BL,DAGE,POA1,POL1,POLEN,POT1,TEFFL,TM1,TM2,TM3,TMP1,TMP2,
+<span class="ln">27</span>     *       TMP3
+<span class="ln">28</span>      INTEGER IOCCOL,MODELN,NK
+<span class="ln">29</span>
+<span class="ln">30</span>      CHARACTER*256 COUT,CTEMP
+<span class="ln">31</span>C Removed variables not used in the routine
+<span class="ln">32</span>      CHARACTER*256 FPMOD, FPENV, FPATM
+<span class="ln">33</span>C MHP 10/02 added proper dimensions to last 2 variables
+<span class="ln">34</span>C 10/13/26 MHP via Claude
+<span class="ln">35</span>C code changed to receive DAGE, the stellar age, as an argument instead of
+<span class="ln">36</span>C through COMMON/THEAGE/.  main.f is PDIST&#x27;s only caller.
+<span class="ln">37</span>C 10/12/26 MHP via Claude
+<span class="ln">38</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">39</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">40</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">41</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">42</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">43</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">44</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">45</span>C
+<span class="ln">46</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">47</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">48</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">49</span>C 10/13/26 MHP via Claude
+<span class="ln">50</span>C code changed to drop COMMON/PULSE/, declared here but never used.
+<span class="ln">51</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">52</span>C 9/24/26 MHP via Claude
+<span class="ln">53</span>C code changed to remove dead ILLDAT, IKUR from COMMON/LUNUM/
+<span class="ln">54</span>C 9/24/26 MHP via Claude
+<span class="ln">55</span>C code changed to remove dead IDYN from COMMON/LUNUM/
+<span class="ln">56</span>C 9/25/26 MHP via Claude
+<span class="ln">57</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">58</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">59</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">60</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">61</span>C COMMON/IOUNITS/
+<span class="ln">62</span>C 9/25/26 MHP via Claude
+<span class="ln">63</span>C code changed to remove dead COMMON/LUNUM/ISCOMP (declared,
+<span class="ln">64</span>C assigned a unit number, but never opened or read anywhere)
+<span class="ln">65</span>C MHP 8/25 Removed common block with file names
+<span class="ln">66</span>C      COMMON/LUFNM/ FLAST, FFIRST, FRUN, FSTAND, FFERMI,
+<span class="ln">67</span>C     1    FDEBUG, FTRACK, FSHORT, FMILNE, FMODPT,
+<span class="ln">68</span>C     2    FSTOR, FPMOD, FPENV, FPATM, FDYN,
+<span class="ln">69</span>C     3    FLLDAT, FSNU, FSCOMP, FKUR,
+<span class="ln">70</span>C     4    FMHD1, FMHD2, FMHD3, FMHD4, FMHD5, FMHD6, FMHD7, FMHD8
+<span class="ln">71</span>      SAVE
+<span class="ln">72</span>
+<span class="ln">73</span>      TM1 = BL-POL1
+<span class="ln">74</span>      TM2 = TEFFL-POT1
+<span class="ln">75</span>      TM3 = DAGE-POA1
+<span class="ln">76</span>      TMP1 = POA*TM1*POA*TM1
+<span class="ln">77</span>      TMP2 = POB*TM2*POB*TM2
+<span class="ln">78</span>      TMP3 = POC*TM3*POC*TM3
+<span class="ln">79</span>      POLEN = POLEN+TMP1+TMP2+TMP3
+<span class="ln">80</span>      POL1 = BL
+<span class="ln">81</span>      POT1 = TEFFL
+<span class="ln">82</span>      POA1 = DAGE
+<span class="ln">83</span>      IF (POLEN .GE. POMAX) THEN
+<span class="ln">84</span>          LPULSE = .TRUE.
+<span class="ln">85</span>          POLEN = 0.0D0
+<span class="ln">86</span>          IOCCOL = INDEX(FPMOD,&#x27; &#x27;)-1
+<span class="ln">87</span>          IF (MODELN.LT.10000)THEN
+<span class="ln">88</span>             WRITE(CTEMP,&#x27;(I2.2,&#x27;&#x27;_&#x27;&#x27;,I4.4)&#x27;)NK, MODELN
+<span class="ln">89</span>             COUT = FPMOD(1:IOCCOL) // CTEMP(1:7)
+<span class="ln">90</span>          ELSE
+<span class="ln">91</span>             WRITE(CTEMP,&#x27;(I2.2,&#x27;&#x27;_&#x27;&#x27;,I5.5)&#x27;)NK, MODELN
+<span class="ln">92</span>             COUT = FPMOD(1:IOCCOL) // CTEMP(1:8)
+<span class="ln">93</span>          ENDIF
+<span class="ln">94</span>          OPEN(IOPMOD,FILE=COUT,STATUS=&#x27;NEW&#x27;,FORM=&#x27;FORMATTED&#x27;)
+<span class="ln">95</span>          IOCCOL = INDEX(FPENV,&#x27; &#x27;)-1
+<span class="ln">96</span>          IF (MODELN.LT.10000)THEN
+<span class="ln">97</span>             WRITE(CTEMP,&#x27;(I2.2,&#x27;&#x27;_&#x27;&#x27;,I4.4)&#x27;)NK, MODELN
+<span class="ln">98</span>             COUT = FPENV(1:IOCCOL) // CTEMP(1:7)
+<span class="ln">99</span>          ELSE
+<span class="ln">100</span>             WRITE(CTEMP,&#x27;(I2.2,&#x27;&#x27;_&#x27;&#x27;,I5.5)&#x27;)NK, MODELN
+<span class="ln">101</span>             COUT = FPENV(1:IOCCOL) // CTEMP(1:8)
+<span class="ln">102</span>          ENDIF
+<span class="ln">103</span>          OPEN(IOPENV,FILE=COUT,STATUS=&#x27;NEW&#x27;,FORM=&#x27;FORMATTED&#x27;)
+<span class="ln">104</span>          IOCCOL = INDEX(FPATM,&#x27; &#x27;)-1
+<span class="ln">105</span>          IF (MODELN.LT.10000)THEN
+<span class="ln">106</span>             WRITE(CTEMP,&#x27;(I2.2,&#x27;&#x27;_&#x27;&#x27;,I4.4)&#x27;)NK, MODELN
+<span class="ln">107</span>             COUT = FPATM(1:IOCCOL) // CTEMP(1:7)
+<span class="ln">108</span>          ELSE
+<span class="ln">109</span>             WRITE(CTEMP,&#x27;(I2.2,&#x27;&#x27;_&#x27;&#x27;,I5.5)&#x27;)NK, MODELN
+<span class="ln">110</span>             COUT = FPATM(1:IOCCOL) // CTEMP(1:8)
+<span class="ln">111</span>          ENDIF
+<span class="ln">112</span>          OPEN(IOPATM,FILE=COUT,STATUS=&#x27;NEW&#x27;,FORM=&#x27;FORMATTED&#x27;)
+<span class="ln">113</span>       ELSE
+<span class="ln">114</span>          CLOSE(IOPMOD)
+<span class="ln">115</span>          CLOSE(IOPENV)
+<span class="ln">116</span>          CLOSE(IOPATM)
+<span class="ln">117</span>          LPULSE = .FALSE.
+<span class="ln">118</span>       END IF
+<span class="ln">119</span>       WRITE(IOWR,276)POLEN,TM1,TM2,TM3
+<span class="ln">120</span>       WRITE(ISHORT,276)POLEN,TMP1,TMP2,TMP3
+<span class="ln">121</span> 276   FORMAT(5X,&#x27; LEN SQ=&#x27;,1PE10.3, &#x27;  D L=&#x27;,1PE10.3,
+<span class="ln">122</span>     *        &#x27;  D Te=&#x27;,1PE10.3,&#x27;  D AGE=&#x27;,1PE10.3)
+<span class="ln">123</span>
+<span class="ln">124</span>       RETURN
+<span class="ln">125</span>       END</pre></details>
+<details class='py' id='py-pdist'><summary>Python version: pdist</summary><pre class='doc'>Accumulate the squared distance the star has moved in the HR diagram
+and in age since the last pulsation model; when it reaches POMAX, open
+three new pulsation output files and set LPULSE, otherwise close them
+and clear LPULSE.
+
+Translates: pdist.f#PDIST (09c3b9b)
+
+Arguments: pol1, pot1, poa1 (log L, log Teff and age at the previous
+model), polen (the accumulated squared distance); bl, teffl, the
+model number modeln, the run index nk and the age dage now; the base
+file names fpatm, fpenv, fpmod.
+
+Returns (pol1, pot1, poa1, polen), updated. Sets nmlpar_mod.lpulse.</pre><pre class='src'><span class="ln">28</span>def pdist(pol1, pot1, poa1, polen, bl, teffl, modeln, nk, fpatm, fpenv,
+<span class="ln">29</span>          fpmod, dage):
+<span class="ln">30</span>    &quot;&quot;&quot;Accumulate the squared distance the star has moved in the HR diagram
+<span class="ln">31</span>    and in age since the last pulsation model; when it reaches POMAX, open
+<span class="ln">32</span>    three new pulsation output files and set LPULSE, otherwise close them
+<span class="ln">33</span>    and clear LPULSE.
+<span class="ln">34</span>
+<span class="ln">35</span>    Translates: pdist.f#PDIST (09c3b9b)
+<span class="ln">36</span>
+<span class="ln">37</span>    Arguments: pol1, pot1, poa1 (log L, log Teff and age at the previous
+<span class="ln">38</span>    model), polen (the accumulated squared distance); bl, teffl, the
+<span class="ln">39</span>    model number modeln, the run index nk and the age dage now; the base
+<span class="ln">40</span>    file names fpatm, fpenv, fpmod.
+<span class="ln">41</span>
+<span class="ln">42</span>    Returns (pol1, pot1, poa1, polen), updated. Sets nmlpar_mod.lpulse.
+<span class="ln">43</span>    &quot;&quot;&quot;
+<span class="ln">44</span>    tm1 = bl - pol1
+<span class="ln">45</span>    tm2 = teffl - pot1
+<span class="ln">46</span>    tm3 = dage - poa1
+<span class="ln">47</span>    tmp1 = nmlpar_mod.poa * tm1 * nmlpar_mod.poa * tm1
+<span class="ln">48</span>    tmp2 = nmlpar_mod.pob * tm2 * nmlpar_mod.pob * tm2
+<span class="ln">49</span>    tmp3 = nmlpar_mod.poc * tm3 * nmlpar_mod.poc * tm3
+<span class="ln">50</span>    # Question (see the page): POMAX is compared with a squared distance.
+<span class="ln">51</span>    polen = polen + tmp1 + tmp2 + tmp3
+<span class="ln">52</span>    pol1 = bl
+<span class="ln">53</span>    pot1 = teffl
+<span class="ln">54</span>    poa1 = dage
+<span class="ln">55</span>    if polen &gt;= nmlpar_mod.pomax:
+<span class="ln">56</span>        nmlpar_mod.lpulse = True
+<span class="ln">57</span>        polen = 0.0
+<span class="ln">58</span>        # Question (see the page): STATUS=&#x27;NEW&#x27; stops if the file exists.
+<span class="ln">59</span>        iounits_mod.open(iounits_mod.iopmod, _pulse_name(fpmod, nk, modeln),
+<span class="ln">60</span>                         status=&quot;new&quot;)
+<span class="ln">61</span>        iounits_mod.open(iounits_mod.iopenv, _pulse_name(fpenv, nk, modeln),
+<span class="ln">62</span>                         status=&quot;new&quot;)
+<span class="ln">63</span>        iounits_mod.open(iounits_mod.iopatm, _pulse_name(fpatm, nk, modeln),
+<span class="ln">64</span>                         status=&quot;new&quot;)
+<span class="ln">65</span>    else:
+<span class="ln">66</span>        iounits_mod.close(iounits_mod.iopmod)
+<span class="ln">67</span>        iounits_mod.close(iounits_mod.iopenv)
+<span class="ln">68</span>        iounits_mod.close(iounits_mod.iopatm)
+<span class="ln">69</span>        nmlpar_mod.lpulse = False
+<span class="ln">70</span>    # Question (see the page): the differences go to IOWR, their weighted
+<span class="ln">71</span>    # squares to ISHORT, under the same labels.
+<span class="ln">72</span>    iounits_mod.write(iounits_mod.iowr, _fmt276(polen, tm1, tm2, tm3))
+<span class="ln">73</span>    iounits_mod.write(iounits_mod.ishort, _fmt276(polen, tmp1, tmp2, tmp3))
+<span class="ln">74</span>    return pol1, pot1, poa1, polen</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_fmt276'><summary>Python version: _fmt276</summary><pre class='src'><span class="ln">8</span>def _fmt276(polen, d1, d2, d3):
+<span class="ln">9</span>    # FORMAT 276: 5X,&#x27; LEN SQ=&#x27;,1PE10.3,&#x27;  D L=&#x27;,1PE10.3,&#x27;  D Te=&#x27;,1PE10.3,&#x27;  D AGE=&#x27;,1PE10.3
+<span class="ln">10</span>    return (&quot; &quot; * 5 + f&quot; LEN SQ={polen:10.3E}  D L={d1:10.3E}&quot;
+<span class="ln">11</span>            f&quot;  D Te={d2:10.3E}  D AGE={d3:10.3E}&quot;)</pre></details>
+<details class='py' id='py-_pulse_name'><summary>Python version: _pulse_name</summary><pre class='doc'>The file name &lt;base&gt;NN_MMMM (or NN_MMMMM from model 10000 on).
+
+base is a CHARACTER*256 in Fortran, padded with blanks: the name ends
+at its first blank, INDEX(base, &#x27; &#x27;) - 1. A Python string has no
+padding, so a name without blanks is taken whole.</pre><pre class='src'><span class="ln">14</span>def _pulse_name(base, nk, modeln):
+<span class="ln">15</span>    &quot;&quot;&quot;The file name &lt;base&gt;NN_MMMM (or NN_MMMMM from model 10000 on).
+<span class="ln">16</span>
+<span class="ln">17</span>    base is a CHARACTER*256 in Fortran, padded with blanks: the name ends
+<span class="ln">18</span>    at its first blank, INDEX(base, &#x27; &#x27;) - 1. A Python string has no
+<span class="ln">19</span>    padding, so a name without blanks is taken whole.&quot;&quot;&quot;
+<span class="ln">20</span>    ioccol = base.find(&quot; &quot;) if &quot; &quot; in base else len(base)
+<span class="ln">21</span>    if modeln &lt; 10000:
+<span class="ln">22</span>        ctemp = f&quot;{nk:02d}_{modeln:04d}&quot;
+<span class="ln">23</span>    else:
+<span class="ln">24</span>        ctemp = f&quot;{nk:02d}_{modeln:05d}&quot;
+<span class="ln">25</span>    return base[:ioccol] + ctemp</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "The pulsation files are written by WRTMOD, QATM and QENV": QATM and QENV only declare <code>/PULSE/</code>; WRTMOD writes <code>IOPMOD</code> and passes <code>LPULPT</code> to ENVINT, which writes <code>IOPATM</code> and <code>IOPENV</code>. Fix: say so.</li>
+<li><strong>Unclear.</strong> <code>NK</code> "probably the run number": it is the main program's loop index over runs (<code>DO 200 NK = 1, NUMRUN</code>). Fix: say so.</li>
+</ol>
+<p>Revised: both applied.</p></div></details>
+</main></body></html>

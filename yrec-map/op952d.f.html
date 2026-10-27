@@ -1,0 +1,179 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>op952d.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ op952d.f</span></header><main>
+<h1>op952d.f</h1>
+<p class='muted'>76 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/op952d.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>op952d.py</code>, 61 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Gets the OPAL95 opacity from the table pre-interpolated to the surface composition (MHP 7/98: "get OPAL95 opacity from table at surface X,Z"): a two-dimensional interpolation in $\log T$ and $\log R$, where $R = \rho/T_6^3$. It is the fastest of three routines; <a href="../yrec-map/op953d.f.html#def-OP953D">OP953D</a> adds $X$ and <a href="../yrec-map/op954d.f.html#def-OP954D">OP954D</a> adds $X$ and $Z$.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the surface table <code>CAPPAE(70,19)</code> of $\log\kappa$ in <code>LLOT95E_MOD</code>, built by <a href="../yrec-map/op95xtab.f.html#def-OP95XTAB">OP95XTAB</a>; the indices and the Lagrange weights prepared by <a href="../yrec-map/getopal95.f.html#def-GETOPAL95">GETOPAL95</a> in <code>OP95INTERP_MOD</code> (formerly <code>/OP95INDX/</code>, <code>/OP95FACT/</code> and <code>/OP95EXT/</code>), where $\log R$ is now named <code>RHO_T63L</code> (formerly <code>RL</code>) and its lowest table value <code>RHO_T63LL</code> (formerly <code>RLL</code>).</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/getopal95.f.html#def-GETOPAL95">GETOPAL95</a>, when the point's $Z$ matches the table's <code>ZTAB</code> (to a relative $10^{-4}$) and its $X$ the surface table's <code>XTAB</code> (to $10^{-4}$), and the acoustic depth is not being computed (<code>LADON</code> and <code>LACOUT</code>, which force <a href="../yrec-map/op954d.f.html#def-OP954D">OP954D</a>).</li>
+<li><strong>Outputs:</strong> $\kappa$ (<code>O</code>), $\log\kappa$ (<code>OL</code>), <code>QOD</code> $= \partial\log\kappa/\partial\log\rho$ and <code>QOT</code> $= \partial\log\kappa/\partial\log T$.</li>
+</ul>
+<p><strong>The method.</strong> At each of the four nearest temperatures $T_i$, four-point Lagrange interpolation in $\log R$ gives $\log\kappa$ and its slope:
+$$C_i = \sum_k b^{(D)}_{ik}\,\log\kappa_{i,k},\qquad C&#x27;_i = \sum_k b^{(D&#x27;)}_{ik}\,\log\kappa_{i,k}.$$
+If $\log R$ lies below the table (<code>LEXTL</code>) or above it at some $T_i$ (<code>LEXH(I)</code>), the value at the edge is extrapolated linearly, $C_i \to C_i + (\log R - \log R_\mathrm{edge})\,C&#x27;_i$. Then, in $\log T$, $\log\kappa = \sum_i b^{(T)}_i C_i$, $\partial\log\kappa/\partial\log T|_R = \sum_i b^{(T&#x27;)}_i C_i$ and $\partial\log\kappa/\partial\log R|_T = \sum_i b^{(T)}_i C&#x27;_i$. Since $\log R = \log\rho - 3\log T_6$,
+$$\left(\frac{\partial\log\kappa}{\partial\log\rho}\right)_T = \left(\frac{\partial\log\kappa}{\partial\log R}\right)_T,\qquad \left(\frac{\partial\log\kappa}{\partial\log T}\right)_\rho = \left(\frac{\partial\log\kappa}{\partial\log T}\right)_R - 3\left(\frac{\partial\log\kappa}{\partial\log R}\right)_T .$$</p>
+<p><strong>Design.</strong> The table dimensions are fixed (70 temperatures, 19 values of $\log R$), now as private parameters of <code>LLOT95E_MOD</code>; the routine itself no longer declares them.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (the three interpolation blocks merged into <code>OP95INTERP_MOD</code>, with <code>RL</code>, <code>RLL</code> renamed <code>RHO_T63L</code>, <code>RHO_T63LL</code> so as not to clash with the radius <code>RL</code>), the dimension parameters moved into <code>LLOT95E_MOD</code>, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<p class='placeholder'>None yet.</p>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+OP952D
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-OP952D'>OP952D</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-OP952D'><h3><span class='kind'>subroutine</span>OP952D</h3>
+<p class='muted'>lines 6–76 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/op952d.f#L6-L76'>GitHub</a></p>
+<pre>SUBROUTINE OP952D(O,OL,QOD,QOT)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+OP952D
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/llot95e_mod.f.html#def-LLOT95E_MOD'>LLOT95E_MOD</a>, <a href='../yrec-map/op95interp_mod.f.html#def-OP95INTERP_MOD'>OP95INTERP_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/getopal95.f.html#def-GETOPAL95'>GETOPAL95</a> <span class='muted'>(getopal95.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE OP952D(O,OL,QOD,QOT)
+<span class="ln">7</span>C 10/14/26 MHP via Claude
+<span class="ln">8</span>C code changed to convert COMMON/OP95INTERP/ into OP95INTERP_MOD.
+<span class="ln">9</span>      USE OP95INTERP_MOD
+<span class="ln">10</span>C 10/14/26 MHP via Claude
+<span class="ln">11</span>C code changed to convert COMMON/LLOT95E/ into LLOT95E_MOD.
+<span class="ln">12</span>      USE LLOT95E_MOD
+<span class="ln">13</span>C 10/20/26 MHP via Claude
+<span class="ln">14</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">15</span>C explicit declarations.
+<span class="ln">16</span>      IMPLICIT NONE
+<span class="ln">17</span>      REAL*8 C,DELTAR,O,OL,QC,QOD,QOT
+<span class="ln">18</span>      INTEGER I,ID,IT
+<span class="ln">19</span>C MHP 7/98 GET OPAL95 OPACITY FROM TABLE AT SURFACE X,Z
+<span class="ln">20</span>C AS ABOVE FOR DESIRED SURFACE VALUE OF X.
+<span class="ln">21</span>C INDICES FOR INTERPOLATION IN Z,X,T, AND R; INTERPOLATION FACTORS FOR
+<span class="ln">22</span>C Z,X,T, AND R (AND DERIVATIVE FACTORS FOR T AND RHO); AND DATA FOR
+<span class="ln">23</span>C LINEAR EXTRAPOLATION WHEN OUTSIDE THE TABLE IN RHO.
+<span class="ln">24</span>C 10/9/26 MHP via Claude
+<span class="ln">25</span>C code changed to merge COMMON/OP95INDX/, COMMON/OP95FACT/, and
+<span class="ln">26</span>C COMMON/OP95EXT/ into COMMON/OP95INTERP/ (see getopal95.f for the
+<span class="ln">27</span>C full rationale).
+<span class="ln">28</span>C 10/13/26 MHP via Claude
+<span class="ln">29</span>C code changed to rename COMMON/OP95INTERP/&#x27;s RL and RLL to RHO_T63L and
+<span class="ln">30</span>C RHO_T63LL.  RL is log(rho/T6**3), set here as RL = DL - 3*(TL-6); the
+<span class="ln">31</span>C old names clash with RL and RLL as used for radius throughout the rest
+<span class="ln">32</span>C of the code, which is why main.f declared only a 10-member prefix of
+<span class="ln">33</span>C this block to avoid importing them.  With the clash gone main.f can
+<span class="ln">34</span>C declare the full block, which a USE statement will require once this
+<span class="ln">35</span>C becomes a module.
+<span class="ln">36</span>      DIMENSION C(4),QC(4)
+<span class="ln">37</span>      SAVE
+<span class="ln">38</span>C FIND OPACITY AT EACH OF THE 4 NEARBY VALUES OF T.
+<span class="ln">39</span>      DO I = 1,4
+<span class="ln">40</span>         IT = JT + I - 1
+<span class="ln">41</span>C FOR EACH T, INTERPOLATE IN 4 VALUES OF R
+<span class="ln">42</span>         ID = JD(I)
+<span class="ln">43</span>C LOG CAPPA AT DESIRED RHO FOR EACH OF THE 4 DESIRED T.
+<span class="ln">44</span>         C(I) = BD(I,1)*CAPPAE(IT,ID) + BD(I,2)*CAPPAE(IT,ID+1)
+<span class="ln">45</span>     *         + BD(I,3)*CAPPAE(IT,ID+2) + BD(I,4)*CAPPAE(IT,ID+3)
+<span class="ln">46</span>C D LOG CAPPA/D LOG R FOR EACH OF THE 4 DESIRED T.
+<span class="ln">47</span>         QC(I) = BDD(I,1)*CAPPAE(IT,ID) + BDD(I,2)*CAPPAE(IT,ID+1)
+<span class="ln">48</span>     *         + BDD(I,3)*CAPPAE(IT,ID+2) + BDD(I,4)*CAPPAE(IT,ID+3)
+<span class="ln">49</span>      END DO
+<span class="ln">50</span>C CHECK ON WHETHER RHO IS OUTSIDE OF THE TABLE AND NEEDS EXTRAPOLATION
+<span class="ln">51</span>      IF(LEXTL)THEN
+<span class="ln">52</span>C FACTOR IN R
+<span class="ln">53</span>         DELTAR = RHO_T63L-RHO_T63LL
+<span class="ln">54</span>C CORRECT CAPPA BY USING THE DERIVATIVE AT THE BOUNDARY.
+<span class="ln">55</span>         DO I = 1,4
+<span class="ln">56</span>            C(I) = C(I)+DELTAR*QC(I)
+<span class="ln">57</span>         END DO
+<span class="ln">58</span>      ELSE IF(LEXTH)THEN
+<span class="ln">59</span>         DO I = 1,4
+<span class="ln">60</span>            IF(LEXH(I))THEN
+<span class="ln">61</span>               DELTAR = RHO_T63L - RLH(I)
+<span class="ln">62</span>               C(I) = C(I)+DELTAR*QC(I)
+<span class="ln">63</span>            ENDIF
+<span class="ln">64</span>         END DO
+<span class="ln">65</span>      ENDIF
+<span class="ln">66</span>C INTERPOLATE FOR LOG CAPPA IN T.
+<span class="ln">67</span>      OL = BT(1)*C(1) + BT(2)*C(2) + BT(3)*C(3) + BT(4)*C(4)
+<span class="ln">68</span>C D LOG CAPPA/D LOG T
+<span class="ln">69</span>      QOT = BTT(1)*C(1) + BTT(2)*C(2) + BTT(3)*C(3) + BTT(4)*C(4)
+<span class="ln">70</span>C D LOG CAPPA/D LOG R
+<span class="ln">71</span>      QOD = BT(1)*QC(1) + BT(2)*QC(2) + BT(3)*QC(3) + BT(4)*QC(4)
+<span class="ln">72</span>C CORRECT FROM DERIVATE AT FIXED R TO DERIVATIVE AT FIXED RHO.
+<span class="ln">73</span>      QOT = QOT - 3.0D0*QOD
+<span class="ln">74</span>      O = 1.0D1**OL
+<span class="ln">75</span>      RETURN
+<span class="ln">76</span>      END</pre></details>
+<details class='py' id='py-op952d'><summary>Python version: op952d</summary><pre class='doc'>Get the OPAL95 opacity from the table pre-interpolated to the
+surface composition (MHP 7/98): four-point Lagrange interpolation in
+log R (R = rho/T6**3), with linear extrapolation beyond the table, then
+in log T, with the indices and weights GETOPAL95 left in
+op95interp_mod.
+
+Translates: op952d.f#OP952D (09c3b9b)
+
+Arguments: o, ol, qod, qot, passed in with any value.
+
+Returns (o, ol, qod, qot): kappa, log kappa, dlog kappa/dlog rho and
+dlog kappa/dlog T (at constant rho).</pre><pre class='src'><span class="ln">14</span>def op952d(o, ol, qod, qot):
+<span class="ln">15</span>    &quot;&quot;&quot;Get the OPAL95 opacity from the table pre-interpolated to the
+<span class="ln">16</span>    surface composition (MHP 7/98): four-point Lagrange interpolation in
+<span class="ln">17</span>    log R (R = rho/T6**3), with linear extrapolation beyond the table, then
+<span class="ln">18</span>    in log T, with the indices and weights GETOPAL95 left in
+<span class="ln">19</span>    op95interp_mod.
+<span class="ln">20</span>
+<span class="ln">21</span>    Translates: op952d.f#OP952D (09c3b9b)
+<span class="ln">22</span>
+<span class="ln">23</span>    Arguments: o, ol, qod, qot, passed in with any value.
+<span class="ln">24</span>
+<span class="ln">25</span>    Returns (o, ol, qod, qot): kappa, log kappa, dlog kappa/dlog rho and
+<span class="ln">26</span>    dlog kappa/dlog T (at constant rho).
+<span class="ln">27</span>    &quot;&quot;&quot;
+<span class="ln">28</span>    im = op95interp_mod
+<span class="ln">29</span>    cappae = llot95e_mod.cappae
+<span class="ln">30</span>    # Log kappa at the desired rho, and its slope in log R, at each of the
+<span class="ln">31</span>    # four nearby values of T.
+<span class="ln">32</span>    for i in range(1, 5):
+<span class="ln">33</span>        it = im.jt + i - 1
+<span class="ln">34</span>        id_ = im.jd[i]
+<span class="ln">35</span>        c[i] = (im.bd[i, 1] * cappae[it, id_] + im.bd[i, 2] * cappae[it, id_ + 1]
+<span class="ln">36</span>                + im.bd[i, 3] * cappae[it, id_ + 2]
+<span class="ln">37</span>                + im.bd[i, 4] * cappae[it, id_ + 3])
+<span class="ln">38</span>        qc[i] = (im.bdd[i, 1] * cappae[it, id_]
+<span class="ln">39</span>                 + im.bdd[i, 2] * cappae[it, id_ + 1]
+<span class="ln">40</span>                 + im.bdd[i, 3] * cappae[it, id_ + 2]
+<span class="ln">41</span>                 + im.bdd[i, 4] * cappae[it, id_ + 3])
+<span class="ln">42</span>    # Outside the table in rho: extrapolate with the slope at the edge.
+<span class="ln">43</span>    if im.lextl:
+<span class="ln">44</span>        deltar = im.rho_t63l - im.rho_t63ll
+<span class="ln">45</span>        for i in range(1, 5):
+<span class="ln">46</span>            c[i] = c[i] + deltar * qc[i]
+<span class="ln">47</span>    elif im.lexth:
+<span class="ln">48</span>        for i in range(1, 5):
+<span class="ln">49</span>            if im.lexh[i]:
+<span class="ln">50</span>                deltar = im.rho_t63l - im.rlh[i]
+<span class="ln">51</span>                c[i] = c[i] + deltar * qc[i]
+<span class="ln">52</span>    # Interpolate in T: log kappa, dlog kappa/dlog T and dlog kappa/dlog R.
+<span class="ln">53</span>    ol = im.bt[1] * c[1] + im.bt[2] * c[2] + im.bt[3] * c[3] + im.bt[4] * c[4]
+<span class="ln">54</span>    qot = (im.btt[1] * c[1] + im.btt[2] * c[2] + im.btt[3] * c[3]
+<span class="ln">55</span>           + im.btt[4] * c[4])
+<span class="ln">56</span>    qod = (im.bt[1] * qc[1] + im.bt[2] * qc[2] + im.bt[3] * qc[3]
+<span class="ln">57</span>           + im.bt[4] * qc[4])
+<span class="ln">58</span>    # From the derivative at fixed R to the derivative at fixed rho.
+<span class="ln">59</span>    qot = qot - 3.0 * qod
+<span class="ln">60</span>    o = 10.0**ol
+<span class="ln">61</span>    return o, ol, qod, qot</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong (small).</strong> "when the point's $Z$ and $X$ match the surface table's (within $10^{-4}$)": GETOPAL95 compares $Z$ with <code>ZTAB</code> to a <em>relative</em> $10^{-4}$ and $X$ with <code>XTAB</code> to an absolute $10^{-4}$, and skips this path when the acoustic depth is computed (<code>LADON .AND. LACOUT</code>). Fix: say so.</li>
+</ol>
+<p>Revised: the call condition stated exactly.</p></div></details>
+</main></body></html>

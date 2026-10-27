@@ -1,0 +1,290 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>readalex06.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ readalex06.f</span></header><main>
+<h1>readalex06.f</h1>
+<p class='muted'>136 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/readalex06.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>readalex06.py</code>, 105 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Reads the low-temperature opacity tables of Ferguson et al. (2005, ApJ 623, 585), called the "Alexander 2006" tables in the code, for all compositions at once.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/setupopac.f.html#def-SETUPOPAC"><code>SETUPOPAC</code></a>, when <code>LALEX06</code> is true.</li>
+<li><strong>Input:</strong> the formatted file <code>FALEX06</code> (its name passed through <code>SETUPOPAC</code> since the change "MHP 8/25"), opened on unit <code>IALEX06</code> from <a href="../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD"><code>IOUNITS_MOD</code></a> (set in <a href="../yrec-map/parmin.f.html#def-PARMIN"><code>PARMIN</code></a>).</li>
+<li><strong>Outputs, through modules:</strong></li>
+<li><a href="../yrec-map/alot06all_mod.f.html#def-ALOT06ALL_MOD"><code>ALOT06ALL_MOD</code></a>: <code>CAPTALEX06(143, 85, 19)</code>, all tables, read by <a href="../yrec-map/alex06tab.f.html#def-ALEX06TAB"><code>ALEX06TAB</code></a>;</li>
+<li><a href="../yrec-map/galot06_mod.f.html#def-GALOT06_MOD"><code>GALOT06_MOD</code></a>: the grids <code>TGR06</code> ($\log T$), <code>XXG06</code> ($X$), <code>R0GR06</code> ($\log R$), <code>ZZG06</code> ($Z$), initialized in the module itself and read here (to check the tables) and by <code>ALEX06TAB</code> and <a href="../yrec-map/getalex06.f.html#def-GETALEX06"><code>GETALEX06</code></a>;</li>
+<li><a href="../yrec-map/alot06_mod.f.html#def-ALOT06_MOD"><code>ALOT06_MOD</code></a>: the table for one composition, <code>CAPALEX06(85, 19)</code>, initialized here to the first table ($X = 0$, $Z = 0$), and the composition and starting indices (<code>XE</code>, <code>ZE</code>, <code>IX</code>, <code>IT</code>, <code>ID</code>, initialized in the module). <code>ALEX06TAB</code> rebuilds it for the envelope's composition, and <code>GETALEX06</code> interpolates in it.</li>
+</ul>
+<p><strong>The tables.</strong> From the header comments: $X$ = 0, 0.1, 0.2, 0.35, 0.5, 0.7, 0.8, 0.9 and $1-Z$; 16 values of $Z$ from 0 to 0.1; 85 values of $\log T$ from 2.7 to 4.5 (0.05 dex steps, 0.01 dex between 2.9 and 3.5); 19 values of $\log R$ from $-8$ to 1, with</p>
+<p>$$R = \frac{\rho}{T_6^{\,3}} .$$</p>
+<p>The tables at $X = 1-Z$ exist for 15 values of $Z$ only (none for $Z = 0.1$), so there are $8 \times 16 + 15 = 143$ compositions (<code>NUMXZ</code>), stored at index $(i_X - 1)\cdot 16 + i_Z$.</p>
+<p><strong>The method.</strong> For each composition, the routine reads the header ($X$, $Z$) and checks it against the grid; reads the $\log R$ row and checks it; then reads the 85 temperature rows in descending order of $T$, checking each $\log T$ against <code>TGR06</code>. A mismatch prints an error and stops the run.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>; the grids' and the starting indices' <code>DATA</code> statements moved into the modules (<code>GALOT06_MOD</code>, <code>ALOT06_MOD</code>), with the same values.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A check that does not stop.</strong> In the first loop (the eight $X$ values below $1-Z$), the <code>STOP</code> after a mismatch of $X$ or $Z$ is commented out, so the run goes on after printing "RUN STOPPED". In the second loop it does stop. Which is intended?</li>
+<li><strong>Only 16 of 19 densities checked.</strong> Both loops check <code>R0GRTAB(KK)</code> for <code>KK = 1, 16</code>, not up to <code>NUMD</code> = 19. Why are the last three values of $\log R$ not checked?</li>
+<li><strong>Exact comparisons of reals.</strong> The checks compare values read with <code>F9.6</code> or <code>F7.3</code> against <code>DATA</code> values with <code>.NE.</code>. This works when the decimal strings round to the same binary number, but a table written with a slightly different rounding would stop the run. Use a tolerance?</li>
+<li><strong>Stale comment.</strong> The comment on the storage index speaks of "15 sets of metal abundance with 7 sets of hydrogen" and of $Z = 0.1$ "already read in at X=0.9", while the code has 16 values of $Z$ and 9 of $X$.</li>
+<li><strong>No <code>STATUS='OLD'</code>.</strong> The file is opened without <code>STATUS</code>, so a wrong name creates an empty file and fails at the first read rather than at the open.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>MHP 3/09  SUBROUTINE FOR READING IN ALEXANDER LOW T OPACITIES.
+
+ALEXANDER OPACITIES FERGUSON ET AL. 2005  APJ,623,585
+FOR EACH  X = 0.0, 0.1, 0.2, 0.35, 0.5, 0.7, 0.8, 0.9, 1-Z
+INCREASING ORDER OF Z = 0.0, 0.00001, 0.00003, 0.0001, 0.0003,
+(16)               0.001, 0.002, 0.004, 0.01, 0.02, 0.03,
+0.04, 0.05, 0.06, 0.08, 0.10
+DESCENDING ORDER OF LOGT 4.5-3.5 IN 0.05 DEX INCREMENTS
+(85)                 3.5-2.9 IN 0.01 DEX INCREMENTS
+2.9-2.7 IN 0.05 DEX INCREMENTS
+ASCENDING ORDER OF  LOGR -8.0 -7.5 -7.0 -6.5 -6.0 -5.5 -5.0 -4.5 -4.0 -3.5
+(19)                -3.0 -2.5 -2.0 -1.5 -1.0 -0.5  0.0  0.5  1.0
+WHERE R = RHO/T_6**3
+READ IN ALL Z VALUES AT FIXED X.  THEN GENERATE SURFACE X,Z TABLE.
+INTERPOLATION BETWEEN COMPOSITIONS IS 4-POINT LAGRANGIAN.
+
+MHP 8/25 Added file name to subroutine call</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-READALEX06'>READALEX06</a> <span class='muted'>subroutine · MHP 3/09  SUBROUTINE FOR READING IN ALEXANDER LOW T OPACITIES.</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-READALEX06'><h3><span class='kind'>subroutine</span>READALEX06</h3>
+<p class='muted'>lines 18–136 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/readalex06.f#L18-L136'>GitHub</a></p>
+<pre>SUBROUTINE READALEX06(FALEX06)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>MHP 3/09  SUBROUTINE FOR READING IN ALEXANDER LOW T OPACITIES.
+
+ALEXANDER OPACITIES FERGUSON ET AL. 2005  APJ,623,585
+FOR EACH  X = 0.0, 0.1, 0.2, 0.35, 0.5, 0.7, 0.8, 0.9, 1-Z
+INCREASING ORDER OF Z = 0.0, 0.00001, 0.00003, 0.0001, 0.0003,
+(16)               0.001, 0.002, 0.004, 0.01, 0.02, 0.03,
+0.04, 0.05, 0.06, 0.08, 0.10
+DESCENDING ORDER OF LOGT 4.5-3.5 IN 0.05 DEX INCREMENTS
+(85)                 3.5-2.9 IN 0.01 DEX INCREMENTS
+2.9-2.7 IN 0.05 DEX INCREMENTS
+ASCENDING ORDER OF  LOGR -8.0 -7.5 -7.0 -6.5 -6.0 -5.5 -5.0 -4.5 -4.0 -3.5
+(19)                -3.0 -2.5 -2.0 -1.5 -1.0 -0.5  0.0  0.5  1.0
+WHERE R = RHO/T_6**3
+READ IN ALL Z VALUES AT FIXED X.  THEN GENERATE SURFACE X,Z TABLE.
+INTERPOLATION BETWEEN COMPOSITIONS IS 4-POINT LAGRANGIAN.
+
+MHP 8/25 Added file name to subroutine call</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/alot06all_mod.f.html#def-ALOT06ALL_MOD'>ALOT06ALL_MOD</a>, <a href='../yrec-map/alot06_mod.f.html#def-ALOT06_MOD'>ALOT06_MOD</a>, <a href='../yrec-map/galot06_mod.f.html#def-GALOT06_MOD'>GALOT06_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/setupopac.f.html#def-SETUPOPAC'>SETUPOPAC</a> <span class='muted'>(setupopac.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">18</span>      SUBROUTINE READALEX06(FALEX06)
+<span class="ln">19</span>C 10/14/26 MHP via Claude
+<span class="ln">20</span>C code changed to convert COMMON/GALOT06/ into GALOT06_MOD.
+<span class="ln">21</span>      USE GALOT06_MOD
+<span class="ln">22</span>C 10/14/26 MHP via Claude
+<span class="ln">23</span>C code changed to convert COMMON/ALOT06/ into ALOT06_MOD.
+<span class="ln">24</span>      USE ALOT06_MOD
+<span class="ln">25</span>C 10/14/26 MHP via Claude
+<span class="ln">26</span>C code changed to convert COMMON/ALOT06ALL/ into ALOT06ALL_MOD.
+<span class="ln">27</span>      USE ALOT06ALL_MOD
+<span class="ln">28</span>C 10/14/26 MHP via Claude
+<span class="ln">29</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">30</span>      USE IOUNITS_MOD
+<span class="ln">31</span>C 10/20/26 MHP via Claude
+<span class="ln">32</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">33</span>C explicit declarations.
+<span class="ln">34</span>      IMPLICIT NONE
+<span class="ln">35</span>      REAL*8 XTEST
+<span class="ln">36</span>      INTEGER I,II,J,JJ,K,KK,NUMD,NUMT,NUMX,NUMZ
+<span class="ln">37</span>      PARAMETER (NUMX=9)
+<span class="ln">38</span>      PARAMETER (NUMZ=16)
+<span class="ln">39</span>      PARAMETER (NUMT=85)
+<span class="ln">40</span>      PARAMETER (NUMD=19)
+<span class="ln">41</span>      CHARACTER*256 FALEX06
+<span class="ln">42</span>C     ALEX LOW T OPACITY COMMON BLOCKS
+<span class="ln">43</span>C MHP 8/25 Removed file names from common block
+<span class="ln">44</span>C 9/25/26 MHP via Claude
+<span class="ln">45</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">46</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">47</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">48</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">49</span>C COMMON/IOUNITS/
+<span class="ln">50</span>C     LOCAL ARRAYS
+<span class="ln">51</span>      REAL*8 R0GRTAB(NUMD),XX,ZZ,T
+<span class="ln">52</span>C INITIALIZE INDEX OF PREVIOUS CLOSEST POINTS AND ENVELOPE ABUNDANCES
+<span class="ln">53</span>      SAVE
+<span class="ln">54</span>      OPEN(UNIT=IALEX06,FILE=FALEX06)
+<span class="ln">55</span>C READ IN INITIAL X AND Z; ENSURE THAT THEY HAVE THE EXPECTED VALUES.
+<span class="ln">56</span>      DO I = 1,NUMX-1
+<span class="ln">57</span>         DO II = 1, NUMZ
+<span class="ln">58</span>C INDEX FOR STORING TABLES : 15 SETS OF METAL ABUNDANCE WITH 7 SETS
+<span class="ln">59</span>C OF HYDROGEN FOR EACH.  THESE ARE STORED IN THE ORDER (X,Z) OF
+<span class="ln">60</span>C (0,0),(0,0.1),...(0.9,0),(0.9,0.1).  The final tables are defined
+<span class="ln">61</span>C at X = 1-Z except for the 0.1 Z case (already read in at X=0.9).
+<span class="ln">62</span>C HEADER INFORMATION: X AND Z; CHECK FOR CONSISTENCY
+<span class="ln">63</span>            READ(IALEX06,10)XX,ZZ
+<span class="ln">64</span> 10   FORMAT(30X,F9.6,7X,F9.6//)
+<span class="ln">65</span>            IF(XX.NE.XXG06(I) .OR. ZZ.NE.ZZG06(II))THEN
+<span class="ln">66</span>               WRITE(*,15)XXG06(I),XX,ZZG06(II),ZZ
+<span class="ln">67</span> 15   FORMAT(1X,&#x27;ERROR IN ALEXANDER OPACITY TABLES:&#x27;/
+<span class="ln">68</span>     *       1X,&#x27;EXPECTED AND ACTUAL X,Z&#x27;,4F7.2,&#x27; RUN STOPPED&#x27;)
+<span class="ln">69</span>C               STOP
+<span class="ln">70</span>            ENDIF
+<span class="ln">71</span>            READ(IALEX06,20)(R0GRTAB(K),K=1,NUMD)
+<span class="ln">72</span> 20   FORMAT(6X,19F7.3)
+<span class="ln">73</span>            DO KK=1,16
+<span class="ln">74</span>               IF(R0GRTAB(KK).NE.R0GR06(KK))THEN
+<span class="ln">75</span>                  WRITE(*,25)KK,R0GR06(KK),R0GRTAB(KK)
+<span class="ln">76</span> 25    FORMAT(1X,&#x27;ERROR IN ALEXANDER OPACITY TABLES:&#x27;/
+<span class="ln">77</span>     *        1X,&#x27;EXPECTED AND ACTUAL R&#x27;,I3,2F7.3,&#x27; RUN STOPPED&#x27;)
+<span class="ln">78</span>                  STOP
+<span class="ln">79</span>               ENDIF
+<span class="ln">80</span>            END DO
+<span class="ln">81</span>            JJ = (I-1)*NUMZ+II
+<span class="ln">82</span>C OPACITY INFORMATION AT EACH SHELL: CHECK FOR CONSISTENCY WITH T.
+<span class="ln">83</span>C STORE IN A NUMXZ*NUMT*NUMR ARRAY.
+<span class="ln">84</span>            DO J = NUMT,1,-1
+<span class="ln">85</span>               READ(IALEX06,30) T,(CAPTALEX06(JJ,J,K),K=1,NUMD)
+<span class="ln">86</span> 30    FORMAT(F5.3,1X,19F7.3)
+<span class="ln">87</span>               IF(T.NE.TGR06(J))THEN
+<span class="ln">88</span>                  WRITE(*,35)J,TGR06(J),T
+<span class="ln">89</span> 35    FORMAT(1X,&#x27;ERROR IN ALEXANDER OPACITY TABLES:&#x27;/
+<span class="ln">90</span>     *        1X,&#x27;EXPECTED AND ACTUAL T&#x27;,I3,2F7.3,&#x27; RUN STOPPED&#x27;)
+<span class="ln">91</span>                  STOP
+<span class="ln">92</span>               ENDIF
+<span class="ln">93</span>            END DO
+<span class="ln">94</span>         END DO
+<span class="ln">95</span>      END DO
+<span class="ln">96</span>C FINAL SET OF X TABLES ARE DEFINED AT X = 1 - Z AND THERE IS NOT ONE FOR
+<span class="ln">97</span>C Z = 0.1 (ALREADY READ IN AT X=0.9).
+<span class="ln">98</span>      DO II = 1, NUMZ-1
+<span class="ln">99</span>C INDEX FOR STORING TABLES : 15 SETS OF METAL ABUNDANCE WITH 7 SETS
+<span class="ln">100</span>C OF HYDROGEN FOR EACH.  THESE ARE STORED IN THE ORDER (X,Z) OF
+<span class="ln">101</span>C (0,0),(0,0.1),...(0.9,0),(0.9,0.1).  The final tables are defined
+<span class="ln">102</span>C at X = 1-Z except for the 0.1 Z case (already read in at X=0.9).
+<span class="ln">103</span>C HEADER INFORMATION: X AND Z; CHECK FOR CONSISTENCY
+<span class="ln">104</span>         READ(IALEX06,10)XX,ZZ
+<span class="ln">105</span>         XTEST = 1.0D0 - ZZG06(II)
+<span class="ln">106</span>         IF(XX.NE.XTEST .OR. ZZ.NE.ZZG06(II))THEN
+<span class="ln">107</span>            WRITE(*,15)XTEST,XX,ZZG06(II),ZZ
+<span class="ln">108</span>            STOP
+<span class="ln">109</span>         ENDIF
+<span class="ln">110</span>         READ(IALEX06,20)(R0GRTAB(K),K=1,NUMD)
+<span class="ln">111</span>         DO KK=1,16
+<span class="ln">112</span>            IF(R0GRTAB(KK).NE.R0GR06(KK))THEN
+<span class="ln">113</span>               WRITE(*,25)KK,R0GR06(KK),R0GRTAB(KK)
+<span class="ln">114</span>               STOP
+<span class="ln">115</span>            ENDIF
+<span class="ln">116</span>         END DO
+<span class="ln">117</span>         JJ = (NUMX-1)*NUMZ+II
+<span class="ln">118</span>C OPACITY INFORMATION AT EACH SHELL: CHECK FOR CONSISTENCY WITH T.
+<span class="ln">119</span>C STORE IN A NUMXZ*NUMT*NUMR ARRAY.
+<span class="ln">120</span>         DO J = NUMT,1,-1
+<span class="ln">121</span>            READ(IALEX06,30) T,(CAPTALEX06(JJ,J,K),K=1,NUMD)
+<span class="ln">122</span>            IF(T.NE.TGR06(J))THEN
+<span class="ln">123</span>               WRITE(*,35)J,TGR06(J),T
+<span class="ln">124</span>               STOP
+<span class="ln">125</span>            ENDIF
+<span class="ln">126</span>         END DO
+<span class="ln">127</span>      END DO
+<span class="ln">128</span>      CLOSE(UNIT=IALEX06)
+<span class="ln">129</span>C INITIALIZE FIXED Z,X TABLE
+<span class="ln">130</span>      DO I = 1,NUMT
+<span class="ln">131</span>         DO J = 1,NUMD
+<span class="ln">132</span>            CAPALEX06(I,J)=CAPTALEX06(1,I,J)
+<span class="ln">133</span>         END DO
+<span class="ln">134</span>      END DO
+<span class="ln">135</span>      RETURN
+<span class="ln">136</span>      END</pre></details>
+<details class='py' id='py-readalex06'><summary>Python version: readalex06</summary><pre class='doc'>Read all 143 compositions of the low-temperature opacity tables into
+alot06all_mod.captalex06, checking each table&#x27;s X, Z, log R and log T
+against the grids of galot06_mod, then set alot06_mod.capalex06 to the
+first table (X = 0, Z = 0).
+
+Translates: readalex06.f#READALEX06 (09c3b9b)
+
+Arguments: falex06, the file name (opened on unit IALEX06). Nothing is
+returned; the tables are stored in alot06all_mod and alot06_mod.</pre><pre class='src'><span class="ln">68</span>def readalex06(falex06):
+<span class="ln">69</span>    &quot;&quot;&quot;Read all 143 compositions of the low-temperature opacity tables into
+<span class="ln">70</span>    alot06all_mod.captalex06, checking each table&#x27;s X, Z, log R and log T
+<span class="ln">71</span>    against the grids of galot06_mod, then set alot06_mod.capalex06 to the
+<span class="ln">72</span>    first table (X = 0, Z = 0).
+<span class="ln">73</span>
+<span class="ln">74</span>    Translates: readalex06.f#READALEX06 (09c3b9b)
+<span class="ln">75</span>
+<span class="ln">76</span>    Arguments: falex06, the file name (opened on unit IALEX06). Nothing is
+<span class="ln">77</span>    returned; the tables are stored in alot06all_mod and alot06_mod.
+<span class="ln">78</span>    &quot;&quot;&quot;
+<span class="ln">79</span>    g = galot06_mod
+<span class="ln">80</span>    unit = iounits_mod.ialex06
+<span class="ln">81</span>    # Question (see the page): opened without STATUS=&#x27;OLD&#x27;.
+<span class="ln">82</span>    iounits_mod.open(unit, falex06)
+<span class="ln">83</span>    # The eight X values below 1-Z, each with all 16 values of Z.
+<span class="ln">84</span>    for i in range(1, NUMX):
+<span class="ln">85</span>        for ii in range(1, NUMZ + 1):
+<span class="ln">86</span>            xx, zz = _read_header(unit)
+<span class="ln">87</span>            if xx != g.xxg06[i] or zz != g.zzg06[ii]:
+<span class="ln">88</span>                print(_fmt15(g.xxg06[i], xx, g.zzg06[ii], zz))
+<span class="ln">89</span>                # Question (see the page): the STOP here is commented out.
+<span class="ln">90</span>            jj = (i - 1) * NUMZ + ii
+<span class="ln">91</span>            _read_table(unit, jj)
+<span class="ln">92</span>    # The final tables, at X = 1-Z; none for Z = 0.1 (read at X = 0.9).
+<span class="ln">93</span>    for ii in range(1, NUMZ):
+<span class="ln">94</span>        xx, zz = _read_header(unit)
+<span class="ln">95</span>        xtest = 1.0 - g.zzg06[ii]
+<span class="ln">96</span>        if xx != xtest or zz != g.zzg06[ii]:
+<span class="ln">97</span>            print(_fmt15(xtest, xx, g.zzg06[ii], zz))
+<span class="ln">98</span>            raise SystemExit
+<span class="ln">99</span>        jj = (NUMX - 1) * NUMZ + ii
+<span class="ln">100</span>        _read_table(unit, jj)
+<span class="ln">101</span>    iounits_mod.close(unit)
+<span class="ln">102</span>    # Initialize the fixed (X, Z) table.
+<span class="ln">103</span>    for i in range(1, NUMT + 1):
+<span class="ln">104</span>        for j in range(1, NUMD + 1):
+<span class="ln">105</span>            alot06_mod.capalex06[i, j] = alot06all_mod.captalex06[1, i, j]</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_fields'><summary>Python version: _fields</summary><pre class='doc'>Split a fixed-format record into floats (a blank field reads as 0,
+as in Fortran).</pre><pre class='src'><span class="ln">17</span>def _fields(line, widths, start=0):
+<span class="ln">18</span>    &quot;&quot;&quot;Split a fixed-format record into floats (a blank field reads as 0,
+<span class="ln">19</span>    as in Fortran).&quot;&quot;&quot;
+<span class="ln">20</span>    out, pos = [], start
+<span class="ln">21</span>    for w in widths:
+<span class="ln">22</span>        text = line[pos:pos + w].strip()
+<span class="ln">23</span>        out.append(float(text) if text else 0.0)
+<span class="ln">24</span>        pos += w
+<span class="ln">25</span>    return out</pre></details>
+<details class='py' id='py-_read_header'><summary>Python version: _read_header</summary><pre class='doc'>FORMAT 10, (30X,F9.6,7X,F9.6//): X and Z, then two records skipped.</pre><pre class='src'><span class="ln">28</span>def _read_header(unit):
+<span class="ln">29</span>    &quot;&quot;&quot;FORMAT 10, (30X,F9.6,7X,F9.6//): X and Z, then two records skipped.&quot;&quot;&quot;
+<span class="ln">30</span>    xx, _, zz = _fields(iounits_mod.read(unit), [9, 7, 9], start=30)
+<span class="ln">31</span>    iounits_mod.read(unit)
+<span class="ln">32</span>    iounits_mod.read(unit)
+<span class="ln">33</span>    return xx, zz</pre></details>
+<details class='py' id='py-_read_table'><summary>Python version: _read_table</summary><pre class='doc'>Check the log R row (only its first 16 values) and read the NUMT
+rows of table JJ, in descending order of log T, checking each log T.</pre><pre class='src'><span class="ln">36</span>def _read_table(unit, jj):
+<span class="ln">37</span>    &quot;&quot;&quot;Check the log R row (only its first 16 values) and read the NUMT
+<span class="ln">38</span>    rows of table JJ, in descending order of log T, checking each log T.&quot;&quot;&quot;
+<span class="ln">39</span>    g = galot06_mod
+<span class="ln">40</span>    # FORMAT 20, (6X,19F7.3).
+<span class="ln">41</span>    r0grtab = np.zeros(NUMD + 1)
+<span class="ln">42</span>    r0grtab[1:] = _fields(iounits_mod.read(unit), [7] * NUMD, start=6)
+<span class="ln">43</span>    # Question (see the page): only 16 of the 19 densities are checked.
+<span class="ln">44</span>    for kk in range(1, 17):
+<span class="ln">45</span>        if r0grtab[kk] != g.r0gr06[kk]:
+<span class="ln">46</span>            print(f&quot; ERROR IN ALEXANDER OPACITY TABLES:\n&quot;
+<span class="ln">47</span>                  f&quot; EXPECTED AND ACTUAL R{kk:3d}{g.r0gr06[kk]:7.3f}&quot;
+<span class="ln">48</span>                  f&quot;{r0grtab[kk]:7.3f} RUN STOPPED&quot;)
+<span class="ln">49</span>            raise SystemExit
+<span class="ln">50</span>    # Opacity at each log T (FORMAT 30, (F5.3,1X,19F7.3)).
+<span class="ln">51</span>    for j in range(NUMT, 0, -1):
+<span class="ln">52</span>        vals = _fields(iounits_mod.read(unit), [5, 1] + [7] * NUMD)
+<span class="ln">53</span>        t = vals[0]
+<span class="ln">54</span>        alot06all_mod.captalex06[jj, j, 1:NUMD + 1] = vals[2:]
+<span class="ln">55</span>        if t != g.tgr06[j]:
+<span class="ln">56</span>            print(f&quot; ERROR IN ALEXANDER OPACITY TABLES:\n&quot;
+<span class="ln">57</span>                  f&quot; EXPECTED AND ACTUAL T{j:3d}{g.tgr06[j]:7.3f}{t:7.3f}&quot;
+<span class="ln">58</span>                  f&quot; RUN STOPPED&quot;)
+<span class="ln">59</span>            raise SystemExit</pre></details>
+<details class='py' id='py-_fmt15'><summary>Python version: _fmt15</summary><pre class='src'><span class="ln">62</span>def _fmt15(xexp, xx, zexp, zz):
+<span class="ln">63</span>    return (&quot; ERROR IN ALEXANDER OPACITY TABLES:\n&quot;
+<span class="ln">64</span>            f&quot; EXPECTED AND ACTUAL X,Z{xexp:7.2f}{xx:7.2f}{zexp:7.2f}&quot;
+<span class="ln">65</span>            f&quot;{zz:7.2f} RUN STOPPED&quot;)</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings: the grids, the storage index (143 compositions), the checks and the questions hold (the exact comparisons of question 3 do pass for the current grid values, but the question stands for other tables).</p>
+<p>No change.</p></div></details>
+</main></body></html>

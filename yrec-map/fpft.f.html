@@ -1,0 +1,269 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>fpft.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ fpft.f</span></header><main>
+<h1>fpft.f</h1>
+<p class='muted'>109 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/fpft.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>fpft.py</code>, 105 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>FPFT</code> computes, for every shell of a rotating model, the form factors $f_P$ and $f_T$ that correct the stellar structure equations for rotational distortion, together with the mean effective gravity on each equipotential. The equipotentials' shapes come from <a href="../yrec-map/shape.f.html#def-SHAPE">SHAPE</a>; the angular averages from a Gauss–Legendre quadrature.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> the main program (<a href="../yrec-map/main.f.html#def-_file_level_">main.f</a>), <a href="../yrec-map/crrect.f.html#def-CRRECT">CRRECT</a> (the structure correction, iterated), <a href="../yrec-map/hpoint.f.html#def-HPOINT">HPOINT</a> and <a href="../yrec-map/starin.f.html#def-STARIN">STARIN</a>.</li>
+<li><strong>Inputs:</strong> <code>HD</code>, <code>HR</code>, <code>HS</code> ($\log\rho$, $\log r$, $\log m$ in cgs), <code>OMEGA</code> ($\Omega$ per shell, rad s$^{-1}$), <code>M</code>.</li>
+<li><strong>What it calls:</strong> <code>SHAPE</code> (the run of $r_0$ and $\eta_2$), <a href="../yrec-map/trapzd.f.html#def-TRAPZD">TRAPZD</a> (trapezoid rule for the distortion integral), <a href="../yrec-map/polint.f.html#def-POLINT">POLINT</a> (polynomial extrapolation) and <a href="../yrec-map/qgauss.f.html#def-QGAUSS">QGAUSS</a> (the angular quadrature, which calls <a href="../yrec-map/func.f.html#def-FUNC">FUNC</a>).</li>
+<li><strong>Outputs:</strong> <code>FP</code>, <code>FT</code> (the form factors), <code>HG</code> (mean gravity $\langle g\rangle$), <code>ETA2</code> ($\eta_2$, from Radau's equation as computed in <code>SHAPE</code>), <code>R0</code>. It also fills <a href="../yrec-map/quadd_mod.f.html#def-QUADD_MOD"><code>QUADD_MOD</code></a> with the spherical, rotational and distortion potentials <code>PHISP</code>, <code>PHIROT</code>, <code>PHIDIS</code>, read by <a href="../yrec-map/checkj.f.html#def-CHECKJ">CHECKJ</a>, <a href="../yrec-map/vcirc.f.html#def-VCIRC">VCIRC</a> and <a href="../yrec-map/wrtmod.f.html#def-WRTMOD">WRTMOD</a>.</li>
+<li><strong>Modules:</strong> <code>QUADD_MOD</code> (above); constants from <a href="../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD"><code>CONSTANTS_MOD</code></a>.</li>
+</ul>
+<p><strong>The method.</strong> For each shell, outward:</p>
+<ol>
+<li>The distortion amplitude $a = \dfrac{5}{3}\dfrac{\Omega^2 r_0^3}{Gm\,(2+\eta_2)}$.</li>
+<li>The integral $I(r_0) = \int_0^{r_0}(\ldots)\,dr_0&#x27;$ (its integrand, per <code>TRAPZD</code>'s comment, is $(\rho/m)\,r_0&#x27;^7\,\Omega^2(5+\eta_2)/(2+\eta_2)$) is added shell by shell: the trapezoid rule on the step from the previous shell, refined once and extrapolated to zero step with <code>POLINT</code> (a Romberg step; <code>JMAX</code> = 2, tolerance $10^{-6}$).</li>
+<li><code>QGAUSS</code> integrates over $0 \le \theta \le \pi/2$ the surface element $S$, $gS$ and $S/g$, giving $S_\Phi$, $S_\Phi\langle g\rangle$ and $S_\Phi\langle g^{-1}\rangle$.</li>
+<li>With $r_\Phi$ the shell's radius (<code>HR</code>),
+$$f_P = \frac{4\pi r_\Phi^4}{Gm\,S_\Phi\langle g^{-1}\rangle},\qquad f_T = \frac{(4\pi r_\Phi^2)^2}{S_\Phi\langle g\rangle\;S_\Phi\langle g^{-1}\rangle},$$
+which is the usual Kippenhahn–Thomas form, $f_T = (4\pi r_\Phi^2/S_\Phi)^2/(\langle g\rangle\langle g^{-1}\rangle)$, provided <code>QGAUSS</code>'s outputs are the surface integrals named above (read from its code). <code>HG</code> = $\langle g\rangle$.</li>
+</ol>
+<p><strong>KC's changes.</strong> The unused argument <code>I</code> was removed from the call to <code>TRAPZD</code> (2025-05-31).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>; the unused <code>/ROT/</code> and <code>/CCOUT/</code> are gone, which settles the former question 2.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Romberg with two levels.</strong> With <code>JMAX</code> = 2 the refinement stops after one halving whether or not the tolerance is met; the result is then used without a warning. Is two levels enough?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-FPFT'>FPFT</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-FPFT'><h3><span class='kind'>subroutine</span>FPFT</h3>
+<p class='muted'>lines 2–109 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/fpft.f#L2-L109'>GitHub</a></p>
+<pre>SUBROUTINE FPFT(HD,HR,HS,M,OMEGA,ETA2,FP,FT,HG,R0)</pre>
+<div class='notes'><p>Form factors $f_P$, $f_T$ and $\langle g\rangle$ for every shell of a rotating model (method above); also the potentials in <code>QUADD_MOD</code>.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/quadd_mod.f.html#def-QUADD_MOD'>QUADD_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/polint.f.html#def-POLINT'>POLINT</a> <span class='muted'>(polint.f)</span></li>
+<li><a href='../yrec-map/qgauss.f.html#def-QGAUSS'>QGAUSS</a> <span class='muted'>(qgauss.f)</span></li>
+<li><a href='../yrec-map/shape.f.html#def-SHAPE'>SHAPE</a> <span class='muted'>(shape.f)</span></li>
+<li><a href='../yrec-map/trapzd.f.html#def-TRAPZD'>TRAPZD</a> <span class='muted'>(trapzd.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/crrect.f.html#def-CRRECT'>CRRECT</a> <span class='muted'>(crrect.f)</span></li>
+<li><a href='../yrec-map/hpoint.f.html#def-HPOINT'>HPOINT</a> <span class='muted'>(hpoint.f)</span></li>
+<li><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span> ×2</li>
+<li><a href='../yrec-map/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE FPFT(HD,HR,HS,M,OMEGA,ETA2,FP,FT,HG,R0)
+<span class="ln">3</span>C 10/15/26 MHP via Claude
+<span class="ln">4</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">5</span>C PARAMETER(JSON=5000) here.
+<span class="ln">6</span>      USE DIMENSIONS_MOD
+<span class="ln">7</span>C 10/14/26 MHP via Claude
+<span class="ln">8</span>C code changed to convert COMMON/QUADD/ into QUADD_MOD.
+<span class="ln">9</span>      USE QUADD_MOD
+<span class="ln">10</span>C 10/14/26 MHP via Claude
+<span class="ln">11</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">12</span>      USE CONSTANTS_MOD
+<span class="ln">13</span>C 10/20/26 MHP via Claude
+<span class="ln">14</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">15</span>C explicit declarations.
+<span class="ln">16</span>      IMPLICIT NONE
+<span class="ln">17</span>      REAL*8 A,AINT,AINT0,AINT1,AINTP,AINTT,B,CG,DINT,EPS,ETA2,ETA22,
+<span class="ln">18</span>     *       ETA22P,F0,FACT,FP,FT,G0,GINV,GINV0,GM,H,HD,HG,HR,HS,OMEGA,
+<span class="ln">19</span>     *       Q,QP,R0,R03,R0P,RHO,RHOP,RPHI,RPHI3,SM,SPHI,W2,W2P,XA,YA
+<span class="ln">20</span>      INTEGER I,J,J1,JMAX,K,KM,M,N1
+<span class="ln">21</span>
+<span class="ln">22</span>C 10/13/26 MHP via Claude: removed the unused COMMON/NMLPAR/ declaration
+<span class="ln">23</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">24</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CCOUT/ declaration
+<span class="ln">25</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">26</span>C 9/25/26 MHP via Claude
+<span class="ln">27</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">28</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">29</span>C 10/13/26 MHP via Claude: removed the unused COMMON/IOUNITS/ declaration
+<span class="ln">30</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">31</span>      DIMENSION HD(JSON),HS(JSON),HR(JSON),OMEGA(JSON),FP(JSON),
+<span class="ln">32</span>     * FT(JSON),ETA2(JSON),R0(JSON),H(20),XA(20),YA(20),AINT0(10),
+<span class="ln">33</span>     * HG(JSON)
+<span class="ln">34</span>      REAL*8 MP
+<span class="ln">35</span>      SAVE
+<span class="ln">36</span>
+<span class="ln">37</span>C  FIND THE RUN OF R0 AND ETA2 FOR THE MODEL
+<span class="ln">38</span>      CALL <a href="../yrec-map/shape.f.html#def-SHAPE" title="SHAPE in shape.f">SHAPE</a>(HD,HR,HS,1,M,OMEGA,ETA2,R0)
+<span class="ln">39</span>      B = 0.125D0*C4PI
+<span class="ln">40</span>      CG = DEXP(CLN*CGL)
+<span class="ln">41</span>      EPS = 1.0D-6
+<span class="ln">42</span>      JMAX = 2
+<span class="ln">43</span>      K = 2
+<span class="ln">44</span>      KM = K-1
+<span class="ln">45</span>C THE VALUES OF THE PREVIOUS SHELL MPHI,ETA2+2,OMEGA**2,RHO, AND R0 ARE
+<span class="ln">46</span>C NEEDED FOR THE EVALUATION OF THE DISTORTED POTENTIAL.
+<span class="ln">47</span>C THE BELOW VALUES ARE THE CENTRAL VALUES OF THE ABOVE IN ORDER.
+<span class="ln">48</span>      MP = 0.0D0
+<span class="ln">49</span>      ETA22P = 2.0D0
+<span class="ln">50</span>      W2P = OMEGA(1)**2
+<span class="ln">51</span>      RHOP = EXP(CLN*HD(1))
+<span class="ln">52</span>      R0P = 0.0D0
+<span class="ln">53</span>      AINTP = 0.0D0
+<span class="ln">54</span>      AINTT = 0.0D0
+<span class="ln">55</span>      QP = 0.0D0
+<span class="ln">56</span>C NOW CALCULATE FP AND FT USING THE ETA2 AND R0 VALUES
+<span class="ln">57</span>      DO 100 I = 1,M
+<span class="ln">58</span>         RHO = EXP(CLN*HD(I))
+<span class="ln">59</span>         GM = CG*DEXP(CLN*HS(I))
+<span class="ln">60</span>         FACT = 5.0D0*CC13*OMEGA(I)**2/(GM*(2.0D0+ETA2(I)))
+<span class="ln">61</span>         R03 = R0(I)**3
+<span class="ln">62</span>         A = FACT*R03
+<span class="ln">63</span>         SM = DEXP(CLN*HS(I))
+<span class="ln">64</span>         ETA22 = ETA2(I)+2.0D0
+<span class="ln">65</span>         W2 = OMEGA(I)**2
+<span class="ln">66</span>         H(1) = 1.0D0
+<span class="ln">67</span>         DO 40 J = 1,JMAX
+<span class="ln">68</span>C  EVALUATE THE INTEGRAL AINT FROM 0 TO R0 USING THE TRAPEZOIDAL RULE
+<span class="ln">69</span>            CALL <a href="../yrec-map/trapzd.f.html#def-TRAPZD" title="TRAPZD in trapzd.f">TRAPZD</a>(R0P,R0(I),AINT0(J),J,RHO,RHOP,SM,MP,
+<span class="ln">70</span>C      *      W2,W2P,ETA22,ETA22P,Q,QP,I)  ! KC 2025-05-31
+<span class="ln">71</span>     *      W2,W2P,ETA22,ETA22P,Q,QP)
+<span class="ln">72</span>            IF(J.GE.K) THEN
+<span class="ln">73</span>               N1 = J - KM
+<span class="ln">74</span>               DO 35 J1 = 1,K
+<span class="ln">75</span>                  XA(J1) = H(N1)
+<span class="ln">76</span>                  YA(J1) = AINT0(N1)
+<span class="ln">77</span>                  N1 = N1 + 1
+<span class="ln">78</span>   35          CONTINUE
+<span class="ln">79</span>               CALL <a href="../yrec-map/polint.f.html#def-POLINT" title="POLINT in polint.f">POLINT</a>(XA,YA,K,0.0D0,AINT1,DINT)
+<span class="ln">80</span>               IF(DABS(DINT).LT.EPS*DABS(AINT1)) GOTO 50
+<span class="ln">81</span>            ENDIF
+<span class="ln">82</span>            AINT0(J+1) = AINT0(J)
+<span class="ln">83</span>            H(J+1) = 0.25D0*H(J)
+<span class="ln">84</span>   40    CONTINUE
+<span class="ln">85</span>   50    AINT = AINTP + AINT1
+<span class="ln">86</span>C  FIND &lt;G&gt; AND &lt;G-1&gt; ACROSS THE SHELL BY GAUSSIAN QUADRATURE
+<span class="ln">87</span>         CALL <a href="../yrec-map/qgauss.f.html#def-QGAUSS" title="QGAUSS in qgauss.f">QGAUSS</a>(G0,GINV0,SPHI,B,R0,HS,AINT,Q,W2,A,I)
+<span class="ln">88</span>         HG(I) = G0/SPHI
+<span class="ln">89</span>         GINV = DLOG10(GINV0)
+<span class="ln">90</span>         F0 = C4PIL + 4.0D0*HR(I) - GINV
+<span class="ln">91</span>         FP(I) = DEXP(CLN*(F0 - CGL - HS(I)))
+<span class="ln">92</span>         FT(I) = DEXP(CLN*(F0 + C4PIL))/G0
+<span class="ln">93</span>C  OUTPUT DATA
+<span class="ln">94</span>         RPHI = DEXP(CLN*HR(I))
+<span class="ln">95</span>         RPHI3 = RPHI**3
+<span class="ln">96</span>         PHISP(I) = GM/RPHI
+<span class="ln">97</span>         PHIROT(I) =  W2*RPHI**2
+<span class="ln">98</span>         PHIDIS(I) = C4PI*CC13*AINT/RPHI3
+<span class="ln">99</span>         AINTP = AINT
+<span class="ln">100</span>         QP = Q
+<span class="ln">101</span>         MP = SM
+<span class="ln">102</span>         ETA22P = ETA22
+<span class="ln">103</span>         W2P = W2
+<span class="ln">104</span>         RHOP = RHO
+<span class="ln">105</span>         R0P = R0(I)
+<span class="ln">106</span>  100 CONTINUE
+<span class="ln">107</span>
+<span class="ln">108</span>      RETURN
+<span class="ln">109</span>      END</pre></details>
+<details class='py' id='py-fpft'><summary>Python version: fpft</summary><pre class='doc'>For every shell of a rotating model, outward: the distortion
+amplitude, the distortion integral (trapezoid rule with one Romberg
+step), the angular averages by Gauss-Legendre quadrature, and from
+them the form factors f_P, f_T and &lt;g&gt;; also the spherical,
+rotational and distortion potentials in quadd_mod.
+
+Translates: fpft.f#FPFT (09c3b9b)
+
+Arguments: hd, hr, hs (log rho, log r, log m, cgs), m (number of
+shells), omega (angular velocity per shell).
+Arrays changed in place: eta2, r0 (from SHAPE), fp, ft, hg, and
+quadd_mod.phisp, phirot, phidis.
+
+Returns nothing.</pre><pre class='src'><span class="ln">16</span>def fpft(hd, hr, hs, m, omega, eta2, fp, ft, hg, r0):
+<span class="ln">17</span>    &quot;&quot;&quot;For every shell of a rotating model, outward: the distortion
+<span class="ln">18</span>    amplitude, the distortion integral (trapezoid rule with one Romberg
+<span class="ln">19</span>    step), the angular averages by Gauss-Legendre quadrature, and from
+<span class="ln">20</span>    them the form factors f_P, f_T and &lt;g&gt;; also the spherical,
+<span class="ln">21</span>    rotational and distortion potentials in quadd_mod.
+<span class="ln">22</span>
+<span class="ln">23</span>    Translates: fpft.f#FPFT (09c3b9b)
+<span class="ln">24</span>
+<span class="ln">25</span>    Arguments: hd, hr, hs (log rho, log r, log m, cgs), m (number of
+<span class="ln">26</span>    shells), omega (angular velocity per shell).
+<span class="ln">27</span>    Arrays changed in place: eta2, r0 (from SHAPE), fp, ft, hg, and
+<span class="ln">28</span>    quadd_mod.phisp, phirot, phidis.
+<span class="ln">29</span>
+<span class="ln">30</span>    Returns nothing.
+<span class="ln">31</span>    &quot;&quot;&quot;
+<span class="ln">32</span>    c = constants_mod
+<span class="ln">33</span>    h = np.zeros(20 + 1)
+<span class="ln">34</span>    xa = np.zeros(20 + 1)
+<span class="ln">35</span>    ya = np.zeros(20 + 1)
+<span class="ln">36</span>    aint0 = np.zeros(10 + 1)
+<span class="ln">37</span>
+<span class="ln">38</span>    shape(hd, hr, hs, 1, m, omega, eta2, r0)
+<span class="ln">39</span>    b = 0.125 * c.c4pi
+<span class="ln">40</span>    cg = math.exp(c.cln * c.cgl)
+<span class="ln">41</span>    eps = 1.0e-6
+<span class="ln">42</span>    jmax = 2
+<span class="ln">43</span>    k = 2
+<span class="ln">44</span>    km = k - 1
+<span class="ln">45</span>    # The values at the previous shell (at the centre for the first).
+<span class="ln">46</span>    mp = 0.0
+<span class="ln">47</span>    eta22p = 2.0
+<span class="ln">48</span>    w2p = omega[1] ** 2
+<span class="ln">49</span>    rhop = math.exp(c.cln * hd[1])
+<span class="ln">50</span>    r0p = 0.0
+<span class="ln">51</span>    aintp = 0.0
+<span class="ln">52</span>    aintt = 0.0
+<span class="ln">53</span>    qp = 0.0
+<span class="ln">54</span>    q = 0.0
+<span class="ln">55</span>    aint1 = 0.0
+<span class="ln">56</span>
+<span class="ln">57</span>    for i in range(1, m + 1):  # label 100
+<span class="ln">58</span>        rho = math.exp(c.cln * hd[i])
+<span class="ln">59</span>        gm = cg * math.exp(c.cln * hs[i])
+<span class="ln">60</span>        fact = 5.0 * c.cc13 * omega[i] ** 2 / (gm * (2.0 + eta2[i]))
+<span class="ln">61</span>        r03 = r0[i] ** 3
+<span class="ln">62</span>        a = fact * r03
+<span class="ln">63</span>        sm = math.exp(c.cln * hs[i])
+<span class="ln">64</span>        eta22 = eta2[i] + 2.0
+<span class="ln">65</span>        w2 = omega[i] ** 2
+<span class="ln">66</span>        # The distortion integral over this step: trapezoid rule, refined
+<span class="ln">67</span>        # and extrapolated to zero step (Romberg).
+<span class="ln">68</span>        h[1] = 1.0
+<span class="ln">69</span>        for j in range(1, jmax + 1):  # label 40
+<span class="ln">70</span>            aint0[j], q = trapzd(r0p, r0[i], aint0[j], j, rho, rhop, sm, mp,
+<span class="ln">71</span>                                 w2, w2p, eta22, eta22p, q, qp)
+<span class="ln">72</span>            if j &gt;= k:
+<span class="ln">73</span>                n1 = j - km
+<span class="ln">74</span>                for j1 in range(1, k + 1):  # label 35
+<span class="ln">75</span>                    xa[j1] = h[n1]
+<span class="ln">76</span>                    ya[j1] = aint0[n1]
+<span class="ln">77</span>                    n1 = n1 + 1
+<span class="ln">78</span>                aint1, dint = polint(xa, ya, k, 0.0, 0.0, 0.0)
+<span class="ln">79</span>                # Question (see the page): with jmax = 2 the result is
+<span class="ln">80</span>                # used whether or not the tolerance is met.
+<span class="ln">81</span>                if abs(dint) &lt; eps * abs(aint1):
+<span class="ln">82</span>                    break  # GOTO 50
+<span class="ln">83</span>            aint0[j + 1] = aint0[j]
+<span class="ln">84</span>            h[j + 1] = 0.25 * h[j]
+<span class="ln">85</span>        aint = aintp + aint1  # label 50
+<span class="ln">86</span>
+<span class="ln">87</span>        g0, ginv0, sphi = qgauss(0.0, 0.0, 0.0, b, r0, hs, aint, q, w2, a, i)
+<span class="ln">88</span>        hg[i] = g0 / sphi
+<span class="ln">89</span>        ginv = math.log10(ginv0)
+<span class="ln">90</span>        f0 = c.c4pil + 4.0 * hr[i] - ginv
+<span class="ln">91</span>        fp[i] = math.exp(c.cln * (f0 - c.cgl - hs[i]))
+<span class="ln">92</span>        ft[i] = math.exp(c.cln * (f0 + c.c4pil)) / g0
+<span class="ln">93</span>
+<span class="ln">94</span>        rphi = math.exp(c.cln * hr[i])
+<span class="ln">95</span>        rphi3 = rphi ** 3
+<span class="ln">96</span>        quadd_mod.phisp[i] = gm / rphi
+<span class="ln">97</span>        quadd_mod.phirot[i] = w2 * rphi ** 2
+<span class="ln">98</span>        quadd_mod.phidis[i] = c.c4pi * c.cc13 * aint / rphi3
+<span class="ln">99</span>        aintp = aint
+<span class="ln">100</span>        qp = q
+<span class="ln">101</span>        mp = sm
+<span class="ln">102</span>        eta22p = eta22
+<span class="ln">103</span>        w2p = w2
+<span class="ln">104</span>        rhop = rho
+<span class="ln">105</span>        r0p = r0[i]</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked against the code: $f_P$, $f_T$ and $\langle g\rangle$ from <code>F0</code>, the amplitude $a$, the Romberg step (<code>JMAX</code> = 2, <code>H(J+1) = H(J)/4</code>), the potentials in <code>/QUADD/</code>, the callers and the COMMON blocks. Nothing to fix.</p>
+<p>No change.</p></div></details>
+</main></body></html>

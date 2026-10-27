@@ -1,0 +1,160 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Time stepping · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ New structure (Fortran and Python) / Time stepping</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='fortran.html'>Language and style</a></li><li><a href='common-map.html'>The COMMON-block map</a></li><li><a href='kernels.html'>Kernels and settings</a></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><strong>Time stepping</strong></li><li><a href='composition.html'>Composition and settling</a></li><li><a href='rotation.html'>Rotation and mass loss</a></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>Time stepping</h1>
+<p><em>In Python: <code>pyrec.timestep</code>, under Python below.</em></p>
+<h2>3.8 The time step: <code>TimeStepper</code>, <code>StepCriterion</code></h2>
+<p><strong>Responsibility:</strong> propose the next time step as the most restrictive of several criteria, each a subclass of <code>StepCriterion</code>, limited in growth by <code>ATIME(13)</code>.</p>
+<pre><code class="language-fortran">type, abstract :: StepCriterion
+contains
+    procedure(dt_if), deferred :: dt_max
+        !! (star, start, dt_old) -&gt; real(dp) Largest step allowed [s];
+        !! DT_NOLIMIT if the criterion does not apply.
+    procedure :: name             !! () -&gt; character: for the .short file.
+end type
+type, extends(StepCriterion) :: StructureCriterion   !! PTIME, ATIME(8-11)
+type, extends(StepCriterion) :: HydrogenCriterion    !! XTIME
+type, extends(StepCriterion) :: HeliumCriterion      !! YTIME
+type, extends(StepCriterion) :: RotationCriterion    !! WTIME, DTWIND
+type, extends(StepCriterion) :: SurfaceCriterion     !! ENTIME (triangle)
+type :: CriterionSlot
+    class(StepCriterion), allocatable :: c
+end type
+
+type :: TimeStepper
+    type(CriterionSlot), allocatable :: criteria(:)
+    logical :: use_structure = .true.   !! LPTIME; switched off by HTIMER.
+contains
+    procedure :: next_dt
+        !! (star, start, card, dt_old, dt, limiting) HTIMER: the step [s]
+        !! and the name of the criterion that set it.
+end type
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../yrec-map/htimer.f.html#def-HTIMER"><code>HTIMER</code></a>, <a href="../yrec-map/ptime.f.html#def-PTIME"><code>PTIME</code></a>, <a href="../yrec-map/xtime.f.html#def-XTIME"><code>XTIME</code></a>, <a href="../yrec-map/ytime.f.html#def-YTIME"><code>YTIME</code></a>, <a href="../yrec-map/wtime.f.html#def-WTIME"><code>WTIME</code></a>, <a href="../yrec-map/entime.f.html#def-ENTIME"><code>ENTIME</code></a>. A new criterion is a new subclass in the list, which is also the hook for a user's own criterion (<a href="hooks.html">Section 6.5</a>). Today <code>HTIMER</code> switches the structure criterion off for the whole job by changing <code>LPTIME</code> in <code>NMLPAR_MOD</code> (a COMMON block at <code>rp_1</code>); here that switch is a component of the <code>TimeStepper</code>, and <code>SolarCalibr</code> resets it at each cycle as <code>main.f</code> does now.</p>
+<h2>Python</h2>
+<p>The stubs of the new structure (signatures and docstrings, no bodies), each naming the routines it replaces in the current code.</p>
+<h3><code>pyrec/timestep/__init__.py</code></h3>
+<pre><code class="language-python">&quot;&quot;&quot;The time step: the most restrictive of several criteria, limited in growth.
+
+Imports `config` and `star`.
+
+Modules
+-------
+stepper : StepCriterion family, TimeStepper.
+
+&quot;&quot;&quot;
+from .stepper import StepCriterion, TimeStepper
+</code></pre>
+<h3><code>pyrec/timestep/stepper.py</code></h3>
+<ul>
+<li><code>StructureCriterion</code> replaces <a href="../yrec-map/ptime.f.html#def-PTIME"><code>PTIME</code></a>.</li>
+<li><code>HydrogenCriterion</code> replaces <a href="../yrec-map/xtime.f.html#def-XTIME"><code>XTIME</code></a>.</li>
+<li><code>HeliumCriterion</code> replaces <a href="../yrec-map/ytime.f.html#def-YTIME"><code>YTIME</code></a>.</li>
+<li><code>RotationCriterion</code> replaces <a href="../yrec-map/wtime.f.html#def-WTIME"><code>WTIME</code></a>.</li>
+<li><code>SurfaceCriterion</code> replaces <a href="../yrec-map/entime.f.html#def-ENTIME"><code>ENTIME</code></a>.</li>
+<li><code>TimeStepper.next_dt</code> replaces <a href="../yrec-map/htimer.f.html#def-HTIMER"><code>HTIMER</code></a>.</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;Step criteria and the time stepper.
+
+Classes
+-------
+StepCriterion : Base of the family; a user's own criterion is a subclass.
+StructureCriterion : PTIME, ATIME(8-11).
+HydrogenCriterion : XTIME.
+HeliumCriterion : YTIME.
+RotationCriterion : WTIME, DTWIND.
+SurfaceCriterion : ENTIME (the triangle).
+TimeStepper : The next step and the criterion that set it.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+from ..config import KindCard
+from ..star import Star, StepStart
+
+
+class StepCriterion:
+    &quot;&quot;&quot;Base of the step criteria.
+
+    Methods
+    -------
+    dt_max : Largest step allowed.
+    name : For the .short file.
+    &quot;&quot;&quot;
+
+    DT_NOLIMIT = 1.0e20  # [s] &quot;No limit&quot; (HTIMER).
+
+    def dt_max(self, star: Star, start: StepStart, dt_old: float) -&gt; float:
+        &quot;&quot;&quot;Largest step allowed [s]; ``DT_NOLIMIT`` if the criterion does not apply.
+
+        This is a hook for derived classes. The base class does nothing.
+        &quot;&quot;&quot;
+        ...
+
+    @property
+    def name(self) -&gt; str:
+        &quot;&quot;&quot;The class name, for the .short file.&quot;&quot;&quot;
+        ...
+
+
+class StructureCriterion(StepCriterion):
+    &quot;&quot;&quot;Changes of structure per step.
+
+    Replaces: ptime.f#PTIME
+    &quot;&quot;&quot;
+
+
+class HydrogenCriterion(StepCriterion):
+    &quot;&quot;&quot;Change of central hydrogen per step.
+
+    Replaces: xtime.f#XTIME
+    &quot;&quot;&quot;
+
+
+class HeliumCriterion(StepCriterion):
+    &quot;&quot;&quot;Change of central helium per step, and the helium flash.
+
+    Replaces: ytime.f#YTIME
+    &quot;&quot;&quot;
+
+    LOGRHOC_FLASH = 5.0  # log rho_c at and above which the flash criterion applies (YTIME).
+    C_YTIME = 1.0e15  # Scale of YTIME's criterion.
+    Y_FLOOR = 1.0e-22  # Floor on Y (YTIME).
+
+
+class RotationCriterion(StepCriterion):
+    &quot;&quot;&quot;Change of rotation per step.
+
+    Replaces: wtime.f#WTIME
+    &quot;&quot;&quot;
+
+
+class SurfaceCriterion(StepCriterion):
+    &quot;&quot;&quot;Keeps (Teff, L) inside the envelope triangle.
+
+    Replaces: entime.f#ENTIME
+    &quot;&quot;&quot;
+
+
+class TimeStepper:
+    &quot;&quot;&quot;The next step, as the most restrictive criterion, limited in growth by ATIME(13).
+
+    Attributes
+    ----------
+    criteria : list[StepCriterion]
+    use_structure : bool
+        LPTIME; switched off by the stepper, reset per calibration cycle.
+    &quot;&quot;&quot;
+
+    FINAL_STEP_FRAC = 1.0e-3  # Floor of the final step before ENDAGE, as a fraction of the age (main.f).
+    L_NOBURN = 1.0e-34  # [Lsun] &quot;No burning&quot; (HTIMER).
+
+    def next_dt(self, star: Star, start: StepStart, card: KindCard, dt_old: float) -&gt; tuple[float, str]:
+        &quot;&quot;&quot;The step [s] and the name of the criterion that set it.
+
+        Replaces: htimer.f#HTIMER
+        &quot;&quot;&quot;
+        ...
+</code></pre>
+
+</main></body></html>

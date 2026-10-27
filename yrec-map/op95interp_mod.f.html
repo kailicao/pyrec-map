@@ -1,0 +1,139 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>op95interp_mod.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ op95interp_mod.f</span></header><main>
+<h1>op95interp_mod.f</h1>
+<p class='muted'>51 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/op95interp_mod.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>op95interp_mod.py</code>, 31 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>OP95INTERP_MOD</code> holds the interpolation stencil and weights for the OPAL 1995 opacity tables: <a href="../yrec-map/getopal95.f.html#def-GETOPAL95"><code>GETOPAL95</code></a> computes them for the current $\rho$, $T$, $X$, $Z$, and the interpolators <a href="../yrec-map/op952d.f.html#def-OP952D"><code>OP952D</code></a>, <a href="../yrec-map/op953d.f.html#def-OP953D"><code>OP953D</code></a> and <a href="../yrec-map/op954d.f.html#def-OP954D"><code>OP954D</code></a> apply them. Shared by 6 routines. It replaces three <code>rp_1</code> blocks, <code>COMMON/OP95INDX/</code> (the indices), <code>COMMON/OP95FACT/</code> (the weights) and <code>COMMON/OP95EXT/</code> (extrapolation), first merged into one <code>COMMON/OP95INTERP/</code> and then made a module (MHP via Claude, 10/9–10/14/26); <code>OP95EXT</code>'s <code>RL</code> and <code>RLL</code> are renamed <code>RHO_T63L</code> and <code>RHO_T63LL</code>, since <code>RL</code> means $\log r$ everywhere else in the code.</p>
+<p><strong>What its variables hold, who sets them, who reads them.</strong> All are set by <code>GETOPAL95</code> on each call; the interpolators read them.</p>
+<ul>
+<li><code>JZ</code>, <code>JX(4,4)</code>, <code>JT</code>, <code>JD(4)</code>: the first table index of each four-point stencil, in $Z$, in $X$ (for each of the four $Z$), in $T$, and in $R$ (for each of the four $T$, since the stencil in $R$ may shift at high density). Initialized to 1, the values of <a href="../yrec-map/ll95tbl.f.html#def-LL95TBL"><code>LL95TBL</code></a>'s <code>DATA</code> statement at <code>rp_1</code>.</li>
+<li><code>BZ(4)</code>, <code>BX(4,4)</code>, <code>BT(4)</code>, <code>BD(4,4)</code>: the four-point weights in $Z$, $X$, $T$ and $R$ (<a href="../yrec-map/intrp2.f.html#def-INTRP2"><code>INTRP2</code></a> for $Z$ and $X$, <a href="../yrec-map/interp.f.html#def-INTERP"><code>INTERP</code></a> for $T$ and $R$); <code>BTT(4)</code>, <code>BDD(4,4)</code>: <code>INTERP</code>'s weights for the derivatives in $T$ and $R$.</li>
+<li><code>RHO_T63L</code>: $\log R = \log\rho - 3(\log T - 6)$, the table's density variable; <code>RHO_T63LL</code>: the table's lowest $\log R$, used in place of <code>RHO_T63L</code> when extrapolating below the table.</li>
+<li><code>LEXTL</code>: extrapolation below the table in $R$; <code>LEXTH</code>, <code>LEXH(4)</code>: extrapolation above it (the empty high-density corner), overall and for each of the four temperatures; <code>RLH(4)</code>: the table edge in $\log R$ at each temperature, from which the extrapolation is linear.</li>
+</ul>
+<p><strong>Design.</strong> A blanket <code>USE OP95INTERP_MOD</code> in each routine; the <a href="../yrec-map/main.f.html#def-_file_level_">main program</a> and <code>LL95TBL</code> use it but refer to none of its names. The module's header says the four initialized indices came from PARMIN's <code>DATA</code> statements and are namelist variables; they came from <code>LL95TBL</code>'s <code>DATA</code> statement and are in no namelist.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> New file: <code>COMMON/OP95INDX/</code>, <code>/OP95FACT/</code> and <code>/OP95EXT/</code> as one module, with <code>RL</code>, <code>RLL</code> renamed <code>RHO_T63L</code>, <code>RHO_T63LL</code> and the indices' <code>DATA</code> moved from <code>LL95TBL</code>.</p></div>
+<h2>Questions for the experts</h2>
+<p class='placeholder'>None yet.</p>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+OP95INTERP_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/14/26 MHP via Claude
+code changed to convert COMMON/OP95INTERP/ into this module.
+
+Imported with a blanket USE, the convention for the conversion.
+All 6 files declared this block identically, so the USE imports
+exactly the names the declaration already made global in each
+scoping unit and cannot change meaning.
+
+The types restate what the implicit rules supplied: L is
+LOGICAL*4, I/J/K/M/N are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while
+ifort Classic predates it.  That matches COMMON&#x27;s semantics.
+
+4 of the 16 members carry an initializer, migrated
+from parmin.f&#x27;s DATA statements because DATA on a USE-associated
+name is rejected.  The literal text is copied verbatim: these
+are namelist variables whose DATA supplied a default the
+namelist read could override, and a module initializer is
+applied once at load time, before PARMIN runs, which is the
+same thing.  Rewriting a literal such as 0.9828 as 0.9828D0
+would change its stored value, so that is deliberately not
+done here; see KNOWN_ISSUES.md issue 23.</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-OP95INTERP_MOD'>OP95INTERP_MOD</a> <span class='muted'>module · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-OP95INTERP_MOD'><h3><span class='kind'>module</span>OP95INTERP_MOD</h3>
+<p class='muted'>lines 29–51 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/op95interp_mod.f#L29-L51'>GitHub</a></p>
+<pre>MODULE OP95INTERP_MOD</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+OP95INTERP_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/14/26 MHP via Claude
+code changed to convert COMMON/OP95INTERP/ into this module.
+
+Imported with a blanket USE, the convention for the conversion.
+All 6 files declared this block identically, so the USE imports
+exactly the names the declaration already made global in each
+scoping unit and cannot change meaning.
+
+The types restate what the implicit rules supplied: L is
+LOGICAL*4, I/J/K/M/N are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while
+ifort Classic predates it.  That matches COMMON&#x27;s semantics.
+
+4 of the 16 members carry an initializer, migrated
+from parmin.f&#x27;s DATA statements because DATA on a USE-associated
+name is rejected.  The literal text is copied verbatim: these
+are namelist variables whose DATA supplied a default the
+namelist read could override, and a module initializer is
+applied once at load time, before PARMIN runs, which is the
+same thing.  Rewriting a literal such as 0.9828 as 0.9828D0
+would change its stored value, so that is deliberately not
+done here; see KNOWN_ISSUES.md issue 23.</pre></details>
+<details><summary>Used by (6 units)</summary><p><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a>, <a href='../yrec-map/getopal95.f.html#def-GETOPAL95'>GETOPAL95</a>, <a href='../yrec-map/ll95tbl.f.html#def-LL95TBL'>LL95TBL</a>, <a href='../yrec-map/op952d.f.html#def-OP952D'>OP952D</a>, <a href='../yrec-map/op953d.f.html#def-OP953D'>OP953D</a>, <a href='../yrec-map/op954d.f.html#def-OP954D'>OP954D</a></p></details>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">29</span>      MODULE OP95INTERP_MOD
+<span class="ln">30</span>
+<span class="ln">31</span>      IMPLICIT NONE
+<span class="ln">32</span>      SAVE
+<span class="ln">33</span>
+<span class="ln">34</span>      INTEGER*4 :: JZ = 1
+<span class="ln">35</span>      INTEGER*4 :: JX(4,4) = 1
+<span class="ln">36</span>      INTEGER*4 :: JT = 1
+<span class="ln">37</span>      INTEGER*4 :: JD(4) = 1
+<span class="ln">38</span>      REAL*8    :: BZ(4)
+<span class="ln">39</span>      REAL*8    :: BX(4,4)
+<span class="ln">40</span>      REAL*8    :: BT(4)
+<span class="ln">41</span>      REAL*8    :: BTT(4)
+<span class="ln">42</span>      REAL*8    :: BD(4,4)
+<span class="ln">43</span>      REAL*8    :: BDD(4,4)
+<span class="ln">44</span>      REAL*8    :: RHO_T63L
+<span class="ln">45</span>      REAL*8    :: RHO_T63LL
+<span class="ln">46</span>      REAL*8    :: RLH(4)
+<span class="ln">47</span>      LOGICAL*4 :: LEXTL
+<span class="ln">48</span>      LOGICAL*4 :: LEXTH
+<span class="ln">49</span>      LOGICAL*4 :: LEXH(4)
+<span class="ln">50</span>
+<span class="ln">51</span>      END MODULE OP95INTERP_MOD</pre></details>
+<details class='py' id='py-_module_level_'><summary>Python version: op95interp_mod.py</summary><pre class='src'><span class="ln">1</span>&quot;&quot;&quot;Python version of op95interp_mod.f (YREC 09c3b9b): the interpolation stencil and weights for the OPAL 1995 opacity tables, formerly COMMON/OP95INDX/, /OP95FACT/ and /OP95EXT/.
+<span class="ln">2</span>
+<span class="ln">3</span>Translates: op95interp_mod.f#OP95INTERP_MOD (09c3b9b)
+<span class="ln">4</span>
+<span class="ln">5</span>Module-level names, as in the Fortran module, in lower case. Routines that
+<span class="ln">6</span>USE OP95INTERP_MOD import this module and write ``op95interp_mod.&lt;name&gt;``.
+<span class="ln">7</span>All are set by getopal95 and read by op952d, op953d, op954d.
+<span class="ln">8</span>&quot;&quot;&quot;
+<span class="ln">9</span>
+<span class="ln">10</span>import numpy as np
+<span class="ln">11</span>
+<span class="ln">12</span># First table index of each four-point stencil (initializers, formerly
+<span class="ln">13</span># ll95tbl&#x27;s DATA): in Z, in X for each Z, in T, in R for each T.
+<span class="ln">14</span>jz = 1
+<span class="ln">15</span>jx = np.ones((5, 5), dtype=np.int32)    # index 0 unused in both dimensions
+<span class="ln">16</span>jt = 1
+<span class="ln">17</span>jd = np.ones(5, dtype=np.int32)
+<span class="ln">18</span># Four-point weights (bz, bx from intrp2; bt, bd from interp) and the
+<span class="ln">19</span># derivative weights in T and R (btt, bdd).
+<span class="ln">20</span>bz = np.zeros(5)
+<span class="ln">21</span>bx = np.zeros((5, 5))
+<span class="ln">22</span>bt = np.zeros(5)
+<span class="ln">23</span>btt = np.zeros(5)
+<span class="ln">24</span>bd = np.zeros((5, 5))
+<span class="ln">25</span>bdd = np.zeros((5, 5))
+<span class="ln">26</span>rho_t63l = 0.0          # log R = log rho - 3 (log T - 6), formerly RL
+<span class="ln">27</span>rho_t63ll = 0.0         # lowest log R of the table, formerly RLL
+<span class="ln">28</span>rlh = np.zeros(5)       # table edge in log R at each T (extrapolation)
+<span class="ln">29</span>lextl = False           # extrapolation below the table in R
+<span class="ln">30</span>lexth = False           # extrapolation above it (high-density corner)
+<span class="ln">31</span>lexh = np.zeros(5, dtype=bool)   # the same, for each of the four T</pre></details>
+</section>
+</main></body></html>

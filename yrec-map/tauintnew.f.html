@@ -1,0 +1,569 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>tauintnew.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ tauintnew.f</span></header><main>
+<h1>tauintnew.f</h1>
+<p class='muted'>278 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/tauintnew.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>tauintnew.py</code>, 230 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>TAUINTNEW</code> computes the convective overturn time scale $\tau_\mathrm{cz}$ (<code>TAUCZ</code>) and the radius of the base of the convection zone (<code>RBCZ</code>), by the method G. Somers introduced in 3/17. Its comment: search from the centre up for the base of the surface convection zone, and from the surface down; if both agree the zone is unique and the "old top-down sinkline method" is used; if not, several convective cells exist, and the crossing time of the lowest cell in the envelope is taken.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the full profile from <a href="../yrec-map/gettau.f.html#def-GETTAU">GETTAU</a> (interior and envelope; <code>M</code> points, of which <code>MINT</code> are interior shells): <code>HS1</code>, <code>LCZ</code>, <code>HR</code>, <code>HP</code>, <code>HD</code>, <code>HG</code>, <code>SVEL</code>, and <code>DEL1</code>, <code>DEL2</code>: for interior shells GETTAU passes <code>SDEL(1,·)</code> and <code>SDEL(3,·)</code>, the radiative and adiabatic gradients, but for the stitched envelope points <code>EDELS(1,·)</code> and <code>EDELS(2,·)</code>, the radiative and actual gradients.</li>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/gettau.f.html#def-GETTAU">GETTAU</a>, when <code>LNEWTCZ</code> is set; otherwise <code>GETTAU</code> calls <a href="../yrec-map/tauint.f.html#def-TAUINT">TAUINT</a>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/kspline.f.html#def-KSPLINE">KSPLINE</a> and <a href="../yrec-map/ksplint.f.html#def-KSPLINT">KSPLINT</a>, a natural cubic spline through four points.</li>
+<li><strong>Outputs:</strong> <code>TAUCZ</code> in <a href="../yrec-map/ovrtrn_mod.f.html"><code>OVRTRN_MOD</code></a> (read by the mass-loss and rotation routines, by their names), and the argument <code>RBCZ</code> in solar radii.</li>
+<li><strong>Modules:</strong> <a href="../yrec-map/ovrtrn_mod.f.html"><code>OVRTRN_MOD</code></a> (<code>TAUCZ</code>), <a href="../yrec-map/constants_mod.f.html"><code>CONSTANTS_MOD</code></a> (<code>CLN</code>, <code>CMSUN</code>, <code>CRSUN</code>), <code>JSON</code> from <a href="../yrec-map/dimensions_mod.f.html"><code>DIMENSIONS_MOD</code></a>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Find the zone.</strong> From shell <code>IBEG</code> (first 1) upward: pass the convective core, if any (its top <code>JCORE</code>), then the first convective shell above a radiative region is <code>IMAX</code>. From the surface downward, the base of the outermost zone is <code>JMAX</code>: the first point <code>J</code> below a convective point <code>J+1</code> that is radiative, plus one, so that radiative points at the surface are passed over (JvS 02/2026; if no such point exists, <code>JMAX</code> = 1). A star with no such zone is radiative ($\tau_\mathrm{cz} = 0$); one convective throughout is fully convective.</li>
+<li><strong>Reject false zones</strong> and search again from above: a zone less than one decade in pressure above the core, $\log P(\mathrm{JCORE}) - \log P(\mathrm{IMAX}) &lt; 1$ (unless the profile is the interior only); a zone fewer than 3 shells thick; in the interior-only case with two zones (<code>IJMAX</code> ≠ 0, <code>M = MINT</code>), <code>IMAX</code> is set to <code>JMAX</code>; and, at the end, a result $\tau_\mathrm{cz} &gt; 10^{20}$.</li>
+<li><strong>The base:</strong> $r_b$ where $\nabla_1 - \nabla_2$ changes sign, by linear interpolation in $\log r$ (for a fully convective star, $\log r_b = 1$, a very small radius in cm).</li>
+<li><strong>One zone</strong> (<code>IMAX = JMAX</code>): go up from the base to where $r - r_b = H_P$, with $H_P = P/(\rho g)$. Around that point, four shells give $\delta_k = (r_k - r_b) - H_{P,k}$, and natural cubic splines in $\delta$ evaluated at $\delta = 0$ give $v$ and $H_P$; then
+   $$\tau_\mathrm{cz} = \frac{H_P}{v}\bigg|_{\,r - r_b = H_P} .$$</li>
+<li><strong>Several cells, or $r_b + H_P$ outside the star:</strong> the lowest zone's top $r_t$ (again where $\nabla_1 - \nabla_2$ changes sign), its width $\Delta r = r_t - r_b$, and $v$ at its middle, $r_b + \Delta r/2$, from a four-point spline in $r$:
+   $$\tau_\mathrm{cz} = \frac{\Delta r}{v(r_b + \Delta r/2)} .$$</li>
+</ol>
+<p><strong>KC's changes.</strong> Removed the unused arguments <code>HCOMP</code>, <code>HS2</code> and <code>HSTOT</code>, and the <code>RECURSIVE</code> attribute (2025-05-31); added the check <code>IMAX .GT. 0 .AND. JCORE .GT. 0</code> before using <code>HP(JCORE)</code> "to avoid runtime error" (2025-05-30); moved an <code>ENDIF</code> "to avoid block mismatch" (2025-05-31); reordered the elements of COMMON <code>ENVSTRUCT</code> (2025-05-30).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> COMMON blocks to modules, <code>IMPLICIT NONE</code> (the unused blocks dropped); the downward search for the base of the outermost zone now requires a convective point above the radiative one (JvS 02/2026), so a radiative layer at the surface no longer makes <code>JMAX</code> = <code>M</code>. No question is settled: question 6 concerns the upward search.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>JCORE</code> may be stale.</strong> <code>JCORE</code> is set only when the upward search leaves a convective region that started at <code>IBEG</code>. When the search starts in a radiative shell, <code>JCORE</code> keeps its value from an earlier pass or call (<code>SAVE</code>). KC's check avoids an index of 0, but not a stale index. Should <code>JCORE</code> be reset at label 50?</li>
+<li><strong>Restarts without a limit.</strong> The searches restart with <code>GOTO 50</code> (thin zones, zones near the core, $\tau_\mathrm{cz} &gt; 10^{20}$). Nothing stops <code>IBEG</code> from passing <code>M</code>, after which <code>LCZ(IBEG)</code> is read beyond the profile; and the 3-shell test reads <code>LCZ(IMAX+2)</code>, which can be beyond <code>M</code>. Can the loop fail to end?</li>
+<li><strong>Indices near the top.</strong> The four-point splines use shells up to <code>KK+1</code>; with <code>KK = K+1</code> and <code>K</code> near <code>M-1</code>, this can reach <code>M+1</code>.</li>
+<li><strong>A fully convective star's $r_b$.</strong> <code>RBCZ = 1.</code> is then <code>EXP(CLN*1)</code>, that is 10 cm, not 1 cm; harmless, but the comment and code disagree.</li>
+<li><strong>Unused values.</strong> <code>ENVRCL</code> (a radius from a spline) and <code>HSTOP</code>, <code>HSBOT</code>, <code>LCZSUR</code> (always true for a zone) are computed but not used for the result.</li>
+<li><strong>A fully convective star loops forever.</strong> The code reaches "fully convective" only when every point from <code>IBEG</code> to <code>M</code> is convective, and then sets <code>IMAX = 1</code>, <code>JCORE = 1</code>. When the envelope is stitched (<code>M</code> ≠ <code>MINT</code>), the near-core test <code>HP(1) - HP(1) &lt; 1</code> always holds, so <code>IBEG = 2</code> and the search restarts, ending in the same state: an endless loop. And if the outermost points are radiative, the whole convective interior is taken as a convective core, and $\tau_\mathrm{cz} = 0$. How should a fully convective star be handled?</li>
+<li><strong>Two kinds of gradient.</strong> <code>DEL2</code> is the adiabatic gradient for interior shells but the actual gradient for the stitched envelope points, so the sign change of $\nabla_1 - \nabla_2$ means different things on the two sides of the fitting point. Intended?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+RECURSIVE SUBROUTINE TAUINTNEW(HCOMP,HS2,HS1,LCZ,HR,HP,HD,HG,M,MINT,SVEL,
+*                     DEL1,DEL2,HSTOT,RBCZ)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-TAUINTNEW'>TAUINTNEW</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-TAUINTNEW'><h3><span class='kind'>subroutine</span>TAUINTNEW</h3>
+<p class='muted'>lines 4–278 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/tauintnew.f#L4-L278'>GitHub</a></p>
+<pre>SUBROUTINE TAUINTNEW(HS1,LCZ,HR,HP,HD,HG,M,MINT,SVEL,</pre>
+<div class='notes'><p>The newer overturn time (G. Somers 3/17): finds the base of the main surface convection zone from both directions, then $H_P/v$ one pressure scale height above the base (by four-point splines), or the lowest cell's width over its central velocity; also returns the base's radius in solar units.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+RECURSIVE SUBROUTINE TAUINTNEW(HCOMP,HS2,HS1,LCZ,HR,HP,HD,HG,M,MINT,SVEL,
+*                     DEL1,DEL2,HSTOT,RBCZ)  ! KC 2025-05-31</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/ovrtrn_mod.f.html#def-OVRTRN_MOD'>OVRTRN_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/kspline.f.html#def-KSPLINE'>KSPLINE</a> <span class='muted'>(kspline.f)</span> ×4</li>
+<li><a href='../yrec-map/ksplint.f.html#def-KSPLINT'>KSPLINT</a> <span class='muted'>(ksplint.f)</span> ×4</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/gettau.f.html#def-GETTAU'>GETTAU</a> <span class='muted'>(gettau.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE TAUINTNEW(HS1,LCZ,HR,HP,HD,HG,M,MINT,SVEL,
+<span class="ln">5</span>     *                     DEL1,DEL2,RBCZ)
+<span class="ln">6</span>C 10/15/26 MHP via Claude
+<span class="ln">7</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">8</span>C PARAMETER(JSON=5000) here.
+<span class="ln">9</span>      USE DIMENSIONS_MOD
+<span class="ln">10</span>C 10/14/26 MHP via Claude
+<span class="ln">11</span>C code changed to convert COMMON/OVRTRN/ into OVRTRN_MOD.
+<span class="ln">12</span>      USE OVRTRN_MOD
+<span class="ln">13</span>C 10/14/26 MHP via Claude
+<span class="ln">14</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">15</span>      USE CONSTANTS_MOD
+<span class="ln">16</span>C 10/20/26 MHP via Claude
+<span class="ln">17</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">18</span>C explicit declarations.
+<span class="ln">19</span>      IMPLICIT NONE
+<span class="ln">20</span>      REAL*8 CVEL,DD1,DD2,DEL1,DEL2,DELR,ENVRCL,FX,HD,HG,HP,HR,HS1,
+<span class="ln">21</span>     *       HSBOT,HSTOP,PSCA,PSCA1,PSCA2,RBCZ,RTCZ,RTEST,RTEST1,RTEST2,
+<span class="ln">22</span>     *       SVEL,VALTEST,XDEL,XRAD,YPSC,YRAD,YSPL,YVEL
+<span class="ln">23</span>      INTEGER I,IBEG,IJMAX,IMAX,ITOP,J,JCORE,JMAX,K,KK,M,MINT
+<span class="ln">24</span>      LOGICAL*4 LALLCZ,LCZ,LCZSUR,LRADZONE
+<span class="ln">25</span>C 10/13/26 MHP via Claude: removed the unused COMMON/COMP/ declaration
+<span class="ln">26</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">27</span>C 10/13/26 MHP via Claude: removed the unused COMMON/DEUTER/ declaration
+<span class="ln">28</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">29</span>C 10/13/26 MHP via Claude: removed the unused COMMON/NMLPAR/ declaration
+<span class="ln">30</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">31</span>C 9/25/26 MHP via Claude
+<span class="ln">32</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">33</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">34</span>C 10/13/26 MHP via Claude
+<span class="ln">35</span>C code changed to remove COMMON/JTEST/: IMAX1, IMAX2 and LJVS are
+<span class="ln">36</span>C referenced nowhere in executable code.  The only code that used LJVS is
+<span class="ln">37</span>C a commented-out block in wrtout.f, removed with it.
+<span class="ln">38</span>C Needs access to this common block: grants knowledge of envellope
+<span class="ln">39</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">40</span>C JvS 08/25 Updated with new elements
+<span class="ln">41</span>C 10/13/26 MHP via Claude: removed the unused COMMON/ENVSTRUCT/ declaration
+<span class="ln">42</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">43</span>C       DIMENSION HCOMP(15,JSON),HS2(JSON),LCZ(JSON),  ! KC 2025-05-31
+<span class="ln">44</span>      DIMENSION LCZ(JSON),
+<span class="ln">45</span>     *     HR(JSON), HP(JSON), HD(JSON), HG(JSON), HS1(JSON),  ! XSUM(15)
+<span class="ln">46</span>     *     DEL1(JSON), DEL2(JSON), SVEL(JSON)
+<span class="ln">47</span>C G Somers; Adding vectors for cubic spline int.
+<span class="ln">48</span>      DIMENSION XDEL(4),XRAD(4),YRAD(4),YVEL(4),YPSC(4),YSPL(4)
+<span class="ln">49</span>      SAVE
+<span class="ln">50</span>C
+<span class="ln">51</span>C G Somers 3/17, IMPLEMENTING NEW TAUCZ METHOD.
+<span class="ln">52</span>C THE METHOD WORKS AS FOLLOWS. SEARCH FROM THE CENTER OF THE STAR UP UNTIL YOU
+<span class="ln">53</span>C FIND THE BASE OF THE SURFACE CONVECTION ZONE. THEN SEARCH FROM THE SURFACE
+<span class="ln">54</span>c DOWN UNTIL YOU FIND THE SAME. IF BOTH DIRECTIONS GIVE SAME ANSWER, THEN
+<span class="ln">55</span>c SURFACE CONVECTION ZONE IS UNIQUE, AND THE OLD TOP-DOWN SINKLINE METHOD CAN
+<span class="ln">56</span>c BE EMPLOYED. IF THEY ARE DIFFERENT, THEN MULTIPLE SURFACE CONVECTION CELLS
+<span class="ln">57</span>C EXIST. IN THIS CASE, DETERMINE THE CROSSING TIME OF THE LOWEST CONVECTION
+<span class="ln">58</span>C CELL IN THE ENVELOPE.
+<span class="ln">59</span>C
+<span class="ln">60</span>C IMAX: BASE OF THE MAIN INTERNAL CONVECTION ZONE.
+<span class="ln">61</span>C JMAX: BASE OF THE UPPER-MOST CONVECTION ZONE.
+<span class="ln">62</span>C RBCZ: RADIUS AT WHICH THE BCZ EXISTS
+<span class="ln">63</span>C TAUCZ: OVERTURN TIMESCALE
+<span class="ln">64</span>C
+<span class="ln">65</span>C DETERMINE EXTENT OF SURFACE CONVECTION ZONE.
+<span class="ln">66</span>      LALLCZ = .FALSE.
+<span class="ln">67</span>C FIND THE TOP OF THE MAIN INTERNAL CONVECTION ZONE.
+<span class="ln">68</span>      IBEG = 1
+<span class="ln">69</span>   50 LRADZONE = .TRUE.
+<span class="ln">70</span>      IF (LCZ(IBEG)) LRADZONE = .FALSE.
+<span class="ln">71</span>      DO 60 I = IBEG,M,1
+<span class="ln">72</span>         IF (.NOT.LRADZONE.AND..NOT.LCZ(I)) THEN
+<span class="ln">73</span>            JCORE = I-1
+<span class="ln">74</span>            LRADZONE = .TRUE.
+<span class="ln">75</span>         ENDIF
+<span class="ln">76</span>         IF (LRADZONE.AND.LCZ(I)) GOTO 70
+<span class="ln">77</span>   60 CONTINUE
+<span class="ln">78</span>C IF THE CODE GETS HERE, EITHER THE STAR IS FULLY CONVECTIVE, OR
+<span class="ln">79</span>C HAS A COMPLETELY RADIATIVE ENVLOPE, MAYBE WITH A CONVECTIVE CORE.
+<span class="ln">80</span>      IF(LRADZONE)THEN ! RADIATIVE ENVELOPE
+<span class="ln">81</span>         LALLCZ = .FALSE.
+<span class="ln">82</span>         LCZSUR = .FALSE.
+<span class="ln">83</span>         IMAX = M
+<span class="ln">84</span>         JMAX = M
+<span class="ln">85</span>         JCORE = M
+<span class="ln">86</span>         GOTO 100
+<span class="ln">87</span>      ELSE ! FULLY CONVECTIVE
+<span class="ln">88</span>         LALLCZ = .TRUE.
+<span class="ln">89</span>         LCZSUR = .TRUE.
+<span class="ln">90</span>         I = 1
+<span class="ln">91</span>         J = 0
+<span class="ln">92</span>         JCORE = 1
+<span class="ln">93</span>       GOTO 90
+<span class="ln">94</span>      ENDIF
+<span class="ln">95</span>   70 CONTINUE
+<span class="ln">96</span>C FIND THE BASE OF THE UPPER-MOST CONVECTION ZONE
+<span class="ln">97</span>C JvS 02/2026: ADDED LCZ(J+1) TO TRAP OUT CASES WHERE THE LAST (FEW) POINT(S) IN 
+<span class="ln">98</span>C THE MODEL IS(ARE) ALREADY RADIATIVE 
+<span class="ln">99</span>      DO 80 J = M-1,1,-1
+<span class="ln">100</span>         IF(LCZ(J+1) .AND. .NOT.LCZ(J)) GOTO 90
+<span class="ln">101</span>   80 CONTINUE
+<span class="ln">102</span>   90 IMAX = I
+<span class="ln">103</span>      JMAX = J + 1
+<span class="ln">104</span>      IJMAX = JMAX-IMAX
+<span class="ln">105</span>C LOCATING THE CORRECT CZ INCURES VARIOUS PATHOLOGIES. TRAP THEM OUT.
+<span class="ln">106</span>C
+<span class="ln">107</span>C ENSURE THIS CZ IS SUFFICIENTLY FAR FROM THE CONVECTIVE CORE. IN SOME CASES
+<span class="ln">108</span>C THERE ARE A FEW SHELLS RIGHT ABOVE THE CORE THAT ARE CONVECTIVE. SKIP THESE.
+<span class="ln">109</span>C KC 2025-05-30 ADDED IF CHECK TO AVOID RUNTIME ERROR.
+<span class="ln">110</span>      IF (IMAX .GT. 0 .AND. JCORE .GT. 0) THEN
+<span class="ln">111</span>         IF(M.NE.MINT .AND. HP(JCORE)-HP(IMAX).LT.1)THEN
+<span class="ln">112</span>            IBEG = IMAX+1
+<span class="ln">113</span>            GOTO 50
+<span class="ln">114</span>         ENDIF
+<span class="ln">115</span>      ENDIF
+<span class="ln">116</span>C ENSURE THIS CZ IS AT LEAST 3 SHELLS THICK. IF NOT, WE ARE LIKELY SNAGGED
+<span class="ln">117</span>C ON A SINGLE SHELL CONV ZONE DEEP IN THE INTERIOR. RECOMMENSE SEARCH FROM
+<span class="ln">118</span>C ABOVE THIS SHELL.
+<span class="ln">119</span>      IF(.NOT.(LCZ(IMAX).AND.LCZ(IMAX+1).AND.LCZ(IMAX+2)))THEN
+<span class="ln">120</span>         IF(.NOT.LCZ(IMAX+1))THEN
+<span class="ln">121</span>            IBEG = IMAX+1
+<span class="ln">122</span>         ELSE
+<span class="ln">123</span>            IBEG = IMAX+2
+<span class="ln">124</span>         ENDIF
+<span class="ln">125</span>         GOTO 50
+<span class="ln">126</span>      ENDIF
+<span class="ln">127</span>C IN THE CASE WHERE ONLY THE INTERIOR MODEL IS CONSIDERED, USE JMAX.
+<span class="ln">128</span>      IF (IJMAX.NE.0.AND.M.EQ.MINT) THEN
+<span class="ln">129</span>         IMAX = JMAX
+<span class="ln">130</span>         IJMAX = 0
+<span class="ln">131</span>      ENDIF
+<span class="ln">132</span>C  HSTOP IS THE MASS AT THE TOP OF THE C.Z.
+<span class="ln">133</span>C  HSBOT IS THE MASS AT THE BOTTOM OF THE C.Z.
+<span class="ln">134</span>      HSTOP = HS1(M)
+<span class="ln">135</span>      IF(JMAX.GT.1)THEN
+<span class="ln">136</span>         HSBOT = 0.5D0*(HS1(JMAX)+HS1(JMAX-1))
+<span class="ln">137</span>      ELSE
+<span class="ln">138</span>         HSBOT = 0.0D0
+<span class="ln">139</span>      ENDIF
+<span class="ln">140</span>C  LCZSUR=T IF A SURFACE C.Z.DEEP ENOUGH FOR ANGULAR MOMENTUM LOSS EXISTS
+<span class="ln">141</span>      IF((HSTOP-HSBOT)/CMSUN.GT.0.0D0)THEN
+<span class="ln">142</span>         LCZSUR = .TRUE.
+<span class="ln">143</span>      ELSE
+<span class="ln">144</span>         LCZSUR= .FALSE.
+<span class="ln">145</span>      ENDIF
+<span class="ln">146</span>  100 CONTINUE
+<span class="ln">147</span>
+<span class="ln">148</span>C CALCULATE TAUCZ TOP DOWN FOR FULLY AND PARTIALLY CONVECTIVE. FOR A FULLY
+<span class="ln">149</span>C RADIATIVE ENVELOPE, SET TAUCZ = 0.0.
+<span class="ln">150</span>      IF(LCZSUR)THEN
+<span class="ln">151</span>C INFER RBCZ, THE RADIUS AT THE BASE OF THE SURFACE CZ.
+<span class="ln">152</span>         IF(LALLCZ)THEN
+<span class="ln">153</span>C           SET TO CENTER OF STAR, I.E. A VERY SMALL NUMBER
+<span class="ln">154</span>C           IN CGS UNITS, RELATIVE TO THE RADII OF STARS.
+<span class="ln">155</span>            RBCZ = 1.
+<span class="ln">156</span>         ELSE
+<span class="ln">157</span>C           PINPOINT RCZ LINEARLY
+<span class="ln">158</span>            DD2 = DEL1(IMAX-1)-DEL2(IMAX-1)
+<span class="ln">159</span>            DD1 = DEL1(IMAX)-DEL2(IMAX)
+<span class="ln">160</span>            FX = DD2/(DD2-DD1)
+<span class="ln">161</span>            RBCZ = HR(IMAX-1)+FX*(HR(IMAX)-HR(IMAX-1))
+<span class="ln">162</span>         ENDIF
+<span class="ln">163</span>         RBCZ = EXP(CLN*RBCZ)
+<span class="ln">164</span>C        IF THERE ARE MULTIPLE CONVECTION CELLS IN THE PREDOMINATELY
+<span class="ln">165</span>C        RADIATIVE ENVELOPE, USE AVERAGING METHOD.
+<span class="ln">166</span>         IF (IJMAX.NE.0) GOTO 110
+<span class="ln">167</span>C CALCULATE HP
+<span class="ln">168</span>         PSCA2 = EXP(CLN*(HP(IMAX)-HD(IMAX)))/HG(IMAX)
+<span class="ln">169</span>         RTEST2 = EXP(CLN*HR(IMAX))-RBCZ
+<span class="ln">170</span>         VALTEST = RTEST2 - PSCA2
+<span class="ln">171</span>         IF(VALTEST.GT.0.0)THEN
+<span class="ln">172</span>C INNER MOST POINT PSCA IS BELOW BCZ
+<span class="ln">173</span>            K = IMAX
+<span class="ln">174</span>            CVEL = SVEL(IMAX)
+<span class="ln">175</span>            PSCA = PSCA2
+<span class="ln">176</span>            TAUCZ = PSCA/CVEL
+<span class="ln">177</span>         ELSE
+<span class="ln">178</span>            DO K = IMAX+1,M-1,1
+<span class="ln">179</span>               PSCA1 = PSCA2
+<span class="ln">180</span>               RTEST1 = RTEST2
+<span class="ln">181</span>               PSCA2 = EXP(CLN*(HP(K)-HD(K)))/HG(K)
+<span class="ln">182</span>               RTEST2 = EXP(CLN*HR(K))-RBCZ
+<span class="ln">183</span>               VALTEST = RTEST2 - PSCA2
+<span class="ln">184</span>C              FIND LOCATION WHERE HP = R
+<span class="ln">185</span>               IF(VALTEST.GT.0.0)THEN
+<span class="ln">186</span>C                 IF K = IMAX+1, MOVE AWAY FROM EDGE CASE.
+<span class="ln">187</span>                  KK = K
+<span class="ln">188</span>                  IF (K.EQ.IMAX+1) KK = K+1
+<span class="ln">189</span>C                 FIND V WITH CUBIC SPLINE
+<span class="ln">190</span>                  XDEL(1) = EXP(CLN*HR(KK-2))-RBCZ-
+<span class="ln">191</span>     *                      EXP(CLN*(HP(KK-2)-HD(KK-2)))/HG(KK-2)
+<span class="ln">192</span>                  XDEL(2) = EXP(CLN*HR(KK-1))-RBCZ-
+<span class="ln">193</span>     *                      EXP(CLN*(HP(KK-1)-HD(KK-1)))/HG(KK-1)
+<span class="ln">194</span>                  XDEL(3) = EXP(CLN*HR(KK))-RBCZ-
+<span class="ln">195</span>     *                      EXP(CLN*(HP(KK)-HD(KK)))/HG(KK)
+<span class="ln">196</span>                  XDEL(4) = EXP(CLN*HR(KK+1))-RBCZ-
+<span class="ln">197</span>     *                      EXP(CLN*(HP(KK+1)-HD(KK+1)))/HG(KK+1)
+<span class="ln">198</span>                  YVEL(1) = SVEL(KK-2)
+<span class="ln">199</span>                  YVEL(2) = SVEL(KK-1)
+<span class="ln">200</span>                  YVEL(3) = SVEL(KK)
+<span class="ln">201</span>                  YVEL(4) = SVEL(KK+1)
+<span class="ln">202</span>                  CALL <a href="../yrec-map/kspline.f.html#def-KSPLINE" title="KSPLINE in kspline.f">KSPLINE</a>(XDEL,YVEL,YSPL)
+<span class="ln">203</span>                  CALL <a href="../yrec-map/ksplint.f.html#def-KSPLINT" title="KSPLINT in ksplint.f">KSPLINT</a>(XDEL,YVEL,YSPL,0.0D0,CVEL)
+<span class="ln">204</span>                  YPSC(1) = EXP(CLN*(HP(KK-2)-HD(KK-2)))/HG(KK-2)
+<span class="ln">205</span>                  YPSC(2) = EXP(CLN*(HP(KK-1)-HD(KK-1)))/HG(KK-1)
+<span class="ln">206</span>                  YPSC(3) = EXP(CLN*(HP(KK)-HD(KK)))/HG(KK)
+<span class="ln">207</span>                  YPSC(4) = EXP(CLN*(HP(KK+1)-HD(KK+1)))/HG(KK+1)
+<span class="ln">208</span>                  CALL <a href="../yrec-map/kspline.f.html#def-KSPLINE" title="KSPLINE in kspline.f">KSPLINE</a>(XDEL,YPSC,YSPL)
+<span class="ln">209</span>                  CALL <a href="../yrec-map/ksplint.f.html#def-KSPLINT" title="KSPLINT in ksplint.f">KSPLINT</a>(XDEL,YPSC,YSPL,0.0D0,PSCA)
+<span class="ln">210</span>                  YRAD(1) = HR(KK-2)
+<span class="ln">211</span>                  YRAD(2) = HR(KK-1)
+<span class="ln">212</span>                  YRAD(3) = HR(KK)
+<span class="ln">213</span>                  YRAD(4) = HR(KK+1)
+<span class="ln">214</span>                  CALL <a href="../yrec-map/kspline.f.html#def-KSPLINE" title="KSPLINE in kspline.f">KSPLINE</a>(XDEL,YRAD,YSPL)
+<span class="ln">215</span>                  CALL <a href="../yrec-map/ksplint.f.html#def-KSPLINT" title="KSPLINT in ksplint.f">KSPLINT</a>(XDEL,YRAD,YSPL,0.0D0,ENVRCL)
+<span class="ln">216</span>C DEFINE TAUCZ
+<span class="ln">217</span>                  TAUCZ = PSCA/CVEL
+<span class="ln">218</span>                  GOTO 140
+<span class="ln">219</span>               ENDIF
+<span class="ln">220</span>            END DO
+<span class="ln">221</span>C KC 2025-05-31 MOVED ENDIF HERE TO AVOID BLOCK MISMATCH.
+<span class="ln">222</span>         ENDIF
+<span class="ln">223</span>  110       CONTINUE
+<span class="ln">224</span>c IF CODE GETS HERE, THEN 1 PSCA ABOVE THE BCZ IS OUTSIDE OF THE STAR,
+<span class="ln">225</span>c OR MULTIPLE CONVECTION CELLS RESIDE WITHIN THE RADIATIVE ENVELOPE.
+<span class="ln">226</span>C IN THIS CASE, EVALUATE CVEL AT CENTER OF BOTTOM CZ. FIRST, FIND UPPER EDGE.
+<span class="ln">227</span>            DO K = IMAX,M-1,1
+<span class="ln">228</span>               IF(.NOT.LCZ(K))GOTO 120
+<span class="ln">229</span>            ENDDO
+<span class="ln">230</span>  120       ITOP = K-1
+<span class="ln">231</span>c PINPOINT TOP OF CZ LINEARLY
+<span class="ln">232</span>            DD2 = DEL1(ITOP)-DEL2(ITOP)
+<span class="ln">233</span>            DD1 = DEL1(ITOP+1)-DEL2(ITOP+1)
+<span class="ln">234</span>            FX = DD2/(DD2-DD1)
+<span class="ln">235</span>            RTCZ = HR(ITOP)+FX*(HR(ITOP+1)-HR(ITOP))
+<span class="ln">236</span>            RTCZ = EXP(CLN*RTCZ)
+<span class="ln">237</span>C CALCULATE WIDTH OF THE CONVECTION CELL
+<span class="ln">238</span>            DELR = RTCZ - RBCZ
+<span class="ln">239</span>C FIND INDICES SURROUNDING LINEAR CENTER OF CZ
+<span class="ln">240</span>            RTEST = LOG10(RBCZ + 0.5*DELR)
+<span class="ln">241</span>            DO K = IMAX,ITOP+1,1
+<span class="ln">242</span>               IF(HR(K).GT.RTEST) GOTO 130
+<span class="ln">243</span>            ENDDO
+<span class="ln">244</span>  130       CONTINUE
+<span class="ln">245</span>            RTEST = EXP(CLN*RTEST)
+<span class="ln">246</span>C           IF K = IMAX+1, MOVE AWAY FROM EDGE CASE.
+<span class="ln">247</span>            KK = K
+<span class="ln">248</span>            IF (K.EQ.IMAX+1) KK = K+1
+<span class="ln">249</span>C CALCULATE CVEL AT THAT CENTRAL LOCATION
+<span class="ln">250</span>            XRAD(1) = EXP(CLN*HR(KK-2))
+<span class="ln">251</span>            XRAD(2) = EXP(CLN*HR(KK-1))
+<span class="ln">252</span>            XRAD(3) = EXP(CLN*HR(KK))
+<span class="ln">253</span>            XRAD(4) = EXP(CLN*HR(KK+1))
+<span class="ln">254</span>            YVEL(1) = SVEL(KK-2)
+<span class="ln">255</span>            YVEL(2) = SVEL(KK-1)
+<span class="ln">256</span>            YVEL(3) = SVEL(KK)
+<span class="ln">257</span>            YVEL(4) = SVEL(KK+1)
+<span class="ln">258</span>            CALL <a href="../yrec-map/kspline.f.html#def-KSPLINE" title="KSPLINE in kspline.f">KSPLINE</a>(XRAD,YVEL,YSPL)
+<span class="ln">259</span>            CALL <a href="../yrec-map/ksplint.f.html#def-KSPLINT" title="KSPLINT in ksplint.f">KSPLINT</a>(XRAD,YVEL,YSPL,RTEST,CVEL)
+<span class="ln">260</span>C DEFINE TAUCZ
+<span class="ln">261</span>            TAUCZ = DELR/CVEL
+<span class="ln">262</span>  140       CONTINUE
+<span class="ln">263</span>C KC 2025-05-31 MOVED ENDIF ABOVE TO AVOID BLOCK MISMATCH.
+<span class="ln">264</span>C          ENDIF
+<span class="ln">265</span>C        CONVERT CORE RADIUS INTO SOLAR UNITS
+<span class="ln">266</span>         RBCZ = RBCZ/CRSUN
+<span class="ln">267</span>      ELSE
+<span class="ln">268</span>         TAUCZ = 0.0D0
+<span class="ln">269</span>         RBCZ = 0.0
+<span class="ln">270</span>      ENDIF
+<span class="ln">271</span>C     ENSURE THAT TAUCZ WAS NOT ACCIDENTALLY CALCULATED
+<span class="ln">272</span>C     DEEP IN THE STELLAR INTERIOR. IF YES, REDO CALCULATION.
+<span class="ln">273</span>      IF (TAUCZ.GT.1.0E20) THEN
+<span class="ln">274</span>         IBEG = IMAX + 1
+<span class="ln">275</span>       GOTO 50
+<span class="ln">276</span>      ENDIF
+<span class="ln">277</span>      RETURN
+<span class="ln">278</span>      END</pre></details>
+<details class='py' id='py-tauintnew'><summary>Python version: tauintnew</summary><pre class='doc'>Compute the convective overturn time TAUCZ (in ovrtrn_mod) and the
+radius of the base of the convection zone: find the zone from the
+centre up and from the surface down; for a single zone, H_P/v one
+pressure scale height above its base; otherwise the lowest cell&#x27;s width
+over the velocity at its middle.
+
+Translates: tauintnew.f#TAUINTNEW (09c3b9b)
+
+Arguments: the profile of m points (mint of them interior shells), index
+0 unused: hs1 (mass, g), lcz (convective or not), hr, hp, hd (log r, P,
+rho), hg (gravity), svel (convective velocity), del1, del2 (the two
+gradients compared to find the zone&#x27;s edges); rbcz is output only.
+
+Returns rbcz, the base&#x27;s radius in solar radii (0 for a radiative
+envelope).</pre><pre class='src'><span class="ln">24</span>def tauintnew(hs1, lcz, hr, hp, hd, hg, m, mint, svel, del1, del2, rbcz):
+<span class="ln">25</span>    &quot;&quot;&quot;Compute the convective overturn time TAUCZ (in ovrtrn_mod) and the
+<span class="ln">26</span>    radius of the base of the convection zone: find the zone from the
+<span class="ln">27</span>    centre up and from the surface down; for a single zone, H_P/v one
+<span class="ln">28</span>    pressure scale height above its base; otherwise the lowest cell&#x27;s width
+<span class="ln">29</span>    over the velocity at its middle.
+<span class="ln">30</span>
+<span class="ln">31</span>    Translates: tauintnew.f#TAUINTNEW (09c3b9b)
+<span class="ln">32</span>
+<span class="ln">33</span>    Arguments: the profile of m points (mint of them interior shells), index
+<span class="ln">34</span>    0 unused: hs1 (mass, g), lcz (convective or not), hr, hp, hd (log r, P,
+<span class="ln">35</span>    rho), hg (gravity), svel (convective velocity), del1, del2 (the two
+<span class="ln">36</span>    gradients compared to find the zone&#x27;s edges); rbcz is output only.
+<span class="ln">37</span>
+<span class="ln">38</span>    Returns rbcz, the base&#x27;s radius in solar radii (0 for a radiative
+<span class="ln">39</span>    envelope).
+<span class="ln">40</span>    &quot;&quot;&quot;
+<span class="ln">41</span>    global jcore
+<span class="ln">42</span>    cln = constants_mod.cln
+<span class="ln">43</span>    xdel = np.zeros(5)
+<span class="ln">44</span>    xrad = np.zeros(5)
+<span class="ln">45</span>    yrad = np.zeros(5)
+<span class="ln">46</span>    yvel = np.zeros(5)
+<span class="ln">47</span>    ypsc = np.zeros(5)
+<span class="ln">48</span>    yspl = np.zeros(5)
+<span class="ln">49</span>
+<span class="ln">50</span>    lallcz = False
+<span class="ln">51</span>    ibeg = 1
+<span class="ln">52</span>    while True:  # label 50
+<span class="ln">53</span>        # Find the top of the main internal convection zone.
+<span class="ln">54</span>        # Question (see the page): jcore keeps its value from an earlier pass
+<span class="ln">55</span>        # or call when the search starts in a radiative shell.
+<span class="ln">56</span>        # Question (see the page): nothing stops ibeg from passing m.
+<span class="ln">57</span>        lradzone = not lcz[ibeg]
+<span class="ln">58</span>        found = False
+<span class="ln">59</span>        for i in range(ibeg, m + 1):  # loop 60
+<span class="ln">60</span>            if not lradzone and not lcz[i]:
+<span class="ln">61</span>                jcore = i - 1
+<span class="ln">62</span>                lradzone = True
+<span class="ln">63</span>            if lradzone and lcz[i]:
+<span class="ln">64</span>                found = True
+<span class="ln">65</span>                break  # to label 70
+<span class="ln">66</span>        if not found:
+<span class="ln">67</span>            # Fully convective, or a radiative envelope (maybe with a
+<span class="ln">68</span>            # convective core).
+<span class="ln">69</span>            if lradzone:
+<span class="ln">70</span>                lallcz = False
+<span class="ln">71</span>                lczsur = False
+<span class="ln">72</span>                imax = m
+<span class="ln">73</span>                jmax = m
+<span class="ln">74</span>                jcore = m
+<span class="ln">75</span>                to_100 = True
+<span class="ln">76</span>            else:
+<span class="ln">77</span>                lallcz = True
+<span class="ln">78</span>                lczsur = True
+<span class="ln">79</span>                i = 1
+<span class="ln">80</span>                j = 0
+<span class="ln">81</span>                jcore = 1
+<span class="ln">82</span>                to_100 = False
+<span class="ln">83</span>        else:
+<span class="ln">84</span>            # label 70: find the base of the uppermost convection zone.
+<span class="ln">85</span>            # JvS 02/2026: LCZ(J+1) traps the case where the last points are
+<span class="ln">86</span>            # already radiative.
+<span class="ln">87</span>            j = 0  # the Fortran&#x27;s J after the loop runs out
+<span class="ln">88</span>            for jj in range(m - 1, 0, -1):  # loop 80
+<span class="ln">89</span>                if lcz[jj + 1] and not lcz[jj]:
+<span class="ln">90</span>                    j = jj
+<span class="ln">91</span>                    break  # to label 90
+<span class="ln">92</span>            to_100 = False
+<span class="ln">93</span>
+<span class="ln">94</span>        if not to_100:
+<span class="ln">95</span>            # label 90
+<span class="ln">96</span>            imax = i
+<span class="ln">97</span>            jmax = j + 1
+<span class="ln">98</span>            ijmax = jmax - imax
+<span class="ln">99</span>            # Skip convective shells just above the convective core.
+<span class="ln">100</span>            # (KC 2025-05-30: the check on imax and jcore.)
+<span class="ln">101</span>            # Question (see the page): for a fully convective star with a
+<span class="ln">102</span>            # stitched envelope, this restarts the search for ever.
+<span class="ln">103</span>            if imax &gt; 0 and jcore &gt; 0:
+<span class="ln">104</span>                if m != mint and hp[jcore] - hp[imax] &lt; 1:
+<span class="ln">105</span>                    ibeg = imax + 1
+<span class="ln">106</span>                    continue  # GOTO 50
+<span class="ln">107</span>            # At least 3 shells thick, or search again from above.
+<span class="ln">108</span>            # Question (see the page): lcz[imax + 2] can be beyond m.
+<span class="ln">109</span>            if not (lcz[imax] and lcz[imax + 1] and lcz[imax + 2]):
+<span class="ln">110</span>                if not lcz[imax + 1]:
+<span class="ln">111</span>                    ibeg = imax + 1
+<span class="ln">112</span>                else:
+<span class="ln">113</span>                    ibeg = imax + 2
+<span class="ln">114</span>                continue  # GOTO 50
+<span class="ln">115</span>            # Interior model only: use jmax.
+<span class="ln">116</span>            if ijmax != 0 and m == mint:
+<span class="ln">117</span>                imax = jmax
+<span class="ln">118</span>                ijmax = 0
+<span class="ln">119</span>            # Masses at the top and bottom of the zone (unused below).
+<span class="ln">120</span>            hstop = hs1[m]
+<span class="ln">121</span>            if jmax &gt; 1:
+<span class="ln">122</span>                hsbot = 0.5 * (hs1[jmax] + hs1[jmax - 1])
+<span class="ln">123</span>            else:
+<span class="ln">124</span>                hsbot = 0.0
+<span class="ln">125</span>            lczsur = (hstop - hsbot) / constants_mod.cmsun &gt; 0.0
+<span class="ln">126</span>
+<span class="ln">127</span>        # label 100: taucz from the top down; 0 for a radiative envelope.
+<span class="ln">128</span>        if lczsur:
+<span class="ln">129</span>            if lallcz:
+<span class="ln">130</span>                # Question (see the page): exp(cln * 1) is 10 cm, not 1 cm.
+<span class="ln">131</span>                rbcz = 1.0
+<span class="ln">132</span>            else:
+<span class="ln">133</span>                # The base where del1 - del2 changes sign, linear in log r.
+<span class="ln">134</span>                dd2 = del1[imax - 1] - del2[imax - 1]
+<span class="ln">135</span>                dd1 = del1[imax] - del2[imax]
+<span class="ln">136</span>                fx = dd2 / (dd2 - dd1)
+<span class="ln">137</span>                rbcz = hr[imax - 1] + fx * (hr[imax] - hr[imax - 1])
+<span class="ln">138</span>            rbcz = math.exp(cln * rbcz)
+<span class="ln">139</span>            to_110 = ijmax != 0  # several cells: the averaging method
+<span class="ln">140</span>            if not to_110:
+<span class="ln">141</span>                psca2 = _psca(hp, hd, hg, imax)
+<span class="ln">142</span>                rtest2 = math.exp(cln * hr[imax]) - rbcz
+<span class="ln">143</span>                valtest = rtest2 - psca2
+<span class="ln">144</span>                if valtest &gt; 0.0:
+<span class="ln">145</span>                    # The innermost point&#x27;s scale height reaches below.
+<span class="ln">146</span>                    k = imax
+<span class="ln">147</span>                    cvel = svel[imax]
+<span class="ln">148</span>                    psca = psca2
+<span class="ln">149</span>                    ovrtrn_mod.taucz = psca / cvel
+<span class="ln">150</span>                    # Possible bug (update-findings, batch 12): since the
+<span class="ln">151</span>                    # ENDIF was moved (KC 2025-05-31) this branch falls
+<span class="ln">152</span>                    # through to label 110, which overwrites taucz.
+<span class="ln">153</span>                    to_110 = True
+<span class="ln">154</span>                else:
+<span class="ln">155</span>                    to_110 = True
+<span class="ln">156</span>                    for k in range(imax + 1, m):
+<span class="ln">157</span>                        psca1 = psca2
+<span class="ln">158</span>                        rtest1 = rtest2
+<span class="ln">159</span>                        psca2 = _psca(hp, hd, hg, k)
+<span class="ln">160</span>                        rtest2 = math.exp(cln * hr[k]) - rbcz
+<span class="ln">161</span>                        valtest = rtest2 - psca2
+<span class="ln">162</span>                        # Where r - r_b = H_P.
+<span class="ln">163</span>                        if valtest &gt; 0.0:
+<span class="ln">164</span>                            kk = k
+<span class="ln">165</span>                            if k == imax + 1:
+<span class="ln">166</span>                                kk = k + 1
+<span class="ln">167</span>                            # Question (see the page): kk + 1 can reach m + 1.
+<span class="ln">168</span>                            for n in range(1, 5):
+<span class="ln">169</span>                                kn = kk - 3 + n
+<span class="ln">170</span>                                xdel[n] = (math.exp(cln * hr[kn]) - rbcz
+<span class="ln">171</span>                                           - _psca(hp, hd, hg, kn))
+<span class="ln">172</span>                            for n in range(1, 5):
+<span class="ln">173</span>                                yvel[n] = svel[kk - 3 + n]
+<span class="ln">174</span>                            kspline(xdel, yvel, yspl)
+<span class="ln">175</span>                            cvel = ksplint(xdel, yvel, yspl, 0.0, 0.0)
+<span class="ln">176</span>                            for n in range(1, 5):
+<span class="ln">177</span>                                ypsc[n] = _psca(hp, hd, hg, kk - 3 + n)
+<span class="ln">178</span>                            kspline(xdel, ypsc, yspl)
+<span class="ln">179</span>                            psca = ksplint(xdel, ypsc, yspl, 0.0, 0.0)
+<span class="ln">180</span>                            for n in range(1, 5):
+<span class="ln">181</span>                                yrad[n] = hr[kk - 3 + n]
+<span class="ln">182</span>                            kspline(xdel, yrad, yspl)
+<span class="ln">183</span>                            # Question (see the page): envrcl is not used.
+<span class="ln">184</span>                            envrcl = ksplint(xdel, yrad, yspl, 0.0, 0.0)
+<span class="ln">185</span>                            ovrtrn_mod.taucz = psca / cvel
+<span class="ln">186</span>                            to_110 = False
+<span class="ln">187</span>                            break  # to label 140
+<span class="ln">188</span>            if to_110:
+<span class="ln">189</span>                # label 110: r_b + H_P is outside the star, or several cells
+<span class="ln">190</span>                # lie in the radiative envelope; use the lowest cell&#x27;s
+<span class="ln">191</span>                # middle. First find its upper edge.
+<span class="ln">192</span>                k = m  # the Fortran&#x27;s K after the loop runs out
+<span class="ln">193</span>                for kk2 in range(imax, m):
+<span class="ln">194</span>                    if not lcz[kk2]:
+<span class="ln">195</span>                        k = kk2
+<span class="ln">196</span>                        break  # to label 120
+<span class="ln">197</span>                itop = k - 1  # label 120
+<span class="ln">198</span>                dd2 = del1[itop] - del2[itop]
+<span class="ln">199</span>                dd1 = del1[itop + 1] - del2[itop + 1]
+<span class="ln">200</span>                fx = dd2 / (dd2 - dd1)
+<span class="ln">201</span>                rtcz = hr[itop] + fx * (hr[itop + 1] - hr[itop])
+<span class="ln">202</span>                rtcz = math.exp(cln * rtcz)
+<span class="ln">203</span>                delr = rtcz - rbcz
+<span class="ln">204</span>                # The shells around the cell&#x27;s middle.
+<span class="ln">205</span>                rtest = math.log10(rbcz + 0.5 * delr)
+<span class="ln">206</span>                k = itop + 2  # the Fortran&#x27;s K after the loop runs out
+<span class="ln">207</span>                for kk2 in range(imax, itop + 2):
+<span class="ln">208</span>                    if hr[kk2] &gt; rtest:
+<span class="ln">209</span>                        k = kk2
+<span class="ln">210</span>                        break  # to label 130
+<span class="ln">211</span>                rtest = math.exp(cln * rtest)  # label 130
+<span class="ln">212</span>                kk = k
+<span class="ln">213</span>                if k == imax + 1:
+<span class="ln">214</span>                    kk = k + 1
+<span class="ln">215</span>                for n in range(1, 5):
+<span class="ln">216</span>                    xrad[n] = math.exp(cln * hr[kk - 3 + n])
+<span class="ln">217</span>                    yvel[n] = svel[kk - 3 + n]
+<span class="ln">218</span>                kspline(xrad, yvel, yspl)
+<span class="ln">219</span>                cvel = ksplint(xrad, yvel, yspl, rtest, 0.0)
+<span class="ln">220</span>                ovrtrn_mod.taucz = delr / cvel
+<span class="ln">221</span>            # label 140: the base&#x27;s radius in solar units.
+<span class="ln">222</span>            rbcz = rbcz / constants_mod.crsun
+<span class="ln">223</span>        else:
+<span class="ln">224</span>            ovrtrn_mod.taucz = 0.0
+<span class="ln">225</span>            rbcz = 0.0
+<span class="ln">226</span>        # A taucz found deep in the interior: search again above.
+<span class="ln">227</span>        if ovrtrn_mod.taucz &gt; 1.0e20:
+<span class="ln">228</span>            ibeg = imax + 1
+<span class="ln">229</span>            continue  # GOTO 50
+<span class="ln">230</span>        return rbcz</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_psca'><summary>Python version: _psca</summary><pre class='src'><span class="ln">18</span>def _psca(hp, hd, hg, k):
+<span class="ln">19</span>    # The pressure scale height P/(rho g) at shell k.
+<span class="ln">20</span>    cln = constants_mod.cln
+<span class="ln">21</span>    return math.exp(cln * (hp[k] - hd[k])) / hg[k]</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing (apparent bug).</strong> A fully convective star: the code reaches "fully convective" only when every point from <code>IBEG</code> to <code>M</code> is convective, and then sets <code>IMAX = 1</code>, <code>JCORE = 1</code>; when the envelope is stitched (<code>M ≠ MINT</code>), the near-core test <code>HP(1) - HP(1) &lt; 1</code> always holds, so <code>IBEG = 2</code> and the search restarts, ending in the same state: an endless loop. And if the outermost points are radiative, the whole convective interior is taken as a "convective core", and $\tau_\mathrm{cz} = 0$. <strong>Fix:</strong> new question.</li>
+<li><strong>Missing.</strong> <code>DEL1</code>, <code>DEL2</code> from GETTAU: radiative and adiabatic gradients for interior shells, but radiative and actual gradients for the stitched envelope points. <strong>Fix:</strong> add to the inputs, and a question.</li>
+<li><strong>Missing.</strong> In the interior-only case with two zones (<code>IJMAX ≠ 0</code>, <code>M = MINT</code>), <code>IMAX</code> is set to <code>JMAX</code>. <strong>Fix:</strong> add to step 2.</li>
+</ol>
+<p>Revised: <code>DEL1</code>, <code>DEL2</code> in the inputs; <code>IMAX = JMAX</code> in step 2; new questions 6 (endless loop) and 7 (gradients).</p></div></details>
+</main></body></html>

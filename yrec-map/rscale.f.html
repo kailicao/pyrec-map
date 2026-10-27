@@ -1,0 +1,721 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>rscale.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ rscale.f</span></header><main>
+<h1>rscale.f</h1>
+<p class='muted'>416 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/rscale.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>rscale.py</code>, 247 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Rescales a starting model before a run, as asked by a "kind card" (one entry of the run's sequence, number <code>NK</code>): the hydrogen abundance $X$, the metallicity $Z$, the abundance of one other species, the total mass and, for horizontal-branch stars, the core mass. It also applies the "ZRAMP" option, a metallicity that changes linearly with mass in the core.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/starin.f.html#def-STARIN"><code>STARIN</code></a>, twice (for the two ways a model is read), when <code>IRESCA(NK)</code> is not 1.</li>
+<li><strong>Inputs:</strong> the model (<code>HCOMP</code>, <code>HS</code> = $\log_{10} m$ in g, <code>HSTOT</code>, <code>HL</code>, <code>LC</code>, <code>M</code>, <code>SMASS</code> in solar masses) and, through modules, the targets: <code>RUNLOOP_MOD</code>'s <code>RESCAL(1..4, NK)</code> (new mass, $X$, $Z$, core mass; a negative or zero value means "no change", except for $Z$, where only a negative value does, so $Z = 0$ can be asked for), and, in <code>NMLPAR_MOD</code>, <code>XNEWCP</code>, <code>INEWCP</code>, <code>LNEWCP</code>, <code>LREL</code> (one species to set) and <code>RSCLZC</code>, <code>RSCLZM1</code>, <code>RSCLZM2</code>, <code>LZRAMP</code> (the ramp), set by the namelist or by <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/findsh.f.html#def-FINDSH"><code>FINDSH</code></a>, to locate the hydrogen-burning shell (<code>JXBEG</code> to <code>JXEND</code>) in a horizontal-branch model.</li>
+<li><strong>Outputs:</strong> <code>HCOMP</code>, <code>HS</code>, <code>HSTOT</code>, <code>SMASS</code> changed in place; in modules, <code>XNEW</code>, <code>ZNEW</code>, <code>ZENV</code>, <code>STOTAL</code> (<code>COMP_MOD</code>) and <code>XENV0</code>, <code>ZENV0</code> (<code>LABEL_MOD</code>, which <a href="../yrec-map/wrthead.f.html#def-WRTHEAD"><code>WRTHEAD</code></a> and the output routines print).</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>$X$.</strong> Every shell's $X$ is multiplied by $X_\mathrm{new}/X_\mathrm{surf}$, capped at $X_\mathrm{new}$. <code>XENV</code> is deliberately not changed, since it fixes the mean molecular weight of the Yale equation of state from the first run (MHP 7/99).</li>
+<li><strong>$Z$.</strong> The same amount is added in every shell, $Z_j \to \max(0, Z_j + \Delta Z)$ with $\Delta Z = Z_\mathrm{new} - Z_\mathrm{surf}$, and species 5–11 (C12 through O18) are multiplied by $Z_j^\mathrm{new}/Z_j^\mathrm{old}$.</li>
+<li><strong>One species</strong> (<code>LNEWCP</code>, main sequence only): set to <code>XNEWCP</code> everywhere; with <code>LREL</code>, <code>XNEWCP</code> is first converted from the astronomers' scale, $X_\mathrm{sp} = 10^{\,\texttt{XNEWCP}-12}\,X_\mathrm{surf}$.</li>
+<li><strong>Mass, main sequence</strong> (when the central $X &gt; 10^{-10}$): every mass point is multiplied by $M_\mathrm{new}/M_\mathrm{old}$ (in the log, $\log m \to \log m + \log(M_\mathrm{new}/M_\mathrm{old})$); all other variables are kept.</li>
+<li><strong>Mass, horizontal branch.</strong> Mass is added or removed outside the hydrogen shell, by stretching the mass coordinate above a fixed point $m_0$:
+   $$m \to m_0 + s\,(m - m_0),\qquad s = \frac{M_\mathrm{new} - m_0}{M_\mathrm{old} - m_0}.$$
+   If more than $0.01\,M_\odot$ lies outside the core, $m_0$ is the top of the shell ("old method"); otherwise the base of the shell ("new method").</li>
+<li><strong>Core mass, horizontal branch.</strong> The core's points are multiplied by $M_\mathrm{core}^\mathrm{new}/M_\mathrm{core}^\mathrm{old}$, the shell's points shifted by the change $\Delta M_\mathrm{core}$ (so the shell's mass stays fixed), and the envelope squeezed or stretched so that the total mass is unchanged. The old and new masses are printed.</li>
+<li><strong>$Y$</strong> is reset everywhere to $1 - X - Z - X_\mathrm{He3}$.</li>
+<li><strong>ZRAMP</strong> (if <code>LZRAMP</code> and the three parameters are positive): with $f = m/M_*$, $Z$ is set to $Z_c$ (<code>RSCLZC</code>) for $f &lt;$ <code>RSCLZM1</code>, and rises linearly to the surface $Z$ between <code>RSCLZM1</code> and <code>RSCLZM2</code>; $X$ absorbs the change, and species 5–11 are multiplied by a factor <code>ZFACT</code>.</li>
+</ol>
+<p><strong>Design.</strong> Several unconditional <code>write(*,*)</code> lines ("Entering old method", "SENV", "Envelope") print to the terminal in the horizontal-branch mass rescaling; they look like debugging left on. Many others are commented out.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (<code>/CKIND/</code> to <code>RUNLOOP_MOD</code>, <code>/COMP/</code> to <code>COMP_MOD</code>, <code>/LABEL/</code> to <code>LABEL_MOD</code>, <code>/NEWCMP/</code> and <code>/ZRAMP/</code> to <code>NMLPAR_MOD</code>, <code>/LUOUT/</code> to <code>IOUNITS_MOD</code>, the constants to <code>CONSTANTS_MOD</code>), the array size <code>JSON</code> from <code>DIMENSIONS_MOD</code>, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The ZRAMP factor (apparent bug).</strong> In the ZRAMP block, <code>ZFACT = (HCOMP(3,I)-RSCLZC(NK))/HCOMP(3,I)</code>, that is $(Z_\mathrm{old} - Z_\mathrm{new})/Z_\mathrm{old}$, the fractional change, not the ratio $Z_\mathrm{new}/Z_\mathrm{old}$ used in step 2. With it, the CNO species are scaled by about $1 - Z_c/Z$, and become negative when $Z_c &gt; Z$. Was the ratio meant?</li>
+<li><strong>The error message for one species.</strong> Format 1004 prints <code>ICOMP</code>, which is never set (the species index is <code>INEWCP</code>), and ends "Z NOT RESCALED" for any species.</li>
+<li><strong><code>XNEWCP</code> converted in place.</strong> With <code>LREL</code>, the value in <code>NMLPAR_MOD</code> is overwritten by the converted mass fraction. If <code>RSCALE</code> runs again in the same job (another kind card), the converted value is converted a second time. Also, <code>XNEWCP</code> is one value for all kind cards. Intended?</li>
+<li><strong>He3 and the $Z$ rescaling.</strong> The comment says "THE CNO CYCLE ELEMENTS AND HE3 ARE MULTIPLIED BY THE RATIO", but the loop covers species 5–11 only; He3 is species 4 and is not scaled. Which is meant?</li>
+<li><strong>Debug output.</strong> Remove or put behind a debug flag the unconditional <code>write(*,*)</code> lines in the horizontal-branch branch?</li>
+<li><strong>The 0.01 solar-mass switch.</strong> The choice between the two horizontal-branch methods depends on whether the mass outside the core exceeds $0.01\,M_\odot$, a hard-coded value. Where does it come from?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+RSCALE
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-RSCALE'>RSCALE</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-RSCALE'><h3><span class='kind'>subroutine</span>RSCALE</h3>
+<p class='muted'>lines 5–416 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/rscale.f#L5-L416'>GitHub</a></p>
+<pre>SUBROUTINE RSCALE(HL,HCOMP,HS,HSTOT,M,NK,SMASS,LC)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+RSCALE
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/comp_mod.f.html#def-COMP_MOD'>COMP_MOD</a>, <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/label_mod.f.html#def-LABEL_MOD'>LABEL_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/runloop_mod.f.html#def-RUNLOOP_MOD'>RUNLOOP_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/findsh.f.html#def-FINDSH'>FINDSH</a> <span class='muted'>(findsh.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span> ×2</li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">5</span>      SUBROUTINE RSCALE(HL,HCOMP,HS,HSTOT,M,NK,SMASS,LC)
+<span class="ln">6</span>C 10/15/26 MHP via Claude
+<span class="ln">7</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">8</span>C PARAMETER(JSON=5000) here.
+<span class="ln">9</span>      USE DIMENSIONS_MOD
+<span class="ln">10</span>C 10/14/26 MHP via Claude
+<span class="ln">11</span>C code changed to convert COMMON/LABEL/ into LABEL_MOD.
+<span class="ln">12</span>      USE LABEL_MOD
+<span class="ln">13</span>C 10/14/26 MHP via Claude
+<span class="ln">14</span>C code changed to convert COMMON/COMP/ into COMP_MOD.
+<span class="ln">15</span>      USE COMP_MOD
+<span class="ln">16</span>C 10/14/26 MHP via Claude
+<span class="ln">17</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">18</span>      USE NMLPAR_MOD
+<span class="ln">19</span>C 10/14/26 MHP via Claude
+<span class="ln">20</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">21</span>      USE CONSTANTS_MOD
+<span class="ln">22</span>C 10/14/26 MHP via Claude
+<span class="ln">23</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">24</span>      USE IOUNITS_MOD
+<span class="ln">25</span>C 10/14/26 MHP via Claude
+<span class="ln">26</span>C code changed to convert COMMON/RUNLOOP/ into RUNLOOP_MOD.  A blanket
+<span class="ln">27</span>C USE imports exactly the names the COMMON declaration made global here,
+<span class="ln">28</span>C so it cannot change meaning.  See runloop_mod.f for the block history
+<span class="ln">29</span>C and for why the module declares the types the implicit rules supplied.
+<span class="ln">30</span>      USE RUNLOOP_MOD
+<span class="ln">31</span>C 10/20/26 MHP via Claude
+<span class="ln">32</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">33</span>C explicit declarations.
+<span class="ln">34</span>      IMPLICIT NONE
+<span class="ln">35</span>      REAL*8 CHKENV,CORNEW,COROLD,DCOR,DELZ,DENV,ENVNEW,ENVOLD,ENVOLD2,
+<span class="ln">36</span>     *       ENVTOTAL,FS,HCOMP,HL,HS,HSTOT,HSTOT1,SFACTOR,SHIFT,SHLNEW,
+<span class="ln">37</span>     *       SHLOLD,SHLP,SLOPE,SMASS,TEMP,XFACT,ZFACT,ZP
+<span class="ln">38</span>      INTEGER I,I1,ICOMP,J,JCORE,JENV,JXBEG,JXEND,JXMID,M,NK
+<span class="ln">39</span>      LOGICAL*4 LC,LSHELL
+<span class="ln">40</span>C DBG 5/94 Added rescaling of Z in core ZRAMP stuff.
+<span class="ln">41</span>C      CHARACTER*256 FLAOL2, FOPAL2
+<span class="ln">42</span>C 9/25/26 MHP via Claude
+<span class="ln">43</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">44</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">45</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">46</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">47</span>C COMMON/IOUNITS/
+<span class="ln">48</span>C 10/12/26 MHP via Claude
+<span class="ln">49</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">50</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">51</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">52</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">53</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">54</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">55</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">56</span>C
+<span class="ln">57</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">58</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">59</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">60</span>C MHP 5/91 COMMON BLOCK ADDED TO FIX CORE RESCALING.
+<span class="ln">61</span>C 9/25/26 MHP via Claude
+<span class="ln">62</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">63</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">64</span>c      ISETMIX,ISETISO,
+<span class="ln">65</span>c     * LMIXTURE,LISOTOPE,FRAC_C,FRAC_N,FRAC_O,R12_13,R14_15,R16_17,R16_18,ZXMIX,
+<span class="ln">66</span>c     * XH2_INI,XHE3_INI,XLI6_INI,XLI7_INI,XBE9_INI,XB10_INI,XB11_INI
+<span class="ln">67</span>C COMMON/NEWCMP/XNEWCP,INEWCP,LNEWCP,LREL,ANEWCP
+<span class="ln">68</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">69</span>C DBG 5/94 ZRAMP stuff.
+<span class="ln">70</span>C 9/24/26 MHP via Claude
+<span class="ln">71</span>C code changed to remove dead IOOPAL2 from COMMON/ZRAMP/
+<span class="ln">72</span>C 10/9/26 MHP via Claude
+<span class="ln">73</span>C code changed to remove NK (was NK2 here only, since this file&#x27;s own
+<span class="ln">74</span>C dummy argument NK already carries the identical value, passed down
+<span class="ln">75</span>C from main.f&#x27;s own run-index loop variable through STARIN) from
+<span class="ln">76</span>C COMMON/ZRAMP/. It was never read by name here, only declared for
+<span class="ln">77</span>C positional alignment with the other members, so this file&#x27;s own NK
+<span class="ln">78</span>C argument is untouched.
+<span class="ln">79</span>C 10/13/26 MHP via Claude
+<span class="ln">80</span>C code changed to remove COMMON/ZRAMP/: its sole remaining member
+<span class="ln">81</span>C IOLAOL2 is neither written nor read anywhere.  The namelist members
+<span class="ln">82</span>C that shared this block moved to the consolidated block in stage 2b.
+<span class="ln">83</span>      DIMENSION HCOMP(15,JSON),HS(JSON),HL(JSON),LC(JSON)
+<span class="ln">84</span>      SAVE
+<span class="ln">85</span>
+<span class="ln">86</span>c ************
+<span class="ln">87</span>c      write(*,*)
+<span class="ln">88</span>c      write(*,*)&#x27;Entering rscale &#x27;,HSTOT-HS(M)
+<span class="ln">89</span>c ************
+<span class="ln">90</span>
+<span class="ln">91</span>      IF(RESCAL(2,NK).GT.0.0D0) THEN
+<span class="ln">92</span>C  RESCALE X BY MULTIPLYING ALL SHELL X VALUES BY THE RATIO (XNEW/XOLD)
+<span class="ln">93</span>C  WHERE XOLD = OLD SURFACE X VALUE
+<span class="ln">94</span>C  THIS METHOD OK FOR BOTH HORIZONTAL BRANCH AND MAIN SEQUENCE STARS
+<span class="ln">95</span>         IF(RESCAL(2,NK).LE.1.0D0) THEN
+<span class="ln">96</span>            XFACT = RESCAL(2,NK)/DMAX1(XNEW,1.0D-20)
+<span class="ln">97</span>            DO 10 I = 1,M
+<span class="ln">98</span>               HCOMP(1,I) = DMIN1(RESCAL(2,NK),HCOMP(1,I)*XFACT)
+<span class="ln">99</span>   10       CONTINUE
+<span class="ln">100</span>            XNEW = RESCAL(2,NK)
+<span class="ln">101</span>            XENV0 = RESCAL(2,NK)
+<span class="ln">102</span>C DBG 4/95 BUG FIX XENV IS USED IN SOME ROUTINES AND NOT XENV0 SO CHANGE
+<span class="ln">103</span>C     XENV WHENEVER X IS CHANGED.
+<span class="ln">104</span>C MHP 7/99 THIS IS NOT A BUG, IT IS NECESSARY.
+<span class="ln">105</span>C XENV IS USED TO SET THE INITIAL MU FOR THE YALE EQUATION OF STATE,
+<span class="ln">106</span>C AND IT SHOULD NOT BE CHANGED AFTER THE FIRST RUN.
+<span class="ln">107</span>C            XENV = XENV0
+<span class="ln">108</span>         ELSE
+<span class="ln">109</span>C  DESIRED X &gt;100%; X NOT CHANGED
+<span class="ln">110</span>C            ACOMP = &#x27; X &#x27;
+<span class="ln">111</span>            I1 = 2
+<span class="ln">112</span>            WRITE(ISHORT,1000)NK,RESCAL(I1,NK)
+<span class="ln">113</span> 1000       FORMAT(1X,&#x27;ERROR IN SUBROUTINE RSCALE&#x27;/1X,&#x27;RESCALING OF X&#x27;,
+<span class="ln">114</span>     *      &#x27; IN KIND CARD #&#x27;,I3,1X,&#x27;FAILED - DESIRED COMP&#x27;,F9.6/1X,
+<span class="ln">115</span>     *      &#x27;GREATER THAN UNITY.  X NOT RESCALED&#x27;)
+<span class="ln">116</span>         ENDIF
+<span class="ln">117</span>      ENDIF
+<span class="ln">118</span>      IF(RESCAL(3,NK).GE.0.0D0) THEN
+<span class="ln">119</span>C  RESCALE Z BY ADDING (RESCAL(3,NK)-OLD Z) TO EACH Z VALUE IN THE STAR
+<span class="ln">120</span>C  THE CNO CYCLE ELEMENTS AND HE3 ARE MULTIPLIED BY THE RATIO OF THE
+<span class="ln">121</span>C  DESIRED NEW Z TO THE OLD Z - LIGHT ELEMENT ABUNDANCES ARE LEFT ALONE
+<span class="ln">122</span>         IF(RESCAL(3,NK).LE.1.0D0) THEN
+<span class="ln">123</span>            DELZ = RESCAL(3,NK) - ZNEW
+<span class="ln">124</span>            DO 30 J = 1,M
+<span class="ln">125</span>               ZFACT=DMAX1(0.D0,HCOMP(3,J)+DELZ)/(HCOMP(3,J)+1.D-30)
+<span class="ln">126</span>               HCOMP(3,J) = DMAX1(0.0D0,HCOMP(3,J)+DELZ)
+<span class="ln">127</span>               DO 20 I = 5,11
+<span class="ln">128</span>                  HCOMP(I,J) = HCOMP(I,J)*ZFACT
+<span class="ln">129</span>   20          CONTINUE
+<span class="ln">130</span>   30       CONTINUE
+<span class="ln">131</span>            ZNEW = RESCAL(3,NK)
+<span class="ln">132</span>            ZENV0 = RESCAL(3,NK)
+<span class="ln">133</span>C DBG 4/95 BUG FIX ZENV IS USED IN MANY ROUTINES AND NOT ZENV0 SO CHANGE
+<span class="ln">134</span>C     ZENV WHENEVER Z IS CHANGED.
+<span class="ln">135</span>            ZENV = ZENV0
+<span class="ln">136</span>         ELSE
+<span class="ln">137</span>C  DESIRED Z &gt;100%; Z NOT CHANGED
+<span class="ln">138</span>C            ACOMP = &#x27; Z &#x27;
+<span class="ln">139</span>            I1 = 3
+<span class="ln">140</span>            WRITE(ISHORT,1002)NK,RESCAL(I1,NK)
+<span class="ln">141</span> 1002       FORMAT(1X,&#x27;ERROR IN SUBROUTINE RSCALE&#x27;/1X,&#x27;RESCALING OF Z&#x27;,
+<span class="ln">142</span>     *      &#x27; IN KIND CARD #&#x27;,I3,1X,&#x27;FAILED - DESIRED COMP&#x27;,F9.6/1X,
+<span class="ln">143</span>     *      &#x27;GREATER THAN UNITY.  Z NOT RESCALED&#x27;)
+<span class="ln">144</span>         ENDIF
+<span class="ln">145</span>      ENDIF
+<span class="ln">146</span>      IF(HCOMP(1,1).GT.1.0D-10) THEN
+<span class="ln">147</span>c ************
+<span class="ln">148</span>c      write(*,*)&#x27;Entering MS change &#x27;,HSTOT-HS(M)
+<span class="ln">149</span>c ************
+<span class="ln">150</span>
+<span class="ln">151</span>C  MAIN SEQUENCE RESCALING - MASS AND SINGLE ELEMENT.
+<span class="ln">152</span>         IF(LNEWCP.AND.XNEWCP.GE.0.0D0) THEN
+<span class="ln">153</span>C  RESCALE THE ABUNDANCE OF ONE ELEMENT OTHER THAN X,Y,Z
+<span class="ln">154</span>C  JNEWCP = INDEX OF ELEMENT TO BE CHANGED IN MATRIX HCOMP
+<span class="ln">155</span>C  IF LREL = T, ABUNDANCE IS RELATIVE TO SURFACE HYDROGEN ABUNDANCE
+<span class="ln">156</span>C  ON A LOGARITHMIC SCALE WHERE X ABUNDANCE = 12.0
+<span class="ln">157</span>C  E.G. AN ABUNDANCE OF 3.0 MEANS 1.0D-9* SURFACE H ABUNDANCE
+<span class="ln">158</span>            IF(LREL) XNEWCP = DEXP(CLN*(XNEWCP-12.0D0))*HCOMP(1,M)
+<span class="ln">159</span>            IF(XNEWCP.LT.1.0D0) THEN
+<span class="ln">160</span>               DO 35 I = 1,M
+<span class="ln">161</span>                  HCOMP(INEWCP,I) = XNEWCP
+<span class="ln">162</span>   35          CONTINUE
+<span class="ln">163</span>            ELSE
+<span class="ln">164</span>C  ERROR - RESCALED ABUNDANCE &gt;100% - ABUNDANCE NOT CHANGED
+<span class="ln">165</span>C               ACOMP = ANEWCP
+<span class="ln">166</span>               WRITE(ISHORT,1004)ICOMP,NK,XNEWCP
+<span class="ln">167</span> 1004       FORMAT(1X,&#x27;ERROR IN SUBROUTINE RSCALE&#x27;/1X,&#x27;RESCALING OF &#x27;,
+<span class="ln">168</span>     *      &#x27;SPECIES &#x27;,I3,&#x27; IN KIND CARD # &#x27;,I3,&#x27; FAILED - DESIRED COMP&#x27;,F9.6/1X,
+<span class="ln">169</span>     *      &#x27;GREATER THAN UNITY.  Z NOT RESCALED&#x27;)
+<span class="ln">170</span>            ENDIF
+<span class="ln">171</span>         ENDIF
+<span class="ln">172</span>C  RESCALE STAR MASS BY MULTIPLYING ALL MASS POINTS IN THE STAR BY
+<span class="ln">173</span>C  A SCALE FACTOR(MNEW/MOLD) WHILE LEAVING ALL OTHER LOCAL VARIABLES
+<span class="ln">174</span>C  UNCHANGED.
+<span class="ln">175</span>         IF(RESCAL(1,NK).GT.0.0D0) THEN
+<span class="ln">176</span>            HSTOT1 = DLOG10(RESCAL(1,NK)/SMASS)
+<span class="ln">177</span>            HSTOT = HSTOT + HSTOT1
+<span class="ln">178</span>            SMASS = RESCAL(1,NK)
+<span class="ln">179</span>            STOTAL = HSTOT
+<span class="ln">180</span>            DO 40 I = 1,M
+<span class="ln">181</span>               HS(I) = HS(I) + HSTOT1
+<span class="ln">182</span>   40       CONTINUE
+<span class="ln">183</span>         ENDIF
+<span class="ln">184</span>      ELSE
+<span class="ln">185</span>C  HORIZONTAL BRANCH RESCALING;CORE MASS AND TOTAL MASS.
+<span class="ln">186</span>C  FOR TOTAL MASS,TREAT AS MAIN SEQUENCE BUT ONLY CHANGE
+<span class="ln">187</span>C  THE MASS POINTS OUTSIDE THE H-BURNING SHELL;
+<span class="ln">188</span>C  FOR CORE MASS CHANGE THE POINTS INSIDE THE H-BURNING
+<span class="ln">189</span>C  SHELL AND CORRESPONDINGLY REDUCE/INCREASE THE MASS OUTSIDE
+<span class="ln">190</span>C  THE SHELL.
+<span class="ln">191</span>c ************
+<span class="ln">192</span>c      write(*,*)&#x27;Entering HB scale &#x27;,HSTOT-HS(M)
+<span class="ln">193</span>c ************
+<span class="ln">194</span>
+<span class="ln">195</span>
+<span class="ln">196</span>         IF(RESCAL(1,NK).GT.0.0D0.OR.RESCAL(4,NK).GT.0.0D0) THEN
+<span class="ln">197</span>C  RESCALE MASS AND/OR CORE MASS
+<span class="ln">198</span>C  FIND H-BURNING SHELL.
+<span class="ln">199</span>C
+<span class="ln">200</span>
+<span class="ln">201</span>C ************* Added call to FINDSHELL (gn - 10/05)**************
+<span class="ln">202</span>
+<span class="ln">203</span>            CALL <a href="../yrec-map/findsh.f.html#def-FINDSH" title="FINDSH in findsh.f">FINDSH</a>(HCOMP,HL,LC,M,JCORE,JENV,JXBEG,JXEND,JXMID,
+<span class="ln">204</span>     *                  LSHELL)
+<span class="ln">205</span>C ****************************************************************
+<span class="ln">206</span>
+<span class="ln">207</span>C FIND CORE, ENVELOPE, AND H-BURNING SHELL MASSES.
+<span class="ln">208</span>            COROLD = EXP(CLN*HS(JXBEG-1))/CMSUN
+<span class="ln">209</span>            ENVOLD = (EXP(CLN*HSTOT)-EXP(CLN*HS(JXEND)))/CMSUN
+<span class="ln">210</span>            ENVOLD2 = (EXP(CLN*HS(M))-EXP(CLN*HS(JXEND)))/CMSUN
+<span class="ln">211</span>            SHLOLD = (EXP(CLN*HS(JXEND))-EXP(CLN*HS(JXBEG-1)))/CMSUN
+<span class="ln">212</span>            DENV = 0.0D0
+<span class="ln">213</span>            DCOR = 0.0D0
+<span class="ln">214</span>            WRITE(ISHORT,63)COROLD,SHLOLD,ENVOLD,SMASS
+<span class="ln">215</span>   63       FORMAT(1X,&#x27;HB-OLD MASSES: CORE &#x27;,
+<span class="ln">216</span>     *      F9.6,&#x27; SHELL &#x27;,F9.6,&#x27; ENV &#x27;,F9.6,&#x27; TOTAL&#x27;,F9.6)
+<span class="ln">217</span>         ENDIF
+<span class="ln">218</span>
+<span class="ln">219</span>         IF(RESCAL(1,NK).GT.0.0D0) THEN
+<span class="ln">220</span>
+<span class="ln">221</span>C MASS RESCALING : ADD OR SUBTRACT MASS FROM THE ENVELOPE OUTSIDE
+<span class="ln">222</span>C THE H-BURNING SHELL (ONLY).
+<span class="ln">223</span>C
+<span class="ln">224</span>C ENSURE THAT THE NEW ENVELOPE MASS IS POSITIVE.
+<span class="ln">225</span>
+<span class="ln">226</span>
+<span class="ln">227</span>            DENV = RESCAL(1,NK) - SMASS
+<span class="ln">228</span>            ENVNEW = ENVOLD + DENV
+<span class="ln">229</span>
+<span class="ln">230</span>c ** Reduce either total mass outside core OR the standard envelope only ***
+<span class="ln">231</span>            IF((((10D0**HSTOT)/CMSUN)-COROLD).GE.0.01D0) THEN
+<span class="ln">232</span>c ************
+<span class="ln">233</span>      write(*,*)&#x27;Entering old method &#x27;,(10**HSTOT-10**HS(M))/
+<span class="ln">234</span>     *                                 (10**HS(M)-10**HS(JXBEG-1))
+<span class="ln">235</span>      write(*,*)&#x27;SENV &#x27;,10**HSTOT - 10**HS(M)
+<span class="ln">236</span>      write(*,*)&#x27;Envelope &#x27;,10**HS(M) - 10**HS(JXBEG-1)
+<span class="ln">237</span>c ************
+<span class="ln">238</span>
+<span class="ln">239</span>c **************************************************************************
+<span class="ln">240</span>c               write(*,*)JXBEG-1,JXMID,JXEND,M
+<span class="ln">241</span>            IF(ENVNEW.LE.0.0D0)THEN
+<span class="ln">242</span>               WRITE(ISHORT,69)ENVOLD,ENVOLD+DENV,RESCAL(1,NK),SMASS
+<span class="ln">243</span>   69          FORMAT(1X,&#x27;ERROR IN SUBROUTINE RSCALE&#x27;/1X,
+<span class="ln">244</span>     *         &#x27;DESIRED NEW ENVELOPE MASS LESS THAN ZERO&#x27;/1X,
+<span class="ln">245</span>     *         &#x27;OLD ENVELOPE MASS &#x27;,1PE9.2,&#x27; NEW ENVELOPE &#x27;,E9.2,
+<span class="ln">246</span>     *         &#x27; NEW AND OLD TOTAL MASS &#x27;,2E10.2)
+<span class="ln">247</span>               STOP
+<span class="ln">248</span>            ENDIF
+<span class="ln">249</span>
+<span class="ln">250</span>c ***** Calculate scale factor for mass rescaling *****
+<span class="ln">251</span>
+<span class="ln">252</span>c            HSTOT1 = DLOG10(RESCAL(1,NK)/SMASS)
+<span class="ln">253</span>        SFACTOR =(RESCAL(1,NK)-EXP(CLN*HS(JXEND))/CMSUN)/
+<span class="ln">254</span>     *                          (SMASS-EXP(CLN*HS(JXEND))/CMSUN)
+<span class="ln">255</span>
+<span class="ln">256</span>c *****************************************************
+<span class="ln">257</span>
+<span class="ln">258</span>c            HSTOT = HSTOT + HSTOT1
+<span class="ln">259</span>        HSTOT=DLOG10(10**HS(JXEND)+SFACTOR*(10**HSTOT-10**HS(JXEND)))
+<span class="ln">260</span>
+<span class="ln">261</span>            SMASS = RESCAL(1,NK)
+<span class="ln">262</span>            STOTAL = HSTOT
+<span class="ln">263</span>            DO 70 I = JXEND+1,M
+<span class="ln">264</span>        HS(I)=DLOG10(10**HS(JXEND)+SFACTOR*(10**HS(I)-10**HS(JXEND)))
+<span class="ln">265</span>   70       CONTINUE
+<span class="ln">266</span>            ENVOLD = ENVNEW
+<span class="ln">267</span>c *****
+<span class="ln">268</span>c            write(*,*)&#x27;Mass difference &#x27;,DENV
+<span class="ln">269</span>c            write(*,*)&#x27;HSTOT1 &#x27;,HSTOT1
+<span class="ln">270</span>c            write(*,*)&#x27;SFACTOR &#x27;,DLOG10(SFACTOR)
+<span class="ln">271</span>c ************
+<span class="ln">272</span>c      write(*,*)&#x27;leaving old method &#x27;,HSTOT-HS(M)
+<span class="ln">273</span>c ************
+<span class="ln">274</span>
+<span class="ln">275</span>         ELSE
+<span class="ln">276</span>
+<span class="ln">277</span>c ************
+<span class="ln">278</span>      write(*,*)&#x27;Entering new method &#x27;,(10**HSTOT-10**HS(M))/
+<span class="ln">279</span>     *                                 (10**HS(M)-10**HS(JXBEG-1))
+<span class="ln">280</span>      write(*,*)&#x27;SENV &#x27;,10**HSTOT - 10**HS(M)
+<span class="ln">281</span>      write(*,*)&#x27;Envelope &#x27;,10**HS(M) - 10**HS(JXBEG-1)
+<span class="ln">282</span>c ************
+<span class="ln">283</span>c           *** print debug info ***
+<span class="ln">284</span>c            write(*,*)JXBEG-1,JXMID,JXEND,M
+<span class="ln">285</span>c            write(*,*)(10**HS(JXBEG-1))/CMSUN,&#x27; core&#x27;
+<span class="ln">286</span>c            write(*,*)(10**HS(JXMID))/CMSUN,&#x27; mid&#x27;
+<span class="ln">287</span>c            write(*,*)(10**HS(JXEND))/CMSUN,&#x27; end&#x27;
+<span class="ln">288</span>c            write(*,*)(10**HS(M))/CMSUN,&#x27; M&#x27;
+<span class="ln">289</span>c            write(*,*)(10**HSTOT)/CMSUN,&#x27; total&#x27;
+<span class="ln">290</span>            CHKENV = ((10**HSTOT)/CMSUN)-COROLD
+<span class="ln">291</span>            IF(CHKENV.LE.0.0D0)THEN
+<span class="ln">292</span>               WRITE(ISHORT,69)ENVOLD,ENVOLD+DENV,RESCAL(1,NK),SMASS
+<span class="ln">293</span>               STOP
+<span class="ln">294</span>            ENDIF
+<span class="ln">295</span>
+<span class="ln">296</span>c **** Calculate scale factor *****
+<span class="ln">297</span>
+<span class="ln">298</span>c           HSTOT1 = DLOG10(RESCAL(1,NK)/SMASS)
+<span class="ln">299</span>        SFACTOR =(RESCAL(1,NK)-EXP(CLN*HS(JXBEG-1))/CMSUN)/
+<span class="ln">300</span>     *                          (SMASS-EXP(CLN*HS(JXBEG-1))/CMSUN)
+<span class="ln">301</span>c        write(*,*)&#x27;hstot1&#x27;,(10**HSTOT1)
+<span class="ln">302</span>c        write(*,*)&#x27;smass&#x27;,SMASS
+<span class="ln">303</span>
+<span class="ln">304</span>c            HSTOT = HSTOT + HSTOT1
+<span class="ln">305</span>       HSTOT=DLOG10(10**HS(JXBEG-1)+SFACTOR*(10**HSTOT-10**HS(JXBEG-1)))
+<span class="ln">306</span>
+<span class="ln">307</span>            SMASS = RESCAL(1,NK)
+<span class="ln">308</span>            STOTAL = HSTOT
+<span class="ln">309</span>            DO 78 I = JXBEG,M
+<span class="ln">310</span>      HS(I)=DLOG10(10**HS(JXBEG-1)+SFACTOR*(10**HS(I)-10**HS(JXBEG-1)))
+<span class="ln">311</span> 78     CONTINUE
+<span class="ln">312</span>            ENVOLD = (EXP(CLN*HSTOT)-EXP(CLN*HS(JXEND)))/CMSUN
+<span class="ln">313</span>            ENVTOTAL=(EXP(CLN*HS(M))-EXP(CLN*HS(JXBEG-1)))/CMSUN
+<span class="ln">314</span>c            write(*,*)&#x27;total envelope &#x27;,ENVTOTAL
+<span class="ln">315</span>c            write(*,*)&#x27;HSTOT1 &#x27;,HSTOT1
+<span class="ln">316</span>c            write(*,*)&#x27;SFACTOR &#x27;,DLOG10(SFACTOR)
+<span class="ln">317</span>
+<span class="ln">318</span>c ************
+<span class="ln">319</span>c      write(*,*)&#x27;leaving new method &#x27;,HSTOT-HS(M)
+<span class="ln">320</span>c ************
+<span class="ln">321</span>
+<span class="ln">322</span>         ENDIF
+<span class="ln">323</span>         ENDIF
+<span class="ln">324</span>c ******************************************************************
+<span class="ln">325</span>
+<span class="ln">326</span>         IF(RESCAL(4,NK).GT.0.0D0) THEN
+<span class="ln">327</span>
+<span class="ln">328</span>C RESCALE CORE MASS.
+<span class="ln">329</span>C THE MASS OF THE H-BURNING SHELL IS HELD FIXED, AND MASS IS TRANSFERRED
+<span class="ln">330</span>C FROM THE CORE TO THE ENVELOPE (OR VICE VERSA).
+<span class="ln">331</span>C
+<span class="ln">332</span>
+<span class="ln">333</span>            SHLP= (EXP(CLN*HS(JXEND)))
+<span class="ln">334</span>            DCOR = RESCAL(4,NK) - COROLD
+<span class="ln">335</span>            DENV = - DCOR
+<span class="ln">336</span>            ENVNEW = ENVOLD2 + DENV
+<span class="ln">337</span>            IF(ENVNEW.LE.0.0D0)THEN
+<span class="ln">338</span>               WRITE(ISHORT,71)ENVOLD,ENVNEW,RESCAL(4,NK),COROLD
+<span class="ln">339</span>   71          FORMAT(1X,&#x27;ERROR IN SUBROUTINE RSCALE&#x27;/1X,
+<span class="ln">340</span>     *         &#x27;NEW ENVELOPE MASS LESS THAN ZERO BECAUSE OF CORE&#x27;,
+<span class="ln">341</span>     *         &#x27; RESCALING&#x27;/1X,
+<span class="ln">342</span>     *         &#x27;OLD ENVELOPE MASS &#x27;,1PE10.2,&#x27; NEW ENVELOPE &#x27;,E10.2,
+<span class="ln">343</span>     *         &#x27; NEW AND OLD CORE MASS &#x27;,2E10.2)
+<span class="ln">344</span>               STOP
+<span class="ln">345</span>            ENDIF
+<span class="ln">346</span>            HSTOT1 = DLOG10(RESCAL(4,NK)/COROLD)
+<span class="ln">347</span>            DO 80 I = 1,JXBEG-1
+<span class="ln">348</span>               HS(I) = HS(I) + HSTOT1
+<span class="ln">349</span>   80       CONTINUE
+<span class="ln">350</span>
+<span class="ln">351</span>C  HOLD H-SHELL MASS CONSTANT;SHIFT IS THE CHANGE IN THE
+<span class="ln">352</span>C  UNLOGGED MASS OF EACH POINT IN THE H SHELL.
+<span class="ln">353</span>            SHIFT = DCOR*CMSUN
+<span class="ln">354</span>            DO 90 I = JXBEG,JXEND
+<span class="ln">355</span>               TEMP = EXP(CLN*HS(I))
+<span class="ln">356</span>               HS(I) = LOG10(TEMP + SHIFT)
+<span class="ln">357</span>   90       CONTINUE
+<span class="ln">358</span>C  NOW SHRINK OR EXPAND THE ENVELOPE MASS TO RETAIN TOTAL CONSTANT MASS.
+<span class="ln">359</span>C
+<span class="ln">360</span>
+<span class="ln">361</span>        SFACTOR =(EXP(CLN*HS(M))-EXP(CLN*HS(JXEND)))/
+<span class="ln">362</span>     *                          (EXP(CLN*HS(M))-SHLP)
+<span class="ln">363</span>
+<span class="ln">364</span>            DO 100 I = JXEND+1,M
+<span class="ln">365</span>        HS(I)=DLOG10(10**HS(M)-SFACTOR*(10**HS(M)-10**HS(I)))
+<span class="ln">366</span>  100       CONTINUE
+<span class="ln">367</span>
+<span class="ln">368</span>         ENDIF
+<span class="ln">369</span>
+<span class="ln">370</span>         IF(RESCAL(1,NK).GT.0.0D0.OR.RESCAL(4,NK).GT.0.0D0)THEN
+<span class="ln">371</span>            CORNEW = EXP(CLN*HS(JXBEG-1))/CMSUN
+<span class="ln">372</span>            ENVNEW = (EXP(CLN*HSTOT)-EXP(CLN*HS(JXEND)))/CMSUN
+<span class="ln">373</span>            SHLNEW = (EXP(CLN*HS(JXEND))-EXP(CLN*HS(JXBEG-1)))/CMSUN
+<span class="ln">374</span>            WRITE(ISHORT,101)CORNEW,SHLNEW,ENVNEW,SMASS
+<span class="ln">375</span>  101       FORMAT(1X,&#x27;HB-RESCALED MASSES: CORE &#x27;,
+<span class="ln">376</span>     *      F9.6,&#x27; SHELL &#x27;,F9.6,&#x27; ENV &#x27;,F9.6,&#x27; TOTAL &#x27;,F9.6)
+<span class="ln">377</span>
+<span class="ln">378</span>         ENDIF
+<span class="ln">379</span>      ENDIF
+<span class="ln">380</span>C  CHANGE Y TO REFLECT NEW X,Z, AND HE3 VALUES.
+<span class="ln">381</span>      DO 110 I = 1,M
+<span class="ln">382</span>         HCOMP(2,I) = 1.0D0-HCOMP(1,I)-HCOMP(3,I)-HCOMP(4,I)
+<span class="ln">383</span>  110 CONTINUE
+<span class="ln">384</span>C
+<span class="ln">385</span>C DBG 5/94 rescale interior Z if LZRAMP flag is T.
+<span class="ln">386</span>C Z is linearly adjusted from RSCLZC at the center to surface Z at
+<span class="ln">387</span>C mass fraction RSCLZM.  Compensate changing Z with X.
+<span class="ln">388</span>      IF(LZRAMP.AND.(RSCLZC(NK).GT.0D0).AND.(RSCLZM1(NK).GT.0D0)
+<span class="ln">389</span>     *     .AND.(RSCLZM2(NK).GT.0D0))THEN
+<span class="ln">390</span>            SLOPE = (ZNEW - RSCLZC(NK))/(RSCLZM2(NK)-RSCLZM1(NK))
+<span class="ln">391</span>            DO I = 1,M
+<span class="ln">392</span>               FS = 10.0D0**HS(I)/(SMASS*CMSUN)
+<span class="ln">393</span>               IF (FS .LT. RSCLZM1(NK)) THEN
+<span class="ln">394</span>                  ZFACT = (HCOMP(3,I)-RSCLZC(NK))/HCOMP(3,I)
+<span class="ln">395</span>                  HCOMP(3,I) = RSCLZC(NK)
+<span class="ln">396</span>                  HCOMP(1, I) = 1.0D0-HCOMP(3,I)-HCOMP(4,I)-HCOMP(2,I)
+<span class="ln">397</span>                  DO J = 5,11
+<span class="ln">398</span>                      HCOMP(J,I) = HCOMP(J,I)*ZFACT
+<span class="ln">399</span>                  ENDDO
+<span class="ln">400</span>               ELSE IF (FS .LT. RSCLZM2(NK)) THEN
+<span class="ln">401</span>                  ZP = (FS-RSCLZM1(NK))*SLOPE+RSCLZC(NK)
+<span class="ln">402</span>                  ZFACT = (HCOMP(3,I)-ZP)/HCOMP(3,I)
+<span class="ln">403</span>                  HCOMP(3, I) = ZP
+<span class="ln">404</span>                  HCOMP(1, I) = 1.0D0-HCOMP(3,I)-HCOMP(4,I)-HCOMP(2,I)
+<span class="ln">405</span>                  DO J = 5,11
+<span class="ln">406</span>                      HCOMP(J,I) = HCOMP(J,I)*ZFACT
+<span class="ln">407</span>                  ENDDO
+<span class="ln">408</span>               END IF
+<span class="ln">409</span>            ENDDO
+<span class="ln">410</span>      END IF
+<span class="ln">411</span>c ************
+<span class="ln">412</span>c      write(*,*)&#x27;Leaving rscale &#x27;,HSTOT-HS(M)
+<span class="ln">413</span>c ************
+<span class="ln">414</span>c      IF(HSTOT.LT.HS(M)) STOP
+<span class="ln">415</span>      RETURN
+<span class="ln">416</span>      END</pre></details>
+<details class='py' id='py-rscale'><summary>Python version: rscale</summary><pre class='doc'>Rescale the model for kind card nk: X, Z, one species (main
+sequence), the total mass (main sequence: every mass point scaled;
+horizontal branch: the mass coordinate stretched above the hydrogen
+shell or its base) and the core mass (horizontal branch); then reset Y
+and apply ZRAMP. The targets are runloop_mod.rescal[1..4, nk], the
+species nmlpar_mod.xnewcp, inewcp, and the ramp nmlpar_mod.rsclzc,
+rsclzm1, rsclzm2.
+
+Translates: rscale.f#RSCALE (09c3b9b)
+
+Arguments: hl, hcomp, hs (changed in place), hstot (log total mass),
+m, nk, smass (total mass in solar masses), lc. Also sets comp_mod.xnew,
+znew, zenv, stotal and label_mod.xenv0, zenv0. Returns (hstot, smass).</pre><pre class='src'><span class="ln">23</span>def rscale(hl, hcomp, hs, hstot, m, nk, smass, lc):
+<span class="ln">24</span>    &quot;&quot;&quot;Rescale the model for kind card nk: X, Z, one species (main
+<span class="ln">25</span>    sequence), the total mass (main sequence: every mass point scaled;
+<span class="ln">26</span>    horizontal branch: the mass coordinate stretched above the hydrogen
+<span class="ln">27</span>    shell or its base) and the core mass (horizontal branch); then reset Y
+<span class="ln">28</span>    and apply ZRAMP. The targets are runloop_mod.rescal[1..4, nk], the
+<span class="ln">29</span>    species nmlpar_mod.xnewcp, inewcp, and the ramp nmlpar_mod.rsclzc,
+<span class="ln">30</span>    rsclzm1, rsclzm2.
+<span class="ln">31</span>
+<span class="ln">32</span>    Translates: rscale.f#RSCALE (09c3b9b)
+<span class="ln">33</span>
+<span class="ln">34</span>    Arguments: hl, hcomp, hs (changed in place), hstot (log total mass),
+<span class="ln">35</span>    m, nk, smass (total mass in solar masses), lc. Also sets comp_mod.xnew,
+<span class="ln">36</span>    znew, zenv, stotal and label_mod.xenv0, zenv0. Returns (hstot, smass).
+<span class="ln">37</span>    &quot;&quot;&quot;
+<span class="ln">38</span>    c = constants_mod
+<span class="ln">39</span>    comp = comp_mod
+<span class="ln">40</span>    nml = nmlpar_mod
+<span class="ln">41</span>    rescal = runloop_mod.rescal
+<span class="ln">42</span>    w = iounits_mod.write
+<span class="ln">43</span>    ishort = iounits_mod.ishort
+<span class="ln">44</span>
+<span class="ln">45</span>    # X: every shell scaled by X_new / X_surf, capped at X_new.
+<span class="ln">46</span>    if rescal[2, nk] &gt; 0.0:
+<span class="ln">47</span>        if rescal[2, nk] &lt;= 1.0:
+<span class="ln">48</span>            xfact = rescal[2, nk] / max(comp.xnew, 1.0e-20)
+<span class="ln">49</span>            for i in range(1, m + 1):
+<span class="ln">50</span>                hcomp[1, i] = min(rescal[2, nk], hcomp[1, i] * xfact)
+<span class="ln">51</span>            comp.xnew = rescal[2, nk]
+<span class="ln">52</span>            label_mod.xenv0 = rescal[2, nk]
+<span class="ln">53</span>        else:
+<span class="ln">54</span>            i1 = 2
+<span class="ln">55</span>            w(ishort, &quot; ERROR IN SUBROUTINE RSCALE&quot;)  # format 1000
+<span class="ln">56</span>            w(ishort, f&quot; RESCALING OF X IN KIND CARD #{nk:3d} FAILED - &quot;
+<span class="ln">57</span>                      f&quot;DESIRED COMP{rescal[i1, nk]:9.6f}&quot;)
+<span class="ln">58</span>            w(ishort, &quot; GREATER THAN UNITY.  X NOT RESCALED&quot;)
+<span class="ln">59</span>
+<span class="ln">60</span>    # Z: the same amount added in every shell; species 5-11 scaled.
+<span class="ln">61</span>    if rescal[3, nk] &gt;= 0.0:
+<span class="ln">62</span>        if rescal[3, nk] &lt;= 1.0:
+<span class="ln">63</span>            delz = rescal[3, nk] - comp.znew
+<span class="ln">64</span>            for j in range(1, m + 1):
+<span class="ln">65</span>                zfact = max(0.0, hcomp[3, j] + delz) / (hcomp[3, j] + 1.0e-30)
+<span class="ln">66</span>                hcomp[3, j] = max(0.0, hcomp[3, j] + delz)
+<span class="ln">67</span>                # Question (see the page): He3 (species 4) is not scaled.
+<span class="ln">68</span>                for i in range(5, 12):
+<span class="ln">69</span>                    hcomp[i, j] = hcomp[i, j] * zfact
+<span class="ln">70</span>            comp.znew = rescal[3, nk]
+<span class="ln">71</span>            label_mod.zenv0 = rescal[3, nk]
+<span class="ln">72</span>            comp.zenv = label_mod.zenv0
+<span class="ln">73</span>        else:
+<span class="ln">74</span>            i1 = 3
+<span class="ln">75</span>            w(ishort, &quot; ERROR IN SUBROUTINE RSCALE&quot;)  # format 1002
+<span class="ln">76</span>            w(ishort, f&quot; RESCALING OF Z IN KIND CARD #{nk:3d} FAILED - &quot;
+<span class="ln">77</span>                      f&quot;DESIRED COMP{rescal[i1, nk]:9.6f}&quot;)
+<span class="ln">78</span>            w(ishort, &quot; GREATER THAN UNITY.  Z NOT RESCALED&quot;)
+<span class="ln">79</span>
+<span class="ln">80</span>    if hcomp[1, 1] &gt; 1.0e-10:
+<span class="ln">81</span>        # Main sequence. One species set everywhere.
+<span class="ln">82</span>        if nml.lnewcp and nml.xnewcp &gt;= 0.0:
+<span class="ln">83</span>            # Question (see the page): XNEWCP converted in place.
+<span class="ln">84</span>            if nml.lrel:
+<span class="ln">85</span>                nml.xnewcp = (math.exp(c.cln * (nml.xnewcp - 12.0))
+<span class="ln">86</span>                              * hcomp[1, m])
+<span class="ln">87</span>            if nml.xnewcp &lt; 1.0:
+<span class="ln">88</span>                for i in range(1, m + 1):
+<span class="ln">89</span>                    hcomp[nml.inewcp, i] = nml.xnewcp
+<span class="ln">90</span>            else:
+<span class="ln">91</span>                # Question (see the page): ICOMP is never set.
+<span class="ln">92</span>                icomp = 0
+<span class="ln">93</span>                w(ishort, &quot; ERROR IN SUBROUTINE RSCALE&quot;)  # format 1004
+<span class="ln">94</span>                w(ishort, f&quot; RESCALING OF SPECIES {icomp:3d} IN KIND CARD # &quot;
+<span class="ln">95</span>                          f&quot;{nk:3d} FAILED - DESIRED COMP{nml.xnewcp:9.6f}&quot;)
+<span class="ln">96</span>                w(ishort, &quot; GREATER THAN UNITY.  Z NOT RESCALED&quot;)
+<span class="ln">97</span>        # The total mass: every mass point scaled.
+<span class="ln">98</span>        if rescal[1, nk] &gt; 0.0:
+<span class="ln">99</span>            hstot1 = math.log10(rescal[1, nk] / smass)
+<span class="ln">100</span>            hstot = hstot + hstot1
+<span class="ln">101</span>            smass = rescal[1, nk]
+<span class="ln">102</span>            comp.stotal = hstot
+<span class="ln">103</span>            for i in range(1, m + 1):
+<span class="ln">104</span>                hs[i] = hs[i] + hstot1
+<span class="ln">105</span>    else:
+<span class="ln">106</span>        # Horizontal branch.
+<span class="ln">107</span>        if rescal[1, nk] &gt; 0.0 or rescal[4, nk] &gt; 0.0:
+<span class="ln">108</span>            jcore, jenv, jxbeg, jxend, jxmid, lshell = findsh(
+<span class="ln">109</span>                hcomp, hl, lc, m, 0, 0, 0, 0, 0, False)
+<span class="ln">110</span>            corold = math.exp(c.cln * hs[jxbeg - 1]) / c.cmsun
+<span class="ln">111</span>            envold = (math.exp(c.cln * hstot)
+<span class="ln">112</span>                      - math.exp(c.cln * hs[jxend])) / c.cmsun
+<span class="ln">113</span>            envold2 = (math.exp(c.cln * hs[m])
+<span class="ln">114</span>                       - math.exp(c.cln * hs[jxend])) / c.cmsun
+<span class="ln">115</span>            shlold = (math.exp(c.cln * hs[jxend])
+<span class="ln">116</span>                      - math.exp(c.cln * hs[jxbeg - 1])) / c.cmsun
+<span class="ln">117</span>            denv = 0.0
+<span class="ln">118</span>            dcor = 0.0
+<span class="ln">119</span>            w(ishort, f&quot; HB-OLD MASSES: CORE {corold:9.6f} SHELL &quot;
+<span class="ln">120</span>                      f&quot;{shlold:9.6f} ENV {envold:9.6f} TOTAL{smass:9.6f}&quot;)
+<span class="ln">121</span>
+<span class="ln">122</span>        # The total mass: the mass coordinate stretched above m_0.
+<span class="ln">123</span>        if rescal[1, nk] &gt; 0.0:
+<span class="ln">124</span>            denv = rescal[1, nk] - smass
+<span class="ln">125</span>            envnew = envold + denv
+<span class="ln">126</span>            # Question (see the page): the 0.01 Msun switch.
+<span class="ln">127</span>            if ((10.0 ** hstot) / c.cmsun) - corold &gt;= 0.01:
+<span class="ln">128</span>                # The old method: m_0 at the top of the shell.
+<span class="ln">129</span>                # Question (see the page): debug output.
+<span class="ln">130</span>                print(&quot; Entering old method &quot;,
+<span class="ln">131</span>                      (10.0 ** hstot - 10.0 ** hs[m])
+<span class="ln">132</span>                      / (10.0 ** hs[m] - 10.0 ** hs[jxbeg - 1]))
+<span class="ln">133</span>                print(&quot; SENV &quot;, 10.0 ** hstot - 10.0 ** hs[m])
+<span class="ln">134</span>                print(&quot; Envelope &quot;, 10.0 ** hs[m] - 10.0 ** hs[jxbeg - 1])
+<span class="ln">135</span>                if envnew &lt;= 0.0:
+<span class="ln">136</span>                    _error_stop([  # format 69
+<span class="ln">137</span>                        &quot; ERROR IN SUBROUTINE RSCALE&quot;,
+<span class="ln">138</span>                        &quot; DESIRED NEW ENVELOPE MASS LESS THAN ZERO&quot;,
+<span class="ln">139</span>                        f&quot; OLD ENVELOPE MASS {envold:9.2E} NEW ENVELOPE &quot;
+<span class="ln">140</span>                        f&quot;{envold + denv:9.2E} NEW AND OLD TOTAL MASS &quot;
+<span class="ln">141</span>                        f&quot;{rescal[1, nk]:10.2E}{smass:10.2E}&quot;])
+<span class="ln">142</span>                hse = hs[jxend]
+<span class="ln">143</span>                sfactor = ((rescal[1, nk] - math.exp(c.cln * hse) / c.cmsun)
+<span class="ln">144</span>                           / (smass - math.exp(c.cln * hse) / c.cmsun))
+<span class="ln">145</span>                hstot = math.log10(10.0 ** hse
+<span class="ln">146</span>                                   + sfactor * (10.0 ** hstot - 10.0 ** hse))
+<span class="ln">147</span>                smass = rescal[1, nk]
+<span class="ln">148</span>                comp.stotal = hstot
+<span class="ln">149</span>                for i in range(jxend + 1, m + 1):
+<span class="ln">150</span>                    hs[i] = math.log10(10.0 ** hs[jxend]
+<span class="ln">151</span>                                       + sfactor * (10.0 ** hs[i]
+<span class="ln">152</span>                                                    - 10.0 ** hs[jxend]))
+<span class="ln">153</span>                envold = envnew
+<span class="ln">154</span>            else:
+<span class="ln">155</span>                # The new method: m_0 at the base of the shell.
+<span class="ln">156</span>                print(&quot; Entering new method &quot;,
+<span class="ln">157</span>                      (10.0 ** hstot - 10.0 ** hs[m])
+<span class="ln">158</span>                      / (10.0 ** hs[m] - 10.0 ** hs[jxbeg - 1]))
+<span class="ln">159</span>                print(&quot; SENV &quot;, 10.0 ** hstot - 10.0 ** hs[m])
+<span class="ln">160</span>                print(&quot; Envelope &quot;, 10.0 ** hs[m] - 10.0 ** hs[jxbeg - 1])
+<span class="ln">161</span>                chkenv = ((10.0 ** hstot) / c.cmsun) - corold
+<span class="ln">162</span>                if chkenv &lt;= 0.0:
+<span class="ln">163</span>                    _error_stop([  # format 69
+<span class="ln">164</span>                        &quot; ERROR IN SUBROUTINE RSCALE&quot;,
+<span class="ln">165</span>                        &quot; DESIRED NEW ENVELOPE MASS LESS THAN ZERO&quot;,
+<span class="ln">166</span>                        f&quot; OLD ENVELOPE MASS {envold:9.2E} NEW ENVELOPE &quot;
+<span class="ln">167</span>                        f&quot;{envold + denv:9.2E} NEW AND OLD TOTAL MASS &quot;
+<span class="ln">168</span>                        f&quot;{rescal[1, nk]:10.2E}{smass:10.2E}&quot;])
+<span class="ln">169</span>                hsb = hs[jxbeg - 1]
+<span class="ln">170</span>                sfactor = ((rescal[1, nk] - math.exp(c.cln * hsb) / c.cmsun)
+<span class="ln">171</span>                           / (smass - math.exp(c.cln * hsb) / c.cmsun))
+<span class="ln">172</span>                hstot = math.log10(10.0 ** hsb
+<span class="ln">173</span>                                   + sfactor * (10.0 ** hstot - 10.0 ** hsb))
+<span class="ln">174</span>                smass = rescal[1, nk]
+<span class="ln">175</span>                comp.stotal = hstot
+<span class="ln">176</span>                # HS(JXBEG-1) itself is not in the loop, so hsb stays valid.
+<span class="ln">177</span>                for i in range(jxbeg, m + 1):
+<span class="ln">178</span>                    hs[i] = math.log10(10.0 ** hsb + sfactor
+<span class="ln">179</span>                                       * (10.0 ** hs[i] - 10.0 ** hsb))
+<span class="ln">180</span>                envold = (math.exp(c.cln * hstot)
+<span class="ln">181</span>                          - math.exp(c.cln * hs[jxend])) / c.cmsun
+<span class="ln">182</span>                envtotal = (math.exp(c.cln * hs[m])
+<span class="ln">183</span>                            - math.exp(c.cln * hs[jxbeg - 1])) / c.cmsun
+<span class="ln">184</span>
+<span class="ln">185</span>        # The core mass: core scaled, shell shifted, envelope squeezed.
+<span class="ln">186</span>        if rescal[4, nk] &gt; 0.0:
+<span class="ln">187</span>            shlp = math.exp(c.cln * hs[jxend])
+<span class="ln">188</span>            dcor = rescal[4, nk] - corold
+<span class="ln">189</span>            denv = -dcor
+<span class="ln">190</span>            envnew = envold2 + denv
+<span class="ln">191</span>            if envnew &lt;= 0.0:
+<span class="ln">192</span>                _error_stop([  # format 71
+<span class="ln">193</span>                    &quot; ERROR IN SUBROUTINE RSCALE&quot;,
+<span class="ln">194</span>                    &quot; NEW ENVELOPE MASS LESS THAN ZERO BECAUSE OF CORE &quot;
+<span class="ln">195</span>                    &quot;RESCALING&quot;,
+<span class="ln">196</span>                    f&quot; OLD ENVELOPE MASS {envold:10.2E} NEW ENVELOPE &quot;
+<span class="ln">197</span>                    f&quot;{envnew:10.2E} NEW AND OLD CORE MASS &quot;
+<span class="ln">198</span>                    f&quot;{rescal[4, nk]:10.2E}{corold:10.2E}&quot;])
+<span class="ln">199</span>            hstot1 = math.log10(rescal[4, nk] / corold)
+<span class="ln">200</span>            for i in range(1, jxbeg):
+<span class="ln">201</span>                hs[i] = hs[i] + hstot1
+<span class="ln">202</span>            shift = dcor * c.cmsun
+<span class="ln">203</span>            for i in range(jxbeg, jxend + 1):
+<span class="ln">204</span>                temp = math.exp(c.cln * hs[i])
+<span class="ln">205</span>                hs[i] = math.log10(temp + shift)
+<span class="ln">206</span>            sfactor = ((math.exp(c.cln * hs[m])
+<span class="ln">207</span>                        - math.exp(c.cln * hs[jxend]))
+<span class="ln">208</span>                       / (math.exp(c.cln * hs[m]) - shlp))
+<span class="ln">209</span>            for i in range(jxend + 1, m + 1):
+<span class="ln">210</span>                hs[i] = math.log10(10.0 ** hs[m]
+<span class="ln">211</span>                                   - sfactor * (10.0 ** hs[m] - 10.0 ** hs[i]))
+<span class="ln">212</span>
+<span class="ln">213</span>        if rescal[1, nk] &gt; 0.0 or rescal[4, nk] &gt; 0.0:
+<span class="ln">214</span>            cornew = math.exp(c.cln * hs[jxbeg - 1]) / c.cmsun
+<span class="ln">215</span>            envnew = (math.exp(c.cln * hstot)
+<span class="ln">216</span>                      - math.exp(c.cln * hs[jxend])) / c.cmsun
+<span class="ln">217</span>            shlnew = (math.exp(c.cln * hs[jxend])
+<span class="ln">218</span>                      - math.exp(c.cln * hs[jxbeg - 1])) / c.cmsun
+<span class="ln">219</span>            w(ishort, f&quot; HB-RESCALED MASSES: CORE {cornew:9.6f} SHELL &quot;
+<span class="ln">220</span>                      f&quot;{shlnew:9.6f} ENV {envnew:9.6f} TOTAL {smass:9.6f}&quot;)
+<span class="ln">221</span>
+<span class="ln">222</span>    # Y = 1 - X - Z - X(He3) everywhere.
+<span class="ln">223</span>    for i in range(1, m + 1):
+<span class="ln">224</span>        hcomp[2, i] = 1.0 - hcomp[1, i] - hcomp[3, i] - hcomp[4, i]
+<span class="ln">225</span>
+<span class="ln">226</span>    # ZRAMP: Z = Z_c inside RSCLZM1, rising linearly to the surface Z at
+<span class="ln">227</span>    # RSCLZM2 (in fractions of the total mass).
+<span class="ln">228</span>    if (nml.lzramp and nml.rsclzc[nk] &gt; 0.0 and nml.rsclzm1[nk] &gt; 0.0
+<span class="ln">229</span>            and nml.rsclzm2[nk] &gt; 0.0):
+<span class="ln">230</span>        slope = (comp.znew - nml.rsclzc[nk]) / (nml.rsclzm2[nk]
+<span class="ln">231</span>                                                 - nml.rsclzm1[nk])
+<span class="ln">232</span>        for i in range(1, m + 1):
+<span class="ln">233</span>            fs = 10.0 ** hs[i] / (smass * c.cmsun)
+<span class="ln">234</span>            if fs &lt; nml.rsclzm1[nk]:
+<span class="ln">235</span>                zp = nml.rsclzc[nk]
+<span class="ln">236</span>            elif fs &lt; nml.rsclzm2[nk]:
+<span class="ln">237</span>                zp = (fs - nml.rsclzm1[nk]) * slope + nml.rsclzc[nk]
+<span class="ln">238</span>            else:
+<span class="ln">239</span>                continue
+<span class="ln">240</span>            # Question (see the page): ZFACT is the fractional change, not
+<span class="ln">241</span>            # the ratio.
+<span class="ln">242</span>            zfact = (hcomp[3, i] - zp) / hcomp[3, i]
+<span class="ln">243</span>            hcomp[3, i] = zp
+<span class="ln">244</span>            hcomp[1, i] = 1.0 - hcomp[3, i] - hcomp[4, i] - hcomp[2, i]
+<span class="ln">245</span>            for j in range(5, 12):
+<span class="ln">246</span>                hcomp[j, i] = hcomp[j, i] * zfact
+<span class="ln">247</span>    return hstot, smass</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_error_stop'><summary>Python version: _error_stop</summary><pre class='doc'>Write an error message to ISHORT and stop the run.</pre><pre class='src'><span class="ln">16</span>def _error_stop(text_lines):
+<span class="ln">17</span>    &quot;&quot;&quot;Write an error message to ISHORT and stop the run.&quot;&quot;&quot;
+<span class="ln">18</span>    for line in text_lines:
+<span class="ln">19</span>        iounits_mod.write(iounits_mod.ishort, line)
+<span class="ln">20</span>    raise SystemExit()</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ul>
+<li><strong>Wrong (detail).</strong> "a negative or zero value means 'no change'": for $Z$ the test is <code>RESCAL(3,NK).GE.0</code>, so zero is a valid target. Fix: say so.</li>
+<li>Checked and confirmed: the two horizontal-branch methods and their fixed points, the core rescaling, and the <code>ZFACT</code> bug of question 1.</li>
+</ul>
+<p>Revised: applied.</p></div></details>
+</main></body></html>

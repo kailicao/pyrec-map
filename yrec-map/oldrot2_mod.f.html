@@ -1,0 +1,114 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>oldrot2_mod.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ oldrot2_mod.f</span></header><main>
+<h1>oldrot2_mod.f</h1>
+<p class='muted'>38 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/oldrot2_mod.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>oldrot2_mod.py</code>, 24 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>OLDROT2_MOD</code> holds the terms of the time derivative of $\theta$ in the Maeder–Zahn (1998) advection–diffusion treatment of angular momentum ("MHP 06/02 added term for the time evolution of the angular velocity distribution"), at the start of the step and during the substeps, shared by 5 routines. It replaces <code>COMMON/OLDROT2/</code> (MHP via Claude, 10/14/26); <code>JSON</code> comes from <a href="../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD"><code>DIMENSIONS_MOD</code></a>. All members are arrays of <code>JSON</code>.</p>
+<p><strong>What its variables hold, who sets them, who reads them.</strong> At each interface <code>I</code> (between shells <code>I-1</code> and <code>I</code>):</p>
+<ul>
+<li><code>THM</code>: $r^4/(\sqrt{m}\,G)$ (in logs, <code>2(log r) − ½ log m − log G</code>), set by <a href="../yrec-map/setupv.f.html#def-SETUPV"><code>SETUPV</code></a> ("added for $d\theta/dt$ term from Zahn &amp; Maeder 1998").</li>
+<li><code>THO</code>, <code>QWRST</code>: $\theta$ = <code>THM</code> $\bar\Omega\,d\Omega/dr$ and $d\Omega/dr$ of the old model, set by <a href="../yrec-map/hpoint.f.html#def-HPOINT"><code>HPOINT</code></a>; <a href="../yrec-map/getw.f.html#def-GETW"><code>GETW</code></a> copies them into <code>THP</code>, <code>QWRMST</code> on the first iteration.</li>
+<li><code>THP</code>, <code>QWRMST</code>, <code>WMST</code>: $\theta$, $d\Omega/dr$ and $\Omega$ at the start of the current substep, set by <code>GETW</code> (from the old model on the first iteration, recomputed from the current $\Omega$ after it). <code>THP</code> is read by <a href="../yrec-map/vcirc.f.html#def-VCIRC"><code>VCIRC</code></a>; <code>WMST</code> by <a href="../yrec-map/seculr.f.html#def-SECULR"><code>SECULR</code></a> (the starting surface $\Omega$ for the wind); <code>QWRMST</code> nowhere.</li>
+<li><code>THN</code>: the $d\theta/dt$ term, <code>FESTIME</code> (<code>THM</code> $\bar\Omega\,d\Omega/dr$ − <code>THP</code>)/$\Delta t$, set and read by <code>VCIRC</code>, which adds it to the circulation velocities.</li>
+<li><code>FESTIME</code>: $P/(g\,\Delta\nabla\,\rho)$ at the interface, set by <code>SETUPV</code> (0 where unused) and rescaled by <code>VCIRC</code> with the μ-gradient factor.</li>
+<li><code>DDELM</code>: $\nabla_\mathrm{ad} - \nabla$, set by HPOINT from the old model and by SETUPV (with the μ term, not below a floor); read by SETUPV and VCIRC.</li>
+</ul>
+<p><strong>Design.</strong> A blanket <code>USE OLDROT2_MOD</code>. <code>DDELM</code> has two meanings, set by HPOINT and then overwritten by SETUPV.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> New file: <code>COMMON/OLDROT2/</code> as a module.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>An unused copy.</strong> <code>QWRMST</code> is set by GETW and read nowhere. Can it go?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+OLDROT2_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/14/26 MHP via Claude
+code changed to convert COMMON/OLDROT2/ into this module.
+
+Imported with a blanket USE, the convention for the conversion.
+All 5 files declared this block identically, so the USE
+imports exactly the names the declaration already made global in
+each scoping unit and cannot change meaning.
+
+The types restate what the implicit rules supplied: L is
+LOGICAL*4, I/J/K/M/N are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while ifort
+Classic predates it.  That matches COMMON&#x27;s semantics.</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-OLDROT2_MOD'>OLDROT2_MOD</a> <span class='muted'>module · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-OLDROT2_MOD'><h3><span class='kind'>module</span>OLDROT2_MOD</h3>
+<p class='muted'>lines 19–38 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/oldrot2_mod.f#L19-L38'>GitHub</a></p>
+<pre>MODULE OLDROT2_MOD</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+OLDROT2_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/14/26 MHP via Claude
+code changed to convert COMMON/OLDROT2/ into this module.
+
+Imported with a blanket USE, the convention for the conversion.
+All 5 files declared this block identically, so the USE
+imports exactly the names the declaration already made global in
+each scoping unit and cannot change meaning.
+
+The types restate what the implicit rules supplied: L is
+LOGICAL*4, I/J/K/M/N are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while ifort
+Classic predates it.  That matches COMMON&#x27;s semantics.</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a></p>
+<details><summary>Used by (5 units)</summary><p><a href='../yrec-map/getw.f.html#def-GETW'>GETW</a>, <a href='../yrec-map/hpoint.f.html#def-HPOINT'>HPOINT</a>, <a href='../yrec-map/seculr.f.html#def-SECULR'>SECULR</a>, <a href='../yrec-map/setupv.f.html#def-SETUPV'>SETUPV</a>, <a href='../yrec-map/vcirc.f.html#def-VCIRC'>VCIRC</a></p></details>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">19</span>      MODULE OLDROT2_MOD
+<span class="ln">20</span>C 10/20/26 MHP via Claude
+<span class="ln">21</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">22</span>C a PRIVATE copy here.
+<span class="ln">23</span>      USE DIMENSIONS_MOD
+<span class="ln">24</span>
+<span class="ln">25</span>      IMPLICIT NONE
+<span class="ln">26</span>      SAVE
+<span class="ln">27</span>
+<span class="ln">28</span>      REAL*8 :: THO(JSON)
+<span class="ln">29</span>      REAL*8 :: THN(JSON)
+<span class="ln">30</span>      REAL*8 :: THM(JSON)
+<span class="ln">31</span>      REAL*8 :: DDELM(JSON)
+<span class="ln">32</span>      REAL*8 :: FESTIME(JSON)
+<span class="ln">33</span>      REAL*8 :: THP(JSON)
+<span class="ln">34</span>      REAL*8 :: QWRST(JSON)
+<span class="ln">35</span>      REAL*8 :: WMST(JSON)
+<span class="ln">36</span>      REAL*8 :: QWRMST(JSON)
+<span class="ln">37</span>
+<span class="ln">38</span>      END MODULE OLDROT2_MOD</pre></details>
+<details class='py' id='py-_module_level_'><summary>Python version: oldrot2_mod.py</summary><pre class='src'><span class="ln">1</span>&quot;&quot;&quot;Python version of oldrot2_mod.f (YREC 09c3b9b): the d(theta)/dt terms of
+<span class="ln">2</span>the Maeder-Zahn treatment of angular momentum, formerly COMMON/OLDROT2/.
+<span class="ln">3</span>
+<span class="ln">4</span>Translates: oldrot2_mod.f#OLDROT2_MOD (09c3b9b)
+<span class="ln">5</span>
+<span class="ln">6</span>Routines that USE OLDROT2_MOD import this module and write
+<span class="ln">7</span>``oldrot2_mod.&lt;name&gt;``. Index i is the interface between shells i-1 and i.
+<span class="ln">8</span>&quot;&quot;&quot;
+<span class="ln">9</span>
+<span class="ln">10</span>import numpy as np
+<span class="ln">11</span>
+<span class="ln">12</span>from pyrec import dimensions_mod
+<span class="ln">13</span>
+<span class="ln">14</span>_JSON = dimensions_mod.json
+<span class="ln">15</span>
+<span class="ln">16</span>tho = np.zeros(_JSON + 1)       # theta of the old model (hpoint)
+<span class="ln">17</span>thn = np.zeros(_JSON + 1)       # d theta / dt term (vcirc)
+<span class="ln">18</span>thm = np.zeros(_JSON + 1)       # r^4 / (sqrt(m) G) (setupv)
+<span class="ln">19</span>ddelm = np.zeros(_JSON + 1)     # nabla_ad - nabla (hpoint, then setupv)
+<span class="ln">20</span>festime = np.zeros(_JSON + 1)   # P / (g dnabla rho) (setupv, rescaled by vcirc)
+<span class="ln">21</span>thp = np.zeros(_JSON + 1)       # theta at the start of the substep (getw)
+<span class="ln">22</span>qwrst = np.zeros(_JSON + 1)     # dOmega/dr of the old model (hpoint)
+<span class="ln">23</span>wmst = np.zeros(_JSON + 1)      # Omega at the start of the substep (getw)
+<span class="ln">24</span>qwrmst = np.zeros(_JSON + 1)    # dOmega/dr at the start (getw); read nowhere</pre></details>
+</section>
+</main></body></html>

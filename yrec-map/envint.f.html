@@ -1,0 +1,1701 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>envint.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ envint.f</span></header><main>
+<h1>envint.f</h1>
+<p class='muted'>961 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/envint.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>envint.py</code>, 690 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file integrates the outer layers of the star, which the interior model does not contain: first the atmosphere, from small optical depth to the photosphere, then the envelope, from the photosphere down to the interior's outermost mass point. The result is the pressure, temperature and radius at that fitting point, which <a href="../yrec-map/surfbc.f.html#def-SURFBC">SURFBC</a> turns into the surface boundary condition of the interior; the run of the envelope is stored for output, the acoustic depth and the convective overturn time.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>B</code> ($L$), <code>TEFFL</code>, <code>GL</code> ($\log g$), <code>RL</code> ($\log R$), <code>HSTOT</code> ($\log M$), <code>X</code>, <code>Z</code>, <code>FPL</code>, <code>FTL</code> (rotational corrections), <code>PLIM</code> (the expected end pressure), <code>IE</code> (which point of the envelope triangle), <code>LSBC</code>, <code>LPRT</code>, <code>LPULPT</code>, and <code>CMIXL</code> (the mixing-length constant, passed on to <a href="../yrec-map/qenv.f.html#def-QENV">QENV</a> through <code>QENVMIX_MOD</code>, since QENV is called through BSSTEP with a fixed argument list). From <code>NMLPAR_MOD</code>: the atmosphere choice <code>KTTAU</code> (0 Eddington gray, 1 Krishna Swamy, 2 the <code>HRA</code> $T$–$\tau$ relation, 3 Kurucz, 4 Allard, 5 Castelli–Kurucz 2004); the integration controls (<code>ATMERR</code>, <code>ATMD0</code>, <code>ATMBEG</code>, … and <code>ENVERR</code>, <code>ENVBEG</code>, …); <code>TENV0</code>, <code>TENV1</code>, from which <code>TENV</code> = (<code>TENV0</code> + <code>TENV1</code>)/2 is computed here; <code>LCALCENV</code>, <code>LNEWTCZ</code>; the output switches (<code>LSTATM</code>, <code>LSTENV</code>, <code>LSTCH</code>, <code>IPVER</code>). Also <code>STOLR0</code> (<code>INTPAR_MOD</code>), <code>SENV</code> ($\log$ of the fitting point's mass fraction, <code>COMP_MOD</code>), <code>HRAS</code> (<code>ATMOS_MOD</code>), <code>LCLCD</code> (<code>ACDPTH_MOD</code>), the constants (<code>CONSTANTS_MOD</code>) and the unit numbers (<code>IOUNITS_MOD</code>).</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/surfbc.f.html#def-SURFBC">SURFBC</a> (the boundary condition), <a href="../yrec-map/calcad.f.html#def-CALCAD">CALCAD</a>, <a href="../yrec-map/getnewenv.f.html#def-GETNEWENV">GETNEWENV</a>, <a href="../yrec-map/gettau.f.html#def-GETTAU">GETTAU</a>, <a href="../yrec-map/starin.f.html#def-STARIN">STARIN</a>, <a href="../yrec-map/stitch.f.html#def-STITCH">STITCH</a> and <a href="../yrec-map/wrtmod.f.html#def-WRTMOD">WRTMOD</a>.</li>
+<li><strong>What it calls:</strong> for tabulated atmospheres <a href="../yrec-map/surfp.f.html#def-SURFP">SURFP</a>, <a href="../yrec-map/kcsurfp.f.html#def-KCSURFP">KCSURFP</a> or <a href="../yrec-map/alsurfp.f.html#def-ALSURFP">ALSURFP</a>; for gray ones <a href="../yrec-map/hra.f.html#def-HRA">HRA</a>, <a href="../yrec-map/eqstat.f.html#def-EQSTAT">EQSTAT</a> and <a href="../yrec-map/getopac.f.html#def-GETOPAC">GETOPAC</a>; for both integrations <a href="../yrec-map/bsstep.f.html#def-BSSTEP">BSSTEP</a> with the derivative routines <a href="../yrec-map/qatm.f.html#def-QATM">QATM</a> and <a href="../yrec-map/qenv.f.html#def-QENV">QENV</a>; at the end <a href="../yrec-map/taucal.f.html#def-TAUCAL">TAUCAL</a>.</li>
+<li><strong>Outputs:</strong></li>
+<li>arguments: <code>PS(IE)</code>, <code>TS(IE)</code>, <code>RS(IE)</code> (the fitting point's $\log P$, $\log T$, $\log r$), <code>ESTORE</code>, <code>ISTORE</code> (the state where $T$ first reaches <code>TENV</code>), all set only when <code>LSBC</code>; counters <code>KATM</code>, <code>KENV</code>, <code>KSAHA</code>;</li>
+<li><code>ENVSTRUCT_MOD</code>: the envelope profile ($\log P$, $\log T$, $\log m$, $\log\rho$, $\log r$, $X$, $Z$, convective flag, gradients, velocities, $\beta$, $\Gamma_1$, $c_P$, ionization, opacity, $L$, $\rho_T$), reordered from the centre outward; read by CALCAD, GETNEWENV, GETTAU, STARIN, STITCH, TAUINT;</li>
+<li><code>ATMSTRUCT_MOD</code> (the atmosphere profile, for STITCH); <code>PPHOT</code> (<code>OVRTRN_MOD</code>, the photospheric pressure, for <a href="../yrec-map/amcalc.f.html#def-AMCALC">AMCALC</a>); <code>LPUMOD</code> (<code>PULSE1_MOD</code>, whether QATM and QENV compute the pulsation values) and <code>QQED</code>, <code>QQET</code>, <code>QFS</code> (<code>PULSE2_MOD</code>);</li>
+<li>text: the atmosphere and envelope tables to <code>ISTOR</code>, summaries to <code>ISHORT</code>, pulsation files <code>IOPATM</code>, <code>IOPENV</code>.</li>
+</ul>
+<p><strong>The atmosphere.</strong></p>
+<ul>
+<li><strong>Tables</strong> (<code>KTTAU</code> = 3, 4, 5): the routine reads $\log P$ (and $\log T$) at the photosphere from the table; if the Allard table fails, it switches the run to the gray atmosphere (it sets <code>KTTAU = 0</code> for good).</li>
+<li><strong>Gray</strong> (<code>KTTAU</code> = 0, 1, 2): start at a small optical depth, with the temperature from the $T$–$\tau$ relation at $\tau \to 0$ (Eddington: $\log T = \log T_\mathrm{eff} - \tfrac14\log\tfrac43 + \tfrac14\log\tfrac23$, that is $T^4 = T_\mathrm{eff}^4/2$; Krishna Swamy: $T^4 = \tfrac34 T_\mathrm{eff}^4 \times 0.550$; <code>HRA</code>: its own value at $\tau = 2/3$ shifted by <code>HRAS</code>) and the pressure $P = \rho\mathcal{R}T + aT^4/3$ at a chosen density <code>ATMD0</code>. Then, with $\log\tau$ as the variable,
+$$\frac{d\log P}{d\log\tau} = \frac{g\,\tau}{\kappa P},$$
+up to $\tau = 2/3$ (Eddington; $\tau = 0.312$ for Krishna Swamy). If the starting $\tau$ lies beyond the end, the density is divided by 10 and the start retried.</li>
+</ul>
+<p><strong>The envelope.</strong> With $\log P$ as the variable and $y = (\log(m/M), \log T, \log r)$, QENV gives
+$$\frac{d\log m}{d\log P} = -\frac{4\pi r^4 P}{G m^2 f_P}, \qquad \frac{d\log T}{d\log P} = \nabla, \qquad \frac{d\log r}{d\log P} = -\frac{P r f_P}{G m \rho},$$
+integrated with BSSTEP from the photosphere until $\log(m/M)$ reaches <code>SENV</code>; the step is shortened or reversed to land on it, and, when <code>LSBC</code> is false, the first step past <code>PLIM</code> is cut to end on it. The end point is interpolated linearly to <code>SENV</code>. If the envelope mass is negligible (<code>SENV &gt; -1e-12</code>), the photosphere is the fitting point.</p>
+<p><strong>After the integration.</strong> The profile is reversed; for TAUCAL the masses are passed in grams (<code>ENVS1</code>) and as differences in units of the total mass (<code>ENVS2</code>, used only as weights in an average, so the unit cancels); the base of the convection zone is found by linear interpolation of $\nabla_\mathrm{rad} - \nabla$ (its radius is no longer kept), and TAUCAL computes the overturn time (unless <code>LNEWTCZ</code>). With <code>LCALCENV</code> false, the routine stops after the atmosphere, having set <code>PPHOT</code>.</p>
+<p><strong>Design.</strong> The routine mixes physics with output for several purposes (the <code>.store</code> tables, pulsation files, acoustic-depth arrays), and each output path keeps its own copies of $\Gamma_1$ and related values. Failure to finish in 2000 steps stops the run. <code>LDERIV</code> is set by the pulsation test and then forced to <code>.TRUE.</code> on the next line.</p>
+<p><strong>KC's changes.</strong> 2025-05-30: the elements of <code>/ENVSTRUCT/</code> and <code>/ACDPTH/</code> reordered. 2025-05-31: the call to MEQOS no longer passes <code>LDERIV</code>, <code>LATMO</code>, <code>KSAHA</code>; <code>ENVX</code> removed from the call to TAUCAL.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> COMMON blocks to modules, <code>IMPLICIT NONE</code>; the MHD equation of state (<code>LMHD</code>, the call to MEQOS, removed since <code>rp_1</code>) is gone, so the gray atmosphere always uses EQSTAT; <code>CMIXL</code> is a new argument (formerly <code>/CONST3/</code>), relayed to QENV by <code>QENVMIX_MOD</code>; <code>TENV</code> is computed here from <code>TENV0</code>, <code>TENV1</code> (formerly <code>/CTLIM/</code>, set by PARMIN); <code>ENVRCZ</code> (<code>/ENVCZ/</code>) is no longer set, since nothing read it; the write-only <code>/OPTAB/</code> settings (<code>IDT = 15</code>, <code>IDD = 5</code>) are gone; the optical depth in <code>ATMPRT_MOD</code> is now named <code>TAUL</code>. No question is settled.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A broken swap.</strong> In the loop that reverses the envelope profile, <code>ENVL</code> is swapped without the line <code>ENVL(I2) = DUM1</code> (added with "08/25 JVS"). The first half then gets the second half's values and the second half keeps its own, Since every entry of <code>ENVL</code> is <code>B</code> (the luminosity is constant in the envelope), nothing goes wrong now; the swap would fail only if <code>ENVL</code> ever varied.</li>
+<li><strong><code>ENVG</code> never set.</strong> The local array <code>ENVG</code> is passed to <a href="../yrec-map/taucal.f.html#def-TAUCAL">TAUCAL</a> as <code>HG</code> (gravity) but never filled here. TAUCAL computes <code>HG</code> itself at the two points it needs when <code>LROT</code> is false; with rotation it uses <code>HG</code> as passed, so the overturn time of a rotating model would use an unset $g$. Should ENVINT fill <code>ENVG</code>?</li>
+<li><strong>A computed overturn time not kept.</strong> <code>TAUCZENV</code> ($\sum \Delta r/v$ in the convection zone) is computed in the loop but never stored or returned. Dead code, or meant to feed <code>TAUCZ</code>?</li>
+<li><strong>Wrong $c_P$ in a print.</strong> At the first atmosphere point, the printed $\Gamma_1$ uses <code>QCPP</code> ($\partial c_P/\partial\ln P$) in place of <code>QCP</code>. It affects only the <code>.store</code> output.</li>
+<li><strong>Pulsation variables on other paths.</strong> The block run when <code>LCLCD</code> or <code>LSTCH</code> (not only for pulsation output) uses <code>TAUP</code>, <code>OP</code>, <code>DP</code>, which are set at the start only when <code>LPULPT.AND.LPRT</code>; otherwise they keep values from an earlier call.</li>
+<li><strong>Two ways of storing the atmosphere.</strong> <code>ATMOP</code>, <code>ATMOT</code>, … are stored when <code>LPRT.AND.LSTATM</code>, but <code>ATMOR</code>, <code>ADELS</code> and <code>NUMATM</code> when <code>LCLCD</code>, <code>LSTCH</code> or pulsation output is on. Can the two be out of step for STITCH?</li>
+<li><strong>No limit on retries.</strong> The retry with <code>ATMDX/10</code> has no limit.</li>
+<li>
+<p><strong>A global switch.</strong> On an Allard failure, <code>KTTAU</code> is set to 0 in <code>NMLPAR_MOD</code>, so the rest of the run uses gray atmospheres, even if a later model would fit the table.</p>
+</li>
+<li>
+<p><strong><code>ENVCZL</code> now unused.</strong> With <code>ENVRCZ</code> gone, <code>ENVCZL</code> (the convection zone's base in $\log(r/R_\odot)$) is computed but no longer used, although the new comment says "ENVCZL above is still used below". Remove the computation, or keep the radius somewhere?</p>
+</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+ENVINT
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-ENVINT'>ENVINT</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-ENVINT'><h3><span class='kind'>subroutine</span>ENVINT</h3>
+<p class='muted'>lines 6–961 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/envint.f#L6-L961'>GitHub</a></p>
+<pre>SUBROUTINE ENVINT(B,FPL,FTL,GL,HSTOT,IE,LPRT,LSBC,PLIM,RL,TEFFL,</pre>
+<div class='notes'><p>Integrates the atmosphere (gray $T$–$\tau$ or tabulated) and the envelope (in $\log P$, with <a href="../yrec-map/bsstep.f.html#def-BSSTEP">BSSTEP</a> and <a href="../yrec-map/qenv.f.html#def-QENV">QENV</a>) down to the fitting mass, returns the fitting point's $P$, $T$, $r$, stores the envelope profile in <code>/ENVSTRUCT/</code>, and finds the convection zone's base and overturn time.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+ENVINT
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/acdpth_mod.f.html#def-ACDPTH_MOD'>ACDPTH_MOD</a>, <a href='../yrec-map/atmos_mod.f.html#def-ATMOS_MOD'>ATMOS_MOD</a>, <a href='../yrec-map/atmprt_mod.f.html#def-ATMPRT_MOD'>ATMPRT_MOD</a>, <a href='../yrec-map/atmstruct_mod.f.html#def-ATMSTRUCT_MOD'>ATMSTRUCT_MOD</a>, <a href='../yrec-map/comp_mod.f.html#def-COMP_MOD'>COMP_MOD</a>, <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/envprt_mod.f.html#def-ENVPRT_MOD'>ENVPRT_MOD</a>, <a href='../yrec-map/envstruct_mod.f.html#def-ENVSTRUCT_MOD'>ENVSTRUCT_MOD</a>, <a href='../yrec-map/intpar_mod.f.html#def-INTPAR_MOD'>INTPAR_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/ovrtrn_mod.f.html#def-OVRTRN_MOD'>OVRTRN_MOD</a>, <a href='../yrec-map/pualpha_mod.f.html#def-PUALPHA_MOD'>PUALPHA_MOD</a>, <a href='../yrec-map/pulse1_mod.f.html#def-PULSE1_MOD'>PULSE1_MOD</a>, <a href='../yrec-map/pulse2_mod.f.html#def-PULSE2_MOD'>PULSE2_MOD</a>, <a href='../yrec-map/qenvmix_mod.f.html#def-QENVMIX_MOD'>QENVMIX_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/alsurfp.f.html#def-ALSURFP'>ALSURFP</a> <span class='muted'>(alsurfp.f)</span></li>
+<li><a href='../yrec-map/bsstep.f.html#def-BSSTEP'>BSSTEP</a> <span class='muted'>(bsstep.f)</span> ×2</li>
+<li><a href='../yrec-map/eqstat.f.html#def-EQSTAT'>EQSTAT</a> <span class='muted'>(eqstat.f)</span></li>
+<li><a href='../yrec-map/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span></li>
+<li><a href='../yrec-map/hra.f.html#def-HRA'>HRA</a> <span class='muted'>(hra.f)</span></li>
+<li><a href='../yrec-map/kcsurfp.f.html#def-KCSURFP'>KCSURFP</a> <span class='muted'>(kcsurfp.f)</span></li>
+<li><a href='../yrec-map/qatm.f.html#def-QATM'>QATM</a> <span class='muted'>(qatm.f)</span></li>
+<li><a href='../yrec-map/qenv.f.html#def-QENV'>QENV</a> <span class='muted'>(qenv.f)</span> ×2</li>
+<li><a href='../yrec-map/surfp.f.html#def-SURFP'>SURFP</a> <span class='muted'>(surfp.f)</span></li>
+<li><a href='../yrec-map/taucal.f.html#def-TAUCAL'>TAUCAL</a> <span class='muted'>(taucal.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/calcad.f.html#def-CALCAD'>CALCAD</a> <span class='muted'>(calcad.f)</span></li>
+<li><a href='../yrec-map/getnewenv.f.html#def-GETNEWENV'>GETNEWENV</a> <span class='muted'>(getnewenv.f)</span></li>
+<li><a href='../yrec-map/gettau.f.html#def-GETTAU'>GETTAU</a> <span class='muted'>(gettau.f)</span></li>
+<li><a href='../yrec-map/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span></li>
+<li><a href='../yrec-map/stitch.f.html#def-STITCH'>STITCH</a> <span class='muted'>(stitch.f)</span></li>
+<li><a href='../yrec-map/surfbc.f.html#def-SURFBC'>SURFBC</a> <span class='muted'>(surfbc.f)</span></li>
+<li><a href='../yrec-map/wrtmod.f.html#def-WRTMOD'>WRTMOD</a> <span class='muted'>(wrtmod.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE ENVINT(B,FPL,FTL,GL,HSTOT,IE,LPRT,LSBC,PLIM,RL,TEFFL,
+<span class="ln">7</span>     *                  X,Z,ESTORE,ISTORE,KATM,KENV,KSAHA,PS,RS,TS,
+<span class="ln">8</span>     *                  LPULPT,CMIXL)
+<span class="ln">9</span>C 10/15/26 MHP via Claude
+<span class="ln">10</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">11</span>C PARAMETER(JSON=5000) here.
+<span class="ln">12</span>      USE DIMENSIONS_MOD
+<span class="ln">13</span>C 10/14/26 MHP via Claude
+<span class="ln">14</span>C code changed to convert COMMON/ACDPTH/ into ACDPTH_MOD.
+<span class="ln">15</span>      USE ACDPTH_MOD
+<span class="ln">16</span>C 10/14/26 MHP via Claude
+<span class="ln">17</span>C code changed to convert COMMON/QENVMIX/ into QENVMIX_MOD.
+<span class="ln">18</span>      USE QENVMIX_MOD
+<span class="ln">19</span>C 10/14/26 MHP via Claude
+<span class="ln">20</span>C code changed to convert COMMON/PULSE2/ into PULSE2_MOD.
+<span class="ln">21</span>      USE PULSE2_MOD
+<span class="ln">22</span>C 10/14/26 MHP via Claude
+<span class="ln">23</span>C code changed to convert COMMON/PULSE1/ into PULSE1_MOD.
+<span class="ln">24</span>      USE PULSE1_MOD
+<span class="ln">25</span>C 10/14/26 MHP via Claude
+<span class="ln">26</span>C code changed to convert COMMON/PUALPHA/ into PUALPHA_MOD.
+<span class="ln">27</span>      USE PUALPHA_MOD
+<span class="ln">28</span>C 10/14/26 MHP via Claude
+<span class="ln">29</span>C code changed to convert COMMON/OVRTRN/ into OVRTRN_MOD.
+<span class="ln">30</span>      USE OVRTRN_MOD
+<span class="ln">31</span>C 10/14/26 MHP via Claude
+<span class="ln">32</span>C code changed to convert COMMON/ENVSTRUCT/ into ENVSTRUCT_MOD.
+<span class="ln">33</span>      USE ENVSTRUCT_MOD
+<span class="ln">34</span>C 10/14/26 MHP via Claude
+<span class="ln">35</span>C code changed to convert COMMON/ENVPRT/ into ENVPRT_MOD.
+<span class="ln">36</span>      USE ENVPRT_MOD
+<span class="ln">37</span>C 10/14/26 MHP via Claude
+<span class="ln">38</span>C code changed to convert COMMON/COMP/ into COMP_MOD.
+<span class="ln">39</span>      USE COMP_MOD
+<span class="ln">40</span>C 10/14/26 MHP via Claude
+<span class="ln">41</span>C code changed to convert COMMON/ATMSTRUCT/ into ATMSTRUCT_MOD.
+<span class="ln">42</span>      USE ATMSTRUCT_MOD
+<span class="ln">43</span>C 10/14/26 MHP via Claude
+<span class="ln">44</span>C code changed to convert COMMON/ATMPRT/ into ATMPRT_MOD.
+<span class="ln">45</span>      USE ATMPRT_MOD
+<span class="ln">46</span>C 10/14/26 MHP via Claude
+<span class="ln">47</span>C code changed to convert COMMON/ATMOS/ into ATMOS_MOD.
+<span class="ln">48</span>      USE ATMOS_MOD
+<span class="ln">49</span>C 10/14/26 MHP via Claude
+<span class="ln">50</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">51</span>      USE NMLPAR_MOD
+<span class="ln">52</span>C 10/14/26 MHP via Claude
+<span class="ln">53</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">54</span>      USE CONSTANTS_MOD
+<span class="ln">55</span>C 10/14/26 MHP via Claude
+<span class="ln">56</span>C code changed to convert COMMON/INTPAR/ into INTPAR_MOD.
+<span class="ln">57</span>      USE INTPAR_MOD
+<span class="ln">58</span>C 10/14/26 MHP via Claude
+<span class="ln">59</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">60</span>      USE IOUNITS_MOD
+<span class="ln">61</span>C 10/20/26 MHP via Claude
+<span class="ln">62</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">63</span>C explicit declarations.
+<span class="ln">64</span>      IMPLICIT NONE
+<span class="ln">65</span>      REAL*8 AMU,ATMDX,B,BETA,BETA14,BETAI,CHDELD,CHDELJ,CHRH,CHT,CMIXL,
+<span class="ln">66</span>     *       CV,D,DD1,DD2,DE,DEL,DELA,DELR,DELTR,DL,DN,DP,DR,DUM1,DYDX,
+<span class="ln">67</span>     *       EG,EMU,ENVCZL,EPS,ERR,ERRSUM,ESTORE,ETA,FPL,FTL,FX,FXION,
+<span class="ln">68</span>     *       GAM1,GL,H,HDID,HMAX,HMIN,HNEXT,HRA,HSTOT,O,OL,ON,OP,P,
+<span class="ln">69</span>     *       PELPF,PL,PLIM,PS,QAP,QAT,QCP,QCPP,QCPT,QDP,QDT,QDTP,QDTT,
+<span class="ln">70</span>     *       QESUM,QOD,QOT,RL,RMU,RS,RSURF,SDIF,SEST,SGL,SL,SRAD,STOLER,
+<span class="ln">71</span>     *       T,TAUCZENV,TAUN,TAUP,TEFFL,TENV,TINY,TL,TS,WT0,X,X0,XLIM,
+<span class="ln">72</span>     *       XSTART,XYZ,Y,YSCAL,YSTART,Z
+<span class="ln">73</span>      INTEGER I,I1,I2,IE,ISTORE,J,JENV,K,KATM,KENV,KSAHA,MAXSTP,NBAD,
+<span class="ln">74</span>     *       NOK,NSTEP,NV
+<span class="ln">75</span>      LOGICAL*4 LALFAIL,LATMO,LDERIV,LDUM,LLSTORE,LOCOND,LPRT,LPULPT,
+<span class="ln">76</span>     *       LSBC,LSURCZ,LTEST
+<span class="ln">77</span>
+<span class="ln">78</span>C PARAMETERS NT AND NG FOR TABULATED SURFACE PRESSURES OF KURUCZ.
+<span class="ln">79</span>C JNT 06/14 ADDED NTC/NGC FOR KTTAU=5
+<span class="ln">80</span>C MHP 8/97 ADDED NTA AND NGA FOR ALLARD ATMOSPHERE TABLES
+<span class="ln">81</span>
+<span class="ln">82</span>      REAL*8 ENVS1(JSON),ENVS2(JSON),ENVG(JSON),EDEL1(JSON),
+<span class="ln">83</span>     * EDEL2(JSON)
+<span class="ln">84</span>C 9/25/26 MHP via Claude
+<span class="ln">85</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">86</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">87</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">88</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">89</span>C COMMON/IOUNITS/
+<span class="ln">90</span>C 9/24/26 MHP via Claude
+<span class="ln">91</span>C code changed to remove dead ILLDAT, IKUR from COMMON/LUNUM/
+<span class="ln">92</span>C 9/24/26 MHP via Claude
+<span class="ln">93</span>C code changed to remove dead IDYN from COMMON/LUNUM/
+<span class="ln">94</span>C 9/25/26 MHP via Claude
+<span class="ln">95</span>C code changed to remove dead COMMON/LUNUM/ISCOMP (declared,
+<span class="ln">96</span>C assigned a unit number, but never opened or read anywhere)
+<span class="ln">97</span>C DBG CHANGED MAXSTEP FROM 200 TO 2000 TO GIVE ATMOSPHERE INTEGRATER A CHANCE.
+<span class="ln">98</span>      PARAMETER (MAXSTP = 2000,TINY=1.0D-30)
+<span class="ln">99</span>      EXTERNAL QATM,QENV
+<span class="ln">100</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">101</span>C 9/24/26 MHP via Claude
+<span class="ln">102</span>C code changed to merge COMMON /MISCOPAC/ and COMMON/NWLAOL/ into
+<span class="ln">103</span>C COMMON /NEWOPAC/
+<span class="ln">104</span>C 10/12/26 MHP via Claude
+<span class="ln">105</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">106</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">107</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">108</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">109</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">110</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">111</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">112</span>C
+<span class="ln">113</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">114</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">115</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">116</span>C 10/13/26 MHP via Claude: removed the unused COMMON/NEWOPAC/ declaration
+<span class="ln">117</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">118</span>C DBG PULSE: CONSTANTS NEEDED FOR DEL AND DELA CALCULATION
+<span class="ln">119</span>C 9/25/26 MHP via Claude
+<span class="ln">120</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">121</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">122</span>C 9/24/26 MHP via Claude
+<span class="ln">123</span>C code changed to pass CMIXL as an explicit argument instead of via
+<span class="ln">124</span>C common block, to reduce implicit global state ahead of the F90
+<span class="ln">125</span>C module conversion
+<span class="ln">126</span>C 10/13/26 MHP via Claude
+<span class="ln">127</span>C code changed to drop COMMON/CTLIM/.  TENV is simply 0.5*(TENV0+TENV1)
+<span class="ln">128</span>C and parmin.f was computing it there purely to share it with this, its
+<span class="ln">129</span>C only reader.  Both TENV0 and TENV1 are members of the consolidated
+<span class="ln">130</span>C namelist block declared here, so TENV is derived locally below
+<span class="ln">131</span>C instead, which removes the block without touching any signature.
+<span class="ln">132</span>C 10/12/26 MHP via Claude
+<span class="ln">133</span>C code changed to remove COMMON/OPTAB/ entirely.  Once OPTOL moved to the
+<span class="ln">134</span>C consolidated namelist block, every remaining member was write-only:
+<span class="ln">135</span>C ZSI appeared only in a DATA statement in parmin.f, and IDT and IDD were
+<span class="ln">136</span>C assigned the constants 15 and 5 in coefft.f, envint.f, physic.f and
+<span class="ln">137</span>C starin.f and read nowhere in the code.  They are leftovers from the
+<span class="ln">138</span>C removed opacity-table interpolation schemes.
+<span class="ln">139</span>C DBG PULSE
+<span class="ln">140</span>C 10/13/26 MHP via Claude
+<span class="ln">141</span>C code changed to drop COMMON/PULSE/, declared here but never used.
+<span class="ln">142</span>C 10/13/26 MHP via Claude: removed the unused COMMON/ATMOS2/ declaration
+<span class="ln">143</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">144</span>C JNT 6/14 ADD FOR KURUCZ/CASTELLI 2004 ATMOSPHERES
+<span class="ln">145</span>C 10/13/26 MHP via Claude: removed the unused COMMON/ATMOS2C/ declaration
+<span class="ln">146</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">147</span>C MHP 6/97 ADDED ALLARD MODEL ATMOSPHERES
+<span class="ln">148</span>C      COMMON/ATMOS3/ATMZA,ATMPLA(NTA,NGA),
+<span class="ln">149</span>C     *ATMTLA(NTA),ATMGLA(NGA),FALLARD,IOATMA
+<span class="ln">150</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">151</span>C 10/13/26 MHP via Claude
+<span class="ln">152</span>C code changed to remove COMMON/ALATM04/: its four members DUMMY1..DUMMY4
+<span class="ln">153</span>C are placeholders that no file references in executable code.  Removing
+<span class="ln">154</span>C it also retires the hazard behind the earlier alfilein.f fix, where a
+<span class="ln">155</span>C mis-indented EXTERNAL was absorbed into this declaration and renamed
+<span class="ln">156</span>C DUMMY4.
+<span class="ln">157</span>C DBG 7/95 To store variables for pulse output
+<span class="ln">158</span>C MHP 07/02 STORE CONTENTS OF ENVELOPE INTEGRATION INTO A
+<span class="ln">159</span>C SET OF VECTORS, WHICH ARE FLIPPED AND CONVERTED INTO AN ASCENDING
+<span class="ln">160</span>C SERIES AFTER THE INTEGRATION IS DONE.
+<span class="ln">161</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">162</span>C JvS 08/25 Updated with new elements
+<span class="ln">163</span>C JvS SAVE ATMOSPHERE STRUCTURE TO MAKE PROFILE OUTPUT EASIER
+<span class="ln">164</span>C JVS 08/13 IF THE CZ IS BEYOND THE FITTING POINT, STORE ITS LOCATION
+<span class="ln">165</span>C 10/13/26 MHP via Claude
+<span class="ln">166</span>C code changed to remove COMMON/ENVCZ/: ENVRCZ was written once in
+<span class="ln">167</span>C envint.f and read nowhere, and RINT was never referenced at all.  Its
+<span class="ln">168</span>C only reader was the commented-out JVS block deleted from wrtout.f
+<span class="ln">169</span>C earlier in this work, so the block died with it.
+<span class="ln">170</span>
+<span class="ln">171</span>C MHP 08/02 ADDED VECTOR FOR STORING THE OVERTURN TIMESCALE OF THE
+<span class="ln">172</span>C SURFACE CONVECTION ZONE
+<span class="ln">173</span>C 10/13/26 MHP via Claude: removed the unused COMMON/DEUTER/ declaration
+<span class="ln">174</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">175</span>      DIMENSION FXION(3),PS(3),RS(3),TS(3),ESTORE(4)
+<span class="ln">176</span>      DIMENSION Y(3),DYDX(3),YSCAL(3),YSTART(3),ERRSUM(3),ERR(3)
+<span class="ln">177</span>
+<span class="ln">178</span>C JVS Acoustic depth common block
+<span class="ln">179</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">180</span>C       COMMON/ACDPTH/TAUCZN,DELADJ(JSON),TAUHE, TNORM, TCZ, WHE, ICLCD,
+<span class="ln">181</span>C 9/25/26 MHP via Claude
+<span class="ln">182</span>C code changed to remove dead IACAT, IJVS, IJENT, IJDEL unit
+<span class="ln">183</span>C reservations from COMMON/ACDPTH/ (declared but never opened anywhere)
+<span class="ln">184</span>C      *LCLCD, AGEOUT(5), IACAT, IJLAST, LJLAST, LJWRT, LADON,LAOLY, IJVS,
+<span class="ln">185</span>
+<span class="ln">186</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CCOUT/ declaration
+<span class="ln">187</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">188</span>C G Somers END
+<span class="ln">189</span>
+<span class="ln">190</span>C G Somers 3/17, ADDING NEW TAUCZ COMMON BLOCK
+<span class="ln">191</span>
+<span class="ln">192</span>C MHP 1/01 CHANGED END OF FILE INDICATOR IN ATMOSPHERE/ENVELOPE FILES TO
+<span class="ln">193</span>C VECTOR FROM SCALAR
+<span class="ln">194</span>      DIMENSION XYZ(22)
+<span class="ln">195</span>      DATA XYZ/22*99.99D0/
+<span class="ln">196</span>C 9/24/26 MHP via Claude
+<span class="ln">197</span>C QENV cannot receive CMIXL as a normal argument (it is invoked
+<span class="ln">198</span>C polymorphically as the DERIV callback by MMID/BSSTEP with a fixed
+<span class="ln">199</span>C argument list -- see EXTERNAL QENV below). Relay CMIXL to it via a
+<span class="ln">200</span>C small dedicated common block instead, kept current on every entry to
+<span class="ln">201</span>C ENVINT so it is correct however QENV ends up being reached.
+<span class="ln">202</span>      SAVE
+<span class="ln">203</span>
+<span class="ln">204</span>      CMIXLQ = CMIXL
+<span class="ln">205</span>C DBG PULSE TURN ON DERIVATIVE CALCULATOR
+<span class="ln">206</span>      IF (LPULPT.AND.LPRT) THEN
+<span class="ln">207</span>          LPUMOD = .TRUE.
+<span class="ln">208</span>          LDERIV = .TRUE.
+<span class="ln">209</span>          LATMO = .FALSE.
+<span class="ln">210</span>      ELSE
+<span class="ln">211</span>          LPUMOD = .FALSE.
+<span class="ln">212</span>          LDERIV = .FALSE.
+<span class="ln">213</span>          LATMO = .TRUE.
+<span class="ln">214</span>      END IF
+<span class="ln">215</span>      LOCOND = .FALSE.
+<span class="ln">216</span>
+<span class="ln">217</span>C JVS 10/07/13 Always calculate derivatives
+<span class="ln">218</span>      LDERIV = .TRUE.
+<span class="ln">219</span>
+<span class="ln">220</span>C G Somers 11/14 WRITE ATMOSHPHERE HEADER TO .STORE FILE, AND ADDED
+<span class="ln">221</span>C I/O FLAGS TO THE ATMOSPHERE CALLS
+<span class="ln">222</span>      IF(LPRT.AND.LSTATM)THEN 
+<span class="ln">223</span>         IF(.NOT.LSTCH)WRITE(ISTOR,60)
+<span class="ln">224</span>      ENDIF   
+<span class="ln">225</span> 60   FORMAT(/,&#x27;******** ATMOSPHERE BEGIN ********&#x27;)
+<span class="ln">226</span>
+<span class="ln">227</span>C GET PRESSURE AT T=Teff BY INTERPOLATION IN TABLE ATMPL.
+<span class="ln">228</span>      IF (KTTAU .EQ. 3) THEN
+<span class="ln">229</span>C KURUCZ ATMOSPHERES
+<span class="ln">230</span>         IF(LSTCH) LSTATM=.FALSE.
+<span class="ln">231</span>         CALL <a href="../yrec-map/surfp.f.html#def-SURFP" title="SURFP in surfp.f">SURFP</a>(TEFFL,GL,LPRT.AND.LSTATM)
+<span class="ln">232</span>         GOTO 200
+<span class="ln">233</span>C JNT 06/14
+<span class="ln">234</span>C GET PRESSURE AT T=Teff BY INTERPOLATION IN TABLE ATMPLC.
+<span class="ln">235</span>      ELSE IF (KTTAU .EQ. 5) THEN
+<span class="ln">236</span>C KURUCZ ATMOSPHERES
+<span class="ln">237</span>         IF(LSTCH) LSTATM=.FALSE.
+<span class="ln">238</span>         CALL <a href="../yrec-map/kcsurfp.f.html#def-KCSURFP" title="KCSURFP in kcsurfp.f">KCSURFP</a>(TEFFL,GL,LPRT.AND.LSTATM)
+<span class="ln">239</span>         GOTO 200
+<span class="ln">240</span>C We have Kurucz atmosphere boundary conditions
+<span class="ln">241</span>      ELSE IF (KTTAU .EQ. 4) THEN
+<span class="ln">242</span>C ALLARD &amp; HAUSCHILDT ATMOSPHERES
+<span class="ln">243</span>         IF(LSTCH) LSTATM=.FALSE.
+<span class="ln">244</span>         CALL <a href="../yrec-map/alsurfp.f.html#def-ALSURFP" title="ALSURFP in alsurfp.f">ALSURFP</a>(TEFFL,GL,LPRT.AND.LSTATM,LAlFail)
+<span class="ln">245</span>C Changed to Allard atmosphere code
+<span class="ln">246</span>         IF(LAlFail) then
+<span class="ln">247</span>            KTTAU=0
+<span class="ln">248</span>            LTTAU = .TRUE.
+<span class="ln">249</span>C Set to gray atmosphere (KTTAU=0), as
+<span class="ln">250</span>C TeffL is above Allard max, or GL is out of range.
+<span class="ln">251</span>            WRITE(*,*) &#x27;ENVINT: Change to gray atmosphere (KTTAU=0)&#x27;
+<span class="ln">252</span>            WRITE(ISHORT,*)&#x27;ENVINT: Change to gray atmosphere (KTTAU=0)&#x27;
+<span class="ln">253</span>            goto 2
+<span class="ln">254</span>         ENDIF
+<span class="ln">255</span>         GOTO 200
+<span class="ln">256</span>C We have Allard atmosphere boundary conditions
+<span class="ln">257</span>      ENDIF
+<span class="ln">258</span>    2 CONTINUE
+<span class="ln">259</span>C Start gray atmosphere bounary conditions
+<span class="ln">260</span>C GUESS THE TEMPERATURE FOR AN OPTICAL DEPTH NEAR ZERO.
+<span class="ln">261</span>      ERRSUM(1) = 0.0D0
+<span class="ln">262</span>      IF(KTTAU .EQ. 0) THEN
+<span class="ln">263</span>            TL = TEFFL - 0.031235D0 + 0.25D0*DLOG10(CC23)
+<span class="ln">264</span>      ELSE IF (KTTAU .EQ. 1) THEN
+<span class="ln">265</span>            TL = TEFFL - 0.031235D0 + 0.25D0*DLOG10(0.550D0)
+<span class="ln">266</span>      ELSE IF (KTTAU .EQ. 2) THEN
+<span class="ln">267</span>            TL = TEFFL + <a href="../yrec-map/hra.f.html#def-HRA" title="HRA in hra.f">HRA</a>(CC23) - HRAS
+<span class="ln">268</span>      END IF
+<span class="ln">269</span>C                 For kttau = 0,1,or 2, very occasionally the integration
+<span class="ln">270</span>C                 fails because the starting point (X0) is past the end
+<span class="ln">271</span>C                 point (XLIM). When this happens, we divide the effective
+<span class="ln">272</span>C                 starting density (atmd0) by 10 and retry.
+<span class="ln">273</span>      atmdx = atmd0
+<span class="ln">274</span> 1998 continue
+<span class="ln">275</span>C Return point if X0 &gt; XLIM
+<span class="ln">276</span>      T = DEXP(CLN*TL)
+<span class="ln">277</span>C FIND THE PRESSURE CORRESPONDING TO THIS T AND THE DENSITY CHOSEN
+<span class="ln">278</span>C FOR THE START OF THE ATMOSPHERE INTEGRATION.
+<span class="ln">279</span>
+<span class="ln">280</span>c      PL = DLOG10((CGAS*ATMD0 + CA3*T**3)*T)
+<span class="ln">281</span>      PL = DLOG10((CGAS*ATMDX + CA3*T**3)*T)
+<span class="ln">282</span>
+<span class="ln">283</span>C NOW FIND THE OPTICAL DEPTH(X0) WHERE THE ATMOSPHERE INTEGRATION BEGINS.
+<span class="ln">284</span>C 9/22/26 MHP via Claude
+<span class="ln">285</span>C code changed to remove the MHD equation of state
+<span class="ln">286</span>      CALL <a href="../yrec-map/eqstat.f.html#def-EQSTAT" title="EQSTAT in eqstat.f">EQSTAT</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">287</span>     *        AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,
+<span class="ln">288</span>     *        QCPP,LDERIV,LATMO,KSAHA)
+<span class="ln">289</span>C DBG 12/95 GET OPACITY
+<span class="ln">290</span>      CALL <a href="../yrec-map/getopac.f.html#def-GETOPAC" title="GETOPAC in getopac.f">GETOPAC</a>(DL, TL, X, Z, O, OL, QOD, QOT, FXION)
+<span class="ln">291</span>      X0 = PL - GL + DLOG10(O)
+<span class="ln">292</span>      Y(1) = PL
+<span class="ln">293</span>      DYDX(1) = DEXP(CLN*(GL+X0-OL-PL))
+<span class="ln">294</span>c G Somers 11/14 ADDED I/O FLAG AND CHANGED WRITE OUTS TO .STORE.
+<span class="ln">295</span>      IF(LPRT.AND.LSTATM) THEN
+<span class="ln">296</span>       IF(.NOT.LSTCH) WRITE(ISTOR,10)
+<span class="ln">297</span>         BETA = 1.0D0 - CA3*(T**2)**2/P
+<span class="ln">298</span>         CHRH = 1.0D0/QDP
+<span class="ln">299</span>         CHT = -CHRH*QDT
+<span class="ln">300</span>         CV = QCPP - EXP(CLN*(PL-DL-TL))*CHT**2/CHRH
+<span class="ln">301</span>         GAM1 = CHRH*QCPP/CV
+<span class="ln">302</span>           IF(.NOT.LSTCH)THEN
+<span class="ln">303</span>             WRITE(ISTOR,20)X0,PL,TL,DL,O,(FXION(I),I=1,3),KSAHA,KATM,
+<span class="ln">304</span>     *                   GAM1,QDP,QDT,BETA,QCPP,CV
+<span class="ln">305</span>           ENDIF
+<span class="ln">306</span>   10    FORMAT(6X,&#x27;TAU&#x27;,9X,&#x27;P&#x27;,10X,&#x27;T&#x27;,10X,&#x27;D&#x27;,11X,&#x27;O&#x27;,9X,
+<span class="ln">307</span>     *         &#x27;HII  HEII HEIII   SAHA   KATM&#x27;)
+<span class="ln">308</span>   20    FORMAT(1X,4F11.7,1PE14.7,0P3F6.3,2I7,4F12.8,1P2E12.5)
+<span class="ln">309</span>      ENDIF
+<span class="ln">310</span>C DBG PULSE INITIAL POINT FOR PULSATION
+<span class="ln">311</span>      IF (LPULPT.AND.LPRT) THEN
+<span class="ln">312</span>        QQED = 0.0D0
+<span class="ln">313</span>        QESUM = 0.0D0
+<span class="ln">314</span>        QQET = 0.0D0
+<span class="ln">315</span>        QFS = 1.0D0
+<span class="ln">316</span>        TAUP = DEXP(CLN*X0)
+<span class="ln">317</span>        OP = O
+<span class="ln">318</span>        DP = DEXP(CLN*DL)
+<span class="ln">319</span>        DELTR = 0.0D0
+<span class="ln">320</span>        PELPF = CGAS * T * D * EMU
+<span class="ln">321</span>C FROM FIRST LINES OF TPGRAD
+<span class="ln">322</span>        DELR = O*B*DEXP(CLN*(PL-HSTOT-4.0D0*TL+CLSUNL-CGL+
+<span class="ln">323</span>     *           CDELRL))*FTL/FPL
+<span class="ln">324</span>        IF (DELR-DELA .LE. 1.0D-6) THEN
+<span class="ln">325</span>            DEL = DELR
+<span class="ln">326</span>        ELSE
+<span class="ln">327</span>            DEL = DELA
+<span class="ln">328</span>        END IF
+<span class="ln">329</span>        IF(IPVER.EQ.1) THEN
+<span class="ln">330</span>C MHP 10/02 TYPO - QED SHOULD HAVE BEEN QQED
+<span class="ln">331</span>C     *         PL, QESUM,O,QDP,QED,
+<span class="ln">332</span>           WRITE(IOPATM,5001)DELTR,QFS,B,TL,DL,
+<span class="ln">333</span>     *         PL, QESUM,O,QDP,QQED,
+<span class="ln">334</span>     *         QQET,QOD,QOT,DEL,DELA,
+<span class="ln">335</span>     *         QCP,RMU,QDT,PELPF
+<span class="ln">336</span>C     *         PL, TAUP ,O,QDP,QED,
+<span class="ln">337</span>          ELSE IF (IPVER.EQ.2 .OR. IPVER.EQ.3) THEN
+<span class="ln">338</span>           WRITE(IOPATM,6001)DELTR,QFS,B,TL,DL,
+<span class="ln">339</span>     *         PL, TAUP ,O,QDP,QQED,
+<span class="ln">340</span>     *         QQET,QOD,QOT,DEL,DELA,
+<span class="ln">341</span>     *         QCP,RMU,QDT,PELPF
+<span class="ln">342</span>          END IF
+<span class="ln">343</span>
+<span class="ln">344</span> 5001 FORMAT(5E16.9,/,5E16.9,/,5E16.9,/,4E16.9)
+<span class="ln">345</span> 6001 FORMAT(5E23.16,/,5E23.16,/,5E23.16,/,4E23.16)
+<span class="ln">346</span> 6003 FORMAT(6E23.16,/,6E23.16,/,6E23.16,/,4E23.16)
+<span class="ln">347</span>      END IF
+<span class="ln">348</span>
+<span class="ln">349</span>
+<span class="ln">350</span>
+<span class="ln">351</span>C INTEGRATE DP/DTAU FROM THIS STARTING TAU TO TAU = 2/3.
+<span class="ln">352</span>C SET NUMERICAL PARAMETERS UP.
+<span class="ln">353</span>      NV = 1
+<span class="ln">354</span>      EPS = ATMERR
+<span class="ln">355</span>      IF (KTTAU .EQ. 1) THEN
+<span class="ln">356</span>C KRISHNA-SWAMY T TAU HAS DIFFERENT ZERO THAN EDDINGTON T TAU
+<span class="ln">357</span>C TAU = 0.312156330 AT TEFF.
+<span class="ln">358</span>            XLIM = -0.505627854D0
+<span class="ln">359</span>      ELSE
+<span class="ln">360</span>C TAU = 2/3 AT TEFF.
+<span class="ln">361</span>            XLIM = -0.176091259D0
+<span class="ln">362</span>      END IF
+<span class="ln">363</span>
+<span class="ln">364</span>      if  (x0 .gt. xlim) then ! Check that starting point is before endpoint
+<span class="ln">365</span>         write(ishort,*)&quot;ENVINT: X0&gt;XLIM, X0,XLIM:&quot;,x0,xlim
+<span class="ln">366</span>       write(ishort,*)&quot;ENVINT: get new X0 by dividing ATMD0 by 10&quot;
+<span class="ln">367</span>       atmdx = atmdx / 10D0   ! If not before, divide starting density by 10
+<span class="ln">368</span>       goto 1998              ! and retry.
+<span class="ln">369</span>      endif
+<span class="ln">370</span>
+<span class="ln">371</span>      HMAX = ATMMAX
+<span class="ln">372</span>      HMIN = ATMMIN
+<span class="ln">373</span>      H = ATMBEG
+<span class="ln">374</span>      STOLER = STOLR0
+<span class="ln">375</span>      NOK = 0
+<span class="ln">376</span>      NBAD = 0
+<span class="ln">377</span>
+<span class="ln">378</span>C INTEGRATION LOOP.
+<span class="ln">379</span>      DO 40 NSTEP = 1,MAXSTP
+<span class="ln">380</span>C YSCAL IS THE ARRAY THAT THE NUMERICAL ERRORS ARE SCALED AGAINST.
+<span class="ln">381</span>       DO 30 I = 1,NV
+<span class="ln">382</span>          YSCAL(I) = DABS(Y(I)) + DABS(H*DYDX(I))+TINY
+<span class="ln">383</span>   30    CONTINUE
+<span class="ln">384</span>C ENSURE THAT STEP DOESN&#x27;T EXCEED MAXIMUM STEP SIZE OR GO PAST
+<span class="ln">385</span>C THE LIMIT OF THE INTEGRATION.
+<span class="ln">386</span>       IF((X0-XLIM)*(X0+H-XLIM).LT.0.0D0) H = XLIM - X0
+<span class="ln">387</span>       IF(H.GT.HMAX) H = HMAX
+<span class="ln">388</span>C INTEGRATE THE ATMOSPHERE FROM TAU TO TAU + H
+<span class="ln">389</span>C H IS THE ATTEMPTED STEP,HDID IS THE ONE PERFORMED, AND HNEXT IS THE
+<span class="ln">390</span>C PREDICTED NEXT STEP.
+<span class="ln">391</span>       CALL <a href="../yrec-map/bsstep.f.html#def-BSSTEP" title="BSSTEP in bsstep.f">BSSTEP</a>(Y,DYDX,NV,X0,H,EPS,YSCAL,HDID,
+<span class="ln">392</span>     x      HNEXT,QATM, B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,LPRT,RL,
+<span class="ln">393</span>     X      TEFFL,X,Z,KATM,KSAHA,ERR)
+<span class="ln">394</span>C FIND DP/DTAU AT THE START OF THE NEXT STEP.
+<span class="ln">395</span>       ERRSUM(1) = ERRSUM(1) + ERR(1)
+<span class="ln">396</span>       CALL <a href="../yrec-map/qatm.f.html#def-QATM" title="QATM in qatm.f">QATM</a>(X0,Y,DYDX,B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,
+<span class="ln">397</span>     *             LPRT,RL,TEFFL,X,Z,KATM,KSAHA)
+<span class="ln">398</span>c G Somers 11/14 ADDED I/O FLAG AND CHANGED WRITE OUTS TO .STORE.
+<span class="ln">399</span>       IF(LPRT.AND.LSTATM) THEN
+<span class="ln">400</span>            BETA = 1.0D0 - CA3*EXP(CLN*(4.0D0*AT-AP))
+<span class="ln">401</span>            CHRH = 1.0D0/QQDP
+<span class="ln">402</span>            CHT = -CHRH*QQDT
+<span class="ln">403</span>            CV = QQCP - EXP(CLN*(AP-AD-AT))*CHT**2/CHRH
+<span class="ln">404</span>            GAM1 = CHRH*QQCP/CV
+<span class="ln">405</span>          IF(.NOT.LSTCH)THEN  
+<span class="ln">406</span>            WRITE(ISTOR,20)TAUL,AP,AT,AD,AO,(AFXION(I),I=1,3),
+<span class="ln">407</span>     *               KSAHA,KATM,GAM1,QQDP,QQDT,BETA,QQCP,CV
+<span class="ln">408</span>          ENDIF
+<span class="ln">409</span>C JvS: SAVE STRUCTURE TO COMMON BLOCK
+<span class="ln">410</span>          ATMOP(NSTEP) = AP
+<span class="ln">411</span>          ATMOT(NSTEP) = AT
+<span class="ln">412</span>          ATMOD(NSTEP) = AD
+<span class="ln">413</span>          ABETAS(NSTEP) = BETA
+<span class="ln">414</span>          AGAM1(NSTEP) = GAM1
+<span class="ln">415</span>          AQDT(NSTEP) = QQDT
+<span class="ln">416</span>          AFXIONS(1,NSTEP) = AFXION(1)
+<span class="ln">417</span>          AFXIONS(2,NSTEP) = AFXION(2)
+<span class="ln">418</span>          AFXIONS(3,NSTEP) = AFXION(3)        
+<span class="ln">419</span>          ATMOO(NSTEP) = AO
+<span class="ln">420</span>          ATMOCP(NSTEP) = QQCP
+<span class="ln">421</span>       ENDIF
+<span class="ln">422</span>       IF(HDID.EQ.H) THEN
+<span class="ln">423</span>          NOK = NOK + 1
+<span class="ln">424</span>       ELSE
+<span class="ln">425</span>          NBAD = NBAD + 1
+<span class="ln">426</span>       ENDIF
+<span class="ln">427</span>C DBG PULSE ATMOSPHERE VALUES FOR PULSATION
+<span class="ln">428</span>C JVS 02/11 - Added LCLCD option to IF statement
+<span class="ln">429</span>       IF ((LPULPT.AND.LPRT) .OR. LCLCD .OR. LSTCH) THEN
+<span class="ln">430</span>          QQED = 0.0D0
+<span class="ln">431</span>          QESUM = 0.0D0
+<span class="ln">432</span>          QQET = 0.0D0
+<span class="ln">433</span>          QFS = 1.0D0
+<span class="ln">434</span>          ON = QO
+<span class="ln">435</span>          DN = DEXP(CLN*QDL)
+<span class="ln">436</span>          TAUN = DEXP(CLN*TAUL)
+<span class="ln">437</span>C SEE J.P. COX PRINC. OF STELL. STRUC. P590
+<span class="ln">438</span>          DELTR =  (TAUN - TAUP)/(((DN*ON)+(DP*OP))/2)
+<span class="ln">439</span>          PELPF = CGAS * QT * QD * QEMU
+<span class="ln">440</span>          OP = ON
+<span class="ln">441</span>CFROM FIRST LINES OF TPGRAD
+<span class="ln">442</span>          DELR = QO*B*DEXP(CLN*(QPL-HSTOT-4.0D0*QTL+CLSUNL-CGL+
+<span class="ln">443</span>     *           CDELRL))*FTL/FPL
+<span class="ln">444</span>          IF (DELR-QDELA .LE. 1.0D-6) THEN
+<span class="ln">445</span>            DEL = DELR
+<span class="ln">446</span>          ELSE
+<span class="ln">447</span>            DEL = QDELA
+<span class="ln">448</span>          END IF
+<span class="ln">449</span>          IF (LPULPT.AND.LPRT) THEN
+<span class="ln">450</span>                IF (IPVER.EQ.1) THEN
+<span class="ln">451</span>                         WRITE(IOPATM,5001)DELTR,QFS,B,QTL,QDL,
+<span class="ln">452</span>     *                     QPL, QESUM ,QO,QQDP,QQED,
+<span class="ln">453</span>     *                     QQET,QQOD,QQOT,DEL,QDELA,
+<span class="ln">454</span>     *                     QQCP,QRMU,QQDT,PELPF
+<span class="ln">455</span>                        ELSE IF (IPVER.EQ.2.OR.IPVER.EQ.3) THEN
+<span class="ln">456</span>                         WRITE(IOPATM,6001)DELTR,QFS,B,QTL,QDL,
+<span class="ln">457</span>     *                     QPL, TAUN ,QO,QQDP,QQED,
+<span class="ln">458</span>     *                     QQET,QQOD,QQOT,DEL,QDELA,
+<span class="ln">459</span>     *                     QQCP,QRMU,QQDT,PELPF
+<span class="ln">460</span>                       END IF
+<span class="ln">461</span>            END IF
+<span class="ln">462</span>C JvS SAVE TO COMMON ATMSTRUCT COMMON BLOCK
+<span class="ln">463</span>          ATMOR(NSTEP) = DELTR
+<span class="ln">464</span>          ADELS(1,NSTEP) = DELR
+<span class="ln">465</span>          ADELS(2,NSTEP) = DEL
+<span class="ln">466</span>          ADELS(3,NSTEP) = QDELA
+<span class="ln">467</span>          NUMATM = NSTEP
+<span class="ln">468</span>          
+<span class="ln">469</span>          TAUP = TAUN
+<span class="ln">470</span>          DP = DN
+<span class="ln">471</span>       END IF
+<span class="ln">472</span>C DBG END
+<span class="ln">473</span>
+<span class="ln">474</span>
+<span class="ln">475</span>C  CHECK IF INTEGRATION COMPLETE
+<span class="ln">476</span>       IF(DABS(X0 - XLIM).LE.STOLER) THEN
+<span class="ln">477</span>          WRITE(ISHORT,35)NOK,NBAD,ERRSUM(1)
+<span class="ln">478</span>   35       FORMAT(1X,&#x27;ATMOSPHERE INTEGRATION COMPLETE&#x27;,1X,
+<span class="ln">479</span>     *            &#x27;NUMBER OF STEPS ACCEPTED&#x27;,I5,&#x27; REJECTED&#x27;,
+<span class="ln">480</span>     *            I5/5X,&#x27;MAXIMUM RELATIVE ERROR IN P &#x27;,1PE22.13)
+<span class="ln">481</span>          GOTO 200
+<span class="ln">482</span>       ENDIF
+<span class="ln">483</span>       IF(HNEXT.LT.HMIN) HNEXT = HMIN
+<span class="ln">484</span>       H = HNEXT
+<span class="ln">485</span>40    CONTINUE
+<span class="ln">486</span>C INTEGRATION HAS FAILED TO FINISH IN MAXSTP STEPS;
+<span class="ln">487</span>C PRINT NASTY MESSAGE AND QUIT.
+<span class="ln">488</span>      WRITE(IOWR,50)
+<span class="ln">489</span>      WRITE(ISHORT,50)
+<span class="ln">490</span>   50 FORMAT(5X,&#x27;ATMOSPHERE INTEGRATION FAILED AFTER MAXSTP&#x27;,1X,
+<span class="ln">491</span>     *       &#x27;INTEGRATIONS.I QUIT.&#x27;)
+<span class="ln">492</span>      STOP
+<span class="ln">493</span>C ENVELOPE INTEGRATION
+<span class="ln">494</span>C HERE P IS THE INDEPENDENT VARIABLE AND M,R,AND T ARE
+<span class="ln">495</span>C DEPENDENT VARIABLES.  INTEGRATE FROM TAU = 2/3 TO THE LAST
+<span class="ln">496</span>C MASS POINT IN THE MODEL.
+<span class="ln">497</span>
+<span class="ln">498</span>
+<span class="ln">499</span>  200 CONTINUE   ! Kurucz and Allard (KTTAU=3 and 4) bypass atmosphere
+<span class="ln">500</span>                 !  integration and come here
+<span class="ln">501</span>C G Somers 3/17, IF INTERESTED ONLY IN PPHOT, BREAK HERE.
+<span class="ln">502</span>      PPHOT = AP
+<span class="ln">503</span>      IF(.NOT.LCALCENV) GOTO 555
+<span class="ln">504</span>
+<span class="ln">505</span>C G Somers 11/14 WRITE ENVELOPE HEADER
+<span class="ln">506</span>      IF(LPRT.AND.LSTENV)THEN
+<span class="ln">507</span>         IF(.NOT.LSTCH) WRITE(ISTOR,61)
+<span class="ln">508</span>      ENDIF   
+<span class="ln">509</span> 61   FORMAT(/,&#x27;******** ENVELOPE BEGIN ********&#x27;)
+<span class="ln">510</span>
+<span class="ln">511</span>C DBG PULSE WRITE END OF DATA INDICATOR
+<span class="ln">512</span>      IF (LPULPT.AND.LPRT) THEN
+<span class="ln">513</span>C         XYZ = 99.99D0
+<span class="ln">514</span>         IF(IPVER.EQ.1) THEN
+<span class="ln">515</span>            WRITE(IOPATM, 5001) (XYZ(I),I=1,19)
+<span class="ln">516</span>         ELSE IF (IPVER.EQ.2.OR.IPVER.EQ.3) THEN
+<span class="ln">517</span>            WRITE(IOPATM, 6001) (XYZ(I),I=1,19)
+<span class="ln">518</span>         END IF
+<span class="ln">519</span>C 5002    FORMAT(E16.9)
+<span class="ln">520</span>C 6002    FORMAT(E23.16)
+<span class="ln">521</span>      ENDIF
+<span class="ln">522</span>C DBG
+<span class="ln">523</span>C  IF ENVELOPE MASS(SENV) SMALL ENOUGH,SKIP ENVELOPE INTEGRATION.
+<span class="ln">524</span>C DBG 2/92 CHANGED FROM 1.0D-10 to 1.0D-12
+<span class="ln">525</span>      IF(SENV.GT.-1.0D-12) THEN
+<span class="ln">526</span>       IF(LSBC) THEN
+<span class="ln">527</span>          PS(IE) = AP
+<span class="ln">528</span>          RS(IE) = RL
+<span class="ln">529</span>          TS(IE) = AT
+<span class="ln">530</span>          IF(LPRT)THEN
+<span class="ln">531</span>            IF(.NOT.LSTCH)WRITE(ISTOR,230)PS(IE),TS(IE),RS(IE),SENV
+<span class="ln">532</span>          ENDIF  
+<span class="ln">533</span>       ENDIF
+<span class="ln">534</span> 230     FORMAT(4X,3F16.12,8X,F16.12)
+<span class="ln">535</span>       GOTO 300
+<span class="ln">536</span>      ENDIF
+<span class="ln">537</span>C  INITIALIZE VARIABLES AND SET NUMERICAL PARAMETERS.
+<span class="ln">538</span>      LATMO = .FALSE.
+<span class="ln">539</span>      DO 235 I = 1,3
+<span class="ln">540</span>       ERRSUM(I) = 0.0D0
+<span class="ln">541</span> 235  CONTINUE
+<span class="ln">542</span>      NOK = 0
+<span class="ln">543</span>      NBAD = 0
+<span class="ln">544</span>      X0 = AP
+<span class="ln">545</span>      SL = 0.0D0
+<span class="ln">546</span>      Y(1) = SL
+<span class="ln">547</span>      Y(2) = AT
+<span class="ln">548</span>      Y(3) = RL
+<span class="ln">549</span>      NV = 3
+<span class="ln">550</span>      EPS = ENVERR
+<span class="ln">551</span>      HMAX = ENVMAX
+<span class="ln">552</span>      HMIN = ENVMIN
+<span class="ln">553</span>      H = ENVBEG
+<span class="ln">554</span>      STOLER = DABS(STOLR0*SENV)
+<span class="ln">555</span>      RSURF = DEXP(CLN*RL)
+<span class="ln">556</span>      IF(ISTORE.EQ.IE) ISTORE = 0
+<span class="ln">557</span>      LLSTORE = .FALSE.
+<span class="ln">558</span>      IF (LSBC) THEN
+<span class="ln">559</span>         LTEST = .FALSE.
+<span class="ln">560</span>      ELSE
+<span class="ln">561</span>         LTEST = .TRUE.
+<span class="ln">562</span>      END IF
+<span class="ln">563</span>C  FIND DY/DX AT THE START OF THE STEP.
+<span class="ln">564</span>      CALL <a href="../yrec-map/qenv.f.html#def-QENV" title="QENV in qenv.f">QENV</a>(X0,Y,DYDX,B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,
+<span class="ln">565</span>     *     LPRT,RL,TEFFL,X,Z,KENV,KSAHA)
+<span class="ln">566</span>C DBG PULSE WRITE FIRST POINT OF ENVELOPE
+<span class="ln">567</span>      IF (LPULPT.AND.LPRT) THEN
+<span class="ln">568</span>C         REWIND IOPENV
+<span class="ln">569</span>         QQED = 0.0D0
+<span class="ln">570</span>         QESUM = 0.0D0
+<span class="ln">571</span>         QQET = 0.0D0
+<span class="ln">572</span>         PELPF = CGAS * QT * QD * QEMU
+<span class="ln">573</span>         IF(IPVER.EQ.1) THEN
+<span class="ln">574</span>          WRITE(IOPENV,5001)RL,QFS,B,QTL,QDL,
+<span class="ln">575</span>     *           QPL, QESUM,QO,QQDP,QQED,
+<span class="ln">576</span>     *           QQET,QQOD,QQOT,QDEL,QDELA,
+<span class="ln">577</span>     *           QQCP,QRMU,QQDT,PELPF
+<span class="ln">578</span>         ELSE IF (IPVER.EQ.2) THEN
+<span class="ln">579</span>          WRITE(IOPENV,6001)RL,QFS,B,QTL,QDL,
+<span class="ln">580</span>     *           QPL, QESUM,QO,QQDP,QQED,
+<span class="ln">581</span>     *           QQET,QQOD,QQOT,QDEL,QDELA,
+<span class="ln">582</span>     *           QQCP,QRMU,QQDT,PELPF
+<span class="ln">583</span>         ELSE IF (IPVER.EQ.3) THEN
+<span class="ln">584</span>C DBG 7/95 Appended mixing length info at end of first three lines
+<span class="ln">585</span>          WRITE(IOPENV,6003)RL,QFS,B,QTL,QDL,ALFMLT,
+<span class="ln">586</span>     *           QPL, QESUM,QO,QQDP,QQED,PHMLT,
+<span class="ln">587</span>     *           QQET,QQOD,QQOT,QDEL,QDELA,CMXMLT,
+<span class="ln">588</span>     *           QQCP,QRMU,QQDT,PELPF
+<span class="ln">589</span>         END IF
+<span class="ln">590</span>      END IF   !uncertain!
+<span class="ln">591</span>C DBG
+<span class="ln">592</span>c G Somers 11/14 ADDED I/O FLAG AND CHANGED WRITE OUTS TO .STORE.
+<span class="ln">593</span>      IF(LPRT.AND.LSTENV) THEN
+<span class="ln">594</span>       IF(.NOT.LSTCH) WRITE(ISTOR,240) &#x27;GRAV  &#x27;,&#x27;P   &#x27;,&#x27;T   &#x27;,&#x27;DEPTH    &#x27;,&#x27;M      &#x27;,
+<span class="ln">595</span>     *       &#x27;D    &#x27;,&#x27;O   &#x27;,&#x27;BETA&#x27;,&#x27;DELR  &#x27;,&#x27;DELA&#x27;,&#x27;DEL &#x27;,&#x27;HII &#x27;,
+<span class="ln">596</span>     *       &#x27;HEII&#x27;,&#x27;HEIII&#x27;,&#x27;V   &#x27;,&#x27;GAM1   &#x27;,&#x27;QQDP   &#x27;
+<span class="ln">597</span> 240     FORMAT(1X,3A10,2A14,2A10,A7,A9,5A6,A9,2A12)
+<span class="ln">598</span>c     X&#x27; &#x27;,4X,&#x27;GRAV&#x27;,7X,&#x27;P&#x27;,8X,&#x27;T&#x27;,8X,&#x27;DEPTH&#x27;,6X,&#x27;M&#x27;,
+<span class="ln">599</span>c     *        9X,&#x27;D&#x27;,6X,&#x27;O&#x27;,7X,&#x27;BETA&#x27;,3X,&#x27;DELR&#x27;,5X,&#x27;DELA&#x27;,3X,
+<span class="ln">600</span>c     *        &#x27;DEL&#x27;,3X,&#x27;HII&#x27;,3X,&#x27;HEII&#x27;,1X,&#x27;HEIII&#x27;,3X,&#x27;V&#x27;)
+<span class="ln">601</span>
+<span class="ln">602</span>c 260        FORMAT(1X,1PE10.3,0P2F10.7,1P2E14.7,0P1F10.7,
+<span class="ln">603</span>c     *           1PE10.2,0PF7.3,1PE9.2,0P3F6.3,2F6.3,1PE9.2,
+<span class="ln">604</span>c     *           0P2F12.8)
+<span class="ln">605</span>
+<span class="ln">606</span>
+<span class="ln">607</span>       SRAD = DEXP(CLN*RL)
+<span class="ln">608</span>       DE = (RSURF-SRAD)/RSURF
+<span class="ln">609</span>       SGL = CGL+HSTOT-2.0D0*RL
+<span class="ln">610</span>       EG = DEXP(CLN*SGL)
+<span class="ln">611</span>         CHRH = 1.0D0/QQDP
+<span class="ln">612</span>         CHT = -CHRH*QQDT
+<span class="ln">613</span>         CV = QQCP - EXP(CLN*(EP-ED-ET))*CHT**2/CHRH
+<span class="ln">614</span>         GAM1 = CHRH*QQCP/CV
+<span class="ln">615</span>       IF(.NOT.LSTCH) WRITE(ISTOR,260)EG,EP,ET,DE,ES,ED,EO,EBETA,
+<span class="ln">616</span>     *        (EDEL(K),K=1,3),(EFXION(K),K=1,3),EVEL,
+<span class="ln">617</span>     *        GAM1,QQDP
+<span class="ln">618</span>      ENDIF
+<span class="ln">619</span>C STORE STARTING VALUES OF THE INTEGRATION
+<span class="ln">620</span>C 07/02 INITIALIZE NUMBER OF STORED ENVELOPE POINTS TO 1
+<span class="ln">621</span>      LSURCZ = .FALSE.
+<span class="ln">622</span>      TAUCZENV = 0.0D0
+<span class="ln">623</span>      ENVD(1) = ED
+<span class="ln">624</span>      ENVP(1) = EP
+<span class="ln">625</span>      ENVR(1) = ER
+<span class="ln">626</span>      ENVS(1) = ES
+<span class="ln">627</span>      ENVT(1) = ET
+<span class="ln">628</span>      ENVX(1) = X
+<span class="ln">629</span>      ENVZ(1) = Z
+<span class="ln">630</span>      LCENV(1) = EVEL.GT.0.0D0
+<span class="ln">631</span>C JVS 03/28
+<span class="ln">632</span>      EDELS(1,1) = EDEL(1)
+<span class="ln">633</span>      EDELS(2,1) = EDEL(2)
+<span class="ln">634</span>      EDELS(3,1) = EDEL(3)
+<span class="ln">635</span>      EVELS(1) = EVEL
+<span class="ln">636</span>      EBETAS(1) = EBETA
+<span class="ln">637</span>c JVS end
+<span class="ln">638</span>C JVS 08/25
+<span class="ln">639</span>C Always save these     
+<span class="ln">640</span>      CHRH = 1.0D0/QQDP
+<span class="ln">641</span>      CHT = -CHRH*QQDT
+<span class="ln">642</span>      CV = QQCP - EXP(CLN*(EP-ED-ET))*CHT**2/CHRH
+<span class="ln">643</span>      EGAM1(1) = CHRH*QQCP/CV
+<span class="ln">644</span>      EQCP(1) = QQCP
+<span class="ln">645</span>      EFXIONS(1,1) = EFXION(1) 
+<span class="ln">646</span>      EFXIONS(2,1) = EFXION(2) 
+<span class="ln">647</span>      EFXIONS(3,1) = EFXION(3)   
+<span class="ln">648</span>      ENVO(1) = EO   
+<span class="ln">649</span>      ENVL(1) = B
+<span class="ln">650</span>      EQDT(1) = QQDT
+<span class="ln">651</span>C JVS 10/10
+<span class="ln">652</span>      CHDELJ = EDEL(2)
+<span class="ln">653</span>      CHDELD = QDELA
+<span class="ln">654</span>      IF(LCENV(1))LSURCZ = .TRUE.
+<span class="ln">655</span>      NUMENV = 1
+<span class="ln">656</span>      DO 220 NSTEP = 1,MAXSTP
+<span class="ln">657</span>       XSTART = X0
+<span class="ln">658</span>       DO 210 I = 1,NV
+<span class="ln">659</span>          YSTART(I) = Y(I)
+<span class="ln">660</span>          YSCAL(I) = DABS(Y(I)) + DABS(H*DYDX(I))+TINY
+<span class="ln">661</span> 210     CONTINUE
+<span class="ln">662</span>       SEST = Y(1) + H*DYDX(1)
+<span class="ln">663</span>       IF(SENV - Y(1).GT.0.0D0 .OR. SENV - SEST.GT.0.0D0) THEN
+<span class="ln">664</span>C  IF THE INTEGRATION HAS OVERSHOT THE FITTING POINT, OR THE NEXT
+<span class="ln">665</span>C  STEP WILL DO SO,LIMIT STEP SIZE OR INTEGRATE BACKWARDS TO THE
+<span class="ln">666</span>C  CORRECT MASS.
+<span class="ln">667</span>          H = (SENV - Y(1))/DYDX(1)
+<span class="ln">668</span>       ENDIF
+<span class="ln">669</span>C  ENSURE THAT STEP DOESN&#x27;T EXCEED MAXIMUM STEP SIZE
+<span class="ln">670</span>       IF(H.LT.0.0D0) THEN
+<span class="ln">671</span>          IF(H.LT.-HMAX) H = -HMAX
+<span class="ln">672</span>       ELSE
+<span class="ln">673</span>          IF(H.GT.HMAX)  H = HMAX
+<span class="ln">674</span>       ENDIF
+<span class="ln">675</span>C  PLIM IS AN ESTIMATE OF THE ENDING PRESSURE FOR THE INTEGRATION,
+<span class="ln">676</span>C  BASED ON THE PRESSURE OF THE LAST MODEL POINT.
+<span class="ln">677</span>C  THE FIRST TIME THE INTEGRATOR TRIES TO PASS IT,LIMIT THE STEP
+<span class="ln">678</span>C  IN PRESSURE.
+<span class="ln">679</span>       IF(LTEST) THEN
+<span class="ln">680</span>          IF(X0 + H.GT.PLIM) THEN
+<span class="ln">681</span>             H = PLIM - X0
+<span class="ln">682</span>             LTEST = .FALSE.
+<span class="ln">683</span>          ENDIF
+<span class="ln">684</span>       ENDIF
+<span class="ln">685</span>C  INTEGRATE THE EQUATIONS FROM X0 TO X0 + H
+<span class="ln">686</span>C  H IS THE ATTEMPTED STEP,HDID IS THE ONE PERFORMED, AND HNEXT IS THE
+<span class="ln">687</span>C  PREDICTED NEXT STEP.      
+<span class="ln">688</span>       CALL <a href="../yrec-map/bsstep.f.html#def-BSSTEP" title="BSSTEP in bsstep.f">BSSTEP</a>(Y,DYDX,NV,X0,H,EPS,YSCAL,HDID,HNEXT,QENV,
+<span class="ln">689</span>     *        B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,LPRT,RL,
+<span class="ln">690</span>     *        TEFFL,X,Z,KENV,KSAHA,ERR)
+<span class="ln">691</span>       DO 255 K = 1,3
+<span class="ln">692</span>          ERRSUM(K) = ERRSUM(K) + ERR(K)
+<span class="ln">693</span> 255     CONTINUE
+<span class="ln">694</span>C  FIND DY/DX AT THE START OF THE NEXT STEP.
+<span class="ln">695</span>       CALL <a href="../yrec-map/qenv.f.html#def-QENV" title="QENV in qenv.f">QENV</a>(X0,Y,DYDX,B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,
+<span class="ln">696</span>     *        LPRT,RL,TEFFL,X,Z,KENV,KSAHA)
+<span class="ln">697</span>C DBG PULSE
+<span class="ln">698</span>         IF (LPULPT.AND.LPRT) THEN
+<span class="ln">699</span>          QQED = 0.0D0
+<span class="ln">700</span>          QESUM = 0.0D0
+<span class="ln">701</span>          QQET = 0.0D0
+<span class="ln">702</span>          PELPF = CGAS * QT * QD * QEMU
+<span class="ln">703</span>          IF(IPVER.EQ.1) THEN
+<span class="ln">704</span>               WRITE(IOPENV,5001)RL,QFS,B,QTL,QDL,
+<span class="ln">705</span>     *              QPL, QESUM,QO,QQDP,QQED,
+<span class="ln">706</span>     *              QQET,QQOD,QQOT,QDEL,QDELA,
+<span class="ln">707</span>     *              QQCP,QRMU,QQDT,PELPF
+<span class="ln">708</span>            ELSE IF (IPVER.EQ.2) THEN
+<span class="ln">709</span>               WRITE(IOPENV,6001)RL,QFS,B,QTL,QDL,
+<span class="ln">710</span>     *              QPL, QESUM,QO,QQDP,QQED,
+<span class="ln">711</span>     *              QQET,QQOD,QQOT,QDEL,QDELA,
+<span class="ln">712</span>     *              QQCP,QRMU,QQDT,PELPF
+<span class="ln">713</span>            ELSE IF (IPVER.EQ.3) THEN
+<span class="ln">714</span>C DBG 7/95 Appended mixing length info at end of first three lines
+<span class="ln">715</span>               WRITE(IOPENV,6003)RL,QFS,B,QTL,QDL,ALFMLT,
+<span class="ln">716</span>     *              QPL, QESUM,QO,QQDP,QQED,PHMLT,
+<span class="ln">717</span>     *              QQET,QQOD,QQOT,QDEL,QDELA,CMXMLT,
+<span class="ln">718</span>     *              QQCP,QRMU,QQDT,PELPF
+<span class="ln">719</span>            END IF
+<span class="ln">720</span>         END IF
+<span class="ln">721</span>C DBG END
+<span class="ln">722</span>c G Somers 11/14 ADDED I/O FLAG AND CHANGED WRITE OUTS TO .STORE.
+<span class="ln">723</span>       IF(LPRT.AND.LSTENV) THEN
+<span class="ln">724</span>          SRAD = DEXP(CLN*RL)
+<span class="ln">725</span>          DE = (RSURF-SRAD)/RSURF
+<span class="ln">726</span>          SGL = CGL+HSTOT-2.0D0*RL
+<span class="ln">727</span>          EG = DEXP(CLN*SGL)
+<span class="ln">728</span>            CHRH = 1.0D0/QQDP
+<span class="ln">729</span>            CHT = -CHRH*QQDT
+<span class="ln">730</span>            CV = QQCP - EXP(CLN*(EP-ED-ET))*CHT**2/CHRH
+<span class="ln">731</span>            GAM1 = CHRH*QQCP/CV
+<span class="ln">732</span>          IF(.NOT.LSTCH) WRITE(ISTOR,260)EG,EP,ET,DE,ES,ED,EO,EBETA,
+<span class="ln">733</span>     *           (EDEL(K),K=1,3),(EFXION(K),K=1,3),EVEL,
+<span class="ln">734</span>     *           GAM1,QQDP
+<span class="ln">735</span> 260        FORMAT(1X,1PE10.3,0P2F10.7,1P2E14.7,0P1F10.7,
+<span class="ln">736</span>     *           1PE10.2,0PF7.3,1PE9.2,0P3F6.3,2F6.3,1PE9.2,
+<span class="ln">737</span>     *           0P2F12.8)
+<span class="ln">738</span>       ENDIF
+<span class="ln">739</span>       IF(HDID.EQ.H) THEN
+<span class="ln">740</span>          NOK = NOK + 1
+<span class="ln">741</span>       ELSE
+<span class="ln">742</span>          NBAD = NBAD + 1
+<span class="ln">743</span>       ENDIF
+<span class="ln">744</span>C  CHECK IF INTEGRATION COMPLETE
+<span class="ln">745</span>       SDIF = SENV - Y(1)
+<span class="ln">746</span>C 07/02 STORE ENVELOPE TERMS IF THE INTEGRATION
+<span class="ln">747</span>C HAS NOT OVERSHOT THE FITTING POINT.
+<span class="ln">748</span>         IF(SDIF.LE.STOLER)THEN
+<span class="ln">749</span>            NUMENV = NUMENV + 1
+<span class="ln">750</span>            ENVD(NUMENV) = ED
+<span class="ln">751</span>            ENVP(NUMENV) = EP
+<span class="ln">752</span>            ENVR(NUMENV) = ER
+<span class="ln">753</span>            ENVS(NUMENV) = ES
+<span class="ln">754</span>            ENVT(NUMENV) = ET
+<span class="ln">755</span>            ENVX(NUMENV) = X
+<span class="ln">756</span>            ENVZ(NUMENV) = Z
+<span class="ln">757</span>            LCENV(NUMENV) = EVEL.GT.0.0D0
+<span class="ln">758</span>C JVS 08/13 ADD RUN FOR CZ CALCULATION
+<span class="ln">759</span>            EDELS(1,NUMENV) = EDEL(1)
+<span class="ln">760</span>            EDELS(2,NUMENV) = EDEL(2)
+<span class="ln">761</span>            EDELS(3,NUMENV) = EDEL(3)
+<span class="ln">762</span>            EVELS(NUMENV) = EVEL
+<span class="ln">763</span>            EBETAS(NUMENV) = EBETA
+<span class="ln">764</span>C JVS 08/25	
+<span class="ln">765</span>C Always save these     
+<span class="ln">766</span>            CHRH = 1.0D0/QQDP
+<span class="ln">767</span>            CHT = -CHRH*QQDT
+<span class="ln">768</span>            CV = QQCP - EXP(CLN*(EP-ED-ET))*CHT**2/CHRH
+<span class="ln">769</span>            EGAM1(NUMENV) = CHRH*QQCP/CV
+<span class="ln">770</span>            EQCP(NUMENV) = QQCP
+<span class="ln">771</span>            EFXIONS(1,NUMENV) = EFXION(1) 
+<span class="ln">772</span>            EFXIONS(2,NUMENV) = EFXION(2) 
+<span class="ln">773</span>            EFXIONS(3,NUMENV) = EFXION(3)      
+<span class="ln">774</span>            ENVO(NUMENV) = EO   
+<span class="ln">775</span>            ENVL(NUMENV) = B
+<span class="ln">776</span>            EQDT(NUMENV) = QQDT
+<span class="ln">777</span>
+<span class="ln">778</span>            IF(.NOT.LSURCZ)THEN
+<span class="ln">779</span>               IF(LCENV(NUMENV))THEN
+<span class="ln">780</span>                  LSURCZ = .TRUE.
+<span class="ln">781</span>               ENDIF
+<span class="ln">782</span>            ELSE IF(EVEL.GT.0.0D0)THEN
+<span class="ln">783</span>               DR = 10.0D0**ENVR(NUMENV-1) -
+<span class="ln">784</span>     *              10.0D0**ENVR(NUMENV)
+<span class="ln">785</span>               TAUCZENV = TAUCZENV + DR/EVEL
+<span class="ln">786</span>            ENDIF
+<span class="ln">787</span>         ENDIF
+<span class="ln">788</span>       IF(DABS(SDIF).LE.STOLER)THEN
+<span class="ln">789</span>C            WRITE(*,*)TAUCZENV/CSECYR
+<span class="ln">790</span>          IF(LSBC) THEN
+<span class="ln">791</span>             WT0 = SDIF/(YSTART(1)-Y(1))
+<span class="ln">792</span>             PS(IE) = X0 + WT0*(XSTART - X0)
+<span class="ln">793</span>             RS(IE) = Y(3) + WT0*(YSTART(3) - Y(3))
+<span class="ln">794</span>             TS(IE) = Y(2) + WT0*(YSTART(2) - Y(2))
+<span class="ln">795</span>             IF(LPRT)WRITE(ISHORT,230)PS(IE),TS(IE),RS(IE),SENV
+<span class="ln">796</span>          ENDIF
+<span class="ln">797</span>          GOTO 300
+<span class="ln">798</span>       ELSE IF(.NOT.LLSTORE) THEN
+<span class="ln">799</span>C 10/13/26 MHP via Claude
+<span class="ln">800</span>C TENV was COMMON/CTLIM/, set by parmin.f; derived here instead.
+<span class="ln">801</span>          TENV = 0.5D0*(TENV0 + TENV1)
+<span class="ln">802</span>          IF(Y(2).GE.TENV .AND. LSBC) THEN
+<span class="ln">803</span>             LLSTORE = .TRUE.
+<span class="ln">804</span>             ISTORE = IE
+<span class="ln">805</span>             ESTORE(1) = X0
+<span class="ln">806</span>             ESTORE(2) = Y(2)
+<span class="ln">807</span>             ESTORE(3) = Y(3)
+<span class="ln">808</span>             ESTORE(4) = Y(1)
+<span class="ln">809</span>          ENDIF
+<span class="ln">810</span>       ENDIF
+<span class="ln">811</span>       IF(HNEXT.LT.HMIN) HNEXT = HMIN
+<span class="ln">812</span>       H = HNEXT
+<span class="ln">813</span> 220  CONTINUE
+<span class="ln">814</span>C INTEGRATION HAS FAILED TO FINISH IN MAXSTP STEPS;
+<span class="ln">815</span>C PRINT NASTY MESSAGE AND QUIT.
+<span class="ln">816</span>      WRITE(IOWR,911)
+<span class="ln">817</span>      WRITE(ISHORT,911)
+<span class="ln">818</span> 911  FORMAT(5X,&#x27;ENVELOPE INTEGRATION FAILED AFTER MAXSTP TRIES.&#x27;,1X,
+<span class="ln">819</span>     *     &#x27;I QUIT&#x27;)
+<span class="ln">820</span>      STOP
+<span class="ln">821</span> 300  CONTINUE
+<span class="ln">822</span>C 07/02 NOW INVERT THE ENVELOPE VECTOR.
+<span class="ln">823</span>      IF(SENV.LT.-1.0D-12)THEN
+<span class="ln">824</span>         DO I = 1,NUMENV
+<span class="ln">825</span>            I1 = I
+<span class="ln">826</span>            I2 = NUMENV - I + 1
+<span class="ln">827</span>            IF(I1.GE.I2)GOTO 310
+<span class="ln">828</span>            DUM1 = ENVD(I1)
+<span class="ln">829</span>            ENVD(I1) = ENVD(I2)
+<span class="ln">830</span>            ENVD(I2) = DUM1
+<span class="ln">831</span>            DUM1 = ENVP(I1)
+<span class="ln">832</span>            ENVP(I1) = ENVP(I2)
+<span class="ln">833</span>            ENVP(I2) = DUM1
+<span class="ln">834</span>            DUM1 = ENVR(I1)
+<span class="ln">835</span>            ENVR(I1) = ENVR(I2)
+<span class="ln">836</span>            ENVR(I2) = DUM1
+<span class="ln">837</span>            DUM1 = ENVS(I1)
+<span class="ln">838</span>            ENVS(I1) = ENVS(I2)
+<span class="ln">839</span>            ENVS(I2) = DUM1
+<span class="ln">840</span>            DUM1 = ENVT(I1)
+<span class="ln">841</span>            ENVT(I1) = ENVT(I2)
+<span class="ln">842</span>            ENVT(I2) = DUM1
+<span class="ln">843</span>            DUM1 = ENVX(I1)
+<span class="ln">844</span>            ENVX(I1) = ENVX(I2)
+<span class="ln">845</span>            ENVX(I2) = DUM1
+<span class="ln">846</span>            DUM1 = ENVZ(I1)
+<span class="ln">847</span>            ENVZ(I1) = ENVZ(I2)
+<span class="ln">848</span>            ENVZ(I2) = DUM1
+<span class="ln">849</span>            LDUM = LCENV(I1)
+<span class="ln">850</span>            LCENV(I1) = LCENV(I2)
+<span class="ln">851</span>            LCENV(I2) = LDUM
+<span class="ln">852</span>C  08/25 JVS 
+<span class="ln">853</span>            DUM1 = ENVO(I1)
+<span class="ln">854</span>            ENVO(I1) = ENVO(I2)
+<span class="ln">855</span>            ENVO(I2) = DUM1
+<span class="ln">856</span>            DUM1 = ENVL(I1)
+<span class="ln">857</span>            ENVL(I1) = ENVL(I2)
+<span class="ln">858</span>            DUM1 = EQDT(I1)
+<span class="ln">859</span>            EQDT(I1) = EQDT(I2)
+<span class="ln">860</span>            EQDT(I2) = DUM1    
+<span class="ln">861</span>                  
+<span class="ln">862</span>C 08/13 JVS ADDED DEL VECTORS
+<span class="ln">863</span>            DUM1 = EDELS(1,I1)
+<span class="ln">864</span>            EDELS(1,I1) = EDELS(1,I2)
+<span class="ln">865</span>            EDELS(1,I2) = DUM1
+<span class="ln">866</span>            DUM1 = EDELS(2,I1)
+<span class="ln">867</span>            EDELS(2,I1) = EDELS(2,I2)
+<span class="ln">868</span>            EDELS(2,I2) = DUM1
+<span class="ln">869</span>            DUM1 = EDELS(3,I1)
+<span class="ln">870</span>            EDELS(3,I1) = EDELS(3,I2)
+<span class="ln">871</span>            EDELS(3,I2) = DUM1
+<span class="ln">872</span>            DUM1 = EVELS(I1)
+<span class="ln">873</span>            EVELS(I1) = EVELS(I2)
+<span class="ln">874</span>            EVELS(I2) = DUM1
+<span class="ln">875</span>            DUM1 = EBETAS(I1)
+<span class="ln">876</span>            EBETAS(I1) = EBETAS(I2)
+<span class="ln">877</span>            EBETAS(I2) = DUM1
+<span class="ln">878</span>C  08/25 JVS
+<span class="ln">879</span>            DUM1 = EGAM1(I1)
+<span class="ln">880</span>            EGAM1(I1) = EGAM1(I2)
+<span class="ln">881</span>            EGAM1(I2) = DUM1
+<span class="ln">882</span>            DUM1 = EQCP(I1)
+<span class="ln">883</span>            EQCP(I1) = EQCP(I2)
+<span class="ln">884</span>            EQCP(I2) = DUM1
+<span class="ln">885</span>            DUM1 = EFXIONS(1,I1)
+<span class="ln">886</span>            EFXIONS(1,I1) = EFXIONS(1,I2)
+<span class="ln">887</span>            EFXIONS(1,I2) = DUM1
+<span class="ln">888</span>            DUM1 = EFXIONS(2,I1)
+<span class="ln">889</span>            EFXIONS(2,I1) = EFXIONS(2,I2)
+<span class="ln">890</span>            EFXIONS(2,I2) = DUM1
+<span class="ln">891</span>            DUM1 = EFXIONS(3,I1)
+<span class="ln">892</span>            EFXIONS(3,I1) = EFXIONS(3,I2)
+<span class="ln">893</span>            EFXIONS(3,I2) = DUM1
+<span class="ln">894</span>                       
+<span class="ln">895</span>         END DO
+<span class="ln">896</span> 310     CONTINUE
+<span class="ln">897</span>C JVS 07/12 Save the last envelope point pressure
+<span class="ln">898</span>C      PPHOT = ENVP(NUMENV) ! G Somers 3/17, MOVED PPHOT DEF HIGHER UP
+<span class="ln">899</span>C END JVS
+<span class="ln">900</span>      ENDIF
+<span class="ln">901</span>C DBG PULSE WRITE END OF DATA INDICATOR
+<span class="ln">902</span>      IF (LPULPT.AND.LPRT) THEN
+<span class="ln">903</span>C         XYZ = 99.99D0
+<span class="ln">904</span>         IF(IPVER.EQ.1) THEN
+<span class="ln">905</span>            WRITE(IOPENV, 5001) (XYZ(I),I=1,19)
+<span class="ln">906</span>         ELSE IF (IPVER.EQ.2 .OR. IPVER.EQ.3)THEN
+<span class="ln">907</span>            WRITE(IOPENV, 6003) (XYZ(I),I=1,22)
+<span class="ln">908</span>         END IF
+<span class="ln">909</span>      ENDIF
+<span class="ln">910</span>
+<span class="ln">911</span>      WRITE(ISHORT,215)NOK,NBAD,SDIF,Y(1),(ERRSUM(J),J=1,3)
+<span class="ln">912</span> 215  FORMAT(1X,&#x27;ENVELOPE INTEGRATION COMPLETE&#x27;,1X,
+<span class="ln">913</span>     *     &#x27;NUMBER OF STEPS ACCEPTED&#x27;,I5,&#x27; REJECTED&#x27;,
+<span class="ln">914</span>     *     I5/5X,&#x27;SENV-LAST M=&#x27;,1PE22.13,&#x27;  LAST M=&#x27;,E22.13/
+<span class="ln">915</span>     *     5X,&#x27;MAX RELATIVE ERRORS:M &#x27;,1PE14.5,&#x27;  T &#x27;,E14.5,
+<span class="ln">916</span>     *     &#x27;  R &#x27;,E14.5)
+<span class="ln">917</span>
+<span class="ln">918</span>C JVS 08/13
+<span class="ln">919</span>C IF THE CZ IS IN THE ENVELOPE (.I.E. BEYOND THE FITTING POINT) TRACK ITS
+<span class="ln">920</span>C LOCATION IN MASS AND RADIUS FOR USE WITH AM LOSS ROUTINES
+<span class="ln">921</span>C
+<span class="ln">922</span>C G Somers 3/17, SKIP TAUCAL CALL IF USING NEW TAUCZ ROUTINES
+<span class="ln">923</span>        IF(LNEWTCZ)GOTO 555
+<span class="ln">924</span>C G Somers END
+<span class="ln">925</span>      JENV = 0.0
+<span class="ln">926</span>      DO I=1,NUMENV
+<span class="ln">927</span>            IF (JENV .EQ. 0.0 .AND. LCENV(I) ) JENV = I
+<span class="ln">928</span>      END DO
+<span class="ln">929</span>
+<span class="ln">930</span>      IF (JENV .GT. 1) THEN
+<span class="ln">931</span>            ! Calculate the the location of the base sof the surface CZ in radius
+<span class="ln">932</span>            DD2 = EDELS(1,JENV-1)-EDELS(2,JENV-1)
+<span class="ln">933</span>            DD1 = EDELS(1,JENV)-EDELS(2,JENV)
+<span class="ln">934</span>            FX = DD2/(DD2-DD1)
+<span class="ln">935</span>
+<span class="ln">936</span>            ENVCZL = ENVR(JENV-1)+FX*(ENVR(JENV)-ENVR(JENV-1))-CRSUNL
+<span class="ln">937</span>C 10/13/26 MHP via Claude
+<span class="ln">938</span>C the ENVRCZ assignment is removed with COMMON/ENVCZ/; nothing read it.
+<span class="ln">939</span>C ENVCZL above is still used below.
+<span class="ln">940</span>
+<span class="ln">941</span>            DO I=1,NUMENV
+<span class="ln">942</span>                  ENVS1(I) = DEXP(CLN*(ENVS(I)+HSTOT))
+<span class="ln">943</span>
+<span class="ln">944</span>                  IF (I.EQ.NUMENV) THEN
+<span class="ln">945</span>                        ENVS2(I) = 0.0
+<span class="ln">946</span>                  ELSE
+<span class="ln">947</span>                        ENVS2(I)=DEXP(CLN*ENVS(I+1))-DEXP(CLN*ENVS(I))
+<span class="ln">948</span>                  ENDIF
+<span class="ln">949</span>
+<span class="ln">950</span>                  EDEL1(I) = EDELS(1,I)
+<span class="ln">951</span>                  EDEL2(I) = EDELS(2,I)
+<span class="ln">952</span>            END DO
+<span class="ln">953</span>
+<span class="ln">954</span>C             CALL TAUCAL(ENVX,ENVS2,ENVS1,LCENV,ENVR,ENVP,ENVD,ENVG,NUMENV,  ! KC 2025-05-31
+<span class="ln">955</span>            CALL <a href="../yrec-map/taucal.f.html#def-TAUCAL" title="TAUCAL in taucal.f">TAUCAL</a>(ENVS2,ENVS1,LCENV,ENVR,ENVP,ENVD,ENVG,NUMENV,
+<span class="ln">956</span>     *            EVELS, EDEL1,EDEL2)
+<span class="ln">957</span>      ENDIF
+<span class="ln">958</span>
+<span class="ln">959</span>555      CONTINUE
+<span class="ln">960</span>      RETURN
+<span class="ln">961</span>      END</pre></details>
+<details class='py' id='py-envint'><summary>Python version: envint</summary><pre class='doc'>Integrate the atmosphere (gray T-tau, or read from a table) and the
+envelope (in log P) down to the fitting mass; return the fitting
+point&#x27;s P, T, r, store the envelope profile in envstruct_mod, and find
+the base of the convection zone and its overturn time.
+
+Translates: envint.f#ENVINT (09c3b9b)
+
+Arguments: b (L), fpl, ftl (rotational corrections), gl (log g),
+hstot (log M), ie (the point of the envelope triangle), lprt, lsbc
+(compute the boundary condition), plim (the expected end pressure), rl
+(log R), teffl, x, z, lpulpt (pulsation output), cmixl (the mixing
+length, relayed to qenv through qenvmix_mod); istore and the counters
+katm, kenv, ksaha. Arrays changed in place: ps, rs, ts (log P, log T,
+log r at the fitting point, entry ie, set only with lsbc), estore (the
+state where T first reaches TENV).
+
+Returns (rl, istore, katm, kenv, ksaha): rl as QENV last set it
+(log r at the last envelope point; as passed in if QENV was not
+called).</pre><pre class='src'><span class="ln">91</span>def envint(b, fpl, ftl, gl, hstot, ie, lprt, lsbc, plim, rl, teffl,
+<span class="ln">92</span>           x, z, estore, istore, katm, kenv, ksaha, ps, rs, ts,
+<span class="ln">93</span>           lpulpt, cmixl):
+<span class="ln">94</span>    &quot;&quot;&quot;Integrate the atmosphere (gray T-tau, or read from a table) and the
+<span class="ln">95</span>    envelope (in log P) down to the fitting mass; return the fitting
+<span class="ln">96</span>    point&#x27;s P, T, r, store the envelope profile in envstruct_mod, and find
+<span class="ln">97</span>    the base of the convection zone and its overturn time.
+<span class="ln">98</span>
+<span class="ln">99</span>    Translates: envint.f#ENVINT (09c3b9b)
+<span class="ln">100</span>
+<span class="ln">101</span>    Arguments: b (L), fpl, ftl (rotational corrections), gl (log g),
+<span class="ln">102</span>    hstot (log M), ie (the point of the envelope triangle), lprt, lsbc
+<span class="ln">103</span>    (compute the boundary condition), plim (the expected end pressure), rl
+<span class="ln">104</span>    (log R), teffl, x, z, lpulpt (pulsation output), cmixl (the mixing
+<span class="ln">105</span>    length, relayed to qenv through qenvmix_mod); istore and the counters
+<span class="ln">106</span>    katm, kenv, ksaha. Arrays changed in place: ps, rs, ts (log P, log T,
+<span class="ln">107</span>    log r at the fitting point, entry ie, set only with lsbc), estore (the
+<span class="ln">108</span>    state where T first reaches TENV).
+<span class="ln">109</span>
+<span class="ln">110</span>    Returns (rl, istore, katm, kenv, ksaha): rl as QENV last set it
+<span class="ln">111</span>    (log r at the last envelope point; as passed in if QENV was not
+<span class="ln">112</span>    called).
+<span class="ln">113</span>    &quot;&quot;&quot;
+<span class="ln">114</span>    global taup, op, dp, nok, nbad, sdif
+<span class="ln">115</span>    c = constants_mod
+<span class="ln">116</span>    nml = nmlpar_mod
+<span class="ln">117</span>    io = iounits_mod
+<span class="ln">118</span>    q = pulse2_mod
+<span class="ln">119</span>    apr = atmprt_mod
+<span class="ln">120</span>    epr = envprt_mod
+<span class="ln">121</span>    env = envstruct_mod
+<span class="ln">122</span>    atm = atmstruct_mod
+<span class="ln">123</span>    acd = acdpth_mod
+<span class="ln">124</span>    dydx = np.zeros(4)
+<span class="ln">125</span>    yscal = np.zeros(4)
+<span class="ln">126</span>    ystart = np.zeros(4)
+<span class="ln">127</span>    err = np.zeros(4)
+<span class="ln">128</span>    fxion = np.zeros(4)
+<span class="ln">129</span>
+<span class="ln">130</span>    # QENV is called through BSSTEP with a fixed argument list, so CMIXL
+<span class="ln">131</span>    # reaches it through qenvmix_mod.
+<span class="ln">132</span>    qenvmix_mod.cmixlq = cmixl
+<span class="ln">133</span>    # DBG pulse: turn on the derivative calculator.
+<span class="ln">134</span>    if lpulpt and lprt:
+<span class="ln">135</span>        pulse1_mod.lpumod = True
+<span class="ln">136</span>        lderiv = True
+<span class="ln">137</span>        latmo = False
+<span class="ln">138</span>    else:
+<span class="ln">139</span>        pulse1_mod.lpumod = False
+<span class="ln">140</span>        lderiv = False
+<span class="ln">141</span>        latmo = True
+<span class="ln">142</span>    locond = False
+<span class="ln">143</span>    # JVS 10/07/13: always calculate derivatives.
+<span class="ln">144</span>    lderiv = True
+<span class="ln">145</span>
+<span class="ln">146</span>    if lprt and nml.lstatm:
+<span class="ln">147</span>        if not nml.lstch:
+<span class="ln">148</span>            io.write(io.istor, &quot;\n******** ATMOSPHERE BEGIN ********&quot;)  # 60
+<span class="ln">149</span>
+<span class="ln">150</span>    # Tabulated atmospheres give the photospheric pressure directly.
+<span class="ln">151</span>    tabulated = False
+<span class="ln">152</span>    if nml.kttau == 3:
+<span class="ln">153</span>        # Kurucz atmospheres.
+<span class="ln">154</span>        if nml.lstch:
+<span class="ln">155</span>            nml.lstatm = False
+<span class="ln">156</span>        surfp(teffl, gl, lprt and nml.lstatm)
+<span class="ln">157</span>        tabulated = True
+<span class="ln">158</span>    elif nml.kttau == 5:
+<span class="ln">159</span>        # Kurucz (Castelli-Kurucz 2004) atmospheres.
+<span class="ln">160</span>        if nml.lstch:
+<span class="ln">161</span>            nml.lstatm = False
+<span class="ln">162</span>        kcsurfp(teffl, gl, lprt and nml.lstatm)
+<span class="ln">163</span>        tabulated = True
+<span class="ln">164</span>    elif nml.kttau == 4:
+<span class="ln">165</span>        # Allard &amp; Hauschildt atmospheres.
+<span class="ln">166</span>        if nml.lstch:
+<span class="ln">167</span>            nml.lstatm = False
+<span class="ln">168</span>        lalfail = alsurfp(teffl, gl, lprt and nml.lstatm, False)
+<span class="ln">169</span>        if lalfail:
+<span class="ln">170</span>            # Question (see the page): gray atmospheres for the rest of
+<span class="ln">171</span>            # the run (Teff above the table, or g outside it).
+<span class="ln">172</span>            nml.kttau = 0
+<span class="ln">173</span>            nml.lttau = True
+<span class="ln">174</span>            print(&quot; ENVINT: Change to gray atmosphere (KTTAU=0)&quot;)
+<span class="ln">175</span>            io.write(io.ishort, &quot; ENVINT: Change to gray atmosphere (KTTAU=0)&quot;)
+<span class="ln">176</span>        else:
+<span class="ln">177</span>            tabulated = True
+<span class="ln">178</span>
+<span class="ln">179</span>    if not tabulated:
+<span class="ln">180</span>        # label 2: gray atmosphere. Guess T at an optical depth near zero.
+<span class="ln">181</span>        errsum[1] = 0.0
+<span class="ln">182</span>        if nml.kttau == 0:
+<span class="ln">183</span>            tl = teffl - 0.031235 + 0.25 * math.log10(c.cc23)
+<span class="ln">184</span>        elif nml.kttau == 1:
+<span class="ln">185</span>            tl = teffl - 0.031235 + 0.25 * math.log10(0.550)
+<span class="ln">186</span>        elif nml.kttau == 2:
+<span class="ln">187</span>            tl = teffl + hra(c.cc23) - atmos_mod.hras
+<span class="ln">188</span>        # Very occasionally the start (x0) lies past the end (xlim): the
+<span class="ln">189</span>        # starting density is then divided by 10 and the start retried.
+<span class="ln">190</span>        # Question (see the page): no limit on retries.
+<span class="ln">191</span>        atmdx = nml.atmd0
+<span class="ln">192</span>        while True:                                # label 1998
+<span class="ln">193</span>            t = math.exp(c.cln * tl)
+<span class="ln">194</span>            # P at this T and the chosen starting density.
+<span class="ln">195</span>            pl = math.log10((c.cgas * atmdx + c.ca3 * t**3) * t)
+<span class="ln">196</span>            # The optical depth (x0 = log tau) where the integration begins.
+<span class="ln">197</span>            (t, p, dl, d, beta, betai, beta14, rmu, amu, emu, eta,
+<span class="ln">198</span>             qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap, qcpt, qcpp,
+<span class="ln">199</span>             ksaha) = eqstat(tl, t, pl, 0.0, 0.0, 0.0, x, z, 0.0, 0.0, 0.0,
+<span class="ln">200</span>                             fxion, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+<span class="ln">201</span>                             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, lderiv, latmo,
+<span class="ln">202</span>                             ksaha)
+<span class="ln">203</span>            o, ol, qod, qot = getopac(dl, tl, x, z, 0.0, 0.0, 0.0, 0.0, fxion)
+<span class="ln">204</span>            x0 = pl - gl + math.log10(o)
+<span class="ln">205</span>            y[1] = pl
+<span class="ln">206</span>            dydx[1] = math.exp(c.cln * (gl + x0 - ol - pl))
+<span class="ln">207</span>            if lprt and nml.lstatm:
+<span class="ln">208</span>                if not nml.lstch:
+<span class="ln">209</span>                    io.write(io.istor,
+<span class="ln">210</span>                             &quot;      TAU         P          T          D&quot;
+<span class="ln">211</span>                             &quot;           O         HII  HEII HEIII   SAHA&quot;
+<span class="ln">212</span>                             &quot;   KATM&quot;)                # format 10
+<span class="ln">213</span>                beta = 1.0 - c.ca3 * (t**2)**2 / p
+<span class="ln">214</span>                chrh = 1.0 / qdp
+<span class="ln">215</span>                cht = -chrh * qdt
+<span class="ln">216</span>                # Question (see the page): qcpp where qcp is meant.
+<span class="ln">217</span>                cv = qcpp - math.exp(c.cln * (pl - dl - tl)) * cht**2 / chrh
+<span class="ln">218</span>                gam1 = chrh * qcpp / cv
+<span class="ln">219</span>                if not nml.lstch:
+<span class="ln">220</span>                    io.write(io.istor,
+<span class="ln">221</span>                             f&quot; {x0:11.7f}{pl:11.7f}{tl:11.7f}{dl:11.7f}&quot;
+<span class="ln">222</span>                             f&quot;{o:14.7E}{fxion[1]:6.3f}{fxion[2]:6.3f}&quot;
+<span class="ln">223</span>                             f&quot;{fxion[3]:6.3f}{ksaha:7d}{katm:7d}&quot;
+<span class="ln">224</span>                             f&quot;{gam1:12.8f}{qdp:12.8f}{qdt:12.8f}&quot;
+<span class="ln">225</span>                             f&quot;{beta:12.8f}{qcpp:12.5E}{cv:12.5E}&quot;)  # 20
+<span class="ln">226</span>            # DBG pulse: the initial point for pulsation.
+<span class="ln">227</span>            if lpulpt and lprt:
+<span class="ln">228</span>                q.qqed = 0.0
+<span class="ln">229</span>                qesum = 0.0
+<span class="ln">230</span>                q.qqet = 0.0
+<span class="ln">231</span>                q.qfs = 1.0
+<span class="ln">232</span>                taup = math.exp(c.cln * x0)
+<span class="ln">233</span>                op = o
+<span class="ln">234</span>                dp = math.exp(c.cln * dl)
+<span class="ln">235</span>                deltr = 0.0
+<span class="ln">236</span>                pelpf = c.cgas * t * d * emu
+<span class="ln">237</span>                # From the first lines of TPGRAD.
+<span class="ln">238</span>                delr = o * b * math.exp(c.cln * (pl - hstot - 4.0 * tl
+<span class="ln">239</span>                                                 + c.clsunl - c.cgl
+<span class="ln">240</span>                                                 + c.cdelrl)) * ftl / fpl
+<span class="ln">241</span>                del_ = delr if delr - dela &lt;= 1.0e-6 else dela
+<span class="ln">242</span>                if nml.ipver == 1:
+<span class="ln">243</span>                    # MHP 10/02 typo: QED should have been QQED.
+<span class="ln">244</span>                    _pulse_lines(io.iopatm,
+<span class="ln">245</span>                                 [deltr, q.qfs, b, tl, dl, pl, qesum, o, qdp,
+<span class="ln">246</span>                                  q.qqed, q.qqet, qod, qot, del_, dela, qcp,
+<span class="ln">247</span>                                  rmu, qdt, pelpf], 0)        # format 5001
+<span class="ln">248</span>                elif nml.ipver in (2, 3):
+<span class="ln">249</span>                    _pulse_lines(io.iopatm,
+<span class="ln">250</span>                                 [deltr, q.qfs, b, tl, dl, pl, taup, o, qdp,
+<span class="ln">251</span>                                  q.qqed, q.qqet, qod, qot, del_, dela, qcp,
+<span class="ln">252</span>                                  rmu, qdt, pelpf], 5)        # format 6001
+<span class="ln">253</span>            # Integrate dP/dtau from this tau to tau = 2/3.
+<span class="ln">254</span>            nv = 1
+<span class="ln">255</span>            eps = nml.atmerr
+<span class="ln">256</span>            if nml.kttau == 1:
+<span class="ln">257</span>                # Krishna Swamy: tau = 0.312156330 at Teff.
+<span class="ln">258</span>                xlim = -0.505627854
+<span class="ln">259</span>            else:
+<span class="ln">260</span>                # tau = 2/3 at Teff.
+<span class="ln">261</span>                xlim = -0.176091259
+<span class="ln">262</span>            if x0 &gt; xlim:
+<span class="ln">263</span>                io.write(io.ishort, f&quot; ENVINT: X0&gt;XLIM, X0,XLIM: {x0} {xlim}&quot;)
+<span class="ln">264</span>                io.write(io.ishort,
+<span class="ln">265</span>                         &quot; ENVINT: get new X0 by dividing ATMD0 by 10&quot;)
+<span class="ln">266</span>                atmdx = atmdx / 10.0
+<span class="ln">267</span>                continue                           # go to 1998
+<span class="ln">268</span>            break
+<span class="ln">269</span>
+<span class="ln">270</span>        hmax = nml.atmmax
+<span class="ln">271</span>        hmin = nml.atmmin
+<span class="ln">272</span>        h = nml.atmbeg
+<span class="ln">273</span>        stoler = intpar_mod.stolr0
+<span class="ln">274</span>        nok = 0
+<span class="ln">275</span>        nbad = 0
+<span class="ln">276</span>        # The integration loop.
+<span class="ln">277</span>        for nstep in range(1, MAXSTP + 1):
+<span class="ln">278</span>            for i in range(1, nv + 1):
+<span class="ln">279</span>                yscal[i] = abs(y[i]) + abs(h * dydx[i]) + TINY
+<span class="ln">280</span>            # Don&#x27;t pass the end, nor exceed the maximum step.
+<span class="ln">281</span>            if (x0 - xlim) * (x0 + h - xlim) &lt; 0.0:
+<span class="ln">282</span>                h = xlim - x0
+<span class="ln">283</span>            if h &gt; hmax:
+<span class="ln">284</span>                h = hmax
+<span class="ln">285</span>            # h is the attempted step, hdid the one taken, hnext the next.
+<span class="ln">286</span>            x0, hdid, hnext, rl, katm, ksaha = bsstep(
+<span class="ln">287</span>                y, dydx, nv, x0, h, eps, yscal, 0.0, 0.0, qatm, b, fpl, ftl, gl,
+<span class="ln">288</span>                latmo, lderiv, locond, lprt, rl, teffl, x, z, katm, ksaha, err)
+<span class="ln">289</span>            errsum[1] = errsum[1] + err[1]
+<span class="ln">290</span>            # dP/dtau at the start of the next step.
+<span class="ln">291</span>            katm, ksaha = qatm(x0, y, dydx, b, fpl, ftl, gl, latmo, lderiv,
+<span class="ln">292</span>                               locond, lprt, rl, teffl, x, z, katm, ksaha)
+<span class="ln">293</span>            if lprt and nml.lstatm:
+<span class="ln">294</span>                beta = 1.0 - c.ca3 * math.exp(c.cln * (4.0 * apr.at - apr.ap))
+<span class="ln">295</span>                chrh = 1.0 / q.qqdp
+<span class="ln">296</span>                cht = -chrh * q.qqdt
+<span class="ln">297</span>                cv = q.qqcp - math.exp(c.cln * (apr.ap - apr.ad - apr.at)) \
+<span class="ln">298</span>                    * cht**2 / chrh
+<span class="ln">299</span>                gam1 = chrh * q.qqcp / cv
+<span class="ln">300</span>                if not nml.lstch:
+<span class="ln">301</span>                    io.write(io.istor,
+<span class="ln">302</span>                             f&quot; {apr.taul:11.7f}{apr.ap:11.7f}{apr.at:11.7f}&quot;
+<span class="ln">303</span>                             f&quot;{apr.ad:11.7f}{apr.ao:14.7E}&quot;
+<span class="ln">304</span>                             f&quot;{apr.afxion[1]:6.3f}{apr.afxion[2]:6.3f}&quot;
+<span class="ln">305</span>                             f&quot;{apr.afxion[3]:6.3f}{ksaha:7d}{katm:7d}&quot;
+<span class="ln">306</span>                             f&quot;{gam1:12.8f}{q.qqdp:12.8f}{q.qqdt:12.8f}&quot;
+<span class="ln">307</span>                             f&quot;{beta:12.8f}{q.qqcp:12.5E}{cv:12.5E}&quot;)  # 20
+<span class="ln">308</span>                # JvS: save the structure in atmstruct_mod.
+<span class="ln">309</span>                atm.atmop[nstep] = apr.ap
+<span class="ln">310</span>                atm.atmot[nstep] = apr.at
+<span class="ln">311</span>                atm.atmod[nstep] = apr.ad
+<span class="ln">312</span>                atm.abetas[nstep] = beta
+<span class="ln">313</span>                atm.agam1[nstep] = gam1
+<span class="ln">314</span>                atm.aqdt[nstep] = q.qqdt
+<span class="ln">315</span>                atm.afxions[1, nstep] = apr.afxion[1]
+<span class="ln">316</span>                atm.afxions[2, nstep] = apr.afxion[2]
+<span class="ln">317</span>                atm.afxions[3, nstep] = apr.afxion[3]
+<span class="ln">318</span>                atm.atmoo[nstep] = apr.ao
+<span class="ln">319</span>                atm.atmocp[nstep] = q.qqcp
+<span class="ln">320</span>            if hdid == h:
+<span class="ln">321</span>                nok = nok + 1
+<span class="ln">322</span>            else:
+<span class="ln">323</span>                nbad = nbad + 1
+<span class="ln">324</span>            # DBG pulse: atmosphere values for pulsation (JVS 02/11: also
+<span class="ln">325</span>            # for LCLCD).
+<span class="ln">326</span>            # Question (see the page): taup, op, dp are set only with
+<span class="ln">327</span>            # pulsation output; otherwise they are left from an earlier call.
+<span class="ln">328</span>            if (lpulpt and lprt) or acd.lclcd or nml.lstch:
+<span class="ln">329</span>                q.qqed = 0.0
+<span class="ln">330</span>                qesum = 0.0
+<span class="ln">331</span>                q.qqet = 0.0
+<span class="ln">332</span>                q.qfs = 1.0
+<span class="ln">333</span>                on = q.qo
+<span class="ln">334</span>                dn = math.exp(c.cln * q.qdl)
+<span class="ln">335</span>                taun = math.exp(c.cln * apr.taul)
+<span class="ln">336</span>                # See J.P. Cox, Princ. of Stell. Struc., p. 590.
+<span class="ln">337</span>                deltr = (taun - taup) / (((dn * on) + (dp * op)) / 2)
+<span class="ln">338</span>                pelpf = c.cgas * q.qt * q.qd * q.qemu
+<span class="ln">339</span>                op = on
+<span class="ln">340</span>                # From the first lines of TPGRAD.
+<span class="ln">341</span>                delr = q.qo * b * math.exp(c.cln * (q.qpl - hstot
+<span class="ln">342</span>                                                    - 4.0 * q.qtl + c.clsunl
+<span class="ln">343</span>                                                    - c.cgl + c.cdelrl)) \
+<span class="ln">344</span>                    * ftl / fpl
+<span class="ln">345</span>                del_ = delr if delr - q.qdela &lt;= 1.0e-6 else q.qdela
+<span class="ln">346</span>                if lpulpt and lprt:
+<span class="ln">347</span>                    if nml.ipver == 1:
+<span class="ln">348</span>                        _pulse_lines(io.iopatm,
+<span class="ln">349</span>                                     [deltr, q.qfs, b, q.qtl, q.qdl, q.qpl,
+<span class="ln">350</span>                                      qesum, q.qo, q.qqdp, q.qqed, q.qqet,
+<span class="ln">351</span>                                      q.qqod, q.qqot, del_, q.qdela, q.qqcp,
+<span class="ln">352</span>                                      q.qrmu, q.qqdt, pelpf], 0)
+<span class="ln">353</span>                    elif nml.ipver in (2, 3):
+<span class="ln">354</span>                        _pulse_lines(io.iopatm,
+<span class="ln">355</span>                                     [deltr, q.qfs, b, q.qtl, q.qdl, q.qpl,
+<span class="ln">356</span>                                      taun, q.qo, q.qqdp, q.qqed, q.qqet,
+<span class="ln">357</span>                                      q.qqod, q.qqot, del_, q.qdela, q.qqcp,
+<span class="ln">358</span>                                      q.qrmu, q.qqdt, pelpf], 5)
+<span class="ln">359</span>                # JvS: save in atmstruct_mod.
+<span class="ln">360</span>                # Question (see the page): stored on other switches than
+<span class="ln">361</span>                # atmop, atmot, ...
+<span class="ln">362</span>                atm.atmor[nstep] = deltr
+<span class="ln">363</span>                atm.adels[1, nstep] = delr
+<span class="ln">364</span>                atm.adels[2, nstep] = del_
+<span class="ln">365</span>                atm.adels[3, nstep] = q.qdela
+<span class="ln">366</span>                atm.numatm = nstep
+<span class="ln">367</span>                taup = taun
+<span class="ln">368</span>                dp = dn
+<span class="ln">369</span>            # Is the integration complete?
+<span class="ln">370</span>            if abs(x0 - xlim) &lt;= stoler:
+<span class="ln">371</span>                io.write(io.ishort,
+<span class="ln">372</span>                         f&quot; ATMOSPHERE INTEGRATION COMPLETE NUMBER OF STEPS &quot;
+<span class="ln">373</span>                         f&quot;ACCEPTED{nok:5d} REJECTED{nbad:5d}\n&quot;
+<span class="ln">374</span>                         f&quot;     MAXIMUM RELATIVE ERROR IN P &quot;
+<span class="ln">375</span>                         f&quot;{errsum[1]:22.13E}&quot;)    # format 35
+<span class="ln">376</span>                break                              # go to 200
+<span class="ln">377</span>            if hnext &lt; hmin:
+<span class="ln">378</span>                hnext = hmin
+<span class="ln">379</span>            h = hnext
+<span class="ln">380</span>        else:
+<span class="ln">381</span>            msg = (&quot;     ATMOSPHERE INTEGRATION FAILED AFTER MAXSTP &quot;
+<span class="ln">382</span>                   &quot;INTEGRATIONS.I QUIT.&quot;)         # format 50
+<span class="ln">383</span>            io.write(io.iowr, msg)
+<span class="ln">384</span>            io.write(io.ishort, msg)
+<span class="ln">385</span>            raise SystemExit(msg)
+<span class="ln">386</span>
+<span class="ln">387</span>    # label 200 (tables come here directly). G Somers 3/17: if only the
+<span class="ln">388</span>    # photospheric pressure is wanted, stop here.
+<span class="ln">389</span>    ovrtrn_mod.pphot = apr.ap
+<span class="ln">390</span>    if not nml.lcalcenv:
+<span class="ln">391</span>        return rl, istore, katm, kenv, ksaha           # go to 555
+<span class="ln">392</span>
+<span class="ln">393</span>    # The envelope: P is the independent variable, m, T and r the
+<span class="ln">394</span>    # dependent ones; integrate from tau = 2/3 to the model&#x27;s last point.
+<span class="ln">395</span>    if lprt and nml.lstenv:
+<span class="ln">396</span>        if not nml.lstch:
+<span class="ln">397</span>            io.write(io.istor, &quot;\n******** ENVELOPE BEGIN ********&quot;)  # 61
+<span class="ln">398</span>    # DBG pulse: end-of-data marker for the atmosphere file.
+<span class="ln">399</span>    if lpulpt and lprt:
+<span class="ln">400</span>        if nml.ipver == 1:
+<span class="ln">401</span>            _pulse_lines(io.iopatm, list(XYZ[1:20]), 0)
+<span class="ln">402</span>        elif nml.ipver in (2, 3):
+<span class="ln">403</span>            _pulse_lines(io.iopatm, list(XYZ[1:20]), 5)
+<span class="ln">404</span>
+<span class="ln">405</span>    comp = comp_mod
+<span class="ln">406</span>    if comp.senv &gt; -1.0e-12:
+<span class="ln">407</span>        # The envelope mass is negligible: the photosphere is the fitting
+<span class="ln">408</span>        # point.
+<span class="ln">409</span>        if lsbc:
+<span class="ln">410</span>            ps[ie] = apr.ap
+<span class="ln">411</span>            rs[ie] = rl
+<span class="ln">412</span>            ts[ie] = apr.at
+<span class="ln">413</span>            if lprt:
+<span class="ln">414</span>                if not nml.lstch:
+<span class="ln">415</span>                    io.write(io.istor,
+<span class="ln">416</span>                             f&quot;    {ps[ie]:16.12f}{ts[ie]:16.12f}&quot;
+<span class="ln">417</span>                             f&quot;{rs[ie]:16.12f}        {comp.senv:16.12f}&quot;)
+<span class="ln">418</span>    else:
+<span class="ln">419</span>        # Initialize; set the numerical parameters.
+<span class="ln">420</span>        latmo = False
+<span class="ln">421</span>        for i in range(1, 4):
+<span class="ln">422</span>            errsum[i] = 0.0
+<span class="ln">423</span>        nok = 0
+<span class="ln">424</span>        nbad = 0
+<span class="ln">425</span>        x0 = apr.ap
+<span class="ln">426</span>        sl = 0.0
+<span class="ln">427</span>        y[1] = sl
+<span class="ln">428</span>        y[2] = apr.at
+<span class="ln">429</span>        y[3] = rl
+<span class="ln">430</span>        nv = 3
+<span class="ln">431</span>        eps = nml.enverr
+<span class="ln">432</span>        hmax = nml.envmax
+<span class="ln">433</span>        hmin = nml.envmin
+<span class="ln">434</span>        h = nml.envbeg
+<span class="ln">435</span>        stoler = abs(intpar_mod.stolr0 * comp.senv)
+<span class="ln">436</span>        rsurf = math.exp(c.cln * rl)
+<span class="ln">437</span>        if istore == ie:
+<span class="ln">438</span>            istore = 0
+<span class="ln">439</span>        llstore = False
+<span class="ln">440</span>        ltest = not lsbc
+<span class="ln">441</span>        # dy/dx at the start of the step.
+<span class="ln">442</span>        rl, kenv, ksaha = qenv(x0, y, dydx, b, fpl, ftl, gl, latmo,
+<span class="ln">443</span>                               lderiv, locond, lprt, rl, teffl, x, z, kenv,
+<span class="ln">444</span>                               ksaha)
+<span class="ln">445</span>        # DBG pulse: the first point of the envelope.
+<span class="ln">446</span>        pal = pualpha_mod
+<span class="ln">447</span>        if lpulpt and lprt:
+<span class="ln">448</span>            _envelope_pulse_point(rl, b, pal)
+<span class="ln">449</span>        if lprt and nml.lstenv:
+<span class="ln">450</span>            if not nml.lstch:
+<span class="ln">451</span>                io.write(io.istor,
+<span class="ln">452</span>                         &quot; &quot; + &quot;&quot;.join(f&quot;{s:&gt;10}&quot; for s in
+<span class="ln">453</span>                                       (&quot;GRAV  &quot;, &quot;P   &quot;, &quot;T   &quot;))
+<span class="ln">454</span>                         + &quot;&quot;.join(f&quot;{s:&gt;14}&quot; for s in (&quot;DEPTH    &quot;, &quot;M      &quot;))
+<span class="ln">455</span>                         + &quot;&quot;.join(f&quot;{s:&gt;10}&quot; for s in (&quot;D    &quot;, &quot;O   &quot;))
+<span class="ln">456</span>                         + f&quot;{&#x27;BETA&#x27;:&gt;7}{&#x27;DELR  &#x27;:&gt;9}&quot;
+<span class="ln">457</span>                         + &quot;&quot;.join(f&quot;{s:&gt;6}&quot; for s in
+<span class="ln">458</span>                                   (&quot;DELA&quot;, &quot;DEL &quot;, &quot;HII &quot;, &quot;HEII&quot;, &quot;HEIII&quot;))
+<span class="ln">459</span>                         + f&quot;{&#x27;V   &#x27;:&gt;9}{&#x27;GAM1   &#x27;:&gt;12}{&#x27;QQDP   &#x27;:&gt;12}&quot;)  # 240
+<span class="ln">460</span>            srad = math.exp(c.cln * rl)
+<span class="ln">461</span>            de = (rsurf - srad) / rsurf
+<span class="ln">462</span>            sgl = c.cgl + hstot - 2.0 * rl
+<span class="ln">463</span>            eg = math.exp(c.cln * sgl)
+<span class="ln">464</span>            if not nml.lstch:
+<span class="ln">465</span>                io.write(io.istor, _fmt260(eg, de))
+<span class="ln">466</span>        # Store the starting values (07/02: one stored envelope point).
+<span class="ln">467</span>        lsurcz = False
+<span class="ln">468</span>        tauczenv = 0.0
+<span class="ln">469</span>        _store_envelope_point(1, x, z, b)
+<span class="ln">470</span>        # JVS 10/10
+<span class="ln">471</span>        chdelj = epr.edel[2]                       # set, never used
+<span class="ln">472</span>        chdeld = q.qdela                           # set, never used
+<span class="ln">473</span>        if env.lcenv[1]:
+<span class="ln">474</span>            lsurcz = True
+<span class="ln">475</span>        env.numenv = 1
+<span class="ln">476</span>        for nstep in range(1, MAXSTP + 1):
+<span class="ln">477</span>            xstart = x0
+<span class="ln">478</span>            for i in range(1, nv + 1):
+<span class="ln">479</span>                ystart[i] = y[i]
+<span class="ln">480</span>                yscal[i] = abs(y[i]) + abs(h * dydx[i]) + TINY
+<span class="ln">481</span>            sest = y[1] + h * dydx[1]
+<span class="ln">482</span>            if comp.senv - y[1] &gt; 0.0 or comp.senv - sest &gt; 0.0:
+<span class="ln">483</span>                # The integration has overshot the fitting point, or the
+<span class="ln">484</span>                # next step would: shorten the step, or integrate back.
+<span class="ln">485</span>                h = (comp.senv - y[1]) / dydx[1]
+<span class="ln">486</span>            if h &lt; 0.0:
+<span class="ln">487</span>                if h &lt; -hmax:
+<span class="ln">488</span>                    h = -hmax
+<span class="ln">489</span>            else:
+<span class="ln">490</span>                if h &gt; hmax:
+<span class="ln">491</span>                    h = hmax
+<span class="ln">492</span>            # plim estimates the end pressure from the model&#x27;s last point:
+<span class="ln">493</span>            # the first time the integrator would pass it, limit the step.
+<span class="ln">494</span>            if ltest:
+<span class="ln">495</span>                if x0 + h &gt; plim:
+<span class="ln">496</span>                    h = plim - x0
+<span class="ln">497</span>                    ltest = False
+<span class="ln">498</span>            x0, hdid, hnext, rl, kenv, ksaha = bsstep(
+<span class="ln">499</span>                y, dydx, nv, x0, h, eps, yscal, 0.0, 0.0, qenv, b, fpl, ftl, gl,
+<span class="ln">500</span>                latmo, lderiv, locond, lprt, rl, teffl, x, z, kenv, ksaha, err)
+<span class="ln">501</span>            for k in range(1, 4):
+<span class="ln">502</span>                errsum[k] = errsum[k] + err[k]
+<span class="ln">503</span>            # dy/dx at the start of the next step.
+<span class="ln">504</span>            rl, kenv, ksaha = qenv(x0, y, dydx, b, fpl, ftl, gl, latmo,
+<span class="ln">505</span>                                   lderiv, locond, lprt, rl, teffl, x, z,
+<span class="ln">506</span>                                   kenv, ksaha)
+<span class="ln">507</span>            if lpulpt and lprt:
+<span class="ln">508</span>                _envelope_pulse_point(rl, b, pal)
+<span class="ln">509</span>            if lprt and nml.lstenv:
+<span class="ln">510</span>                srad = math.exp(c.cln * rl)
+<span class="ln">511</span>                de = (rsurf - srad) / rsurf
+<span class="ln">512</span>                sgl = c.cgl + hstot - 2.0 * rl
+<span class="ln">513</span>                eg = math.exp(c.cln * sgl)
+<span class="ln">514</span>                if not nml.lstch:
+<span class="ln">515</span>                    io.write(io.istor, _fmt260(eg, de))
+<span class="ln">516</span>            if hdid == h:
+<span class="ln">517</span>                nok = nok + 1
+<span class="ln">518</span>            else:
+<span class="ln">519</span>                nbad = nbad + 1
+<span class="ln">520</span>            # Is the integration complete? Store the point if it has not
+<span class="ln">521</span>            # overshot the fitting point (07/02).
+<span class="ln">522</span>            sdif = comp.senv - y[1]
+<span class="ln">523</span>            if sdif &lt;= stoler:
+<span class="ln">524</span>                env.numenv = env.numenv + 1
+<span class="ln">525</span>                n = env.numenv
+<span class="ln">526</span>                _store_envelope_point(n, x, z, b)
+<span class="ln">527</span>                if not lsurcz:
+<span class="ln">528</span>                    if env.lcenv[n]:
+<span class="ln">529</span>                        lsurcz = True
+<span class="ln">530</span>                elif epr.evel &gt; 0.0:
+<span class="ln">531</span>                    dr = 10.0**env.envr[n - 1] - 10.0**env.envr[n]
+<span class="ln">532</span>                    # Question (see the page): tauczenv is never kept.
+<span class="ln">533</span>                    tauczenv = tauczenv + dr / epr.evel
+<span class="ln">534</span>            if abs(sdif) &lt;= stoler:
+<span class="ln">535</span>                if lsbc:
+<span class="ln">536</span>                    # Interpolate linearly to the fitting mass.
+<span class="ln">537</span>                    wt0 = sdif / (ystart[1] - y[1])
+<span class="ln">538</span>                    ps[ie] = x0 + wt0 * (xstart - x0)
+<span class="ln">539</span>                    rs[ie] = y[3] + wt0 * (ystart[3] - y[3])
+<span class="ln">540</span>                    ts[ie] = y[2] + wt0 * (ystart[2] - y[2])
+<span class="ln">541</span>                    if lprt:
+<span class="ln">542</span>                        io.write(io.ishort,
+<span class="ln">543</span>                                 f&quot;    {ps[ie]:16.12f}{ts[ie]:16.12f}&quot;
+<span class="ln">544</span>                                 f&quot;{rs[ie]:16.12f}        {comp.senv:16.12f}&quot;)
+<span class="ln">545</span>                break                              # go to 300
+<span class="ln">546</span>            elif not llstore:
+<span class="ln">547</span>                # TENV was COMMON/CTLIM/, set by parmin.f; derived here.
+<span class="ln">548</span>                tenv = 0.5 * (nml.tenv0 + nml.tenv1)
+<span class="ln">549</span>                if y[2] &gt;= tenv and lsbc:
+<span class="ln">550</span>                    llstore = True
+<span class="ln">551</span>                    istore = ie
+<span class="ln">552</span>                    estore[1] = x0
+<span class="ln">553</span>                    estore[2] = y[2]
+<span class="ln">554</span>                    estore[3] = y[3]
+<span class="ln">555</span>                    estore[4] = y[1]
+<span class="ln">556</span>            if hnext &lt; hmin:
+<span class="ln">557</span>                hnext = hmin
+<span class="ln">558</span>            h = hnext
+<span class="ln">559</span>        else:
+<span class="ln">560</span>            msg = (&quot;     ENVELOPE INTEGRATION FAILED AFTER MAXSTP TRIES. &quot;
+<span class="ln">561</span>                   &quot;I QUIT&quot;)                       # format 911
+<span class="ln">562</span>            io.write(io.iowr, msg)
+<span class="ln">563</span>            io.write(io.ishort, msg)
+<span class="ln">564</span>            raise SystemExit(msg)
+<span class="ln">565</span>
+<span class="ln">566</span>    # label 300 (07/02): reverse the envelope profile, centre outward.
+<span class="ln">567</span>    if comp.senv &lt; -1.0e-12:
+<span class="ln">568</span>        n = env.numenv
+<span class="ln">569</span>        for i in range(1, n + 1):
+<span class="ln">570</span>            i1 = i
+<span class="ln">571</span>            i2 = n - i + 1
+<span class="ln">572</span>            if i1 &gt;= i2:
+<span class="ln">573</span>                break                              # go to 310
+<span class="ln">574</span>            for arr in (env.envd, env.envp, env.envr, env.envs, env.envt,
+<span class="ln">575</span>                        env.envx, env.envz, env.lcenv, env.envo):
+<span class="ln">576</span>                arr[i1], arr[i2] = arr[i2], arr[i1]
+<span class="ln">577</span>            # Question (see the page): ENVL(I2) = DUM1 is missing, so the
+<span class="ln">578</span>            # second half keeps its own values.
+<span class="ln">579</span>            dum1 = env.envl[i1]
+<span class="ln">580</span>            env.envl[i1] = env.envl[i2]
+<span class="ln">581</span>            for arr in (env.eqdt, env.evels, env.ebetas, env.egam1,
+<span class="ln">582</span>                        env.eqcp):
+<span class="ln">583</span>                arr[i1], arr[i2] = arr[i2], arr[i1]
+<span class="ln">584</span>            for k in range(1, 4):
+<span class="ln">585</span>                env.edels[k, i1], env.edels[k, i2] = \
+<span class="ln">586</span>                    env.edels[k, i2], env.edels[k, i1]
+<span class="ln">587</span>                env.efxions[k, i1], env.efxions[k, i2] = \
+<span class="ln">588</span>                    env.efxions[k, i2], env.efxions[k, i1]
+<span class="ln">589</span>    # DBG pulse: end-of-data marker for the envelope file.
+<span class="ln">590</span>    if lpulpt and lprt:
+<span class="ln">591</span>        if nml.ipver == 1:
+<span class="ln">592</span>            _pulse_lines(io.iopenv, list(XYZ[1:20]), 0)
+<span class="ln">593</span>        elif nml.ipver in (2, 3):
+<span class="ln">594</span>            _pulse_lines(io.iopenv, list(XYZ[1:23]), 6)
+<span class="ln">595</span>
+<span class="ln">596</span>    # Possible bug (update-findings.md): when the envelope is skipped,
+<span class="ln">597</span>    # nok, nbad, sdif and y are from the atmosphere or an earlier call.
+<span class="ln">598</span>    io.write(io.ishort,
+<span class="ln">599</span>             f&quot; ENVELOPE INTEGRATION COMPLETE NUMBER OF STEPS ACCEPTED&quot;
+<span class="ln">600</span>             f&quot;{nok:5d} REJECTED{nbad:5d}\n&quot;
+<span class="ln">601</span>             f&quot;     SENV-LAST M={sdif:22.13E}  LAST M={y[1]:22.13E}\n&quot;
+<span class="ln">602</span>             f&quot;     MAX RELATIVE ERRORS:M {errsum[1]:14.5E}  T &quot;
+<span class="ln">603</span>             f&quot;{errsum[2]:14.5E}  R {errsum[3]:14.5E}&quot;)   # format 215
+<span class="ln">604</span>
+<span class="ln">605</span>    # JVS 08/13: if the convection zone&#x27;s base lies in the envelope, find
+<span class="ln">606</span>    # it, and the overturn time (G Somers 3/17: not with LNEWTCZ).
+<span class="ln">607</span>    if nml.lnewtcz:
+<span class="ln">608</span>        return rl, istore, katm, kenv, ksaha           # go to 555
+<span class="ln">609</span>    jenv = 0
+<span class="ln">610</span>    for i in range(1, env.numenv + 1):
+<span class="ln">611</span>        if jenv == 0 and env.lcenv[i]:
+<span class="ln">612</span>            jenv = i
+<span class="ln">613</span>    if jenv &gt; 1:
+<span class="ln">614</span>        # The base of the surface convection zone in radius, by linear
+<span class="ln">615</span>        # interpolation of del_rad - del.
+<span class="ln">616</span>        dd2 = env.edels[1, jenv - 1] - env.edels[2, jenv - 1]
+<span class="ln">617</span>        dd1 = env.edels[1, jenv] - env.edels[2, jenv]
+<span class="ln">618</span>        fx = dd2 / (dd2 - dd1)
+<span class="ln">619</span>        # Question (see the page): envczl is no longer used.
+<span class="ln">620</span>        envczl = (env.envr[jenv - 1] + fx * (env.envr[jenv]
+<span class="ln">621</span>                                             - env.envr[jenv - 1])
+<span class="ln">622</span>                  - c.crsunl)
+<span class="ln">623</span>        for i in range(1, env.numenv + 1):
+<span class="ln">624</span>            envs1[i] = math.exp(c.cln * (env.envs[i] + hstot))
+<span class="ln">625</span>            if i == env.numenv:
+<span class="ln">626</span>                envs2[i] = 0.0
+<span class="ln">627</span>            else:
+<span class="ln">628</span>                envs2[i] = (math.exp(c.cln * env.envs[i + 1])
+<span class="ln">629</span>                            - math.exp(c.cln * env.envs[i]))
+<span class="ln">630</span>            edel1[i] = env.edels[1, i]
+<span class="ln">631</span>            edel2[i] = env.edels[2, i]
+<span class="ln">632</span>        # Question (see the page): envg is never set.
+<span class="ln">633</span>        taucal(envs2, envs1, env.lcenv, env.envr, env.envp, env.envd, envg,
+<span class="ln">634</span>               env.numenv, env.evels, edel1, edel2)
+<span class="ln">635</span>    return rl, istore, katm, kenv, ksaha               # label 555</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_pulse_lines'><summary>Python version: _pulse_lines</summary><pre class='doc'>Write values to a pulsation file, per_line to a line (FORMATs 5001:
+5E16.9 and 6001: 5E23.16, as 5, 5, 5, 4; 6003: 6E23.16, as 6, 6, 6,
+4). Python&#x27;s E format prints d.ddd where Fortran&#x27;s prints 0.ddd.</pre><pre class='src'><span class="ln">62</span>def _pulse_lines(unit, values, per_line):
+<span class="ln">63</span>    &quot;&quot;&quot;Write values to a pulsation file, per_line to a line (FORMATs 5001:
+<span class="ln">64</span>    5E16.9 and 6001: 5E23.16, as 5, 5, 5, 4; 6003: 6E23.16, as 6, 6, 6,
+<span class="ln">65</span>    4). Python&#x27;s E format prints d.ddd where Fortran&#x27;s prints 0.ddd.&quot;&quot;&quot;
+<span class="ln">66</span>    width, digits = (16, 9) if per_line == 0 else (23, 16)
+<span class="ln">67</span>    per_line = per_line or 5
+<span class="ln">68</span>    lines = []
+<span class="ln">69</span>    for k in range(0, len(values), per_line):
+<span class="ln">70</span>        lines.append(&quot;&quot;.join(f&quot;{v:{width}.{digits}E}&quot;
+<span class="ln">71</span>                             for v in values[k:k + per_line]))
+<span class="ln">72</span>    iounits_mod.write(unit, &quot;\n&quot;.join(lines))</pre></details>
+<details class='py' id='py-_fmt260'><summary>Python version: _fmt260</summary><pre class='doc'>FORMAT 260: one envelope point of the .store table.</pre><pre class='src'><span class="ln">75</span>def _fmt260(eg, de):
+<span class="ln">76</span>    &quot;&quot;&quot;FORMAT 260: one envelope point of the .store table.&quot;&quot;&quot;
+<span class="ln">77</span>    e = envprt_mod
+<span class="ln">78</span>    q = pulse2_mod
+<span class="ln">79</span>    chrh = 1.0 / q.qqdp
+<span class="ln">80</span>    cht = -chrh * q.qqdt
+<span class="ln">81</span>    cv = q.qqcp - math.exp(constants_mod.cln * (e.ep - e.ed - e.et)) \
+<span class="ln">82</span>        * cht**2 / chrh
+<span class="ln">83</span>    gam1 = chrh * q.qqcp / cv
+<span class="ln">84</span>    return (f&quot; {eg:10.3E}{e.ep:10.7f}{e.et:10.7f}{de:14.7E}{e.es:14.7E}&quot;
+<span class="ln">85</span>            f&quot;{e.ed:10.7f}{e.eo:10.2E}{e.ebeta:7.3f}{e.edel[1]:9.2E}&quot;
+<span class="ln">86</span>            f&quot;{e.edel[2]:6.3f}{e.edel[3]:6.3f}{e.efxion[1]:6.3f}&quot;
+<span class="ln">87</span>            f&quot;{e.efxion[2]:6.3f}{e.efxion[3]:6.3f}{e.evel:9.2E}&quot;
+<span class="ln">88</span>            f&quot;{gam1:12.8f}{q.qqdp:12.8f}&quot;)</pre></details>
+<details class='py' id='py-_store_envelope_point'><summary>Python version: _store_envelope_point</summary><pre class='doc'>Copy the point just integrated (envprt_mod, pulse2_mod) into entry n
+of envstruct_mod: the Fortran writes this block out twice.</pre><pre class='src'><span class="ln">638</span>def _store_envelope_point(n, x, z, b):
+<span class="ln">639</span>    &quot;&quot;&quot;Copy the point just integrated (envprt_mod, pulse2_mod) into entry n
+<span class="ln">640</span>    of envstruct_mod: the Fortran writes this block out twice.&quot;&quot;&quot;
+<span class="ln">641</span>    env = envstruct_mod
+<span class="ln">642</span>    e = envprt_mod
+<span class="ln">643</span>    q = pulse2_mod
+<span class="ln">644</span>    env.envd[n] = e.ed
+<span class="ln">645</span>    env.envp[n] = e.ep
+<span class="ln">646</span>    env.envr[n] = e.er
+<span class="ln">647</span>    env.envs[n] = e.es
+<span class="ln">648</span>    env.envt[n] = e.et
+<span class="ln">649</span>    env.envx[n] = x
+<span class="ln">650</span>    env.envz[n] = z
+<span class="ln">651</span>    env.lcenv[n] = e.evel &gt; 0.0
+<span class="ln">652</span>    for k in range(1, 4):
+<span class="ln">653</span>        env.edels[k, n] = e.edel[k]
+<span class="ln">654</span>    env.evels[n] = e.evel
+<span class="ln">655</span>    env.ebetas[n] = e.ebeta
+<span class="ln">656</span>    # JVS 08/25: always save these.
+<span class="ln">657</span>    chrh = 1.0 / q.qqdp
+<span class="ln">658</span>    cht = -chrh * q.qqdt
+<span class="ln">659</span>    cv = q.qqcp - math.exp(constants_mod.cln * (e.ep - e.ed - e.et)) \
+<span class="ln">660</span>        * cht**2 / chrh
+<span class="ln">661</span>    env.egam1[n] = chrh * q.qqcp / cv
+<span class="ln">662</span>    env.eqcp[n] = q.qqcp
+<span class="ln">663</span>    for k in range(1, 4):
+<span class="ln">664</span>        env.efxions[k, n] = e.efxion[k]
+<span class="ln">665</span>    env.envo[n] = e.eo
+<span class="ln">666</span>    env.envl[n] = b
+<span class="ln">667</span>    env.eqdt[n] = q.qqdt</pre></details>
+<details class='py' id='py-_envelope_pulse_point'><summary>Python version: _envelope_pulse_point</summary><pre class='doc'>DBG pulse: one envelope point to the pulsation file (FORMATs 5001,
+6001, or 6003 with the mixing-length values appended to the first
+three lines); the Fortran writes this block out twice.</pre><pre class='src'><span class="ln">670</span>def _envelope_pulse_point(rl, b, pal):
+<span class="ln">671</span>    &quot;&quot;&quot;DBG pulse: one envelope point to the pulsation file (FORMATs 5001,
+<span class="ln">672</span>    6001, or 6003 with the mixing-length values appended to the first
+<span class="ln">673</span>    three lines); the Fortran writes this block out twice.&quot;&quot;&quot;
+<span class="ln">674</span>    q = pulse2_mod
+<span class="ln">675</span>    io = iounits_mod
+<span class="ln">676</span>    q.qqed = 0.0
+<span class="ln">677</span>    qesum = 0.0
+<span class="ln">678</span>    q.qqet = 0.0
+<span class="ln">679</span>    pelpf = constants_mod.cgas * q.qt * q.qd * q.qemu
+<span class="ln">680</span>    vals = [rl, q.qfs, b, q.qtl, q.qdl, q.qpl, qesum, q.qo, q.qqdp, q.qqed,
+<span class="ln">681</span>            q.qqet, q.qqod, q.qqot, q.qdel, q.qdela, q.qqcp, q.qrmu, q.qqdt,
+<span class="ln">682</span>            pelpf]
+<span class="ln">683</span>    if nmlpar_mod.ipver == 1:
+<span class="ln">684</span>        _pulse_lines(io.iopenv, vals, 0)
+<span class="ln">685</span>    elif nmlpar_mod.ipver == 2:
+<span class="ln">686</span>        _pulse_lines(io.iopenv, vals, 5)
+<span class="ln">687</span>    elif nmlpar_mod.ipver == 3:
+<span class="ln">688</span>        _pulse_lines(io.iopenv,
+<span class="ln">689</span>                     vals[0:5] + [pal.alfmlt] + vals[5:10] + [pal.phmlt]
+<span class="ln">690</span>                     + vals[10:15] + [pal.cmxmlt] + vals[15:19], 6)</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Wrong. Question 1 says <code>ENVL</code> "is wrong after the reversal". Every entry of <code>ENVL</code> is set to <code>B</code> (the luminosity is constant in the envelope), so the broken swap changes nothing now; it would matter only if <code>ENVL</code> ever varied. Fix: say so; keep it as a latent bug.</li>
+<li>Settled / sharpened. Question 2 (<code>ENVG</code>): <a href="../yrec-map/taucal.f.html#def-TAUCAL">TAUCAL</a> computes <code>HG</code> at the two points it needs from <code>HS1</code> when <code>LROT</code> is false; with rotation it uses <code>HG</code> as passed, and ENVINT's <code>ENVG</code> is never filled. Fix: make the question concrete on rotating models.</li>
+<li>Settled. Question 3 (mixed mass units): TAUCAL uses <code>ENVS2</code> only as weights in an average of the convective velocity (<code>UMER/DENOM</code>), so its unit cancels; <code>ENVS1</code> (grams) is what enters $g$. Fix: state it; drop the question.</li>
+<li>Missing. The step limit at <code>PLIM</code> applies only when <code>LSBC</code> is false (<code>LTEST</code>); and <code>PS(IE)</code>, <code>TS(IE)</code>, <code>RS(IE)</code> and <code>ESTORE</code>, <code>ISTORE</code> are set only when <code>LSBC</code> is true. Fix: add.</li>
+<li>Missing. The gray start for Krishna Swamy uses $T^4 = \tfrac34 T_\mathrm{eff}^4 \times 0.550$ (the factor at $\tau \to 0$), not the Eddington one. Fix: a clause.</li>
+<li>Minor. <code>LDERIV</code> is set by the pulsation test and then forced to <code>.TRUE.</code> just after (line 137). Fix: add to Design.</li>
+</ol>
+<p>Revised: question 1 corrected (harmless now); question 2 made concrete on rotating models; question 3 settled and dropped (stated under the method); the <code>LSBC</code> conditions, the Krishna Swamy start and the forced <code>LDERIV</code> added.</p></div></details>
+</main></body></html>

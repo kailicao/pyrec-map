@@ -1,0 +1,460 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>tpgrad.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ tpgrad.f</span></header><main>
+<h1>tpgrad.f</h1>
+<p class='muted'>228 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/tpgrad.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>tpgrad.py</code>, 163 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>TPGRAD</code> decides whether a point is convective and gives its temperature gradient $\nabla = d\ln T/d\ln P$. It computes the radiative gradient, compares it with the adiabatic one (the Schwarzschild criterion), and in convective regions solves the mixing-length theory's cubic for the actual gradient and the convective velocity; on request it also gives the gradient's derivatives for the Henyey solution. Its comments assume that the equation of state and the opacity have been computed already.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> arguments: $\log T$, $T$, $\log P$, $P$, $\rho$ (<code>D</code>), $\log r$, $\log m$ (<code>SL</code>), $L/L_\odot$ (<code>B</code>), the opacity $\kappa$ (<code>O</code>) and its derivatives, the equation-of-state quantities ($\delta = -$<code>QDT</code>, $c_P$ = <code>QCP</code>, $\nabla_\mathrm{ad}$ = <code>DELA</code>, and derivatives), the rotation factors <code>FPL</code>, <code>FTL</code>, $\log T_\mathrm{eff}$, and the mixing length <code>CMIXL</code> (set for each run by the main program, <code>CMIXL = CMIXLA(NK)</code>, and passed down by the callers). Through modules: the constants <code>CDELRL</code>, <code>CMIXL2</code>, <code>CMIXL3</code>, set by <a href="../yrec-map/setups.f.html#def-SETUPS">SETUPS</a>, and <code>CC13</code> (<a href="../yrec-map/constants_mod.f.html"><code>CONSTANTS_MOD</code></a>); the temperature above which MLT is skipped, <code>TGCUT</code>, the overshoot switch <code>LADOV</code> and the spot parameters <code>SPOTF</code>, <code>SPOTX</code>, <code>LSDEPTH</code> (<a href="../yrec-map/nmlpar_mod.f.html"><code>NMLPAR_MOD</code></a>); the overshoot shells <code>IOV1</code>, <code>IOV2</code>, <code>IOVIM</code> (<a href="../yrec-map/dpmix_mod.f.html"><code>DPMIX_MOD</code></a>); <code>ISHORT</code> (<a href="../yrec-map/iounits_mod.f.html"><code>IOUNITS_MOD</code></a>).</li>
+<li><strong>Who calls it:</strong> the routines that evaluate the physics at a point: <a href="../yrec-map/physic.f.html#def-PHYSIC">PHYSIC</a>, <a href="../yrec-map/coefft.f.html#def-COEFFT">COEFFT</a>, <a href="../yrec-map/qenv.f.html#def-QENV">QENV</a>, <a href="../yrec-map/sconvec.f.html#def-SCONVEC">SCONVEC</a> and <a href="../yrec-map/starin.f.html#def-STARIN">STARIN</a>.</li>
+<li><strong>Outputs:</strong> <code>LCONV</code>, <code>DELR</code> ($\nabla_\mathrm{rad}$), <code>DEL</code> ($\nabla$), <code>VEL</code> (the convective velocity, cm/s), and with <code>LDERIV</code> the logarithmic derivatives of $\nabla$ (<code>QACT</code>, <code>QACP</code>, <code>QACR</code>). It sets <code>ALFMLT</code>, <code>PHMLT</code>, <code>CMXMLT</code> in <a href="../yrec-map/pualpha_mod.f.html"><code>PUALPHA_MOD</code></a> to zero, for the pulsation output of <a href="../yrec-map/coefft.f.html#def-COEFFT">COEFFT</a>, <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a> and <a href="../yrec-map/wrtmod.f.html#def-WRTMOD">WRTMOD</a>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Radiative gradient.</strong> With <code>CDELRL</code> = $-\log(4\pi/3) - \log\sigma - \log 16$ (from <code>SETUPS</code>),
+   $$\nabla_\mathrm{rad} = \frac{3\,\kappa\,L\,P}{64\pi\,\sigma\,G\,m\,T^4}\;\frac{f_T}{f_P},$$
+   with $L = $ <code>B</code>$\,L_\odot$, and $f_P$, $f_T$ the rotational distortion factors.</li>
+<li><strong>Radiative</strong> if $\nabla_\mathrm{rad} - \nabla_\mathrm{ad} \le 10^{-6}$: $\nabla = \nabla_\mathrm{rad}$, $v = 0$; but inside an adiabatic overshoot region (<code>LADOV</code>, shell <code>IOVIM</code> between <code>IOV1</code> and <code>IOV2</code>) $\nabla = \nabla_\mathrm{ad}$.</li>
+<li><strong>Convective:</strong> above <code>TGCUT</code> (cores), $\nabla = \nabla_\mathrm{ad}$ and $v = 10^{-11}$, without MLT.</li>
+<li><strong>Spots</strong> (G. Somers 9/14): the radiative flux in convective regions is reduced, $\nabla_\mathrm{rad} \to \nabla_\mathrm{rad}/(f x^4 + 1 - f)$, with $f$ = <code>SPOTF</code>; the contrast $x$ is <code>SPOTX</code>, or with <code>LSDEPTH</code> varies with depth as the comment derives, $x(T) = 1 - (1 - x_\mathrm{surf})\,T_\mathrm{amb}/T$.</li>
+<li><strong>Mixing-length theory.</strong> With $g = Gm/r^2$, $H_P = P/(\rho g)$, the mixing length $\ell$ in units of $H_P$ (<code>CMIXL</code>), $\phi = \ell\,\kappa\rho H_P$ (the optical thickness of an element), <code>CMIXL2</code> = 1/3 and <code>CMIXL3</code> = $16\sqrt2\,\sigma$:
+   $$A_1 = \frac{16\sqrt2\,\sigma\,T^3\kappa}{c_P\,(1 + \phi^2/3)\,\sqrt{(\nabla_\mathrm{rad} - \nabla_\mathrm{ad})\,g\,\delta/H_P}},\qquad A_3 = \frac{3\phi^2}{4\,(1 + \phi^2/3)\,A_1},$$
+   and the cubic
+   $$A_3 V^3 + V^2 + A_1 V - 1 = 0$$
+   is solved for $V$ by a Newton iteration with a second-order correction (at most 25 steps, tolerance $10^{-10}$), starting from $V = 1/A_1$, or $V = A_3^{-1/3}$ when $A_3 &gt; 10^3$. Then
+   $$\nabla = \nabla_\mathrm{ad} + (\nabla_\mathrm{rad} - \nabla_\mathrm{ad})\,V(V + A_1),\qquad v = V\,\sqrt{\frac{g\,\delta\,\ell^2 H_P\,(\nabla_\mathrm{rad} - \nabla_\mathrm{ad})}{8}} .$$
+   If the cubic does not converge, the point is taken as adiabatic, with a message. If $A_1$'s square root would be of a negative number, the run stops (<code>STOP 912</code>, "RUN ENDED").</li>
+<li><strong>Derivatives</strong> (<code>LDERIV</code>): of $A_1$, $A_3$ and $V$ with respect to $\ln T$, $\ln P$, $\ln r$, combined into those of $\nabla$.</li>
+</ol>
+<p><strong>Changed since <code>rp_1</code>.</strong> COMMON blocks to modules, <code>IMPLICIT NONE</code> (the unused <code>CTLIM</code> dropped); <code>CMIXL</code> is now an argument instead of a COMMON variable; the cubic's starting value uses <code>CC13</code> instead of the literal 0.333333333; the negative-square-root message now says "RUN ENDED" instead of "assumed adiabatic convection", which settles former question 2 (stopping is intended), so former questions 3–5 are now 2–4.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A typo in the velocity.</strong> When <code>G*(-QDT)*PRESHT*DELDEL</code> is not positive, <code>VEL = 1.0D0-11</code>, which is $1 - 11 = -10$, not $10^{-11}$ as elsewhere in the routine.</li>
+<li><strong>Spots and the criterion.</strong> The radiative/convective decision uses $\nabla_\mathrm{rad}$ without the spot correction; the correction is applied only after the point is found convective, and the returned <code>DELR</code> and the derivatives (<code>QDDELT</code>, <code>QDDELP</code>) are uncorrected. And <code>DELDEL</code> is recomputed with the correction after the point is found convective; if the correction makes it negative, <code>TEST</code> is negative and the run stops (<code>STOP 912</code>).</li>
+<li><strong><code>PUALPHA</code> is always zero.</strong> <code>ALFMLT</code>, <code>PHMLT</code> and <code>CMXMLT</code> are set to zero on entry and never computed, but <code>COEFFT</code>, <code>ENVINT</code> and <code>WRTMOD</code> store and write them. Is the pulsation output's MLT data lost?</li>
+<li><strong>Unused values.</strong> <code>DELPM</code> and <code>RRR</code> are computed but not used.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+TPGRAD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-TPGRAD'>TPGRAD</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-TPGRAD'><h3><span class='kind'>subroutine</span>TPGRAD</h3>
+<p class='muted'>lines 6–228 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/tpgrad.f#L6-L228'>GitHub</a></p>
+<pre>SUBROUTINE TPGRAD(TL,T,PL,P,D,RL,SL,B,O,QDT,QDP,QOT,QOD,QCP,</pre>
+<div class='notes'><p>The Schwarzschild test and the temperature gradient: radiative, adiabatic (cores, overshoot), or from the mixing-length cubic, with the convective velocity and, on request, the gradient's derivatives.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+TPGRAD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dpmix_mod.f.html#def-DPMIX_MOD'>DPMIX_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/pualpha_mod.f.html#def-PUALPHA_MOD'>PUALPHA_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/coefft.f.html#def-COEFFT'>COEFFT</a> <span class='muted'>(coefft.f)</span></li>
+<li><a href='../yrec-map/physic.f.html#def-PHYSIC'>PHYSIC</a> <span class='muted'>(physic.f)</span></li>
+<li><a href='../yrec-map/qenv.f.html#def-QENV'>QENV</a> <span class='muted'>(qenv.f)</span></li>
+<li><a href='../yrec-map/sconvec.f.html#def-SCONVEC'>SCONVEC</a> <span class='muted'>(sconvec.f)</span> ×3</li>
+<li><a href='../yrec-map/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE TPGRAD(TL,T,PL,P,D,RL,SL,B,O,QDT,QDP,QOT,QOD,QCP,
+<span class="ln">7</span>     *DEL,DELR,DELA,QDTT,QDTP,QAT,QAP,QACT,QACP,QACR,QCPT,QCPP,
+<span class="ln">8</span>     *VEL,LDERIV,LCONV,FPL,FTL,TEFFL,CMIXL)
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/PUALPHA/ into PUALPHA_MOD.
+<span class="ln">11</span>      USE PUALPHA_MOD
+<span class="ln">12</span>C 10/14/26 MHP via Claude
+<span class="ln">13</span>C code changed to convert COMMON/DPMIX/ into DPMIX_MOD.
+<span class="ln">14</span>      USE DPMIX_MOD
+<span class="ln">15</span>C 10/14/26 MHP via Claude
+<span class="ln">16</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">17</span>      USE NMLPAR_MOD
+<span class="ln">18</span>C 10/14/26 MHP via Claude
+<span class="ln">19</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">20</span>      USE CONSTANTS_MOD
+<span class="ln">21</span>C 10/14/26 MHP via Claude
+<span class="ln">22</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">23</span>      USE IOUNITS_MOD
+<span class="ln">24</span>C 10/20/26 MHP via Claude
+<span class="ln">25</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">26</span>C explicit declarations.
+<span class="ln">27</span>      IMPLICIT NONE
+<span class="ln">28</span>      REAL*8 A1,A3,A3P,ATEFFL,B,CMIXL,D,DDEL,DEEPX,DEL,DELA,DELDEL,DELI,
+<span class="ln">29</span>     *       DELPM,DELR,FPL,FTL,G,O,P,PHI,PHI2,PHIPHI,PL,PRESHT,QA1P,
+<span class="ln">30</span>     *       QA1R,QA1T,QA3P,QA3R,QA3T,QACP,QACR,QACT,QAP,QAT,QCP,QCPP,
+<span class="ln">31</span>     *       QCPT,QDDELP,QDDELT,QDELAP,QDELAT,QDP,QDT,QDTP,QDTT,QOD,QOT,
+<span class="ln">32</span>     *       QVP,QVR,QVT,RL,RRR,SL,T,TEFFL,TEMP1,TEMP2,TEMP3,TEMPOP,
+<span class="ln">33</span>     *       TEMPOT,TEST,TL,V,VD,VEL,VP,VTOL
+<span class="ln">34</span>      INTEGER ITER
+<span class="ln">35</span>      LOGICAL*4 LCONV,LDERIV
+<span class="ln">36</span>
+<span class="ln">37</span>C  DL,OL,X,Z,LOCOND USED BY OPACTY
+<span class="ln">38</span>C COMPUTES RADIATIVE GRADIENT AND COMPARES WITH ADIABATIC GRADIENT
+<span class="ln">39</span>C COMPUTES CONVECTIVE GRADIENT VIA MIXING LENGTH THEORY IF APPLICABLE
+<span class="ln">40</span>C ASSUMES EQSTAT AND OPACTY HAVE BEEN CALLED
+<span class="ln">41</span>C RETURNS LCONV = .TRUE. IF CONVECTIVE
+<span class="ln">42</span>C         DELR = RADIATIVE GRADIENT
+<span class="ln">43</span>C         DEL = ACTUAL GRADIENT
+<span class="ln">44</span>C          QACT,QACP = NAT-LOG DERIVATIVES OF THE CONVECTIVE GRADIENT
+<span class="ln">45</span>C 9/25/26 MHP via Claude
+<span class="ln">46</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">47</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">48</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">49</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">50</span>C COMMON/IOUNITS/
+<span class="ln">51</span>C 9/25/26 MHP via Claude
+<span class="ln">52</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">53</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">54</span>C 9/24/26 MHP via Claude
+<span class="ln">55</span>C code changed to pass CMIXL as an explicit argument instead of via
+<span class="ln">56</span>C common block, to reduce implicit global state ahead of the F90
+<span class="ln">57</span>C module conversion
+<span class="ln">58</span>C 10/12/26 MHP via Claude
+<span class="ln">59</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">60</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">61</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">62</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">63</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">64</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">65</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">66</span>C
+<span class="ln">67</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">68</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">69</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">70</span>C 10/13/26 MHP via Claude
+<span class="ln">71</span>C code changed to drop COMMON/CTLIM/, declared here but never used.
+<span class="ln">72</span>C DBG 7/95 To store variables for pulse output
+<span class="ln">73</span>C G Somers END
+<span class="ln">74</span>      DATA VTOL/1.0D-10/
+<span class="ln">75</span>      SAVE
+<span class="ln">76</span>
+<span class="ln">77</span>      ALFMLT=0.0D0
+<span class="ln">78</span>      PHMLT=0.0D0
+<span class="ln">79</span>      CMXMLT=0.0D0
+<span class="ln">80</span>      DELR = O*B*DEXP(CLN*(PL - SL - 4D0*TL + CLSUNL - CGL + CDELRL))*
+<span class="ln">81</span>     *FTL/FPL
+<span class="ln">82</span>      DELDEL = DELR - DELA
+<span class="ln">83</span>      IF(DELDEL.LE.1.0D-6) THEN
+<span class="ln">84</span>C ZONE IS RADIATIVE
+<span class="ln">85</span>       LCONV = .FALSE.
+<span class="ln">86</span>       DEL = DELR
+<span class="ln">87</span>       VEL=0.0D0
+<span class="ln">88</span>         IF (LADOV .AND. IOVIM.GE.IOV1 .AND. IOVIM.LE.IOV2
+<span class="ln">89</span>     *       .AND. IOVIM.NE.-1) THEN
+<span class="ln">90</span>            DEL = DELA
+<span class="ln">91</span>         END IF
+<span class="ln">92</span>       GOTO 200
+<span class="ln">93</span>      ENDIF
+<span class="ln">94</span>C ZONE IS CONVECTIVE
+<span class="ln">95</span>      LCONV = .TRUE.
+<span class="ln">96</span>      DEL = DELA
+<span class="ln">97</span>C SKIP MIXING LENGTH THEORY FOR CORES
+<span class="ln">98</span>      IF(TL.GT.TGCUT) THEN
+<span class="ln">99</span>         VEL = 1.0D-11
+<span class="ln">100</span>       IF(LDERIV) THEN
+<span class="ln">101</span>C DERIVATIVES OF CONVECTIVE GRADIENT
+<span class="ln">102</span>          QACT = QAT
+<span class="ln">103</span>          QACP = QAP
+<span class="ln">104</span>          QACR = 0.0D0
+<span class="ln">105</span>       ENDIF
+<span class="ln">106</span>       GOTO 200
+<span class="ln">107</span>      ENDIF
+<span class="ln">108</span>C G Somers 9/14, Add the ability to include spots, which alter
+<span class="ln">109</span>C the radiative flux in the convective reigons. This is done by
+<span class="ln">110</span>C setting the flux to Lspotted = L/[f*x^4 + (1-f)], where f is the
+<span class="ln">111</span>C spot filling factor and x is the temperature contrast between
+<span class="ln">112</span>C the spotted surface and the normal surface (0 &lt;= x &lt;= 1). We also
+<span class="ln">113</span>C alter the surface boundary condition used in envint.f, by looking
+<span class="ln">114</span>C up the pressure at the un-spotted T (ATEFFL) instead of Teff.
+<span class="ln">115</span>C
+<span class="ln">116</span>C We have also included the ability to have the temperature contrast
+<span class="ln">117</span>C SPOTX vary with depth, as is the case in stars. In this case, SPOTX
+<span class="ln">118</span>C is locally determined by X(T) = 1 - (1-Xsurf)(ATeff/T), where ATeff
+<span class="ln">119</span>C is the surface temperature of the unspotted regions. This is the
+<span class="ln">120</span>C analytic expression resulting from a user specified Xsurf, the
+<span class="ln">121</span>C assumption of magnetic equipartition at the surface (Pmag = Psurf/2),
+<span class="ln">122</span>C and the assumption of constant Pmag with depth.
+<span class="ln">123</span>C
+<span class="ln">124</span>C This flux alters DELR, so recalculate DELDEL with the correction. Only
+<span class="ln">125</span>C do this if the spot filling factor is non-zero, and the envelope is
+<span class="ln">126</span>C convective.
+<span class="ln">127</span>      IF(SPOTF .NE. 0.00)THEN
+<span class="ln">128</span>         IF(LSDEPTH)THEN
+<span class="ln">129</span>            ATEFFL = TEFFL - 0.25*LOG10(SPOTF * SPOTX**4.0 + 1.0 - SPOTF)
+<span class="ln">130</span>            DEEPX = 1.0 - (1.0 - SPOTX)*(10.**ATEFFL)/(10.**TL)
+<span class="ln">131</span>         ELSE
+<span class="ln">132</span>            DEEPX = SPOTX
+<span class="ln">133</span>         ENDIF
+<span class="ln">134</span>         DELDEL = DELR/(SPOTF * DEEPX**4.0 + 1.0 - SPOTF) - DELA
+<span class="ln">135</span>      ENDIF
+<span class="ln">136</span>C G Somers END
+<span class="ln">137</span>      G = DEXP(CLN*(CGL + SL - RL - RL))
+<span class="ln">138</span>      PRESHT = P/(D*G)
+<span class="ln">139</span>      PHI = CMIXL*D*O*PRESHT
+<span class="ln">140</span>      PHI2 = PHI*PHI
+<span class="ln">141</span>      PHIPHI = 1.0D0/(1.0D0 + CMIXL2*PHI2)
+<span class="ln">142</span>C SOLVE CUBIC A3*V**3 + V**2 + A1*V - 1.0 = 0.0
+<span class="ln">143</span>C ENSURE THAT THE SQUARE ROOT BEING TAKEN IS THAT OF A
+<span class="ln">144</span>C POSITIVE NUMBER
+<span class="ln">145</span>      TEST = DELDEL*G*(-QDT)/PRESHT
+<span class="ln">146</span>      IF(TEST.GT.0.0D0)THEN
+<span class="ln">147</span>         A1 = CMIXL3*PHIPHI*T**3*O/(QCP*DSQRT(TEST))
+<span class="ln">148</span>      ELSE
+<span class="ln">149</span>C PATHOLOGICAL FAILURE IN THE CUBIC SOLVER.
+<span class="ln">150</span>         WRITE(*,201)DELDEL,QDT,TEST
+<span class="ln">151</span> 201     FORMAT(&#x27;***WARNING***&#x27;/&#x27;TPGRAD TRIED TO TAKE SQUARE ROOT&#x27;,
+<span class="ln">152</span>     *          &#x27; OF NEGATIVE NUMBER - RUN ENDED&#x27;/
+<span class="ln">153</span>     *          &#x27; DELDEL &#x27;,1PE12.3,&#x27; QDT &#x27;,E12.3,&#x27; DISC. &#x27;,E12.3)
+<span class="ln">154</span>      WRITE(*,911)O,B,PL,SL,TL,FTL,FPL,DELR,DELA,RL
+<span class="ln">155</span> 911  FORMAT(1P10E12.3)
+<span class="ln">156</span>          STOP 912
+<span class="ln">157</span>C         GOTO 15
+<span class="ln">158</span>      ENDIF
+<span class="ln">159</span>C      A1 = CMIXL3*PHIPHI*T**3*O/(QCP*DSQRT(DELDEL*G*(-QDT)/PRESHT))
+<span class="ln">160</span>      V = 1.0D0/A1
+<span class="ln">161</span>      A3 = 0.75D0*PHI2*PHIPHI/A1
+<span class="ln">162</span>      A3P = 3.0D0*A3
+<span class="ln">163</span>      IF(A3.GT.1.0D+3) V = A3**(-CC13)
+<span class="ln">164</span>      DO 10 ITER = 1,25
+<span class="ln">165</span>       V = DMIN1(V,1.0D0)
+<span class="ln">166</span>       VP = A1 + V*(2.0D0 + V*A3P)
+<span class="ln">167</span>       VD = (-1.0D0 + V*(A1 + V*(1.0D0 + V*A3)))/VP
+<span class="ln">168</span>       VD = VD*(1.0D0 + VD*(1.0D0 + V*A3P)/VP)
+<span class="ln">169</span>       V = V - VD
+<span class="ln">170</span>       IF(DABS(VD).LT.VTOL) GOTO 30
+<span class="ln">171</span>   10 CONTINUE
+<span class="ln">172</span>C  15   CONTINUE
+<span class="ln">173</span>      WRITE(ISHORT,20) PL,TL,O,QCP,QDT
+<span class="ln">174</span>   20 FORMAT(&#x27; -----CUBIC NON-CONVERGENCE(PL,TL,CAPPA,CP,QDT)=&#x27;
+<span class="ln">175</span>     *       ,2F10.6/1P3E12.6)
+<span class="ln">176</span>C ASSUME ADIABATIC CONVECTION
+<span class="ln">177</span>      VEL = 1.0D-11
+<span class="ln">178</span>      IF(LDERIV) THEN
+<span class="ln">179</span>C DERIVATIVES OF CONVECTIVE GRADIENT
+<span class="ln">180</span>       QACT = QAT
+<span class="ln">181</span>         QACP = QAP
+<span class="ln">182</span>         QACR = 0.0D0
+<span class="ln">183</span>      ENDIF
+<span class="ln">184</span>      GOTO 200
+<span class="ln">185</span>   30 DDEL = DELDEL*V*(V+A1)
+<span class="ln">186</span>      DEL = DELA + DDEL
+<span class="ln">187</span>C CALCULATE CONVECTIVE VELOCITY
+<span class="ln">188</span>      TEST = G*(-QDT)*PRESHT*DELDEL
+<span class="ln">189</span>      IF(TEST.GT.0.0D0)THEN
+<span class="ln">190</span>         VEL = V*DSQRT(G*(-QDT)*(CMIXL**2)*PRESHT*DELDEL/8.0D0)
+<span class="ln">191</span>      ELSE
+<span class="ln">192</span>         VEL = 1.0D0-11
+<span class="ln">193</span>      ENDIF
+<span class="ln">194</span>      DELPM=DEL-V*V*DELDEL
+<span class="ln">195</span>      RRR = 10.0D0**RL
+<span class="ln">196</span>      IF(LDERIV) THEN
+<span class="ln">197</span>C DERIVATIVES OF CONVECTIVE GRADIENT
+<span class="ln">198</span>       QDELAT = QAT*DELA
+<span class="ln">199</span>       QDELAP = QAP*DELA
+<span class="ln">200</span>       TEMPOT = QOD*QDT + QOT
+<span class="ln">201</span>       TEMPOP = QOD*QDP
+<span class="ln">202</span>       QDDELT = ((-4.0D0 + TEMPOT)*DELR - QDELAT)/DELDEL
+<span class="ln">203</span>       QDDELP = ((+1.0D0 + TEMPOP)*DELR - QDELAP)/DELDEL
+<span class="ln">204</span>       TEMP1 = 2.0D0*CMIXL2*PHI2*PHIPHI
+<span class="ln">205</span>       QA1T = TEMPOT*(1D0-TEMP1)-QCPT-0.5D0*(QDT+QDDELT+QDTT/QDT)+3D0
+<span class="ln">206</span>       QA1P = TEMPOP*(1D0-TEMP1)-TEMP1-QCPP-0.5D0
+<span class="ln">207</span>     *          *(QDP+QDDELP+QDTP/QDT) + 0.5D0
+<span class="ln">208</span>       QA1R = -2.0D0*TEMP1 + 2.0D0
+<span class="ln">209</span>       QA3T = 2.0D0*PHIPHI*TEMPOT - QA1T
+<span class="ln">210</span>       QA3P = 2.0D0*PHIPHI*(1.0D0+TEMPOP) - QA1P
+<span class="ln">211</span>       QA3R = 4.0D0*PHIPHI - QA1R
+<span class="ln">212</span>       TEMP1 = A1*V
+<span class="ln">213</span>       TEMP2 = A3*V*V*V
+<span class="ln">214</span>       TEMP3 = 1.0D0/VP
+<span class="ln">215</span>       QVT = -(TEMP1*QA1T + TEMP2*QA3T)*TEMP3
+<span class="ln">216</span>       QVP = -(TEMP1*QA1P + TEMP2*QA3P)*TEMP3
+<span class="ln">217</span>       QVR = -(TEMP1*QA1R + TEMP2*QA3R)*TEMP3
+<span class="ln">218</span>       TEMP1 = DELDEL*(A1+V+V)
+<span class="ln">219</span>       TEMP2 = DELDEL*A1*V
+<span class="ln">220</span>       DELI = 1.0D0/DEL
+<span class="ln">221</span>       QACT = (QDELAT+QDDELT*DDEL+TEMP1*QVT+TEMP2*QA1T)*DELI
+<span class="ln">222</span>       QACP = (QDELAP+QDDELP*DDEL+TEMP1*QVP+TEMP2*QA1P)*DELI
+<span class="ln">223</span>       QACR = (TEMP1*QVR+TEMP2*QA1R)*DELI
+<span class="ln">224</span>      ENDIF
+<span class="ln">225</span>  200 CONTINUE
+<span class="ln">226</span>
+<span class="ln">227</span>      RETURN
+<span class="ln">228</span>      END</pre></details>
+<details class='py' id='py-tpgrad'><summary>Python version: tpgrad</summary><pre class='doc'>Decide whether a point is convective and give its temperature
+gradient: the radiative gradient, the Schwarzschild test against the
+adiabatic one, and in convective regions the mixing-length cubic for
+the actual gradient and the convective velocity; with lderiv, the
+gradient&#x27;s logarithmic derivatives for the Henyey solution.
+
+Translates: tpgrad.f#TPGRAD (09c3b9b)
+
+Arguments: log T, T, log P, P, rho (d), log r, log m (sl), L/Lsun (b),
+the opacity o and the equation-of-state quantities (qdt = -delta, qdp,
+qot, qod, qcp = c_P, dela = nabla_ad, and their derivatives qdtt, qdtp,
+qat, qap, qcpt, qcpp), lderiv, the rotation factors fpl, ftl, log Teff
+and cmixl (the mixing length in pressure scale heights). dele (the
+Fortran&#x27;s DEL), delr, qact, qacp, qacr, vel and lconv are outputs; the
+derivatives keep their values where the Fortran does not set them.
+
+Returns (dele, delr, qact, qacp, qacr, vel, lconv).</pre><pre class='src'><span class="ln">15</span>def tpgrad(tl, t, pl, p, d, rl, sl, b, o, qdt, qdp, qot, qod, qcp, dele,
+<span class="ln">16</span>           delr, dela, qdtt, qdtp, qat, qap, qact, qacp, qacr, qcpt, qcpp,
+<span class="ln">17</span>           vel, lderiv, lconv, fpl, ftl, teffl, cmixl):
+<span class="ln">18</span>    &quot;&quot;&quot;Decide whether a point is convective and give its temperature
+<span class="ln">19</span>    gradient: the radiative gradient, the Schwarzschild test against the
+<span class="ln">20</span>    adiabatic one, and in convective regions the mixing-length cubic for
+<span class="ln">21</span>    the actual gradient and the convective velocity; with lderiv, the
+<span class="ln">22</span>    gradient&#x27;s logarithmic derivatives for the Henyey solution.
+<span class="ln">23</span>
+<span class="ln">24</span>    Translates: tpgrad.f#TPGRAD (09c3b9b)
+<span class="ln">25</span>
+<span class="ln">26</span>    Arguments: log T, T, log P, P, rho (d), log r, log m (sl), L/Lsun (b),
+<span class="ln">27</span>    the opacity o and the equation-of-state quantities (qdt = -delta, qdp,
+<span class="ln">28</span>    qot, qod, qcp = c_P, dela = nabla_ad, and their derivatives qdtt, qdtp,
+<span class="ln">29</span>    qat, qap, qcpt, qcpp), lderiv, the rotation factors fpl, ftl, log Teff
+<span class="ln">30</span>    and cmixl (the mixing length in pressure scale heights). dele (the
+<span class="ln">31</span>    Fortran&#x27;s DEL), delr, qact, qacp, qacr, vel and lconv are outputs; the
+<span class="ln">32</span>    derivatives keep their values where the Fortran does not set them.
+<span class="ln">33</span>
+<span class="ln">34</span>    Returns (dele, delr, qact, qacp, qacr, vel, lconv).
+<span class="ln">35</span>    &quot;&quot;&quot;
+<span class="ln">36</span>    c = constants_mod
+<span class="ln">37</span>    nml = nmlpar_mod
+<span class="ln">38</span>    pualpha_mod.alfmlt = 0.0
+<span class="ln">39</span>    pualpha_mod.phmlt = 0.0
+<span class="ln">40</span>    pualpha_mod.cmxmlt = 0.0
+<span class="ln">41</span>    # Question (see the page): the pulsation output&#x27;s MLT values stay zero.
+<span class="ln">42</span>    delr = o * b * math.exp(c.cln * (pl - sl - 4.0 * tl + c.clsunl - c.cgl
+<span class="ln">43</span>                                     + c.cdelrl)) * ftl / fpl
+<span class="ln">44</span>    deldel = delr - dela
+<span class="ln">45</span>    if deldel &lt;= 1.0e-6:
+<span class="ln">46</span>        # Radiative (adiabatic inside an adiabatic overshoot region).
+<span class="ln">47</span>        lconv = False
+<span class="ln">48</span>        dele = delr
+<span class="ln">49</span>        vel = 0.0
+<span class="ln">50</span>        if (nml.ladov and dpmix_mod.iovim &gt;= dpmix_mod.iov1
+<span class="ln">51</span>                and dpmix_mod.iovim &lt;= dpmix_mod.iov2
+<span class="ln">52</span>                and dpmix_mod.iovim != -1):
+<span class="ln">53</span>            dele = dela
+<span class="ln">54</span>        return dele, delr, qact, qacp, qacr, vel, lconv  # label 200
+<span class="ln">55</span>    # Convective.
+<span class="ln">56</span>    lconv = True
+<span class="ln">57</span>    dele = dela
+<span class="ln">58</span>    # Cores: no mixing-length theory.
+<span class="ln">59</span>    if tl &gt; nml.tgcut:
+<span class="ln">60</span>        vel = 1.0e-11
+<span class="ln">61</span>        if lderiv:
+<span class="ln">62</span>            qact = qat
+<span class="ln">63</span>            qacp = qap
+<span class="ln">64</span>            qacr = 0.0
+<span class="ln">65</span>        return dele, delr, qact, qacp, qacr, vel, lconv
+<span class="ln">66</span>    # G Somers 9/14: spots reduce the radiative flux in convective regions.
+<span class="ln">67</span>    # Question (see the page): delr itself, its derivatives and the
+<span class="ln">68</span>    # radiative/convective test are left uncorrected.
+<span class="ln">69</span>    if nml.spotf != 0.00:
+<span class="ln">70</span>        if nml.lsdepth:
+<span class="ln">71</span>            ateffl = teffl - 0.25 * math.log10(
+<span class="ln">72</span>                nml.spotf * nml.spotx**4.0 + 1.0 - nml.spotf)
+<span class="ln">73</span>            deepx = 1.0 - (1.0 - nml.spotx) * (10.0**ateffl) / (10.0**tl)
+<span class="ln">74</span>        else:
+<span class="ln">75</span>            deepx = nml.spotx
+<span class="ln">76</span>        deldel = delr / (nml.spotf * deepx**4.0 + 1.0 - nml.spotf) - dela
+<span class="ln">77</span>    g = math.exp(c.cln * (c.cgl + sl - rl - rl))
+<span class="ln">78</span>    presht = p / (d * g)
+<span class="ln">79</span>    phi = cmixl * d * o * presht
+<span class="ln">80</span>    phi2 = phi * phi
+<span class="ln">81</span>    phiphi = 1.0 / (1.0 + c.cmixl2 * phi2)
+<span class="ln">82</span>    # Solve the cubic a3 v^3 + v^2 + a1 v - 1 = 0.
+<span class="ln">83</span>    test = deldel * g * (-qdt) / presht
+<span class="ln">84</span>    if test &gt; 0.0:
+<span class="ln">85</span>        a1 = c.cmixl3 * phiphi * t**3 * o / (qcp * math.sqrt(test))
+<span class="ln">86</span>    else:
+<span class="ln">87</span>        print(f&quot;***WARNING***\nTPGRAD TRIED TO TAKE SQUARE ROOT&quot;
+<span class="ln">88</span>              f&quot; OF NEGATIVE NUMBER - RUN ENDED\n&quot;
+<span class="ln">89</span>              f&quot; DELDEL {deldel:12.3E} QDT {qdt:12.3E} DISC. {test:12.3E}&quot;)
+<span class="ln">90</span>        print(&quot;&quot;.join(f&quot;{v:12.3E}&quot; for v in
+<span class="ln">91</span>                      (o, b, pl, sl, tl, ftl, fpl, delr, dela, rl)))
+<span class="ln">92</span>        raise SystemExit(912)
+<span class="ln">93</span>    v = 1.0 / a1
+<span class="ln">94</span>    a3 = 0.75 * phi2 * phiphi / a1
+<span class="ln">95</span>    a3p = 3.0 * a3
+<span class="ln">96</span>    if a3 &gt; 1.0e+3:
+<span class="ln">97</span>        v = a3**(-c.cc13)
+<span class="ln">98</span>    converged = False
+<span class="ln">99</span>    for it in range(1, 26):  # loop 10
+<span class="ln">100</span>        v = min(v, 1.0)
+<span class="ln">101</span>        vp = a1 + v * (2.0 + v * a3p)
+<span class="ln">102</span>        vd = (-1.0 + v * (a1 + v * (1.0 + v * a3))) / vp
+<span class="ln">103</span>        vd = vd * (1.0 + vd * (1.0 + v * a3p) / vp)
+<span class="ln">104</span>        v = v - vd
+<span class="ln">105</span>        if abs(vd) &lt; VTOL:
+<span class="ln">106</span>            converged = True
+<span class="ln">107</span>            break  # to label 30
+<span class="ln">108</span>    if not converged:
+<span class="ln">109</span>        iounits_mod.write(iounits_mod.ishort,
+<span class="ln">110</span>                          f&quot; -----CUBIC NON-CONVERGENCE(PL,TL,CAPPA,CP,QDT)=&quot;
+<span class="ln">111</span>                          f&quot;{pl:10.6f}{tl:10.6f}\n&quot;
+<span class="ln">112</span>                          f&quot;{o:12.6E}{qcp:12.6E}{qdt:12.6E}&quot;)  # format 20
+<span class="ln">113</span>        # Assume adiabatic convection.
+<span class="ln">114</span>        vel = 1.0e-11
+<span class="ln">115</span>        if lderiv:
+<span class="ln">116</span>            qact = qat
+<span class="ln">117</span>            qacp = qap
+<span class="ln">118</span>            qacr = 0.0
+<span class="ln">119</span>        return dele, delr, qact, qacp, qacr, vel, lconv
+<span class="ln">120</span>    # label 30
+<span class="ln">121</span>    ddel = deldel * v * (v + a1)
+<span class="ln">122</span>    dele = dela + ddel
+<span class="ln">123</span>    # The convective velocity.
+<span class="ln">124</span>    test = g * (-qdt) * presht * deldel
+<span class="ln">125</span>    if test &gt; 0.0:
+<span class="ln">126</span>        vel = v * math.sqrt(g * (-qdt) * (cmixl**2) * presht * deldel / 8.0)
+<span class="ln">127</span>    else:
+<span class="ln">128</span>        # Question (see the page): the Fortran&#x27;s 1.0D0-11 is 1 - 11 = -10,
+<span class="ln">129</span>        # not 1e-11.
+<span class="ln">130</span>        vel = 1.0 - 11
+<span class="ln">131</span>    # Question (see the page): delpm and rrr are not used.
+<span class="ln">132</span>    delpm = dele - v * v * deldel
+<span class="ln">133</span>    rrr = 10.0**rl
+<span class="ln">134</span>    if lderiv:
+<span class="ln">135</span>        # Derivatives of the convective gradient.
+<span class="ln">136</span>        qdelat = qat * dela
+<span class="ln">137</span>        qdelap = qap * dela
+<span class="ln">138</span>        tempot = qod * qdt + qot
+<span class="ln">139</span>        tempop = qod * qdp
+<span class="ln">140</span>        qddelt = ((-4.0 + tempot) * delr - qdelat) / deldel
+<span class="ln">141</span>        qddelp = ((+1.0 + tempop) * delr - qdelap) / deldel
+<span class="ln">142</span>        temp1 = 2.0 * c.cmixl2 * phi2 * phiphi
+<span class="ln">143</span>        qa1t = (tempot * (1.0 - temp1) - qcpt
+<span class="ln">144</span>                - 0.5 * (qdt + qddelt + qdtt / qdt) + 3.0)
+<span class="ln">145</span>        qa1p = (tempop * (1.0 - temp1) - temp1 - qcpp
+<span class="ln">146</span>                - 0.5 * (qdp + qddelp + qdtp / qdt) + 0.5)
+<span class="ln">147</span>        qa1r = -2.0 * temp1 + 2.0
+<span class="ln">148</span>        qa3t = 2.0 * phiphi * tempot - qa1t
+<span class="ln">149</span>        qa3p = 2.0 * phiphi * (1.0 + tempop) - qa1p
+<span class="ln">150</span>        qa3r = 4.0 * phiphi - qa1r
+<span class="ln">151</span>        temp1 = a1 * v
+<span class="ln">152</span>        temp2 = a3 * v * v * v
+<span class="ln">153</span>        temp3 = 1.0 / vp
+<span class="ln">154</span>        qvt = -(temp1 * qa1t + temp2 * qa3t) * temp3
+<span class="ln">155</span>        qvp = -(temp1 * qa1p + temp2 * qa3p) * temp3
+<span class="ln">156</span>        qvr = -(temp1 * qa1r + temp2 * qa3r) * temp3
+<span class="ln">157</span>        temp1 = deldel * (a1 + v + v)
+<span class="ln">158</span>        temp2 = deldel * a1 * v
+<span class="ln">159</span>        deli = 1.0 / dele
+<span class="ln">160</span>        qact = (qdelat + qddelt * ddel + temp1 * qvt + temp2 * qa1t) * deli
+<span class="ln">161</span>        qacp = (qdelap + qddelp * ddel + temp1 * qvp + temp2 * qa1p) * deli
+<span class="ln">162</span>        qacr = (temp1 * qvr + temp2 * qa1r) * deli
+<span class="ln">163</span>    return dele, delr, qact, qacp, qacr, vel, lconv  # label 200</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "the mixing length <code>CMIXL</code> … (<code>CONST3</code>, set by SETUPS)": SETUPS sets <code>CDELRL</code>, <code>CMIXL2</code> and <code>CMIXL3</code>; <code>CMIXL</code> is set for each run by the main program (<code>CMIXL = CMIXLA(NK)</code>). <strong>Fix:</strong> correct.</li>
+<li><strong>Missing (question 3).</strong> With spots, <code>DELDEL</code> is recomputed after the point is found convective; if the spot correction makes it negative, <code>TEST</code> is negative and the run stops (<code>STOP 912</code>). <strong>Fix:</strong> add to question 3.</li>
+</ol>
+<p>Revised: <code>CMIXL</code> set by the main program; <code>STOP 912</code> in question 3.</p></div></details>
+</main></body></html>

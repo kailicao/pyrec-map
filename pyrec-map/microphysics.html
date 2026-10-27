@@ -1,0 +1,886 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Microphysics: Physics and its families · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ New structure (Fortran and Python) / Microphysics: Physics and its families</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='fortran.html'>Language and style</a></li><li><a href='common-map.html'>The COMMON-block map</a></li><li><a href='kernels.html'>Kernels and settings</a></li><li><strong>Microphysics: Physics and its families</strong></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><a href='timestep.html'>Time stepping</a></li><li><a href='composition.html'>Composition and settling</a></li><li><a href='rotation.html'>Rotation and mass loss</a></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>Microphysics: <code>Physics</code> and its families</h1>
+<p><em>In Python: <code>pyrec.physics</code>, under Python below.</em></p>
+<h2>3.3 Microphysics: <code>Physics</code> and its families</h2>
+<p><strong>The design follows YREC's development branch (09c3b9b).</strong> That branch has removed the MHD equation of state, the OPAL 1995 and 2001 equations of state, and the OPAL 1992, LAOL 1989 (apart from its pure-$Z$ table), Alexander 1995 and Kurucz 1990 opacity tables, so the families below no longer have members for them; the COMMON blocks named here are modules there (<a href="common-map.html">Section 6.4</a>).</p>
+<p><strong><code>Physics</code>. Responsibility:</strong> owns the run's microphysics objects, set up once from <code>Config</code>, and evaluates the local physics at a point for any caller.</p>
+<pre><code class="language-fortran">type :: Physics
+    type(Config), pointer :: cfg =&gt; null()
+    class(EosBase), allocatable :: eos         !! Usually an EosBlend.
+    type(OpacityBlend) :: opac
+    class(AtmosphereBase), allocatable :: atm
+    type(ReactionRates) :: rates
+    type(NeutrinoLosses) :: nuloss
+    type(Mlt) :: mlt
+contains
+    procedure :: setup
+        !! (cfg, ierr) Read every table the run needs (SETUPS with SETEOS06,
+        !! SETUPOPAC, ALFILEIN) and build the surface tables for XENV.
+    procedure :: at_point
+        !! (tl, pl, x, z, lr, ls, l, st, ierr) EOS, opacity, gradient and
+        !! convection at one point, as COEFFT, PHYSIC, QENV, SCONVEC, STARIN
+        !! and HSUBP each do today.
+        !! tl, pl : log10 T [K], log10 P [dyn cm-2]; lr, ls : log10 r [cm],
+        !! log10 m [g]; l : L/Lsun; st : type(PointState), out.
+end type
+</code></pre>
+<p><code>PointState</code> holds what one evaluation returns, named as the notes name it: $\rho$, $\beta$, $\eta$, $\mu$ terms, $Q_{\rho T} = (\partial\ln\rho/\partial\ln T)_P$, $Q_{\rho P}$, $c_P$, $\nabla_\mathrm{ad}$, $\kappa$ with $\partial\log\kappa/\partial\log\rho$ and $\partial\log\kappa/\partial\log T$, $\nabla_\mathrm{rad}$, $\nabla$, the convective velocity and the convection flag, and on request the derivatives. Today the same sequence (an EOS call, <code>GETOPAC</code>, <code>TPGRAD</code>) is written out in at least six routines; at <code>rp_1</code> each also had its own branch for the MHD equation of state, and <a href="../yrec-map/starin.f.html#def-STARIN"><code>STARIN</code></a> lost one (STARIN question 1 at <code>rp_1</code>: no equation of state without MHD). The development branch has removed the MHD equation of state and with it these branches; one method keeps the sequence in one place.</p>
+<p><strong>The equation of state.</strong> <code>EosBase</code> is a private-style base (<a href="fortran.html">Section 6.2</a>: Fortran names cannot begin with an underscore, so a base is an <code>abstract</code> type named <code>…Base</code>); each source of the equation of state is a subclass, and <code>EosBlend</code> chooses and ramps between them, as <a href="../yrec-map/eqstat2.f.html#def-EQSTAT2"><code>EQSTAT2</code></a> does.</p>
+<pre><code class="language-fortran">type, abstract :: EosBase
+contains
+    procedure(eos_if), deferred :: eval
+        !! (tl, pl, x, z, derivs, st, ierr) Density and thermodynamic
+        !! derivatives at log10 T, log10 P; derivs: second derivatives too.
+    procedure :: covers
+        !! (tl, dl) -&gt; real(dp) Weight in [0, 1] of this source at (T, rho);
+        !! 1 everywhere in the base class. (EQBOUND06: the OPAL ramp.)
+end type
+type, extends(EosBase) :: YaleEos       !! EQSAHA below TSCUT, EQRELV above.
+type, extends(EosBase) :: ScvEos        !! SCV tables for the envelope mix.
+type, extends(EosBase) :: OpalEos       !! OPAL 2006 (OEQOS06).
+    type(OpalEosTable) :: tab           !! Grid, edges (NTA, NRA), values.
+type, extends(EosBase) :: EosBlend
+    class(EosBase), allocatable :: base, cores(:)
+    logical :: numeric_derivs           !! LNUMDERIV: EQSTAT's front end.
+    real(dp) :: DLOGT_NUM = 3.0e-4_dp   !! Steps of the numerical
+    real(dp) :: DLOGP_NUM = 1.5e-3_dp   !! derivatives (EQSTAT).
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../yrec-map/eqstat.f.html#def-EQSTAT"><code>EQSTAT</code></a>, <a href="../yrec-map/eqstat2.f.html#def-EQSTAT2"><code>EQSTAT2</code></a>, <a href="../yrec-map/eqsaha.f.html#def-EQSAHA"><code>EQSAHA</code></a>, <a href="../yrec-map/eqrelv.f.html#def-EQRELV"><code>EQRELV</code></a>, <a href="../yrec-map/eqscve.f.html#def-EQSCVE"><code>EQSCVE</code></a>, <a href="../yrec-map/eqscvg.f.html#def-EQSCVG"><code>EQSCVG</code></a>, <a href="../yrec-map/setscv.f.html#def-SETSCV"><code>SETSCV</code></a>, <a href="../yrec-map/mu.f.html#def-MU"><code>MU</code></a>; the OPAL 2006 routines <a href="../yrec-map/oeqos06.f.html#def-OEQOS06"><code>OEQOS06</code></a>, <a href="../yrec-map/esac06.f.html#def-ESAC06"><code>ESAC06</code></a>, <a href="../yrec-map/esac06.f.html#def-SETEOS06"><code>SETEOS06</code></a>, <a href="../yrec-map/readcoeos06.f.html#def-READCOEOS06"><code>READCOEOS06</code></a>, <a href="../yrec-map/rhoofp06.f.html#def-RHOOFP06"><code>RHOOFP06</code></a>, <a href="../yrec-map/t6rinteos06.f.html#def-T6RINTEOS06"><code>T6RINTEOS06</code></a>, <a href="../yrec-map/eqbound06.f.html#def-EQBOUND06"><code>EQBOUND06</code></a>, <a href="../yrec-map/radsub06.f.html#def-RADSUB06"><code>RADSUB06</code></a>, <a href="../yrec-map/quadeos06.f.html#def-QUADEOS06"><code>QUADEOS06</code></a>, <a href="../yrec-map/gmass06.f.html#def-GMASS06"><code>GMASS06</code></a>. At <code>rp_1</code> each of these had copies for the 1995 and 2001 releases, which the development branch has removed with the MHD package; the design's one <code>OpalEos</code> for three releases is now one class for one release. The <code>QUADEOS06</code> cache becomes a component of the table (at <code>rp_1</code>, <code>QUADEOS01</code> and <code>QUADEOS06</code> were copies of <code>QUAD</code> that existed so that two releases would not share one cache).</p>
+<p><strong>The opacity.</strong> The same pattern: <code>OpacityTable</code> is the base, and each family is a subclass. At <code>rp_1</code> a second metallicity was a second set of routines (<code>GTLAOL2</code>, <code>KURUCZ2</code>, <code>YLLO2D2</code>, <code>YLLO3D2</code>); they went with their tables in the development branch, which leaves OPAL95 (with its own interpolation in $Z$) as the one interior table, Alexander 2006 as the one low-temperature table, and LAOL 1989's pure-$Z$ table for metal-rich helium cores.</p>
+<pre><code class="language-fortran">type, abstract :: OpacityTable
+    real(dp) :: z               !! The table's metallicity.
+contains
+    procedure(read_if), deferred :: read      !! (file, ierr)
+    procedure :: prepare
+        !! (x) Pre-interpolate to a fixed X (OP95XTAB):
+        !! the base class does nothing.
+    procedure(kap_if), deferred :: kappa
+        !! (dl, tl, x, z, kap, dlk_dlrho, dlk_dlt, ierr) log-derivatives.
+end type
+type, extends(OpacityTable) :: Opal95Opacity    !! 2D/3D/4D by composition.
+type, extends(OpacityTable) :: Laol89Opacity    !! The pure-Z table only.
+type, extends(OpacityTable) :: Alex06Opacity
+type :: ConductiveOpacity                       !! Potekhin tables.
+type :: OpacityBlend
+    !! Chooses low-T and interior tables, ramps between TMOLMIN and TMOLMAX,
+    !! handles metal-rich helium cores, adds conduction harmonically.
+    class(OpacityTable), allocatable :: interior, lowt, purez
+    type(ConductiveOpacity), allocatable :: cond
+contains
+    procedure :: kappa          !! (as above) GETOPAC.
+end type
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../yrec-map/getopac.f.html#def-GETOPAC"><code>GETOPAC</code></a>, <a href="../yrec-map/setupopac.f.html#def-SETUPOPAC"><code>SETUPOPAC</code></a>, <a href="../yrec-map/surfopac.f.html#def-SURFOPAC"><code>SURFOPAC</code></a>; OPAL95 <a href="../yrec-map/ll95tbl.f.html#def-LL95TBL"><code>LL95TBL</code></a>, <a href="../yrec-map/op95ztab.f.html#def-OP95ZTAB"><code>OP95ZTAB</code></a>, <a href="../yrec-map/op95xtab.f.html#def-OP95XTAB"><code>OP95XTAB</code></a>, <a href="../yrec-map/getopal95.f.html#def-GETOPAL95"><code>GETOPAL95</code></a>, <a href="../yrec-map/op952d.f.html#def-OP952D"><code>OP952D</code></a>, <a href="../yrec-map/op953d.f.html#def-OP953D"><code>OP953D</code></a>, <a href="../yrec-map/op954d.f.html#def-OP954D"><code>OP954D</code></a>; the LAOL89 pure-$Z$ table <a href="../yrec-map/rdzlaol.f.html#def-RDZLAOL"><code>RDZLAOL</code></a>, <a href="../yrec-map/zsulaol.f.html#def-ZSULAOL"><code>ZSULAOL</code></a>, <a href="../yrec-map/gtpurz.f.html#def-GTPURZ"><code>GTPURZ</code></a>; Alexander 2006 <a href="../yrec-map/readalex06.f.html#def-READALEX06"><code>READALEX06</code></a>, <a href="../yrec-map/alex06tab.f.html#def-ALEX06TAB"><code>ALEX06TAB</code></a>, <a href="../yrec-map/getalex06.f.html#def-GETALEX06"><code>GETALEX06</code></a>; conduction <a href="../yrec-map/condopacp.f.html#def-CONDOPACP"><code>CONDOPACP</code></a>, <a href="../yrec-map/condopacpint.f.html#def-CONDOPACPINT"><code>CONDOPACPINT</code></a>. Table sizes are read from the files, or held as parameters of the subclass in one place, not in five files (<a href="../yrec-map/op952d.f.html"><code>op952d.f</code></a>). Whether several interior tables may be read at once was open at <code>rp_1</code> (SETUPOPAC question 1); the development branch settles it, since OPAL95 is now the only interior table, so <code>OpacityBlend</code> holds one (<a href="overview.html">Section 8</a>, question 7).</p>
+<p><strong>The atmosphere.</strong> <code>KTTAU</code> chooses among six outer boundary conditions; each becomes a subclass of <code>AtmosphereBase</code>, and the switch between a table and the gray atmosphere becomes an <code>AtmosphereSwitch</code> that holds both, rather than a change of a COMMON flag.</p>
+<pre><code class="language-fortran">type, abstract :: AtmosphereBase
+contains
+    procedure(atm_if), deferred :: photosphere
+        !! (teffl, gl, feh, pl, tl, ierr) log10 P (and log10 T) where the
+        !! envelope starts: T = Teff, or tau = 100 (LALTPTAU100).
+    procedure :: in_range       !! (teffl, gl) -&gt; logical; .true. here.
+end type
+type, extends(AtmosphereBase) :: GrayAtmosphere   !! KTTAU 0, 1, 2:
+    procedure(ttau_if), pointer, nopass :: t_of_tau  !! Eddington, Krishna
+                                                     !! Swamy, HRA fit.
+type, extends(AtmosphereBase) :: KuruczAtmosphere  !! KTTAU 3 (SURFP).
+type, extends(AtmosphereBase) :: AllardAtmosphere  !! KTTAU 4.
+type, extends(AtmosphereBase) :: CastelliAtmosphere !! KTTAU 5 (KCSURFP).
+type, extends(AtmosphereBase) :: AtmosphereSwitch
+    class(AtmosphereBase), allocatable :: table, gray
+    !! Uses the gray atmosphere outside the table's range, per model.
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../yrec-map/surfp.f.html#def-SURFP"><code>SURFP</code></a>, <a href="../yrec-map/kcsurfp.f.html#def-KCSURFP"><code>KCSURFP</code></a>, <a href="../yrec-map/alsurfp.f.html#def-ALSURFP"><code>ALSURFP</code></a>, <a href="../yrec-map/alfilein.f.html#def-ALFILEIN"><code>ALFILEIN</code></a>, <a href="../yrec-map/altabinit.f.html#def-ALTABINIT"><code>ALTABINIT</code></a>, <a href="../yrec-map/alprint.f.html#def-ALPRINT"><code>ALPRINT</code></a>, <a href="../yrec-map/hra.f.html#def-HRA"><code>HRA</code></a>, the table set-up in <a href="../yrec-map/setups.f.html#def-SETUPS"><code>SETUPS</code></a>, and the atmosphere switch in <a href="../yrec-map/surfbc.f.html#def-SURFBC"><code>SURFBC</code></a> (step 1) and <a href="../yrec-map/envint.f.html#def-ENVINT"><code>ENVINT</code></a> (the Allard failure). The limits 3.5, −0.5, 4.5, 4.55 and 3.95 in $\log T_\mathrm{eff}$ belong to a table, and become components of its subclass, set when it is read (<a href="tunables.html">Section 5</a>). A decision for KC: today an Allard failure switches the rest of the run to gray atmospheres (ENVINT question 9; in a solar calibration, the rest of the cycle, since <code>main.f</code> restores <code>KTTAU</code> after each); <code>AtmosphereSwitch</code> would decide per model, which changes results; the first refactoring keeps the old behavior behind a flag (<a href="overview.html">Section 8</a>).</p>
+<p><strong>Nuclear physics.</strong> <code>ReactionRates</code> computes the rates once per point, for both energy and abundances, so that <code>RATES</code> no longer copies <code>ENGEB</code>; <code>NuclearNetwork</code> solves the implicit network over a step.</p>
+<pre><code class="language-fortran">type :: ReactionRates
+    real(dp) :: sstandard(17), qs0e(8), qqs0ee(8)   !! From Config%nuc.
+contains
+    procedure :: eval
+        !! (dl, tl, comp, r, energy, ierr) Screened rates r%hr(13) [per Gyr
+        !! per amu], branchings f1..f4, and if energy is present: eps by
+        !! chain [erg g-1 s-1], d eps/d ln rho, d eps/d ln T (ENGEB).
+    procedure :: neutrino_fluxes
+        !! (dl, tl, comp, flux) Solar neutrino fluxes per gram (LSNU).
+end type
+type :: NuclearNetwork
+    real(dp) :: CMIN, ABSTOL, RELTOL   !! From Config%num (BURTOL).
+    integer :: KEMMAX
+contains
+    procedure :: burn
+        !! (comp0, rates, dm, dt_gyr, comp, ierr) Implicit Newton solve of
+        !! the 7-species network for one shell or one mixed zone (KEMCOM).
+    procedure :: burn_equilibrium  !! (..) EQBURN, the first level's guess.
+end type
+type :: Deuterium        !! DEUTRATE, DBURN, DBURNM (with a substep fraction).
+type :: LightElements    !! LIRATE88, LIBURN, LIBURN2: Li6, Li7, Be9.
+type :: NeutrinoLosses   !! NEUTRINO, NULOSSES, SNEUT, and the older fit.
+</code></pre>
+<p>For a shell or zone, <code>burn</code> solves $G_k(w) = w_k - w_k^0 - A_k\,\Delta t\,R_k(w) = 0$ for the end-of-step abundances $w$ by Newton iteration, as <a href="../yrec-map/kemcom.f.html#def-KEMCOM"><code>KEMCOM</code></a> does. <strong>Replaces:</strong> <a href="../yrec-map/engeb.f.html#def-ENGEB"><code>ENGEB</code></a>, <a href="../yrec-map/rates.f.html#def-RATES"><code>RATES</code></a>, <a href="../yrec-map/kemcom.f.html#def-KEMCOM"><code>KEMCOM</code></a>, <a href="../yrec-map/eqburn.f.html#def-EQBURN"><code>EQBURN</code></a>, <a href="../yrec-map/deutrate.f.html#def-DEUTRATE"><code>DEUTRATE</code></a>, <a href="../yrec-map/dburn.f.html#def-DBURN"><code>DBURN</code></a>, <a href="../yrec-map/dburnm.f.html#def-DBURNM"><code>DBURNM</code></a>, <a href="../yrec-map/lirate88.f.html#def-LIRATE88"><code>LIRATE88</code></a>, <a href="../yrec-map/liburn.f.html#def-LIBURN"><code>LIBURN</code></a>, <a href="../yrec-map/liburn2.f.html#def-LIBURN2"><code>LIBURN2</code></a>, <a href="../yrec-map/neutrino.f.html#def-NEUTRINO"><code>NEUTRINO</code></a>, <a href="../yrec-map/nulosses.f.html#def-NULOSSES"><code>NULOSSES</code></a>, <a href="../yrec-map/sneut.f.html#def-SNEUT"><code>SNEUT</code></a>. Merging <code>RATES</code> into <code>ENGEB</code> is only allowed where the two agree today; where they differ (the ⁷Be screening constants of <code>RATES</code>, question 5), the difference is kept as an option until an expert decides.</p>
+<p><strong>Convection.</strong> <code>Mlt</code> (in <code>convection.f90</code>) evaluates the Schwarzschild criterion and the mixing-length cubic at a point; <code>ConvectionZones</code> (in <code>zones.f90</code>, above <code>star.f90</code>, since its methods take a <code>Star</code>) finds zones and overshoot over the model.</p>
+<pre><code class="language-fortran">type :: Mlt
+    real(dp) :: cmixl                  !! Mixing length, in H_P (CMIXL).
+contains
+    procedure :: gradient
+        !! (pt, lconv, delr, del, vel, derivs) TPGRAD: nabla_rad, nabla,
+        !! v_conv [cm s-1], and d ln nabla/d ln (T, P, r) on request.
+end type
+type :: ConvectionZones
+    integer, allocatable :: zones(:,:)     !! (2, nzone) With overshoot.
+    integer, allocatable :: zones0(:,:)    !! (2, nzone0) Without.
+    integer, allocatable :: radiative(:,:) !! (2, nrzone)
+    integer :: jcore, jenv                 !! Edges before overshoot.
+contains
+    procedure :: find       !! (star, lc) CONVEC with OVERSH and HSUBP.
+    procedure :: find_shell !! (star) FINDSH: the H shell and CZ edges.
+    procedure :: rotation_flags !! (star, lcz) OVROT.
+    procedure :: homogenize !! (star) MIXCZ.
+end type
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../yrec-map/tpgrad.f.html#def-TPGRAD"><code>TPGRAD</code></a>, <a href="../yrec-map/convec.f.html#def-CONVEC"><code>CONVEC</code></a>, <a href="../yrec-map/oversh.f.html#def-OVERSH"><code>OVERSH</code></a>, <a href="../yrec-map/hsubp.f.html#def-HSUBP"><code>HSUBP</code></a>, <a href="../yrec-map/findsh.f.html#def-FINDSH"><code>FINDSH</code></a>, <a href="../yrec-map/ovrot.f.html#def-OVROT"><code>OVROT</code></a>, <a href="../yrec-map/mixcz.f.html#def-MIXCZ"><code>MIXCZ</code></a>, <a href="../yrec-map/sconvec.f.html#def-SCONVEC"><code>SCONVEC</code></a> (as <code>Semiconvection</code>, in <code>mixing.f90</code>). <code>IOVIM</code>, the shell being evaluated, travels today through <a href="../yrec-map/dpmix_mod.f.html#def-DPMIX_MOD"><code>DPMIX_MOD</code></a> (formerly <code>/DPMIX/</code>) into <code>TPGRAD</code>; it becomes an argument.</p>
+<h2>Python</h2>
+<p>The stubs of the new structure (signatures and docstrings, no bodies), each naming the routines it replaces in the current code.</p>
+<h3><code>pyrec/physics/__init__.py</code></h3>
+<ul>
+<li><code>Physics.setup</code> replaces <a href="../yrec-map/setups.f.html#def-SETUPS"><code>SETUPS</code></a>, <a href="../yrec-map/setupopac.f.html#def-SETUPOPAC"><code>SETUPOPAC</code></a>, <a href="../yrec-map/alfilein.f.html#def-ALFILEIN"><code>ALFILEIN</code></a> (at <code>rp_1</code> also <code>MHDTBL</code>, removed with the MHD equation of state).</li>
+<li><code>Physics.at_point</code> replaces <a href="../yrec-map/physic.f.html#def-PHYSIC"><code>PHYSIC</code></a> (the point part), <a href="../yrec-map/coefft.f.html#def-COEFFT"><code>COEFFT</code></a> (the point part), <a href="../yrec-map/qenv.f.html#def-QENV"><code>QENV</code></a> (the point part).</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;Microphysics: Physics, which owns the run's microphysics objects, and its families.
+
+Imports `kernels` and `config`. Class names are those of the Fortran design
+(``EosBase`` rather than ``_EosBase``), since users extend the bases
+(the Hooks page of the new structure).
+
+Modules
+-------
+eos : EosBase, YaleEos, ScvEos, OpalEos, EosBlend.
+opacity : OpacityTable family, ConductiveOpacity, OpacityBlend.
+atmosphere : AtmosphereBase family, AtmosphereSwitch.
+nuclear : ReactionRates, NuclearNetwork, Deuterium, LightElements, NeutrinoLosses.
+convection : Mlt.
+point : PointState, what one evaluation at a point returns.
+
+Classes
+-------
+Physics : The run's microphysics, set up once; local physics at a point.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+from ..config import Config
+from .atmosphere import AtmosphereBase
+from .convection import Mlt
+from .eos import EosBase
+from .nuclear import NeutrinoLosses, ReactionRates
+from .opacity import OpacityBlend
+from .point import PointState
+
+
+class Physics:
+    &quot;&quot;&quot;The run's microphysics objects, set up once from Config.
+
+    Attributes
+    ----------
+    cfg : Config
+    eos : EosBase
+        Usually an EosBlend.
+    opac : OpacityBlend
+    atm : AtmosphereBase
+    rates : ReactionRates
+    nuloss : NeutrinoLosses
+    mlt : Mlt
+
+    Methods
+    -------
+    setup : Read every table the run needs.
+    at_point : EOS, opacity, gradient and convection at one point.
+    &quot;&quot;&quot;
+
+    def __init__(self, cfg: Config) -&gt; None:
+        &quot;&quot;&quot;Store the settings.&quot;&quot;&quot;
+        ...
+
+    def setup(self) -&gt; None:
+        &quot;&quot;&quot;Read every table the run needs and build the surface tables for XENV.
+
+        Replaces: setups.f#SETUPS, setupopac.f#SETUPOPAC, alfilein.f#ALFILEIN
+        &quot;&quot;&quot;
+        ...
+
+    def at_point(self, tl: float, pl: float, x: float, z: float, lr: float, ls: float,
+                 l: float, derivs: bool = False) -&gt; PointState:
+        &quot;&quot;&quot;EOS, opacity, gradient and convection at one point.
+
+        Parameters
+        ----------
+        tl, pl : float
+            log10 T [K], log10 P [dyn cm-2].
+        x, z : float
+            Mass fractions.
+        lr, ls : float
+            log10 r [cm], log10 m [g].
+        l : float
+            L/Lsun.
+        derivs : bool, default: False
+            Also the derivatives.
+
+        Notes
+        -----
+        The same sequence (EOS, GETOPAC, TPGRAD) is written out in six
+        routines today; this one method replaces each. Per point, so the
+        per-shell loops call the families' array versions (Numba) instead.
+
+        Replaces: physic.f#PHYSIC (the point part), coefft.f#COEFFT (the point part), qenv.f#QENV (the point part)
+        &quot;&quot;&quot;
+        ...
+</code></pre>
+<h3><code>pyrec/physics/atmosphere.py</code></h3>
+<ul>
+<li><code>GrayAtmosphere</code> replaces <a href="../yrec-map/hra.f.html#def-HRA"><code>HRA</code></a>.</li>
+<li><code>KuruczAtmosphere</code> replaces <a href="../yrec-map/surfp.f.html#def-SURFP"><code>SURFP</code></a>.</li>
+<li><code>AllardAtmosphere</code> replaces <a href="../yrec-map/alsurfp.f.html#def-ALSURFP"><code>ALSURFP</code></a>, <a href="../yrec-map/alfilein.f.html#def-ALFILEIN"><code>ALFILEIN</code></a>, <a href="../yrec-map/altabinit.f.html#def-ALTABINIT"><code>ALTABINIT</code></a>, <a href="../yrec-map/alprint.f.html#def-ALPRINT"><code>ALPRINT</code></a>.</li>
+<li><code>CastelliAtmosphere</code> replaces <a href="../yrec-map/kcsurfp.f.html#def-KCSURFP"><code>KCSURFP</code></a>.</li>
+<li><code>AtmosphereSwitch</code> replaces <a href="../yrec-map/surfbc.f.html#def-SURFBC"><code>SURFBC</code></a> (step 1, the switch), <a href="../yrec-map/envint.f.html#def-ENVINT"><code>ENVINT</code></a> (the Allard failure).</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;The atmosphere: one subclass per outer boundary condition (KTTAU), and the switch.
+
+Classes
+-------
+AtmosphereBase : Base of the family.
+GrayAtmosphere : KTTAU 0, 1, 2 (Eddington, Krishna Swamy, HRA fit).
+KuruczAtmosphere : KTTAU 3.
+AllardAtmosphere : KTTAU 4.
+CastelliAtmosphere : KTTAU 5.
+AtmosphereSwitch : The gray atmosphere outside a table's range, per model.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+from typing import Callable
+
+
+class AtmosphereBase:
+    &quot;&quot;&quot;Base of the atmosphere family.
+
+    Methods
+    -------
+    photosphere : log P (and log T) where the envelope starts.
+    in_range : Whether (Teff, g) is inside the table.
+    &quot;&quot;&quot;
+
+    def photosphere(self, teffl: float, gl: float, feh: float) -&gt; tuple[float, float]:
+        &quot;&quot;&quot;log10 P and log10 T where the envelope starts: T = Teff, or tau = 100 (LALTPTAU100).
+
+        This is a hook for derived classes. The base class does nothing.
+        &quot;&quot;&quot;
+        ...
+
+    def in_range(self, teffl: float, gl: float) -&gt; bool:
+        &quot;&quot;&quot;True here; tables override it.&quot;&quot;&quot;
+        ...
+
+
+class GrayAtmosphere(AtmosphereBase):
+    &quot;&quot;&quot;Gray atmosphere with a T(tau) relation.
+
+    Attributes
+    ----------
+    t_of_tau : Callable[[float], float]
+        Eddington, Krishna Swamy or the HRA fit.
+
+    Replaces: hra.f#HRA
+    &quot;&quot;&quot;
+
+    t_of_tau: Callable[[float], float]
+
+
+class KuruczAtmosphere(AtmosphereBase):
+    &quot;&quot;&quot;Kurucz model atmospheres (KTTAU 3).
+
+    Replaces: surfp.f#SURFP
+    &quot;&quot;&quot;
+
+    TEFFL_MAX = 3.95  # [log K] Gray switch for Kurucz tables (SURFBC); from the table once read.
+
+
+class AllardAtmosphere(AtmosphereBase):
+    &quot;&quot;&quot;Allard model atmospheres (KTTAU 4).
+
+    Replaces: alsurfp.f#ALSURFP, alfilein.f#ALFILEIN, altabinit.f#ALTABINIT, alprint.f#ALPRINT
+    &quot;&quot;&quot;
+
+
+class CastelliAtmosphere(AtmosphereBase):
+    &quot;&quot;&quot;Castelli and Kurucz atmospheres (KTTAU 5).
+
+    Replaces: kcsurfp.f#KCSURFP
+    &quot;&quot;&quot;
+
+
+class AtmosphereSwitch(AtmosphereBase):
+    &quot;&quot;&quot;Holds a table and the gray atmosphere; uses the gray one outside the table's range.
+
+    Attributes
+    ----------
+    table, gray : AtmosphereBase
+    per_run : bool
+        True keeps today's behavior (gray for the rest of the run after one
+        Allard failure); False decides per model. A decision for KC.
+
+    Replaces: surfbc.f#SURFBC (step 1, the switch), envint.f#ENVINT (the Allard failure)
+    &quot;&quot;&quot;
+</code></pre>
+<h3><code>pyrec/physics/convection.py</code></h3>
+<ul>
+<li><code>mlt_kernel</code> replaces <a href="../yrec-map/tpgrad.f.html#def-TPGRAD"><code>TPGRAD</code></a>.</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;Convection at a point: the Schwarzschild criterion and the mixing-length cubic.
+
+Functions
+---------
+mlt_kernel : The gradients over shells (Numba).
+
+Classes
+-------
+Mlt : Mixing-length theory with its mixing length.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+import numpy as np
+from numba import njit
+
+
+@njit(cache=True)
+def mlt_kernel(grad_rad: np.ndarray, grad_ad: np.ndarray, cmixl: float, hp: np.ndarray,
+               out: np.ndarray) -&gt; None:
+    &quot;&quot;&quot;nabla, v_conv [cm s-1] and the convection flag over shells, into ``out`` (`(3, m)`).
+
+    Notes
+    -----
+    Numba: hot loop. ``IOVIM`` (the shell evaluated) is an argument of the
+    caller, not DPMIX_MOD (formerly /DPMIX/).
+
+    Replaces: tpgrad.f#TPGRAD
+    &quot;&quot;&quot;
+    ...
+
+
+class Mlt:
+    &quot;&quot;&quot;Mixing-length convection.
+
+    Attributes
+    ----------
+    cmixl : float
+        Mixing length, in H_P (CMIXL).
+    &quot;&quot;&quot;
+
+    def __init__(self, cmixl: float) -&gt; None:
+        &quot;&quot;&quot;Store the mixing length.&quot;&quot;&quot;
+        ...
+
+    def gradient(self, pt, lconv: bool, derivs: bool = False) -&gt; tuple[float, float, float]:
+        &quot;&quot;&quot;nabla_rad, nabla, v_conv at a point (a PointState), and d ln nabla/d ln (T, P, r) on request.&quot;&quot;&quot;
+        ...
+</code></pre>
+<h3><code>pyrec/physics/eos.py</code></h3>
+<ul>
+<li><code>YaleEos</code> replaces <a href="../yrec-map/eqsaha.f.html#def-EQSAHA"><code>EQSAHA</code></a>, <a href="../yrec-map/eqrelv.f.html#def-EQRELV"><code>EQRELV</code></a>, <a href="../yrec-map/mu.f.html#def-MU"><code>MU</code></a>.</li>
+<li><code>ScvEos</code> replaces <a href="../yrec-map/eqscve.f.html#def-EQSCVE"><code>EQSCVE</code></a>, <a href="../yrec-map/eqscvg.f.html#def-EQSCVG"><code>EQSCVG</code></a>, <a href="../yrec-map/setscv.f.html#def-SETSCV"><code>SETSCV</code></a>.</li>
+<li><code>OpalEosTable</code> replaces <a href="../yrec-map/readcoeos06.f.html#def-READCOEOS06"><code>READCOEOS06</code></a>, <a href="../yrec-map/esac06.f.html#def-SETEOS06"><code>SETEOS06</code></a>.</li>
+<li><code>opal_interp</code> replaces <a href="../yrec-map/esac06.f.html#def-ESAC06"><code>ESAC06</code></a>, <a href="../yrec-map/t6rinteos06.f.html#def-T6RINTEOS06"><code>T6RINTEOS06</code></a>, <a href="../yrec-map/quadeos06.f.html#def-QUADEOS06"><code>QUADEOS06</code></a>.</li>
+<li><code>OpalEos</code> replaces <a href="../yrec-map/oeqos06.f.html#def-OEQOS06"><code>OEQOS06</code></a>, <a href="../yrec-map/rhoofp06.f.html#def-RHOOFP06"><code>RHOOFP06</code></a>, <a href="../yrec-map/eqbound06.f.html#def-EQBOUND06"><code>EQBOUND06</code></a>, <a href="../yrec-map/gmass06.f.html#def-GMASS06"><code>GMASS06</code></a>.</li>
+<li><code>OpalEos.radiation</code> replaces <a href="../yrec-map/radsub06.f.html#def-RADSUB06"><code>RADSUB06</code></a>.</li>
+<li>The development branch removed the 1995 and 2001 OPAL routines and the MHD equation of state, so their stubs (<code>MhdEos</code> among them) are gone.</li>
+<li><code>EosBlend</code> replaces <a href="../yrec-map/eqstat.f.html#def-EQSTAT"><code>EQSTAT</code></a>, <a href="../yrec-map/eqstat2.f.html#def-EQSTAT2"><code>EQSTAT2</code></a>.</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;The equation of state: a base class, one subclass per source, and the blend.
+
+Classes
+-------
+EosBase : Base of the family.
+YaleEos : EQSAHA below TSCUT, EQRELV above.
+ScvEos : SCV tables for the envelope mix.
+OpalEosTable : The OPAL 2006 grid, edges and values.
+OpalEos : The OPAL 2006 equation of state.
+EosBlend : Chooses and ramps between sources.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+import numpy as np
+from numba import njit
+
+from .point import PointState
+
+
+class EosBase:
+    &quot;&quot;&quot;Base of the equation-of-state family.
+
+    Methods
+    -------
+    eval : Density and thermodynamic derivatives at (log T, log P).
+    eval_shells : The same over arrays of shells.
+    covers : Weight in [0, 1] of this source at (T, rho).
+    &quot;&quot;&quot;
+
+    def eval(self, tl: float, pl: float, x: float, z: float, derivs: bool = False) -&gt; PointState:
+        &quot;&quot;&quot;Density and thermodynamic derivatives at log10 T, log10 P.
+
+        This is a hook for derived classes. The base class does nothing.
+        &quot;&quot;&quot;
+        ...
+
+    def eval_shells(self, tl: np.ndarray, pl: np.ndarray, x: np.ndarray, z: np.ndarray,
+                    out: np.ndarray) -&gt; None:
+        &quot;&quot;&quot;:meth:`eval` over shells, shape `(m,)` each, into ``out`` (shape `(n_q, m)`).
+
+        Notes
+        -----
+        Calls each subclass's Numba kernel; the per-shell loop of PHYSIC.
+        &quot;&quot;&quot;
+        ...
+
+    def covers(self, tl: float, dl: float) -&gt; float:
+        &quot;&quot;&quot;Weight in [0, 1] of this source at (T, rho); 1 everywhere in the base class.&quot;&quot;&quot;
+        ...
+
+
+class YaleEos(EosBase):
+    &quot;&quot;&quot;EQSAHA below TSCUT, EQRELV above; Debye-Hueckel and relativistic options.
+
+    Replaces: eqsaha.f#EQSAHA, eqrelv.f#EQRELV, mu.f#MU
+    &quot;&quot;&quot;
+
+
+class ScvEos(EosBase):
+    &quot;&quot;&quot;SCV tables for the envelope mix.
+
+    Replaces: eqscve.f#EQSCVE, eqscvg.f#EQSCVG, setscv.f#SETSCV
+    &quot;&quot;&quot;
+
+
+class OpalEosTable:
+    &quot;&quot;&quot;The OPAL 2006 grid, edges (NTA, NRA) and values, read from its file.
+
+    Attributes
+    ----------
+    values : np.ndarray, shape: `(n_q, n_x, n_t, n_rho)`, dtype: ``float64``
+    quad_cache : np.ndarray
+        The QUADEOS06 cache, owned by the table.
+
+    Replaces: readcoeos06.f#READCOEOS06, esac06.f#SETEOS06
+    &quot;&quot;&quot;
+
+    def __init__(self, path) -&gt; None:
+        &quot;&quot;&quot;Store the file.&quot;&quot;&quot;
+        ...
+
+    def __call__(self) -&gt; None:
+        &quot;&quot;&quot;Read the table; sizes from the file, not from DATA statements.&quot;&quot;&quot;
+        ...
+
+
+@njit(cache=True)
+def opal_interp(values: np.ndarray, t6: float, rho: float, x: float, out: np.ndarray) -&gt; None:
+    &quot;&quot;&quot;Interpolate an OPAL table at (T6, rho, X), into ``out``.
+
+    Notes
+    -----
+    Numba: hot loop, called per shell per iteration.
+
+    Replaces: esac06.f#ESAC06, t6rinteos06.f#T6RINTEOS06, quadeos06.f#QUADEOS06
+    &quot;&quot;&quot;
+    ...
+
+
+class OpalEos(EosBase):
+    &quot;&quot;&quot;The OPAL 2006 equation of state (the development branch removed the 1995 and 2001 releases).
+
+    Attributes
+    ----------
+    tab : OpalEosTable
+
+    Replaces: oeqos06.f#OEQOS06, rhoofp06.f#RHOOFP06, eqbound06.f#EQBOUND06, gmass06.f#GMASS06
+    &quot;&quot;&quot;
+
+    def radiation(self, tl: float, dl: float) -&gt; tuple[float, float]:
+        &quot;&quot;&quot;The treatment of radiation (at rp_1, the one difference between the three releases).
+
+        Replaces: radsub06.f#RADSUB06
+        &quot;&quot;&quot;
+        ...
+
+
+class EosBlend(EosBase):
+    &quot;&quot;&quot;Chooses and ramps between sources, with optional numerical derivatives.
+
+    Attributes
+    ----------
+    base : EosBase
+    cores : list[EosBase]
+    numeric_derivs : bool
+        LNUMDERIV.
+
+    Replaces: eqstat.f#EQSTAT, eqstat2.f#EQSTAT2
+    &quot;&quot;&quot;
+
+    DLOGT_NUM = 3.0e-4  # Step in log T of the numerical derivatives (EQSTAT).
+    DLOGP_NUM = 1.5e-3  # Step in log P of the numerical derivatives (EQSTAT).
+</code></pre>
+<h3><code>pyrec/physics/nuclear.py</code></h3>
+<ul>
+<li><code>rates_kernel</code> replaces <a href="../yrec-map/engeb.f.html#def-ENGEB"><code>ENGEB</code></a>, <a href="../yrec-map/rates.f.html#def-RATES"><code>RATES</code></a>.</li>
+<li><code>NuclearNetwork</code> replaces <a href="../yrec-map/kemcom.f.html#def-KEMCOM"><code>KEMCOM</code></a>, <a href="../yrec-map/eqburn.f.html#def-EQBURN"><code>EQBURN</code></a>.</li>
+<li><code>Deuterium</code> replaces <a href="../yrec-map/deutrate.f.html#def-DEUTRATE"><code>DEUTRATE</code></a>, <a href="../yrec-map/dburn.f.html#def-DBURN"><code>DBURN</code></a>, <a href="../yrec-map/dburnm.f.html#def-DBURNM"><code>DBURNM</code></a>.</li>
+<li><code>LightElements</code> replaces <a href="../yrec-map/lirate88.f.html#def-LIRATE88"><code>LIRATE88</code></a>, <a href="../yrec-map/liburn.f.html#def-LIBURN"><code>LIBURN</code></a>, <a href="../yrec-map/liburn2.f.html#def-LIBURN2"><code>LIBURN2</code></a>.</li>
+<li><code>NeutrinoLosses</code> replaces <a href="../yrec-map/neutrino.f.html#def-NEUTRINO"><code>NEUTRINO</code></a>, <a href="../yrec-map/nulosses.f.html#def-NULOSSES"><code>NULOSSES</code></a>, <a href="../yrec-map/sneut.f.html#def-SNEUT"><code>SNEUT</code></a>.</li>
+</ul>
+<pre><code class="language-python">r&quot;&quot;&quot;Nuclear physics: rates once per point, the implicit network, light elements, neutrinos.
+
+For a shell or zone, the network solves
+$G_k(w) = w_k - w_k^0 - A_k\,\Delta t\,R_k(w) = 0$ by Newton iteration.
+
+Classes
+-------
+ReactionRates : Screened rates and energy generation.
+NuclearNetwork : The implicit network over a step.
+Deuterium : Deuterium burning.
+LightElements : Li6, Li7, Be9.
+NeutrinoLosses : Plasma and other neutrino losses.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+import numpy as np
+from numba import njit
+
+
+@njit(cache=True)
+def rates_kernel(dl: np.ndarray, tl: np.ndarray, comp: np.ndarray, sstandard: np.ndarray,
+                 hr: np.ndarray, eps: np.ndarray) -&gt; None:
+    &quot;&quot;&quot;Screened rates ``hr`` (`(13, m)`) and energy by chain ``eps`` (`(n_chain, 3, m)`: value, d/d ln rho, d/d ln T) over shells.
+
+    Notes
+    -----
+    Numba: hot loop. ENGEB and RATES merged where they agree.
+
+    Replaces: engeb.f#ENGEB, rates.f#RATES
+    &quot;&quot;&quot;
+    ...
+
+
+class ReactionRates:
+    &quot;&quot;&quot;Rates computed once per point, for both energy and abundances.
+
+    Attributes
+    ----------
+    sstandard : np.ndarray, shape: `(17,)`
+    qs0e, qqs0ee : np.ndarray, shape: `(8,)`
+    be7_screening_rates : bool
+        RATES' 7Be screening constants, an option until the experts decide.
+    &quot;&quot;&quot;
+
+    RATE_FLOOR_IN = 1.0e-30  # Rates below this are zero before use (ENGEB).
+    RATE_FLOOR_OUT = 1.0e-5  # ... and after (ENGEB).
+    SUM_FLOOR = 1.0e-12  # SUM1 floor (ENGEB).
+
+    def eval(self, dl: np.ndarray, tl: np.ndarray, comp: np.ndarray,
+             energy: bool = True) -&gt; tuple[np.ndarray, np.ndarray | None]:
+        &quot;&quot;&quot;Rates [per Gyr per amu] and, if ``energy``, eps by chain [erg g-1 s-1] with derivatives, over shells.&quot;&quot;&quot;
+        ...
+
+    def neutrino_fluxes(self, dl: float, tl: float, comp: np.ndarray) -&gt; np.ndarray:
+        &quot;&quot;&quot;Solar neutrino fluxes per gram (LSNU).&quot;&quot;&quot;
+        ...
+
+
+class NuclearNetwork:
+    &quot;&quot;&quot;The implicit 7-species network over a step, for one shell or one mixed zone.
+
+    Replaces: kemcom.f#KEMCOM, eqburn.f#EQBURN
+    &quot;&quot;&quot;
+
+    MATRIX_FLOOR = 1.0e-8  # Matrix entries below this are zero (KEMCOM).
+    Z_RESET_TOL = 5.0e-7  # Tolerance to reset Z (KEMCOM).
+
+    def burn(self, comp0: np.ndarray, hr: np.ndarray, dm: float, dt_gyr: float) -&gt; np.ndarray:
+        &quot;&quot;&quot;Newton solve of the network; ``comp0`` and the result shape `(NSP,)`.
+
+        Notes
+        -----
+        Numba: the Newton loop is a kernel over shells.
+        &quot;&quot;&quot;
+        ...
+
+    def burn_equilibrium(self, comp0: np.ndarray, hr: np.ndarray) -&gt; np.ndarray:
+        &quot;&quot;&quot;The equilibrium abundances, the first level's guess (EQBURN).&quot;&quot;&quot;
+        ...
+
+
+class Deuterium:
+    &quot;&quot;&quot;Deuterium burning, with a substep fraction.
+
+    Replaces: deutrate.f#DEUTRATE, dburn.f#DBURN, dburnm.f#DBURNM
+    &quot;&quot;&quot;
+
+
+class LightElements:
+    &quot;&quot;&quot;Li6, Li7 and Be9: rates at the start and end of a step, and their burning.
+
+    Replaces: lirate88.f#LIRATE88, liburn.f#LIBURN, liburn2.f#LIBURN2
+    &quot;&quot;&quot;
+
+    LOGT_DESTROY = 7.0  # [log K] Destruction threshold (LIBURN).
+    LAMBDAH_MAX = 30.0  # Limit on lambda*h (LIBURN).
+    ABUND_FLOOR = 1.0e-24  # Abundance floor (LIBURN).
+    TOL = 1.0e-6  # Tolerances (LIBURN).
+    LOGT_RATES_MIN = 6.0  # [log K] TLIM (LIRATE88).
+
+
+class NeutrinoLosses:
+    &quot;&quot;&quot;Plasma, photo-, pair and bremsstrahlung neutrino losses, and the older fit.
+
+    Replaces: neutrino.f#NEUTRINO, nulosses.f#NULOSSES, sneut.f#SNEUT
+    &quot;&quot;&quot;
+</code></pre>
+<h3><code>pyrec/physics/opacity.py</code></h3>
+<ul>
+<li><code>table_interp</code> replaces <a href="../yrec-map/op952d.f.html#def-OP952D"><code>OP952D</code></a>, <a href="../yrec-map/op953d.f.html#def-OP953D"><code>OP953D</code></a>, <a href="../yrec-map/op954d.f.html#def-OP954D"><code>OP954D</code></a>.</li>
+<li><code>Opal95Opacity</code> replaces <a href="../yrec-map/ll95tbl.f.html#def-LL95TBL"><code>LL95TBL</code></a>, <a href="../yrec-map/op95ztab.f.html#def-OP95ZTAB"><code>OP95ZTAB</code></a>, <a href="../yrec-map/op95xtab.f.html#def-OP95XTAB"><code>OP95XTAB</code></a>, <a href="../yrec-map/getopal95.f.html#def-GETOPAL95"><code>GETOPAL95</code></a>.</li>
+<li><code>Laol89Opacity</code> replaces <a href="../yrec-map/rdzlaol.f.html#def-RDZLAOL"><code>RDZLAOL</code></a>, <a href="../yrec-map/zsulaol.f.html#def-ZSULAOL"><code>ZSULAOL</code></a>, <a href="../yrec-map/gtpurz.f.html#def-GTPURZ"><code>GTPURZ</code></a>.</li>
+<li><code>Alex06Opacity</code> replaces <a href="../yrec-map/readalex06.f.html#def-READALEX06"><code>READALEX06</code></a>, <a href="../yrec-map/alex06tab.f.html#def-ALEX06TAB"><code>ALEX06TAB</code></a>, <a href="../yrec-map/getalex06.f.html#def-GETALEX06"><code>GETALEX06</code></a>.</li>
+<li>The development branch removed the OPAL 1992, Alexander 1995 and Kurucz 1990 tables and LAOL 1989's main tables, so their stubs (<code>Opal92Opacity</code>, <code>Alex95Opacity</code>, <code>Kurucz90Opacity</code>) are gone.</li>
+<li><code>ConductiveOpacity</code> replaces <a href="../yrec-map/condopacp.f.html#def-CONDOPACP"><code>CONDOPACP</code></a>, <a href="../yrec-map/condopacpint.f.html#def-CONDOPACPINT"><code>CONDOPACPINT</code></a>.</li>
+<li><code>OpacityBlend</code> replaces <a href="../yrec-map/getopac.f.html#def-GETOPAC"><code>GETOPAC</code></a>, <a href="../yrec-map/setupopac.f.html#def-SETUPOPAC"><code>SETUPOPAC</code></a>, <a href="../yrec-map/surfopac.f.html#def-SURFOPAC"><code>SURFOPAC</code></a>.</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;The opacity: one subclass per table family.
+
+Classes
+-------
+OpacityTable : Base of the family.
+Opal95Opacity, Laol89Opacity, Alex06Opacity : The table families.
+ConductiveOpacity : Potekhin tables.
+OpacityBlend : Chooses and ramps tables, adds conduction.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+from numba import njit
+
+
+@njit(cache=True)
+def table_interp(logk: np.ndarray, x_grid: np.ndarray, t_grid: np.ndarray, r_grid: np.ndarray,
+                 x: float, tl: float, rl: float, out: np.ndarray) -&gt; None:
+    &quot;&quot;&quot;Interpolate a log-kappa table in (X, log T, log R), into ``out`` (kappa and its two log-derivatives).
+
+    Notes
+    -----
+    Numba: hot loop, shared by every table family (the 2D/3D/4D variants
+    differ in the axes they pass).
+
+    Replaces: op952d.f#OP952D, op953d.f#OP953D, op954d.f#OP954D
+    &quot;&quot;&quot;
+    ...
+
+
+class OpacityTable:
+    &quot;&quot;&quot;Base of the opacity family.
+
+    Attributes
+    ----------
+    z : float
+        The table's metallicity.
+
+    Methods
+    -------
+    read : Read the table file.
+    prepare : Pre-interpolate to a fixed X.
+    kappa : log kappa and its log-derivatives.
+    &quot;&quot;&quot;
+
+    def __init__(self, z: float) -&gt; None:
+        &quot;&quot;&quot;Store the metallicity.&quot;&quot;&quot;
+        ...
+
+    def read(self, path: Path) -&gt; None:
+        &quot;&quot;&quot;Read the table; sizes from the file. A hook for derived classes.&quot;&quot;&quot;
+        ...
+
+    def prepare(self, x: float) -&gt; None:
+        &quot;&quot;&quot;Pre-interpolate to a fixed X. This is a hook for derived classes. The base class does nothing.&quot;&quot;&quot;
+        ...
+
+    def kappa(self, dl: float, tl: float, x: float, z: float) -&gt; tuple[float, float, float]:
+        &quot;&quot;&quot;kappa, d log kappa/d log rho, d log kappa/d log T. A hook for derived classes.&quot;&quot;&quot;
+        ...
+
+
+class Opal95Opacity(OpacityTable):
+    &quot;&quot;&quot;OPAL 1995, 2D/3D/4D by composition.
+
+    Replaces: ll95tbl.f#LL95TBL, op95ztab.f#OP95ZTAB, op95xtab.f#OP95XTAB, getopal95.f#GETOPAL95
+    &quot;&quot;&quot;
+
+
+class Laol89Opacity(OpacityTable):
+    &quot;&quot;&quot;LAOL 1989's pure-Z table, for metal-rich helium cores (its main tables are removed).
+
+    Replaces: rdzlaol.f#RDZLAOL, zsulaol.f#ZSULAOL, gtpurz.f#GTPURZ
+    &quot;&quot;&quot;
+
+
+class Alex06Opacity(OpacityTable):
+    &quot;&quot;&quot;Alexander and Ferguson 2006, low temperatures.
+
+    Replaces: readalex06.f#READALEX06, alex06tab.f#ALEX06TAB, getalex06.f#GETALEX06
+    &quot;&quot;&quot;
+
+
+class ConductiveOpacity:
+    &quot;&quot;&quot;Conductive opacities from the Potekhin tables.
+
+    Replaces: condopacp.f#CONDOPACP, condopacpint.f#CONDOPACPINT
+    &quot;&quot;&quot;
+
+    def kappa(self, dl: float, tl: float, x: float, z: float) -&gt; tuple[float, float, float]:
+        &quot;&quot;&quot;Conductive kappa and its log-derivatives.&quot;&quot;&quot;
+        ...
+
+
+class OpacityBlend:
+    &quot;&quot;&quot;Chooses low-T and interior tables, ramps between them, adds conduction harmonically.
+
+    Attributes
+    ----------
+    interior : OpacityTable
+        One table, OPAL95 (the only interior table since 09c3b9b).
+    lowt : OpacityTable
+    purez : OpacityTable
+    cond : ConductiveOpacity or None
+
+    Replaces: getopac.f#GETOPAC, setupopac.f#SETUPOPAC, surfopac.f#SURFOPAC
+    &quot;&quot;&quot;
+
+    TMOLMIN = None  # [log K] Start of the ramp; from Config.opac, default today's value.
+    TMOLMAX = None  # [log K] End of the ramp; from Config.opac.
+
+    def kappa(self, dl: float, tl: float, x: float, z: float) -&gt; tuple[float, float, float]:
+        &quot;&quot;&quot;The blended opacity at a point.&quot;&quot;&quot;
+        ...
+
+    def kappa_shells(self, dl: np.ndarray, tl: np.ndarray, x: np.ndarray, z: np.ndarray,
+                     out: np.ndarray) -&gt; None:
+        &quot;&quot;&quot;The blended opacity over shells (each `(m,)`), into ``out`` (`(3, m)`), through Numba kernels.&quot;&quot;&quot;
+        ...
+</code></pre>
+<h3><code>pyrec/physics/point.py</code></h3>
+<pre><code class="language-python">&quot;&quot;&quot;What one evaluation of the local physics returns.
+
+Classes
+-------
+PointState : Density, thermodynamic derivatives, opacity and gradients at a point.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(slots=True)
+class PointState:
+    r&quot;&quot;&quot;What one evaluation at a point returns, named as the notes name it.
+
+    Attributes
+    ----------
+    rho, beta, eta : float
+    qrt, qrp : float
+        $Q_{\rho T} = (\partial\ln\rho/\partial\ln T)_P$, $Q_{\rho P}$.
+    cp, grad_ad, grad_rad, grad, v_conv : float
+    kappa, dlk_dlrho, dlk_dlt : float
+    convective : bool
+    pualpha : float
+        PUALPHA (PUALPHA_MOD, formerly /PUALPHA/).
+    &quot;&quot;&quot;
+
+    rho: float = 0.0
+    beta: float = 0.0
+    eta: float = 0.0
+    qrt: float = 0.0
+    qrp: float = 0.0
+    cp: float = 0.0
+    grad_ad: float = 0.0
+    grad_rad: float = 0.0
+    grad: float = 0.0
+    v_conv: float = 0.0
+    kappa: float = 0.0
+    dlk_dlrho: float = 0.0
+    dlk_dlt: float = 0.0
+    convective: bool = False
+    pualpha: float = 0.0
+</code></pre>
+<h3><code>pyrec/star/zones.py</code></h3>
+<ul>
+<li><code>ConvectionZones.find</code> replaces <a href="../yrec-map/convec.f.html#def-CONVEC"><code>CONVEC</code></a>, <a href="../yrec-map/oversh.f.html#def-OVERSH"><code>OVERSH</code></a>, <a href="../yrec-map/hsubp.f.html#def-HSUBP"><code>HSUBP</code></a>.</li>
+<li><code>ConvectionZones.find_shell</code> replaces <a href="../yrec-map/findsh.f.html#def-FINDSH"><code>FINDSH</code></a>.</li>
+<li><code>ConvectionZones.rotation_flags</code> replaces <a href="../yrec-map/ovrot.f.html#def-OVROT"><code>OVROT</code></a>.</li>
+<li><code>ConvectionZones.homogenize</code> replaces <a href="../yrec-map/mixcz.f.html#def-MIXCZ"><code>MIXCZ</code></a>.</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;Convection zones and overshoot over the model.
+
+Classes
+-------
+ConvectionZones : Zones with and without overshoot; the H shell.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+import numpy as np
+
+from .model import Star
+
+
+class ConvectionZones:
+    &quot;&quot;&quot;Zones with and without overshoot, and the radiative zones.
+
+    Attributes
+    ----------
+    zones, zones0, radiative : np.ndarray, shape: `(2, nzone)`, dtype: ``int``
+        First and last shell of each zone (0-based).
+    jcore, jenv : int
+        Edges before overshoot.
+    &quot;&quot;&quot;
+
+    def find(self, star: Star) -&gt; None:
+        &quot;&quot;&quot;Find the zones, with overshoot and H_P.
+
+        Replaces: convec.f#CONVEC, oversh.f#OVERSH, hsubp.f#HSUBP
+        &quot;&quot;&quot;
+        ...
+
+    def find_shell(self, star: Star) -&gt; None:
+        &quot;&quot;&quot;The H shell and the edges of the convection zones.
+
+        Replaces: findsh.f#FINDSH
+        &quot;&quot;&quot;
+        ...
+
+    def rotation_flags(self, star: Star) -&gt; np.ndarray:
+        &quot;&quot;&quot;Shells treated as convective for rotation.
+
+        Replaces: ovrot.f#OVROT
+        &quot;&quot;&quot;
+        ...
+
+    def homogenize(self, star: Star) -&gt; None:
+        &quot;&quot;&quot;Mix each convection zone.
+
+        Replaces: mixcz.f#MIXCZ
+        &quot;&quot;&quot;
+        ...
+</code></pre>
+
+</main></body></html>

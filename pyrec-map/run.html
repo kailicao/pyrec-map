@@ -1,0 +1,294 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>The run and calibrations · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ New structure (Fortran and Python) / The run and calibrations</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='fortran.html'>Language and style</a></li><li><a href='common-map.html'>The COMMON-block map</a></li><li><a href='kernels.html'>Kernels and settings</a></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><a href='timestep.html'>Time stepping</a></li><li><a href='composition.html'>Composition and settling</a></li><li><a href='rotation.html'>Rotation and mass loss</a></li><li><strong>The run and calibrations</strong></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>The run and calibrations</h1>
+<p><em>In Python: <code>pyrec.evolve</code>, under Python below.</em></p>
+<h2>3.12 The run: <code>Run</code>, <code>Track</code>, <code>Step</code></h2>
+<p><strong>The design follows YREC's development branch (09c3b9b),</strong> which has removed the Monte Carlo option (its loop in <code>main.f</code> and its summary, <code>WRTMONTE</code>), so the design no longer has a <code>MonteCarlo</code> calibration; the COMMON blocks the run used are modules there, or arguments (<a href="common-map.html">Section 6.4</a>).</p>
+<p><strong><code>Run</code>. Responsibility:</strong> the job: read the configuration, set up the physics once, run the tracks (kind cards) in order, and around them the calibrations; replaces <a href="../yrec-map/main.f.html"><code>main.f</code></a>'s outer loops.</p>
+<pre><code class="language-fortran">type :: Run
+    type(Config) :: cfg
+    type(Physics) :: phys
+    type(Logger) :: logger
+    class(UserPhysics), allocatable :: user    !! Absent: no user physics.
+    type(TrackWriter) :: out
+    class(CalibrBase), allocatable :: calibr   !! Absent: no calibration.
+contains
+    procedure :: init     !! (file_control, file_physics, ierr) PARMIN,
+                          !! SETUPS: settings, tables, output files.
+    procedure :: run      !! (ierr) Every kind card; calibrations.
+    procedure :: clear    !! () Close files, free tables.
+end type
+
+type :: Track
+    !! One kind card: a starting model and a sequence of steps.
+    type(Run), pointer :: job =&gt; null()   !! Settings via job%cfg.
+    type(KindCard) :: card
+    type(Star) :: star
+    type(TimeStepper) :: stepper
+    type(CompositionStep) :: comp
+    type(RotationStep) :: rot
+    type(MassLoss) :: mloss
+    type(ConvectionZones) :: zones
+contains
+    procedure :: start    !! (prev, ierr) STARIN: read or keep the model,
+                          !! rescale, first zones, FINDSH, first step.
+    procedure :: run      !! (ierr) Steps until a stop criterion holds.
+    procedure :: done     !! () -&gt; logical: ENDAGE, END_XCEN, ...
+end type
+
+type :: Step
+    !! One evolutionary step: attempted, cut and retried until it converges.
+    type(Track), pointer :: track =&gt; null()
+    type(StepStart) :: start
+    real(dp) :: dt                        !! [s] (DELTS); &lt; 0: relaxation.
+contains
+    procedure :: run      !! (ierr) The evolution step of Section 4.
+end type
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../yrec-map/main.f.html"><code>main.f</code></a>, the start-up of <a href="../yrec-map/starin.f.html#def-STARIN"><code>STARIN</code></a> (reading through <code>ModelFile</code>, the envelope's fitting point, the first zones), and <a href="../yrec-map/findsh.f.html#def-FINDSH"><code>FINDSH</code></a>'s calls. Each level does what its <code>GOTO</code> does today: a divergence returns from <code>Step%run</code> with a status, and <code>Track%run</code> ends the run with that error (label 15: <code>STARIN</code> stops when <code>LARGE</code> is set, although a comment in <code>main.f</code> calls the label "timestep cutting"; cutting and retrying the step would be new behavior, <a href="overview.html">Section 8</a>), the end of a kind card ends <code>Track%run</code> (label 110), and calibrations decide in <code>Run%run</code> whether a cycle repeats (labels 200, 250).</p>
+<h2>3.13 Calibrations: <code>SolarCalibr</code>, <code>StarCalibr</code></h2>
+<p><strong>Responsibility:</strong> repeat tracks with adjusted parameters until a target is met: the Sun's $L$, $R$ (and surface $Z/X$) at its age, or a star's $L$ at a radius.</p>
+<pre><code class="language-fortran">type, abstract :: CalibrBase
+contains
+    procedure(cards_if), deferred :: cards     !! (cfg) SETCAL, SETSCAL.
+    procedure(check_if), deferred :: check
+        !! (summary, cards, done, ierr) CHKCAL: from a finished track's
+        !! TrackSummary (L, R, age, surface Z/X), adjust X, alpha (and Z)
+        !! by a Newton step for the next cycle, or end.
+    procedure :: after_model
+        !! (summary, done) CHKSCAL: called after each model; may end the
+        !! track. A hook for extended types; the base type does nothing.
+end type
+type, extends(CalibrBase) :: SolarCalibr   !! TOLL, TOLR, TOLZ; 15 cycles.
+type, extends(CalibrBase) :: StarCalibr    !! XLS, STEFF, SR; after_model
+</code></pre>
+<p>For the Sun, each cycle solves the $2\times2$ system
+$$\begin{pmatrix}\partial L/\partial X &amp; \partial L/\partial\alpha\\ \partial R/\partial X &amp; \partial R/\partial\alpha\end{pmatrix}\begin{pmatrix}\Delta X\\ \Delta\alpha\end{pmatrix} = \begin{pmatrix}L_\odot - L\\ R_\odot - R\end{pmatrix}$$
+with the derivatives from the cycle's three tracks (<code>DLDX</code>, <code>DRDX</code>, <code>DLDA</code>, <code>DRDA</code>: in <code>/CALSUN/</code> at <code>rp_1</code>, arguments of <code>CHKCAL</code> since the development branch retired the block). <strong>Replaces:</strong> <a href="../yrec-map/setcal.f.html#def-SETCAL"><code>SETCAL</code></a>, <a href="../yrec-map/chkcal.f.html#def-CHKCAL"><code>CHKCAL</code></a>, <a href="../yrec-map/setscal.f.html#def-SETSCAL"><code>SETSCAL</code></a>, <a href="../yrec-map/chkscal.f.html#def-CHKSCAL"><code>CHKSCAL</code></a>. A calibration no longer fills 48 or 50 kind cards in advance; it adds each kind card when it needs one. <code>StarCalibr</code> differs from the others: <code>main.f</code> calls <code>CHKSCAL</code> after each model (on even kind cards, from the second model on), and it may end the track there (<code>GOTO 200</code>); hence <code>after_model</code>. A calibration sees a track only through a small <code>TrackSummary</code> (defined in <code>calibr.f90</code>), so that <code>calibr</code> sits below <code>evolve</code> in the layering and <code>Run</code> can hold a calibration without a circular dependency. At <code>rp_1</code> a third calibration, <code>MonteCarlo</code>, ran a series over drawn parameters; the development branch has removed it (<a href="overview.html">Section 7.3</a>), and so has the design.</p>
+<h2>Python</h2>
+<p>The stubs of the new structure (signatures and docstrings, no bodies), each naming the routines it replaces in the current code.</p>
+<h3><code>pyrec/evolve/__init__.py</code></h3>
+<pre><code class="language-python">&quot;&quot;&quot;The run: the job, its tracks and their steps; calibrations.
+
+The top of the layering; imports every other package.
+
+Modules
+-------
+calibr : TrackSummary, CalibrBase, SolarCalibr, StarCalibr.
+run : Run, Track, Step.
+
+&quot;&quot;&quot;
+from .run import Run
+</code></pre>
+<h3><code>pyrec/evolve/calibr.py</code></h3>
+<ul>
+<li><code>SolarCalibr</code> replaces <a href="../yrec-map/setcal.f.html#def-SETCAL"><code>SETCAL</code></a>, <a href="../yrec-map/chkcal.f.html#def-CHKCAL"><code>CHKCAL</code></a>.</li>
+<li><code>StarCalibr</code> replaces <a href="../yrec-map/setscal.f.html#def-SETSCAL"><code>SETSCAL</code></a>, <a href="../yrec-map/chkscal.f.html#def-CHKSCAL"><code>CHKSCAL</code></a>.</li>
+<li>The development branch removed the Monte Carlo option, so its stub (<code>MonteCarlo</code>) is gone.</li>
+</ul>
+<pre><code class="language-python">r&quot;&quot;&quot;Calibrations: repeat tracks with adjusted parameters until a target is met.
+
+For the Sun, each cycle solves the 2x2 system
+$\begin{pmatrix}\partial L/\partial X &amp; \partial L/\partial\alpha\\ \partial R/\partial X &amp; \partial R/\partial\alpha\end{pmatrix}\begin{pmatrix}\Delta X\\ \Delta\alpha\end{pmatrix} = \begin{pmatrix}L_\odot - L\\ R_\odot - R\end{pmatrix}$.
+A calibration sees a track only through a TrackSummary, so it sits below
+``run`` in the layering.
+
+Classes
+-------
+TrackSummary : L, R, age, surface Z/X of a finished track or model.
+CalibrBase : Base of the calibrations.
+SolarCalibr : The Sun's L, R (and Z/X) at its age.
+StarCalibr : A star's L at a radius; may end a track after a model.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from ..config import Config, KindCard
+
+
+@dataclass(slots=True)
+class TrackSummary:
+    &quot;&quot;&quot;What a calibration needs from a track.&quot;&quot;&quot;
+
+    lum: float = 0.0
+    radius: float = 0.0
+    age: float = 0.0
+    zx_surf: float = 0.0
+
+
+class CalibrBase:
+    &quot;&quot;&quot;Base of the calibrations.
+
+    Methods
+    -------
+    cards : The first kind cards.
+    check : Adjust for the next cycle, or end.
+    after_model : Called after each model.
+    &quot;&quot;&quot;
+
+    def cards(self, cfg: Config) -&gt; list[KindCard]:
+        &quot;&quot;&quot;The first kind cards; later ones are added as needed. A hook for derived classes.&quot;&quot;&quot;
+        ...
+
+    def check(self, summary: TrackSummary) -&gt; list[KindCard] | None:
+        &quot;&quot;&quot;From a finished track's summary, the next cycle's cards, or None to end. A hook for derived classes.&quot;&quot;&quot;
+        ...
+
+    def after_model(self, summary: TrackSummary) -&gt; bool:
+        &quot;&quot;&quot;Called after each model; True ends the track.
+
+        This is a hook for derived classes. The base class does nothing.
+        &quot;&quot;&quot;
+        ...
+
+
+class SolarCalibr(CalibrBase):
+    &quot;&quot;&quot;Solar calibration: X, alpha (and Z) by Newton steps; TOLL, TOLR, TOLZ.
+
+    Replaces: setcal.f#SETCAL, chkcal.f#CHKCAL
+    &quot;&quot;&quot;
+
+    MAX_CYCLES = 15  # Cycles; at rp_1 the message said 10 and the test 11 (MAIN question 5 at rp_1, settled).
+
+
+class StarCalibr(CalibrBase):
+    &quot;&quot;&quot;A star's L at a radius (XLS, STEFF, SR); uses ``after_model``.
+
+    Replaces: setscal.f#SETSCAL, chkscal.f#CHKSCAL
+    &quot;&quot;&quot;
+</code></pre>
+<h3><code>pyrec/evolve/run.py</code></h3>
+<ul>
+<li><code>Run</code> replaces <a href="../yrec-map/main.f.html"><code>main.f</code></a>.</li>
+<li><code>Run.__init__</code> replaces <a href="../yrec-map/parmin.f.html#def-PARMIN"><code>PARMIN</code></a>, <a href="../yrec-map/setups.f.html#def-SETUPS"><code>SETUPS</code></a>.</li>
+<li><code>Track.start</code> replaces <a href="../yrec-map/starin.f.html#def-STARIN"><code>STARIN</code></a>.</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;The job, its tracks and their steps.
+
+Classes
+-------
+Run : The job: settings, physics once, the tracks, the calibrations.
+Track : One kind card: a starting model and a sequence of steps.
+Step : One evolutionary step.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+from pathlib import Path
+
+from ..config import Config, KindCard
+from ..composition import CompositionStep
+from ..hooks import UserPhysics
+from ..io.writers import TrackWriter
+from ..kernels.logger import Logger
+from ..physics import Physics
+from ..rotation import MassLoss, RotationStep
+from ..star import Star, StepStart
+from ..star.zones import ConvectionZones
+from ..timestep import TimeStepper
+from .calibr import CalibrBase
+
+
+class StepDiverged(RuntimeError):
+    &quot;&quot;&quot;The structure diverged (LARGE); today this ends the run.&quot;&quot;&quot;
+
+
+class Run:
+    &quot;&quot;&quot;The job; replaces main.f's outer loops.
+
+    Attributes
+    ----------
+    cfg : Config
+    phys : Physics
+    logger : Logger
+    user : UserPhysics or None
+    out : TrackWriter
+    calibr : CalibrBase or None
+
+    Replaces: main.f
+    &quot;&quot;&quot;
+
+    def __init__(self, file_control: Path, file_physics: Path) -&gt; None:
+        &quot;&quot;&quot;Read the settings, set up the tables, open the output files.
+
+        Replaces: parmin.f#PARMIN, setups.f#SETUPS
+        &quot;&quot;&quot;
+        ...
+
+    def __call__(self) -&gt; None:
+        &quot;&quot;&quot;Every kind card; the calibrations decide whether a cycle repeats.&quot;&quot;&quot;
+        ...
+
+    def clear(self) -&gt; None:
+        &quot;&quot;&quot;Close files, free tables.&quot;&quot;&quot;
+        ...
+
+
+class Track:
+    &quot;&quot;&quot;One kind card: a starting model and a sequence of steps.
+
+    Attributes
+    ----------
+    run : Run
+        The parent; settings via ``self.run.cfg``.
+    card : KindCard
+    star : Star
+    stepper : TimeStepper
+    comp : CompositionStep
+    rot : RotationStep
+    mloss : MassLoss
+    zones : ConvectionZones
+    &quot;&quot;&quot;
+
+    LOGTC_PMS = 6.6  # [log K] Below it, pre-main-sequence models are relaxed (main.f).
+
+    def __init__(self, run: Run, card: KindCard) -&gt; None:
+        &quot;&quot;&quot;Store the parent and the card.&quot;&quot;&quot;
+        ...
+
+    def start(self, prev: Star | None) -&gt; None:
+        &quot;&quot;&quot;Read or keep the model, rescale, first zones, FINDSH, first step.
+
+        Replaces: starin.f#STARIN
+        &quot;&quot;&quot;
+        ...
+
+    def __call__(self) -&gt; None:
+        &quot;&quot;&quot;Steps until a stop criterion holds; ``StepDiverged`` ends the run, as today.&quot;&quot;&quot;
+        ...
+
+    @property
+    def done(self) -&gt; bool:
+        &quot;&quot;&quot;ENDAGE, END_XCEN, ... reached.&quot;&quot;&quot;
+        ...
+
+
+class Step:
+    &quot;&quot;&quot;One evolutionary step.
+
+    Attributes
+    ----------
+    track : Track
+    start : StepStart
+    dt : float
+        [s] (DELTS); &lt; 0: relaxation.
+    &quot;&quot;&quot;
+
+    def __init__(self, track: Track, dt: float) -&gt; None:
+        &quot;&quot;&quot;Store the parent and the step.&quot;&quot;&quot;
+        ...
+
+    def __call__(self) -&gt; None:
+        &quot;&quot;&quot;Save the start, mass loss and composition, rezone, guess, solve at four levels, rotation, zones, light elements, next dt, output.
+
+        Raises
+        ------
+        StepDiverged
+        &quot;&quot;&quot;
+        ...
+</code></pre>
+
+</main></body></html>

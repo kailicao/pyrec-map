@@ -1,0 +1,242 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>op954d.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ op954d.f</span></header><main>
+<h1>op954d.f</h1>
+<p class='muted'>114 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/op954d.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>op954d.py</code>, 93 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Gets the OPAL95 opacity from the full set of tables (MHP 7/98): a four-dimensional interpolation in $Z$, $X$, $\log T$ and $\log R$ ($R = \rho/T_6^3$). It is the general case, used when the point's composition matches neither pre-interpolated table.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the full set in <code>LLOT95A_MOD</code>: the grids <code>TGR</code>, <code>XXG</code>, <code>R0GR</code>, <code>ZZG</code>, the opacities <code>CAPPA2(126,70,19)</code>, and for each $Z$ the offset of its first table <code>NZ</code> and its number of $X$ tables <code>NUMXM</code> (loaded by <a href="../yrec-map/ll95tbl.f.html#def-LL95TBL">LL95TBL</a>); the indices, weights and extrapolation data from <a href="../yrec-map/getopal95.f.html#def-GETOPAL95">GETOPAL95</a> in <code>OP95INTERP_MOD</code> (formerly <code>/OP95INDX/</code>, <code>/OP95FACT/</code> and <code>/OP95EXT/</code>; <code>BZ</code>, <code>BX(K,·)</code>, and $\log R$ as <code>RHO_T63L</code>).</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/getopal95.f.html#def-GETOPAL95">GETOPAL95</a>, when the point's $Z$ differs from the table's <code>ZTAB</code>, and always when the acoustic depth is computed (<code>LADON</code> and <code>LACOUT</code>; GETOPAL95's comment, JVS 04/11).</li>
+<li><strong>Outputs:</strong> $\kappa$, $\log\kappa$, <code>QOD</code>, <code>QOT</code>, as in <a href="../yrec-map/op952d.f.html#def-OP952D">OP952D</a>.</li>
+</ul>
+<p><strong>The method.</strong> For each of the four nearest $Z$ (table offset <code>NZ(JZ+K-1)</code>) and, within it, the four nearest $X$ (<code>JX(K,J)</code>, which may differ between $Z$ values since high-$Z$ sets lack some $X$ tables), the $\log R$ and $\log T$ interpolation of <code>OP952D</code>; then four-point interpolation in $X$ (weights <code>BX(K,·)</code>) and in $Z$ (weights <code>BZ</code>), and the conversion of $\partial\log\kappa/\partial\log T$ to constant $\rho$.</p>
+<p><strong>Table layout.</strong> The header explains it: "tables are incremented in sets of NZ*NX", so the tables of the third metal abundance ($3\times10^{-4}$) are numbers 21–30; at high $Z$ some $X$ tables are missing ($X &lt; 0.9$ for $Z = 0.1$). The offsets <code>NZ</code> (0, 10, …, 100, 109, 118, in <a href="../yrec-map/ll95tbl.f.html#def-LL95TBL">LL95TBL</a>) give $Z = 0.06$ and $0.08$ nine slots each and $Z = 0.1$ eight.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (the three interpolation blocks merged into <code>OP95INTERP_MOD</code>), <code>IMPLICIT NONE</code>; the extrapolation's $\log R$ and its boundary value are renamed <code>RHO_T63L</code> and <code>RHO_T63LL</code> (formerly <code>RL</code>, <code>RLL</code>, names that clashed with the radius elsewhere). No question is settled.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Tables stored over others?</strong> In <a href="../yrec-map/ll95tbl.f.html#def-LL95TBL">LL95TBL</a> each table goes to slot <code>NZ(IZ)+IX</code>. For $Z = 0.06$ and $0.08$, which lack table 9 ($X = 0.95$), table 10 ($X = 1 - Z$) then goes to <code>NZ(IZ)+10</code>, which is the first slot of the next $Z$: slot 110 ($Z = 0.08$, $X = 0$) and slot 119 ($Z = 0.1$, $X = 0$). The tables are read with $X$ in the outer loop, so these $X = 0$ tables are read first and overwritten later, while slots 109 and 118 stay empty. This routine reads <code>CAPPA2(JX(K,J)+IZ,…)</code> with the same indexing, so the interpolation is self-consistent for $X = 1 - Z$ but takes $X = 0$ at $Z = 0.08$ and $0.1$ from the wrong table. Is this so, and should table 10 at these $Z$ go to <code>NZ(IZ)+9</code>?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+OP954D
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-OP954D'>OP954D</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-OP954D'><h3><span class='kind'>subroutine</span>OP954D</h3>
+<p class='muted'>lines 6–114 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/op954d.f#L6-L114'>GitHub</a></p>
+<pre>SUBROUTINE OP954D(O,OL,QOD,QOT)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+OP954D
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/llot95a_mod.f.html#def-LLOT95A_MOD'>LLOT95A_MOD</a>, <a href='../yrec-map/op95interp_mod.f.html#def-OP95INTERP_MOD'>OP95INTERP_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/getopal95.f.html#def-GETOPAL95'>GETOPAL95</a> <span class='muted'>(getopal95.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE OP954D(O,OL,QOD,QOT)
+<span class="ln">7</span>C 10/14/26 MHP via Claude
+<span class="ln">8</span>C code changed to convert COMMON/OP95INTERP/ into OP95INTERP_MOD.
+<span class="ln">9</span>      USE OP95INTERP_MOD
+<span class="ln">10</span>C 10/14/26 MHP via Claude
+<span class="ln">11</span>C code changed to convert COMMON/LLOT95A/ into LLOT95A_MOD.
+<span class="ln">12</span>      USE LLOT95A_MOD
+<span class="ln">13</span>C 10/20/26 MHP via Claude
+<span class="ln">14</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">15</span>C explicit declarations.
+<span class="ln">16</span>      IMPLICIT NONE
+<span class="ln">17</span>      REAL*8 C,CC,CCD,CCT,CZ,CZD,CZT,DELTAR,O,OL,QC,QOD,QOT
+<span class="ln">18</span>      INTEGER I,ID,IT,IXZ,IZ,J,K
+<span class="ln">19</span>C MHP 7/98 GET OPAL95 OPACITY FROM FULL SET OF OPACITY TABLES.
+<span class="ln">20</span>C FULL SET OF TABLES: OPACITY AS A FUNCTION OF Z AND X, T, RHO/T6**3
+<span class="ln">21</span>C TABLES ARE INCREMENTED IN SETS OF NZ*NX.  SO THE TABLES FOR THE
+<span class="ln">22</span>C THIRD METAL ABUNDANCE (3 X 10**-4)BEGIN AT TABLE 21 AND END AT TABLE 30.
+<span class="ln">23</span>C FOR THE HIGH VALUES OF Z, THE NUMBER OF X TABLES IS NOT THE SAME (I.E.
+<span class="ln">24</span>C X&lt;0.9 FOR Z=0.1).
+<span class="ln">25</span>C FOR EACH COMPOSITION A FULL GRID IN (T,RHO/T6**3) IS RETAINED.
+<span class="ln">26</span>C INDICES FOR INTERPOLATION IN Z,X,T, AND R; INTERPOLATION FACTORS FOR
+<span class="ln">27</span>C Z,X,T, AND R (AND DERIVATIVE FACTORS FOR T AND RHO); AND DATA FOR
+<span class="ln">28</span>C LINEAR EXTRAPOLATION WHEN OUTSIDE THE TABLE IN RHO.
+<span class="ln">29</span>C 10/9/26 MHP via Claude
+<span class="ln">30</span>C code changed to merge COMMON/OP95INDX/, COMMON/OP95FACT/, and
+<span class="ln">31</span>C COMMON/OP95EXT/ into COMMON/OP95INTERP/ (see getopal95.f for the
+<span class="ln">32</span>C full rationale).
+<span class="ln">33</span>C 10/13/26 MHP via Claude
+<span class="ln">34</span>C code changed to rename COMMON/OP95INTERP/&#x27;s RL and RLL to RHO_T63L and
+<span class="ln">35</span>C RHO_T63LL.  RL is log(rho/T6**3), set here as RL = DL - 3*(TL-6); the
+<span class="ln">36</span>C old names clash with RL and RLL as used for radius throughout the rest
+<span class="ln">37</span>C of the code, which is why main.f declared only a 10-member prefix of
+<span class="ln">38</span>C this block to avoid importing them.  With the clash gone main.f can
+<span class="ln">39</span>C declare the full block, which a USE statement will require once this
+<span class="ln">40</span>C becomes a module.
+<span class="ln">41</span>      DIMENSION C(4),QC(4),CC(4),CCT(4),CCD(4),CZ(4),CZT(4),CZD(4)
+<span class="ln">42</span>      SAVE
+<span class="ln">43</span>C FIND OPACITY AT EACH OF THE 4 NEARBY VALUES OF Z
+<span class="ln">44</span>      DO K = 1,4
+<span class="ln">45</span>         IZ = NZ(JZ+K-1)
+<span class="ln">46</span>C FIND OPACITY AT EACH OF THE 4 NEARBY VALUES OF X
+<span class="ln">47</span>         DO J = 1,4
+<span class="ln">48</span>            IXZ = JX(K,J)+IZ
+<span class="ln">49</span>C FOR EACH X, GET CAPPA FOR 4 VALUES OF T
+<span class="ln">50</span>            DO I = 1,4
+<span class="ln">51</span>               IT = JT + I - 1
+<span class="ln">52</span>C FOR EACH T, GET CAPPA FOR 4 VALUES OF R
+<span class="ln">53</span>               ID = JD(I)
+<span class="ln">54</span>C LOG CAPPA AT DESIRED RHO FOR EACH OF THE 4 DESIRED T.
+<span class="ln">55</span>               C(I) = BD(I,1)*CAPPA2(IXZ,IT,ID) +
+<span class="ln">56</span>     *                BD(I,2)*CAPPA2(IXZ,IT,ID+1)
+<span class="ln">57</span>     *               + BD(I,3)*CAPPA2(IXZ,IT,ID+2)
+<span class="ln">58</span>     *              + BD(I,4)*CAPPA2(IXZ,IT,ID+3)
+<span class="ln">59</span>C D LOG CAPPA/D LOG R FOR EACH OF THE 4 DESIRED T.
+<span class="ln">60</span>               QC(I) = BDD(I,1)*CAPPA2(IXZ,IT,ID)
+<span class="ln">61</span>     *               + BDD(I,2)*CAPPA2(IXZ,IT,ID+1)
+<span class="ln">62</span>     *                + BDD(I,3)*CAPPA2(IXZ,IT,ID+2)
+<span class="ln">63</span>     *               + BDD(I,4)*CAPPA2(IXZ,IT,ID+3)
+<span class="ln">64</span>            END DO
+<span class="ln">65</span>C CHECK ON WHETHER RHO IS OUTSIDE OF THE TABLE AND NEEDS EXTRAPOLATION
+<span class="ln">66</span>            IF(LEXTL)THEN
+<span class="ln">67</span>C FACTOR IN R
+<span class="ln">68</span>               DELTAR = RHO_T63L-RHO_T63LL
+<span class="ln">69</span>C CORRECT CAPPA BY USING THE DERIVATIVE AT THE BOUNDARY.
+<span class="ln">70</span>               DO I = 1,4
+<span class="ln">71</span>                  C(I) = C(I)+DELTAR*QC(I)
+<span class="ln">72</span>               END DO
+<span class="ln">73</span>            ELSE IF(LEXTH)THEN
+<span class="ln">74</span>               DO I = 1,4
+<span class="ln">75</span>                  IF(LEXH(I))THEN
+<span class="ln">76</span>                     DELTAR = RHO_T63L - RLH(I)
+<span class="ln">77</span>                     C(I) = C(I)+DELTAR*QC(I)
+<span class="ln">78</span>                  ENDIF
+<span class="ln">79</span>               END DO
+<span class="ln">80</span>            ENDIF
+<span class="ln">81</span>C INTERPOLATE FOR LOG CAPPA IN T.
+<span class="ln">82</span>            CC(J) = BT(1)*C(1) + BT(2)*C(2) + BT(3)*C(3)
+<span class="ln">83</span>     *            + BT(4)*C(4)
+<span class="ln">84</span>C D LOG CAPPA/D LOG T
+<span class="ln">85</span>            CCT(J) = BTT(1)*C(1) + BTT(2)*C(2) + BTT(3)*C(3)
+<span class="ln">86</span>     *             + BTT(4)*C(4)
+<span class="ln">87</span>C D LOG CAPPA/D LOG R
+<span class="ln">88</span>            CCD(J) = BT(1)*QC(1) + BT(2)*QC(2) + BT(3)*QC(3)
+<span class="ln">89</span>     *             + BT(4)*QC(4)
+<span class="ln">90</span>         END DO
+<span class="ln">91</span>C INTERPOLATE FOR LOG CAPPA IN X.
+<span class="ln">92</span>         CZ(K) = BX(K,1)*CC(1) + BX(K,2)*CC(2) + BX(K,3)*CC(3) +
+<span class="ln">93</span>     *           BX(K,4)*CC(4)
+<span class="ln">94</span>C INTERPOLATE FOR QOT IN X.
+<span class="ln">95</span>         CZT(K) = BX(K,1)*CCT(1) + BX(K,2)*CCT(2) + BX(K,3)*CCT(3) +
+<span class="ln">96</span>     *            BX(K,4)*CCT(4)
+<span class="ln">97</span>C INTERPOLATE FOR QOD IN X.
+<span class="ln">98</span>         CZD(K) = BX(K,1)*CCD(1) + BX(K,2)*CCD(2) + BX(K,3)*CCD(3) +
+<span class="ln">99</span>     *            BX(K,4)*CCD(4)
+<span class="ln">100</span>      END DO
+<span class="ln">101</span>C INTERPOLATE FOR LOG CAPPA IN Z.
+<span class="ln">102</span>      OL = BZ(1)*CZ(1) + BZ(2)*CZ(2) + BZ(3)*CZ(3) +
+<span class="ln">103</span>     *     BZ(4)*CZ(4)
+<span class="ln">104</span>C INTERPOLATE FOR QOT IN Z.
+<span class="ln">105</span>      QOT = BZ(1)*CZT(1) + BZ(2)*CZT(2) + BZ(3)*CZT(3) +
+<span class="ln">106</span>     *     BZ(4)*CZT(4)
+<span class="ln">107</span>C INTERPOLATE FOR QOD IN Z.
+<span class="ln">108</span>      QOD = BZ(1)*CZD(1) + BZ(2)*CZD(2) + BZ(3)*CZD(3) +
+<span class="ln">109</span>     *     BZ(4)*CZD(4)
+<span class="ln">110</span>C CORRECT FROM DERIVATE AT FIXED R TO DERIVATIVE AT FIXED RHO.
+<span class="ln">111</span>      QOT = QOT - 3.0D0*QOD
+<span class="ln">112</span>      O = 1.0D1**OL
+<span class="ln">113</span>      RETURN
+<span class="ln">114</span>      END</pre></details>
+<details class='py' id='py-op954d'><summary>Python version: op954d</summary><pre class='doc'>The OPAL95 opacity at the current point from the full set of tables
+(MHP 7/98): the log R and log T interpolation of OP952D for each of the
+4 x 4 nearest (Z, X) tables, then four-point interpolation in X and in
+Z, with the indices and weights GETOPAL95 left in OP95INTERP_MOD.
+
+Translates: op954d.f#OP954D (09c3b9b)
+
+Arguments: o, ol, qod, qot (set only; any value).
+
+Returns (o, ol, qod, qot): the opacity kappa, log10 kappa, and
+dlog kappa/dlog rho and dlog kappa/dlog T at constant rho.</pre><pre class='src'><span class="ln">20</span>def op954d(o, ol, qod, qot):
+<span class="ln">21</span>    &quot;&quot;&quot;The OPAL95 opacity at the current point from the full set of tables
+<span class="ln">22</span>    (MHP 7/98): the log R and log T interpolation of OP952D for each of the
+<span class="ln">23</span>    4 x 4 nearest (Z, X) tables, then four-point interpolation in X and in
+<span class="ln">24</span>    Z, with the indices and weights GETOPAL95 left in OP95INTERP_MOD.
+<span class="ln">25</span>
+<span class="ln">26</span>    Translates: op954d.f#OP954D (09c3b9b)
+<span class="ln">27</span>
+<span class="ln">28</span>    Arguments: o, ol, qod, qot (set only; any value).
+<span class="ln">29</span>
+<span class="ln">30</span>    Returns (o, ol, qod, qot): the opacity kappa, log10 kappa, and
+<span class="ln">31</span>    dlog kappa/dlog rho and dlog kappa/dlog T at constant rho.
+<span class="ln">32</span>    &quot;&quot;&quot;
+<span class="ln">33</span>    tab = llot95a_mod
+<span class="ln">34</span>    ip = op95interp_mod
+<span class="ln">35</span>    cappa2 = tab.cappa2
+<span class="ln">36</span>    bd, bdd, bt, btt = ip.bd, ip.bdd, ip.bt, ip.btt
+<span class="ln">37</span>    # Find the opacity at each of the 4 nearby values of Z.
+<span class="ln">38</span>    for k in range(1, 5):
+<span class="ln">39</span>        # Question (see the page): the slots NZ(IZ)+10 at Z = 0.06, 0.08.
+<span class="ln">40</span>        iz = tab.nz[ip.jz + k - 1]
+<span class="ln">41</span>        # Find the opacity at each of the 4 nearby values of X.
+<span class="ln">42</span>        for j in range(1, 5):
+<span class="ln">43</span>            ixz = ip.jx[k, j] + iz
+<span class="ln">44</span>            # For each X, kappa at 4 values of T.
+<span class="ln">45</span>            for i in range(1, 5):
+<span class="ln">46</span>                it = ip.jt + i - 1
+<span class="ln">47</span>                # For each T, kappa at 4 values of R.
+<span class="ln">48</span>                id_ = ip.jd[i]
+<span class="ln">49</span>                # log kappa at the desired rho for each of the 4 T.
+<span class="ln">50</span>                c[i] = (bd[i, 1] * cappa2[ixz, it, id_]
+<span class="ln">51</span>                        + bd[i, 2] * cappa2[ixz, it, id_ + 1]
+<span class="ln">52</span>                        + bd[i, 3] * cappa2[ixz, it, id_ + 2]
+<span class="ln">53</span>                        + bd[i, 4] * cappa2[ixz, it, id_ + 3])
+<span class="ln">54</span>                # dlog kappa/dlog R for each of the 4 T.
+<span class="ln">55</span>                qc[i] = (bdd[i, 1] * cappa2[ixz, it, id_]
+<span class="ln">56</span>                         + bdd[i, 2] * cappa2[ixz, it, id_ + 1]
+<span class="ln">57</span>                         + bdd[i, 3] * cappa2[ixz, it, id_ + 2]
+<span class="ln">58</span>                         + bdd[i, 4] * cappa2[ixz, it, id_ + 3])
+<span class="ln">59</span>            # Rho outside the table: extrapolate linearly with the
+<span class="ln">60</span>            # derivative at the boundary.
+<span class="ln">61</span>            if ip.lextl:
+<span class="ln">62</span>                deltar = ip.rho_t63l - ip.rho_t63ll
+<span class="ln">63</span>                for i in range(1, 5):
+<span class="ln">64</span>                    c[i] = c[i] + deltar * qc[i]
+<span class="ln">65</span>            elif ip.lexth:
+<span class="ln">66</span>                for i in range(1, 5):
+<span class="ln">67</span>                    if ip.lexh[i]:
+<span class="ln">68</span>                        deltar = ip.rho_t63l - ip.rlh[i]
+<span class="ln">69</span>                        c[i] = c[i] + deltar * qc[i]
+<span class="ln">70</span>            # Interpolate in T: log kappa, dlog kappa/dlog T, and
+<span class="ln">71</span>            # dlog kappa/dlog R.
+<span class="ln">72</span>            cc[j] = bt[1] * c[1] + bt[2] * c[2] + bt[3] * c[3] + bt[4] * c[4]
+<span class="ln">73</span>            cct[j] = (btt[1] * c[1] + btt[2] * c[2] + btt[3] * c[3]
+<span class="ln">74</span>                      + btt[4] * c[4])
+<span class="ln">75</span>            ccd[j] = (bt[1] * qc[1] + bt[2] * qc[2] + bt[3] * qc[3]
+<span class="ln">76</span>                      + bt[4] * qc[4])
+<span class="ln">77</span>        # Interpolate in X: log kappa, QOT and QOD.
+<span class="ln">78</span>        bx = ip.bx
+<span class="ln">79</span>        cz[k] = (bx[k, 1] * cc[1] + bx[k, 2] * cc[2] + bx[k, 3] * cc[3]
+<span class="ln">80</span>                 + bx[k, 4] * cc[4])
+<span class="ln">81</span>        czt[k] = (bx[k, 1] * cct[1] + bx[k, 2] * cct[2] + bx[k, 3] * cct[3]
+<span class="ln">82</span>                  + bx[k, 4] * cct[4])
+<span class="ln">83</span>        czd[k] = (bx[k, 1] * ccd[1] + bx[k, 2] * ccd[2] + bx[k, 3] * ccd[3]
+<span class="ln">84</span>                  + bx[k, 4] * ccd[4])
+<span class="ln">85</span>    # Interpolate in Z.
+<span class="ln">86</span>    bz = ip.bz
+<span class="ln">87</span>    ol = bz[1] * cz[1] + bz[2] * cz[2] + bz[3] * cz[3] + bz[4] * cz[4]
+<span class="ln">88</span>    qot = bz[1] * czt[1] + bz[2] * czt[2] + bz[3] * czt[3] + bz[4] * czt[4]
+<span class="ln">89</span>    qod = bz[1] * czd[1] + bz[2] * czd[2] + bz[3] * czd[3] + bz[4] * czd[4]
+<span class="ln">90</span>    # From the derivative at fixed R to the derivative at fixed rho.
+<span class="ln">91</span>    qot = qot - 3.0 * qod
+<span class="ln">92</span>    o = 10.0**ol
+<span class="ln">93</span>    return o, ol, qod, qot</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Unclear.</strong> "as its comment says (JVS 04/11)": the comment is in GETOPAL95, not here. Fix: name GETOPAL95 and the flags <code>LADON</code>, <code>LACOUT</code>; add the general condition ($Z \ne$ <code>ZTAB</code>).</li>
+<li><strong>Missing question (apparent bug, in LL95TBL).</strong> LL95TBL stores each table at <code>NZ(IZ)+IX</code>, with <code>NZ</code> = 0, 10, …, 100, 109, 118. At $Z = 0.06$ and $0.08$ (no table 9), table 10 goes to <code>NZ(IZ)+10</code>, which is the first slot of the next $Z$: slots 110 and 119, the $X = 0$ tables of $Z = 0.08$ and $0.1$. These are read earlier (the file runs with $X$ outer, as LL95TBL's header check enforces) and so are overwritten; slots 109 and 118 stay empty. OP954D reads with the same indexing, so $X = 0$ at $Z = 0.08$, $0.1$ is wrong in every 4D interpolation that reaches it. Fix: add a question; report to the LL95TBL page's group.</li>
+</ol>
+<p>Revised: the call condition rewritten; the <code>NZ</code> offsets explained; question 1 added.</p></div></details>
+</main></body></html>

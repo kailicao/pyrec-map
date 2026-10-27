@@ -1,0 +1,353 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>oversh.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ oversh.f</span></header><main>
+<h1>oversh.f</h1>
+<p class='muted'>179 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/oversh.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>oversh.py</code>, 119 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Extends each convection zone by convective overshoot. Its comment: it "computes the local pressure scale height at both edges of a given convective region and locates the boundaries of overshoot regions based on the user-specified extent."</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the model (<code>HCOMP</code>, <code>HD</code>, <code>HP</code>, <code>HR</code>, <code>HS</code>, <code>HT</code>, <code>M</code>), the convection zones <code>MXZONE</code> and <code>MXZON0</code> (without overshoot) and <code>NZONE</code>; from <code>NMLPAR_MOD</code> the switches <code>LOVSTC</code>, <code>LOVSTE</code>, <code>LOVSTM</code> (core, envelope, intermediate zones), the extents <code>ALPHAC</code>, <code>ALPHAE</code>, <code>ALPHAM</code> (in pressure scale heights), <code>LOVMAX</code> with <code>BETAC</code>, and the flags <code>LROT</code> and <code>LINSTB</code>.</li>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/convec.f.html#def-CONVEC">CONVEC</a>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/hsubp.f.html#def-HSUBP">HSUBP</a>, the pressure scale height at a zone's edge.</li>
+<li><strong>Outputs:</strong> <code>MXZONE</code> with the new edges (CONVEC then merges zones that overshoot made overlap); <code>IOV1</code>, <code>IOV2</code> in <code>DPMIX_MOD</code> ("store position of overshoot for adiabatic extension", DBG 8/94): the new and the formal lower edge of a zone overshooting downward. With <code>LADOV</code>, <a href="../yrec-map/tpgrad.f.html#def-TPGRAD">TPGRAD</a> gives every radiative point with index <code>IOVIM</code> between them the adiabatic gradient, $\nabla = \nabla_\mathrm{ad}$ (<code>IOVIM</code> is the point being computed, set by <a href="../yrec-map/coefft.f.html#def-COEFFT">COEFFT</a> and <a href="../yrec-map/physic.f.html#def-PHYSIC">PHYSIC</a>). The zones with and without overshoot are printed to <code>ISHORT</code>.</li>
+</ul>
+<p><strong>The method.</strong> For each zone, by type:</p>
+<ul>
+<li><strong>Core</strong> (starts at the centre): overshoot upward by $d = \alpha_c H_P$; with <code>LOVMAX</code>, $d = \min(\alpha_c H_P,\ \beta_c\, r_\mathrm{edge})$, which limits overshoot above small convective cores "as per Woo &amp; Demarque 2001". A fully convective star gets no overshoot.</li>
+<li><strong>Envelope</strong> (reaches the surface): downward by $\alpha_e H_P$.</li>
+<li><strong>Intermediate:</strong> both ways by $\alpha_m H_P$, each with the scale height at that edge.</li>
+</ul>
+<p>Here $H_P = P r^2/(\rho\, G m)$ is the pressure scale height at the zone's formal (Schwarzschild) edge, from HSUBP, in cm, like $d$ and $r$. The new edge is the last model point within $d$ in radius of the formal edge: downward, the innermost point with $r \ge r_\mathrm{edge} - d$; upward, the outermost point with $r \le r_\mathrm{edge} + d$; or the centre or surface if $d$ reaches beyond. For rotating models with <code>LINSTB</code>, the zone is widened by one more point if overshoot moved no edge (MHP 11/91), so that each overshoot region has at least one radiative point.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (the settings of <code>/DPMIX/</code> and <code>/ROT/</code> to <code>NMLPAR_MOD</code>, <code>IOV1</code>, <code>IOV2</code> to <code>DPMIX_MOD</code>, <code>/CONST1/</code> to <code>CONSTANTS_MOD</code>, <code>/LUOUT/</code> to <code>IOUNITS_MOD</code>), <code>JSON</code> from <code>DIMENSIONS_MOD</code>, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>IOV1</code>, <code>IOV2</code> for one zone only.</strong> They are reset to −1 and then overwritten by every zone with downward overshoot, so they keep only the last such zone (usually the envelope). With an intermediate zone and an envelope, the intermediate zone's downward overshoot does not get the adiabatic gradient of <code>LADOV</code>; nor does any upward overshoot (above a core or an intermediate zone), since only the downward branch sets them. Intended (<code>LADOV</code> meant for the envelope's base only)?</li>
+<li><strong>The output format.</strong> The print formats hold four zones per line; more zones continue on new lines without their label. Cosmetic.</li>
+<li><strong>The fully convective exit.</strong> It prints only the first zone and returns before the "with overshoot" line, which tools that parse <code>ISHORT</code> may expect.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+OVERSH
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-OVERSH'>OVERSH</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-OVERSH'><h3><span class='kind'>subroutine</span>OVERSH</h3>
+<p class='muted'>lines 6–179 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/oversh.f#L6-L179'>GitHub</a></p>
+<pre>SUBROUTINE OVERSH(HCOMP,HD,HP,HR,HS,HT,M,MXZONE,MXZON0,NZONE)</pre>
+<div class='notes'><p>Moves each convection zone's edges by $\alpha H_P$ (core, envelope or intermediate parameters), optionally limited by $\beta_c r$ for convective cores.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+OVERSH
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/dpmix_mod.f.html#def-DPMIX_MOD'>DPMIX_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/hsubp.f.html#def-HSUBP'>HSUBP</a> <span class='muted'>(hsubp.f)</span> ×4</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/convec.f.html#def-CONVEC'>CONVEC</a> <span class='muted'>(convec.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE OVERSH(HCOMP,HD,HP,HR,HS,HT,M,MXZONE,MXZON0,NZONE)
+<span class="ln">7</span>C 10/15/26 MHP via Claude
+<span class="ln">8</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">9</span>C PARAMETER(JSON=5000) here.
+<span class="ln">10</span>      USE DIMENSIONS_MOD
+<span class="ln">11</span>C 10/14/26 MHP via Claude
+<span class="ln">12</span>C code changed to convert COMMON/DPMIX/ into DPMIX_MOD.
+<span class="ln">13</span>      USE DPMIX_MOD
+<span class="ln">14</span>C 10/14/26 MHP via Claude
+<span class="ln">15</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">16</span>      USE NMLPAR_MOD
+<span class="ln">17</span>C 10/14/26 MHP via Claude
+<span class="ln">18</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">19</span>      USE CONSTANTS_MOD
+<span class="ln">20</span>C 10/14/26 MHP via Claude
+<span class="ln">21</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">22</span>      USE IOUNITS_MOD
+<span class="ln">23</span>C 10/20/26 MHP via Claude
+<span class="ln">24</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">25</span>C explicit declarations.
+<span class="ln">26</span>      IMPLICIT NONE
+<span class="ln">27</span>      REAL*8 HCOMP,HD,HP,HR,HS,HT,PSCALD,PSCALU,R,RCZ,ROS
+<span class="ln">28</span>      INTEGER I,ID,J,JEDGE,M,MXZON0,MXZONE,NZONE
+<span class="ln">29</span>      LOGICAL*4 LFLAGD,LFLAGU
+<span class="ln">30</span>
+<span class="ln">31</span>C  THIS SR COMPUTES THE LOCAL PRESSURE SCALE HEIGHT AT BOTH EDGES OF A
+<span class="ln">32</span>C  GIVEN CONVECTIVE REGION AND LOCATES THE BOUNDARIES OF OVERSHOOT
+<span class="ln">33</span>C  REGIONS BASED ON THE USER-SPECIFIED EXTENT.
+<span class="ln">34</span>
+<span class="ln">35</span>
+<span class="ln">36</span>C 9/25/26 MHP via Claude
+<span class="ln">37</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">38</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">39</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">40</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">41</span>C COMMON/IOUNITS/
+<span class="ln">42</span>C 9/25/26 MHP via Claude
+<span class="ln">43</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">44</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">45</span>C 10/12/26 MHP via Claude
+<span class="ln">46</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">47</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">48</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">49</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">50</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">51</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">52</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">53</span>C
+<span class="ln">54</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">55</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">56</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">57</span>      DIMENSION HCOMP(15,JSON),HD(JSON),HP(JSON),HR(JSON),HS(JSON),
+<span class="ln">58</span>     *          HT(JSON),MXZONE(12,2),MXZON0(12,2)
+<span class="ln">59</span>      SAVE
+<span class="ln">60</span>
+<span class="ln">61</span>      IOV1 = -1
+<span class="ln">62</span>      IOV2 = -1
+<span class="ln">63</span>      DO 100 I = 1,NZONE
+<span class="ln">64</span>C DETERMINE IF THIS REGION IS A CORE CONVECTION ZONE, SURFACE CZ,
+<span class="ln">65</span>C OR INTERMEDIATE CZ. THERE ARE SEPARATE FLAGS GOVERNING WHETHER
+<span class="ln">66</span>C OVERSHOOT WILL BE PERFORMED IN EACH CASE, AND SEPARATE USER
+<span class="ln">67</span>C PARAMETERS GOVERNING THE DEGREE OF OVERSHOOT.
+<span class="ln">68</span>         IF(MXZONE(I,1).EQ.1)THEN
+<span class="ln">69</span>C CONVECTIVE CORE
+<span class="ln">70</span>C CHECK FOR A FULLY CONVECTIVE STAR; SKIP THIS SR IF THERE IS ONE.
+<span class="ln">71</span>            IF(MXZONE(I,2).EQ.M)THEN
+<span class="ln">72</span>               WRITE(ISHORT,5)
+<span class="ln">73</span>    5          FORMAT(1X,&#x27;FULLY CONVECTIVE MODEL - NO OVERSHOOT&#x27;)
+<span class="ln">74</span>               WRITE(ISHORT,200)(MXZON0(1,J),J= 1,2)
+<span class="ln">75</span>               RETURN
+<span class="ln">76</span>            ENDIF
+<span class="ln">77</span>C SKIP IF NO CORE OVERSHOOT IS DESIRED.
+<span class="ln">78</span>            IF(.NOT.LOVSTC)GOTO 100
+<span class="ln">79</span>            LFLAGU = .TRUE.
+<span class="ln">80</span>            LFLAGD = .FALSE.
+<span class="ln">81</span>            JEDGE = MXZONE(I,2)
+<span class="ln">82</span>            CALL <a href="../yrec-map/hsubp.f.html#def-HSUBP" title="HSUBP in hsubp.f">HSUBP</a> (HCOMP,HD,HP,HR,HS,HT,JEDGE,PSCALU)
+<span class="ln">83</span>C PSCALU IS THE PRESSURE SCALE HEIGHT ABOVE THE CONVECTIVE REGION;
+<span class="ln">84</span>C ALPHAC IS THE DESIRED OVERSHOOT (IN SCALE HEIGHTS).
+<span class="ln">85</span>C            PSCALU = PSCALU*ALPHAC
+<span class="ln">86</span>C JVS 07/13 ALLOW FOR THE LIMITING OF OVERSHOOTING ABOVE THE CONVECTIVE
+<span class="ln">87</span>C CORES OF LOVE MASS STARS AS PER WOO &amp; DEMARQUE 2001
+<span class="ln">88</span>            IF (LOVMAX) THEN
+<span class="ln">89</span>                  PSCALU = MIN(PSCALU*ALPHAC, BETAC*EXP(CLN*HR(JEDGE)))
+<span class="ln">90</span>            ELSE
+<span class="ln">91</span>                  PSCALU = PSCALU*ALPHAC
+<span class="ln">92</span>            ENDIF
+<span class="ln">93</span>
+<span class="ln">94</span>         ELSE IF(MXZONE(I,2).EQ.M)THEN
+<span class="ln">95</span>C CONVECTIVE ENVELOPE
+<span class="ln">96</span>C SKIP IF NO ENVELOPE OVERSHOOT IS DESIRED.
+<span class="ln">97</span>            IF(.NOT.LOVSTE)GOTO 100
+<span class="ln">98</span>            LFLAGU = .FALSE.
+<span class="ln">99</span>            LFLAGD = .TRUE.
+<span class="ln">100</span>            JEDGE = MXZONE(I,1)
+<span class="ln">101</span>            CALL <a href="../yrec-map/hsubp.f.html#def-HSUBP" title="HSUBP in hsubp.f">HSUBP</a> (HCOMP,HD,HP,HR,HS,HT,JEDGE,PSCALD)
+<span class="ln">102</span>C PSCALD IS THE PRESSURE SCALE HEIGHT BELOW THE CONVECTIVE REGION;
+<span class="ln">103</span>C ALPHAE IS THE DESIRED OVERSHOOT (IN SCALE HEIGHTS).
+<span class="ln">104</span>            PSCALD = PSCALD*ALPHAE
+<span class="ln">105</span>         ELSE
+<span class="ln">106</span>C INTERMEDIATE CONVECTION ZONE (NOT INCLUDING CENTRAL OR SURFACE POINT).
+<span class="ln">107</span>C SKIP IF NO INTERMEDIATE CONVECTION.
+<span class="ln">108</span>            IF(.NOT.LOVSTM)GOTO 100
+<span class="ln">109</span>            LFLAGU = .TRUE.
+<span class="ln">110</span>            LFLAGD = .TRUE.
+<span class="ln">111</span>C PSCALU AND PSCALD HAVE THE SAME MEANING AS ABOVE; OVERSHOOT BOTH BELOW
+<span class="ln">112</span>C AND ABOVE IS PERFORMED BY AN AMOUNT ALPHAM.
+<span class="ln">113</span>            JEDGE = MXZONE(I,1)
+<span class="ln">114</span>            CALL <a href="../yrec-map/hsubp.f.html#def-HSUBP" title="HSUBP in hsubp.f">HSUBP</a> (HCOMP,HD,HP,HR,HS,HT,JEDGE,PSCALD)
+<span class="ln">115</span>            PSCALD = PSCALD*ALPHAM
+<span class="ln">116</span>            JEDGE = MXZONE(I,2)
+<span class="ln">117</span>            CALL <a href="../yrec-map/hsubp.f.html#def-HSUBP" title="HSUBP in hsubp.f">HSUBP</a> (HCOMP,HD,HP,HR,HS,HT,JEDGE,PSCALU)
+<span class="ln">118</span>            PSCALU = PSCALU*ALPHAM
+<span class="ln">119</span>         ENDIF
+<span class="ln">120</span>C COMPUTE EXTENSION OF CONVECTION ZONE BELOW SCHWARTZSCHILD BOUNDARY.
+<span class="ln">121</span>         IF(LFLAGD)THEN
+<span class="ln">122</span>            ID = MXZONE(I,1)
+<span class="ln">123</span>            RCZ = EXP(CLN*HR(ID))
+<span class="ln">124</span>            ROS = RCZ - PSCALD
+<span class="ln">125</span>C THE OVERSHOOT REGION IS EXTENDED THE RADIAL DISTANCE PSCALD DOWN; THE
+<span class="ln">126</span>C LAST POINT LESS THAN PSCALD FROM THE FORMAL EDGE OF THE CZ IS DEFINED
+<span class="ln">127</span>C AS THE NEW EDGE OF THE MIXED REGION.
+<span class="ln">128</span>            DO 10 J = ID-1,1,-1
+<span class="ln">129</span>               R = EXP(CLN*HR(J))
+<span class="ln">130</span>               IF(R.LT.ROS)GOTO 20
+<span class="ln">131</span>   10       CONTINUE
+<span class="ln">132</span>C IF THE CODE GETS HERE, THE OVERSHOOT REGION EXTENDS BELOW THE FIRST POINT.
+<span class="ln">133</span>C THE CODE WILL ASSIGN THE FIRST POINT AS THE LOWER EDGE(I.E. THE CZ WILL
+<span class="ln">134</span>C EXTEND TO THE CENTER).
+<span class="ln">135</span>            J = 0
+<span class="ln">136</span>   20       CONTINUE
+<span class="ln">137</span>C FOR ROTATING MODELS, ENSURE THAT THERE IS AT LEAST ONE RADIATIVE POINT
+<span class="ln">138</span>C IN THE OVERSHOOT REGION.
+<span class="ln">139</span>            MXZONE(I,1) = J + 1
+<span class="ln">140</span>C 11/91 MHP CHANGED TO REQUIRE AN OVERSHOOT ZONE ONLY IF LINSTB=T.
+<span class="ln">141</span>            IF(LROT .AND. LINSTB .AND. MXZONE(I,1).EQ.MXZON0(I,1))
+<span class="ln">142</span>     *      MXZONE(I,1) = MXZONE(I,1)-1
+<span class="ln">143</span>C DBG 8/94 STORE POSITION OF OVERSHOOT FOR ADIABATIC EXTENSION
+<span class="ln">144</span>            IOV2 = ID
+<span class="ln">145</span>            IOV1 = MXZONE(I,1)
+<span class="ln">146</span>         ENDIF
+<span class="ln">147</span>C COMPUTE EXTENSION OF CONVECTION ZONE ABOVE SCHWARTZSCHILD BOUNDARY.
+<span class="ln">148</span>         IF(LFLAGU)THEN
+<span class="ln">149</span>            ID = MXZONE(I,2)
+<span class="ln">150</span>            RCZ = EXP(CLN*HR(ID))
+<span class="ln">151</span>            ROS = RCZ + PSCALU
+<span class="ln">152</span>C THE OVERSHOOT REGION IS EXTENDED THE RADIAL DISTANCE PSCALU UP; THE
+<span class="ln">153</span>C LAST POINT LESS THAN PSCALU FROM THE FORMAL EDGE OF THE CZ IS DEFINED
+<span class="ln">154</span>C AS THE NEW EDGE OF THE MIXED REGION.
+<span class="ln">155</span>            DO 30 J = ID+1,M
+<span class="ln">156</span>               R = EXP(CLN*HR(J))
+<span class="ln">157</span>               IF(R.GT.ROS)GOTO 40
+<span class="ln">158</span>   30       CONTINUE
+<span class="ln">159</span>C IF THE CODE GETS HERE, THE OVERSHOOT REGION EXTENDS ABOVE THE LAST POINT.
+<span class="ln">160</span>C THE CODE WILL ASSIGN THE LAST POINT AS THE UPPER EDGE(I.E. THE CZ WILL
+<span class="ln">161</span>C EXTEND TO THE SURFACE).
+<span class="ln">162</span>            J = M + 1
+<span class="ln">163</span>   40       CONTINUE
+<span class="ln">164</span>            MXZONE(I,2) = J - 1
+<span class="ln">165</span>C 11/91 MHP CHANGED TO REQUIRE AN OVERSHOOT ZONE ONLY IF LINSTB=T.
+<span class="ln">166</span>            IF(LROT .AND. LINSTB .AND. MXZONE(I,2).EQ.MXZON0(I,2))
+<span class="ln">167</span>     *      MXZONE(I,2) = MXZONE(I,2)+1
+<span class="ln">168</span>         ENDIF
+<span class="ln">169</span>  100 CONTINUE
+<span class="ln">170</span>C OUTPUT : THE OLD AND NEW MIXED REGIONS ARE PRINTED OUT IN ISHORT.
+<span class="ln">171</span>      WRITE(ISHORT,200)((MXZON0(I,J),J= 1,2),I=1,NZONE)
+<span class="ln">172</span>  200 FORMAT(1X,&#x27;MIXED REGIONS WITHOUT OVERSHOOT&#x27;,
+<span class="ln">173</span>     *       4(&#x27;[&#x27;,I4,&#x27;-&#x27;,I4,&#x27; ]&#x27;))
+<span class="ln">174</span>      WRITE(ISHORT,210)((MXZONE(I,J),J= 1,2),I=1,NZONE)
+<span class="ln">175</span>  210 FORMAT(1X,&#x27;MIXED REGIONS WITH OVERSHOOT   &#x27;,
+<span class="ln">176</span>     *       4(&#x27;[&#x27;,I4,&#x27;-&#x27;,I4,&#x27; ]&#x27;))
+<span class="ln">177</span>
+<span class="ln">178</span>      RETURN
+<span class="ln">179</span>      END</pre></details>
+<details class='py' id='py-oversh'><summary>Python version: oversh</summary><pre class='doc'>Extend each convection zone by overshoot: by alpha_c H_P above a
+core (with LOVMAX, at most beta_c r), alpha_e H_P below the envelope,
+alpha_m H_P both ways for an intermediate zone. H_P is the pressure
+scale height at the zone&#x27;s formal edge (HSUBP). Also sets IOV1, IOV2
+in DPMIX_MOD for the last zone overshooting downward.
+
+Translates: oversh.f#OVERSH (09c3b9b)
+
+Arguments: the model hcomp, hd, hp, hr, hs, ht (index 0 unused); m, the
+number of shells; mxzone[12+1, 2+1], the zones&#x27; edges, changed in place;
+mxzon0, the edges without overshoot; nzone. Returns nothing.</pre><pre class='src'><span class="ln">23</span>def oversh(hcomp, hd, hp, hr, hs, ht, m, mxzone, mxzon0, nzone):
+<span class="ln">24</span>    &quot;&quot;&quot;Extend each convection zone by overshoot: by alpha_c H_P above a
+<span class="ln">25</span>    core (with LOVMAX, at most beta_c r), alpha_e H_P below the envelope,
+<span class="ln">26</span>    alpha_m H_P both ways for an intermediate zone. H_P is the pressure
+<span class="ln">27</span>    scale height at the zone&#x27;s formal edge (HSUBP). Also sets IOV1, IOV2
+<span class="ln">28</span>    in DPMIX_MOD for the last zone overshooting downward.
+<span class="ln">29</span>
+<span class="ln">30</span>    Translates: oversh.f#OVERSH (09c3b9b)
+<span class="ln">31</span>
+<span class="ln">32</span>    Arguments: the model hcomp, hd, hp, hr, hs, ht (index 0 unused); m, the
+<span class="ln">33</span>    number of shells; mxzone[12+1, 2+1], the zones&#x27; edges, changed in place;
+<span class="ln">34</span>    mxzon0, the edges without overshoot; nzone. Returns nothing.
+<span class="ln">35</span>    &quot;&quot;&quot;
+<span class="ln">36</span>    nml = nmlpar_mod
+<span class="ln">37</span>    cln = constants_mod.cln
+<span class="ln">38</span>    ishort = iounits_mod.ishort
+<span class="ln">39</span>    pscalu = 0.0
+<span class="ln">40</span>    pscald = 0.0
+<span class="ln">41</span>    # Question (see the page): IOV1, IOV2 keep only the last zone.
+<span class="ln">42</span>    dpmix_mod.iov1 = -1
+<span class="ln">43</span>    dpmix_mod.iov2 = -1
+<span class="ln">44</span>    for i in range(1, nzone + 1):
+<span class="ln">45</span>        if mxzone[i, 1] == 1:
+<span class="ln">46</span>            if mxzone[i, 2] == m:
+<span class="ln">47</span>                iounits_mod.write(ishort,
+<span class="ln">48</span>                                  &quot; FULLY CONVECTIVE MODEL - NO OVERSHOOT&quot;)
+<span class="ln">49</span>                # Question (see the page): returns before the second line.
+<span class="ln">50</span>                iounits_mod.write(ishort, _zone_lines(
+<span class="ln">51</span>                    &quot;MIXED REGIONS WITHOUT OVERSHOOT&quot;, mxzon0, 1))
+<span class="ln">52</span>                return
+<span class="ln">53</span>            if not nml.lovstc:
+<span class="ln">54</span>                continue
+<span class="ln">55</span>            lflagu = True
+<span class="ln">56</span>            lflagd = False
+<span class="ln">57</span>            jedge = mxzone[i, 2]
+<span class="ln">58</span>            pscalu = hsubp(hcomp, hd, hp, hr, hs, ht, jedge, pscalu)
+<span class="ln">59</span>            if nml.lovmax:
+<span class="ln">60</span>                pscalu = min(pscalu * nml.alphac,
+<span class="ln">61</span>                             nml.betac * math.exp(cln * hr[jedge]))
+<span class="ln">62</span>            else:
+<span class="ln">63</span>                pscalu = pscalu * nml.alphac
+<span class="ln">64</span>        elif mxzone[i, 2] == m:
+<span class="ln">65</span>            if not nml.lovste:
+<span class="ln">66</span>                continue
+<span class="ln">67</span>            lflagu = False
+<span class="ln">68</span>            lflagd = True
+<span class="ln">69</span>            jedge = mxzone[i, 1]
+<span class="ln">70</span>            pscald = hsubp(hcomp, hd, hp, hr, hs, ht, jedge, pscald)
+<span class="ln">71</span>            pscald = pscald * nml.alphae
+<span class="ln">72</span>        else:
+<span class="ln">73</span>            if not nml.lovstm:
+<span class="ln">74</span>                continue
+<span class="ln">75</span>            lflagu = True
+<span class="ln">76</span>            lflagd = True
+<span class="ln">77</span>            jedge = mxzone[i, 1]
+<span class="ln">78</span>            pscald = hsubp(hcomp, hd, hp, hr, hs, ht, jedge, pscald)
+<span class="ln">79</span>            pscald = pscald * nml.alpham
+<span class="ln">80</span>            jedge = mxzone[i, 2]
+<span class="ln">81</span>            pscalu = hsubp(hcomp, hd, hp, hr, hs, ht, jedge, pscalu)
+<span class="ln">82</span>            pscalu = pscalu * nml.alpham
+<span class="ln">83</span>        if lflagd:
+<span class="ln">84</span>            # Downward: the innermost point with r &gt;= r_edge - d.
+<span class="ln">85</span>            id_ = mxzone[i, 1]
+<span class="ln">86</span>            rcz = math.exp(cln * hr[id_])
+<span class="ln">87</span>            ros = rcz - pscald
+<span class="ln">88</span>            for j in range(id_ - 1, 0, -1):
+<span class="ln">89</span>                r = math.exp(cln * hr[j])
+<span class="ln">90</span>                if r &lt; ros:
+<span class="ln">91</span>                    break       # goto 20
+<span class="ln">92</span>            else:
+<span class="ln">93</span>                j = 0
+<span class="ln">94</span>            # label 20
+<span class="ln">95</span>            mxzone[i, 1] = j + 1
+<span class="ln">96</span>            if nml.lrot and nml.linstb and mxzone[i, 1] == mxzon0[i, 1]:
+<span class="ln">97</span>                mxzone[i, 1] = mxzone[i, 1] - 1
+<span class="ln">98</span>            dpmix_mod.iov2 = id_
+<span class="ln">99</span>            dpmix_mod.iov1 = mxzone[i, 1]
+<span class="ln">100</span>        if lflagu:
+<span class="ln">101</span>            # Upward: the outermost point with r &lt;= r_edge + d.
+<span class="ln">102</span>            id_ = mxzone[i, 2]
+<span class="ln">103</span>            rcz = math.exp(cln * hr[id_])
+<span class="ln">104</span>            ros = rcz + pscalu
+<span class="ln">105</span>            for j in range(id_ + 1, m + 1):
+<span class="ln">106</span>                r = math.exp(cln * hr[j])
+<span class="ln">107</span>                if r &gt; ros:
+<span class="ln">108</span>                    break       # goto 40
+<span class="ln">109</span>            else:
+<span class="ln">110</span>                j = m + 1
+<span class="ln">111</span>            # label 40
+<span class="ln">112</span>            mxzone[i, 2] = j - 1
+<span class="ln">113</span>            if nml.lrot and nml.linstb and mxzone[i, 2] == mxzon0[i, 2]:
+<span class="ln">114</span>                mxzone[i, 2] = mxzone[i, 2] + 1
+<span class="ln">115</span>    # label 100 ends the loop
+<span class="ln">116</span>    iounits_mod.write(ishort, _zone_lines(
+<span class="ln">117</span>        &quot;MIXED REGIONS WITHOUT OVERSHOOT&quot;, mxzon0, nzone))
+<span class="ln">118</span>    iounits_mod.write(ishort, _zone_lines(
+<span class="ln">119</span>        &quot;MIXED REGIONS WITH OVERSHOOT   &quot;, mxzone, nzone))</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_zone_lines'><summary>Python version: _zone_lines</summary><pre class='doc'>FORMAT(1X,label,4(&#x27;[&#x27;,I4,&#x27;-&#x27;,I4,&#x27; ]&#x27;)): four zones a line; further
+lines restart at the repeated group, without the label (question 2).</pre><pre class='src'><span class="ln">13</span>def _zone_lines(label, mx, nzone):
+<span class="ln">14</span>    &quot;&quot;&quot;FORMAT(1X,label,4(&#x27;[&#x27;,I4,&#x27;-&#x27;,I4,&#x27; ]&#x27;)): four zones a line; further
+<span class="ln">15</span>    lines restart at the repeated group, without the label (question 2).&quot;&quot;&quot;
+<span class="ln">16</span>    groups = [f&quot;[{mx[i, 1]:4d}-{mx[i, 2]:4d} ]&quot; for i in range(1, nzone + 1)]
+<span class="ln">17</span>    lines = [&quot; &quot; + label + &quot;&quot;.join(groups[:4])]
+<span class="ln">18</span>    for n in range(4, len(groups), 4):
+<span class="ln">19</span>        lines.append(&quot;&quot;.join(groups[n:n + 4]))
+<span class="ln">20</span>    return &quot;\n&quot;.join(lines)</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Unclear.</strong> "<code>IOV1</code>, <code>IOV2</code> … read elsewhere for the overshoot region's temperature gradient": the reader is TPGRAD, which with <code>LADOV</code> gives radiative points with <code>IOV1</code> $\le$ <code>IOVIM</code> $\le$ <code>IOV2</code> the adiabatic gradient; <code>IOV1</code> is the new lower edge, <code>IOV2</code> the formal one; <code>IOVIM</code> is set by COEFFT and PHYSIC. Fix: say so.</li>
+<li><strong>Missing.</strong> $H_P$ and its units (HSUBP: $H_P = P r^2/(\rho G m)$, cm), and the exact rule for the new edge (downward: innermost point with $r \ge r_\mathrm{edge} - d$; upward: outermost with $r \le r_\mathrm{edge} + d$). That CONVEC merges overlapping zones afterwards. Fix: add.</li>
+<li><strong>Missing (question 1).</strong> Upward overshoot (core, intermediate zones) never sets <code>IOV1</code>, <code>IOV2</code>, so <code>LADOV</code> never applies above a core. Fix: add to question 1.</li>
+</ol>
+<p>Revised: the outputs line rewritten with TPGRAD's use; $H_P$, units and the edge rule added; question 1 extended.</p></div></details>
+</main></body></html>

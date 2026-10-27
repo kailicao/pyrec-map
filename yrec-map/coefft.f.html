@@ -1,0 +1,866 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>coefft.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ coefft.f</span></header><main>
+<h1>coefft.f</h1>
+<p class='muted'>500 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/coefft.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>coefft.py</code>, 315 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file evaluates, at every point of the interior model, the four equations of stellar structure and their partial derivatives, and passes them to <a href="../yrec-map/reduce.f.html#def-REDUCE">REDUCE</a>, which builds the linearized (Henyey) system that <a href="../yrec-map/crrect.f.html#def-CRRECT">CRRECT</a> solves for the corrections. On the way it calls the physics (equation of state, opacity, temperature gradient, nuclear energy), totals the luminosity by source, and stores many per-point quantities for output and for other routines.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments, the current model <code>HS</code> ($\log m$), <code>HR</code> ($\log r$), <code>HP</code> ($\log P$), <code>HT</code> ($\log T$), <code>HL</code> ($L/L_\odot$), <code>HD</code> ($\log\rho$), <code>HCOMP</code>; <code>HS1</code>, <code>HS2</code> (the mass at each point and in each shell, in g, probably); the changes over the step <code>HTT</code>, <code>HPP</code> ($\Delta\log T$, $\Delta\log P$) and <code>DELTS</code> (the time step, s); the rotational factors <code>FP</code>, <code>FT</code> and kinetic energies <code>HKEROT</code>, <code>HKEROTO</code>; <code>JENV</code>, <code>TEFFL</code>, <code>CMIXL</code> (the mixing length, passed on to TPGRAD). <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a> brings the options <code>LDH</code>, <code>LROT</code>, <code>LSNU</code>, <code>LPULSE</code>, the accretion switches <code>LMDOT</code>, <code>DMDT0</code> and the nuclear cut-off <code>TCUT(1)</code>; <a href="../yrec-map/masschg2_mod.f.html#def-MASSCHG2_MOD"><code>MASSCHG2_MOD</code></a> the accretion terms <code>DLOGT</code>, <code>DLOGP</code>.</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/crrect.f.html#def-CRRECT">CRRECT</a>, at each iteration of the structure solution.</li>
+<li><strong>What it calls:</strong> for each point, <a href="../yrec-map/eqstat.f.html#def-EQSTAT">EQSTAT</a> (the MHD equation of state, MEQOS, removed since <code>rp_1</code>); <a href="../yrec-map/getopac.f.html#def-GETOPAC">GETOPAC</a>; <a href="../yrec-map/tpgrad.f.html#def-TPGRAD">TPGRAD</a> (the temperature gradient and convection); <a href="../yrec-map/engeb.f.html#def-ENGEB">ENGEB</a> (nuclear energy) above <code>TCUT(1)</code>, with <code>IU = IM</code> so that its per-point rates <code>HR1</code>… land at the right point, which also returns <code>EALPCA</code>, <code>ENU</code> and the $^7$Be mass fraction (unused here); and <a href="../yrec-map/reduce.f.html#def-REDUCE">REDUCE</a> for each pair of points.</li>
+<li><strong>Outputs:</strong></li>
+<li>the matrices <code>HHA</code>, <code>HHB</code>, <code>HMAX</code> (through REDUCE and the central conditions), <code>HHC</code> (the gravothermal energy per point), <code>LC</code> (convective or not), <code>HD</code> (density from the EOS), <code>QDT</code>, <code>QDP</code>;</li>
+<li><code>TLUMX(1:8)</code>, the luminosity by source in $L_\odot$: 1–5 the nuclear terms from ENGEB, 6 the neutrino term <code>ENU</code>, 7 gravothermal, 8 alpha captures (<code>EALPCA</code>); CRRECT renormalizes them;</li>
+<li>per point, in <a href="../yrec-map/scrtch_mod.f.html#def-SCRTCH_MOD"><code>SCRTCH_MOD</code></a>: the nuclear total <code>SESUM</code> (the five ENGEB terms) and <code>SEG</code> (<code>SEG(1:5)</code> the fractions of <code>SESUM</code>, <code>SEG(6)</code> the neutrino term and <code>SEG(7)</code> the gravothermal term, both in erg g$^{-1}$ s$^{-1}$), $\beta$, $\eta$, opacity, the gradients $\nabla_\mathrm{rad}$, $\nabla$, $\nabla_\mathrm{ad}$, ionization fractions, convective velocity, $c_P$; read by 21 routines (output, mixing, diffusion);</li>
+<li><code>GAM1</code> in <a href="../yrec-map/sound_mod.f.html#def-SOUND_MOD"><code>SOUND_MOD</code></a> ($\Gamma_1$); with rotation, <code>SQOT</code>, <code>SQET</code>, <code>FRACNUC</code> ($(\mathtt{SESUM} - \mathtt{SEG(6)} - \mathtt{SEG(7)})/\mathtt{SESUM}$) in <a href="../yrec-map/rotder_mod.f.html#def-ROTDER_MOD"><code>ROTDER_MOD</code></a> (for <a href="../yrec-map/setupv.f.html#def-SETUPV">SETUPV</a>) and <code>DEROT</code> in <a href="../yrec-map/roten_mod.f.html#def-ROTEN_MOD"><code>ROTEN_MOD</code></a>; for pulsation output, <a href="../yrec-map/pulse1_mod.f.html#def-PULSE1_MOD"><code>PULSE1_MOD</code></a> and <a href="../yrec-map/pualpha_mod.f.html#def-PUALPHA_MOD"><code>PUALPHA_MOD</code></a>; the solar neutrino fluxes <code>FLUXTOT</code> in <a href="../yrec-map/fluxes_mod.f.html#def-FLUXES_MOD"><code>FLUXES_MOD</code></a>; the $^3$He luminosities <code>UMHE33</code>, <code>UMHEAL</code> in <a href="../yrec-map/grab_mod.f.html#def-GRAB_MOD"><code>GRAB_MOD</code></a> (JVS 10/11).</li>
+</ul>
+<p><strong>The method.</strong> With $\ln m$ as the independent variable and the code's variables in $\log_{10}$, the structure equations at each point are (the code's names in parentheses):
+$$\frac{d\ln r}{d\ln m} = \frac{m}{4\pi r^3\rho} \;(\mathtt{QR}), \qquad \frac{d\ln P}{d\ln m} = -\frac{G m^2}{4\pi r^4 P}\,f_P \;(\mathtt{QP}), \qquad \frac{d\ln T}{d\ln m} = \nabla\,\frac{d\ln P}{d\ln m} \;(\mathtt{QT}),$$
+$$\frac{d(L/L_\odot)}{d\log m} = \frac{\ln 10\; m}{L_\odot}\left(\epsilon_\mathrm{nuc} + \epsilon_\mathrm{grav} - \epsilon_\mathrm{rot}\right) \;(\mathtt{QL}),$$
+where $f_P$ is the rotational correction (<code>FP</code>) and $\nabla$ the temperature gradient from TPGRAD. Their derivatives with respect to $\ln r$, $\ln P$, $\ln T$ and $L$ follow; for example $\partial\mathtt{QR}/\partial\ln r = -3\,\mathtt{QR}$, $\partial\mathtt{QP}/\partial\ln r = -4\,\mathtt{QP}$, and $\partial\mathtt{QR}/\partial\ln P = -\mathtt{QR}\,(\partial\ln\rho/\partial\ln P)_T$. For the temperature gradient:</p>
+<ul>
+<li><strong>radiative:</strong> $\partial\mathtt{QT}/\partial\ln T = \mathtt{QT}\,(-4 + \kappa_T + \kappa_\rho\,\rho_T)$, $\partial\mathtt{QT}/\partial\ln P = \mathtt{QT}\,\kappa_\rho\,\rho_P$, and a term in $L$, $\mathtt{QT}/(L \ln 10)$;</li>
+<li><strong>convective:</strong> from TPGRAD's derivatives of $\nabla$ (<code>QACP</code>, <code>QACT</code>, <code>QACR</code>), with no dependence on $L$.</li>
+</ul>
+<p>Here $\kappa_T$, $\kappa_\rho$ are <code>QOT</code>, <code>QOD</code> and $\rho_T$, $\rho_P$ are <code>QDT</code>, <code>QDP</code> ($\partial\ln\rho/\partial\ln T$ and $\partial\ln\rho/\partial\ln P$).</p>
+<p><strong>Gravothermal energy.</strong> With $\Delta\log T$, $\Delta\log P$ over the step:
+$$\epsilon_\mathrm{grav} = \frac{\ln 10}{\Delta t}\,\frac{P\rho_T}{\rho}\left(\frac{\Delta\log T}{\nabla_\mathrm{ad}} - \Delta\log P\right),$$
+which, with $\rho_T = -\delta$ and $c_P = P\delta/(\rho T\nabla_\mathrm{ad})$, is the usual $-c_P\,dT/dt + (\delta/\rho)\,dP/dt$. During accretion (<code>LMDOT</code>, <code>DMDT0 &gt; 0</code>), points at and above <code>JENV</code> add <code>DLOGT</code>, <code>DLOGP</code> to the changes; <code>JENV</code> comes from CRRECT, which has it from MIX only at levels 3 and 4 (CRRECT's question 5). With rotation, the change of rotational kinetic energy per gram per second is subtracted.</p>
+<p><strong>The centre.</strong> Point 1 gets the central boundary conditions: $r^3 = 3m/(4\pi\rho)$ in log form, and $L = \epsilon\, m$.</p>
+<p><strong>$\Gamma_1$.</strong> Always computed (JVS 01/11), by Cox and Giuli's relations: $\chi_\rho = 1/\rho_P$, $\chi_T = -\chi_\rho\rho_T$, $c_V = c_P - (P/\rho T)\,\chi_T^2/\chi_\rho$, $\Gamma_1 = \chi_\rho c_P/c_V$.</p>
+<p><strong>Design.</strong> The routine holds many options and outputs that grew over decades (the comments are dated from 1990 to 2012). It sets <code>LOCOND</code>, <code>LDERIV</code>, <code>LATMO</code>, <code>LMIX</code> (arguments) at every call.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused argument <code>MODEL</code> removed; the call to MEQOS no longer passes <code>LDERIV</code>, <code>LATMO</code>, <code>KSAHA</code>; the call to ENGEB drops the unused arguments (<code>Z</code>, <code>XN15</code>, <code>XO17</code>, <code>XLI6</code>, <code>XLI7</code>, <code>XBE9</code> and others).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> The MHD equation of state removed (EQSTAT always), which settles the former question on the Debye–Hückel composition being set only without it; the new argument <code>CMIXL</code>, passed on to TPGRAD; <code>EALPCA</code>, <code>ENU</code> and the $^7$Be mass fraction returned by ENGEB (<code>/NEWEPS/</code> retired); the write-only <code>SQOD</code>, <code>SQED</code> and the write-only opacity indices <code>IDT</code>, <code>IDD</code> (<code>/OPTAB/</code>) no longer set; COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A one-year floor on the time step.</strong> <code>IF(HCOMP(1,IM).GT.0.01D0 .AND. DELTS.LT.TIME) DT = TIMEI</code>: where hydrogen is present and the step is shorter than a year (3.1558e7 s), $\epsilon_\mathrm{grav}$ uses $1/(1\,\mathrm{yr})$ instead of $1/\Delta t$. So for short steps $\epsilon_\mathrm{grav}$ is underestimated by the factor $\Delta t/1\,\mathrm{yr}$. What is this for? The year here is also hard-coded rather than taken from <code>CSECYR</code>.</li>
+<li><strong>Rotation in $d\ln P/dr$.</strong> The terms in $d\ln f_P/d\ln r$ and $d\ln f_T/d\ln r$ (<code>QFPR</code>, <code>QFTR</code>) are commented out ("MHP 10/02 not used"), so the derivatives treat $f_P$ and $f_T$ as constants. Is that accurate enough for fast rotators?</li>
+<li><strong>$f_T$ unused.</strong> $f_P$ multiplies <code>QP</code>, but $f_T$ enters only through TPGRAD; is that the intended form of the rotating structure equations?</li>
+<li><strong>Accretion entropy.</strong> A term for the entropy of accreted material (<code>QACC</code>) is commented out. Is accretion meant to change the energy equation only through <code>DLOGT</code>, <code>DLOGP</code>?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+COEFFT
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-COEFFT'>COEFFT</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-COEFFT'><h3><span class='kind'>subroutine</span>COEFFT</h3>
+<p class='muted'>lines 5–500 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/coefft.f#L5-L500'>GitHub</a></p>
+<pre>SUBROUTINE COEFFT(DELTS,M,HD,HHA,HHB,HHC,HL,HMAX,HP,HPP,HR,HS,HS1,</pre>
+<div class='notes'><p>For each point: EOS, opacity, temperature gradient and nuclear energy; the structure equations and their derivatives, passed to <a href="../yrec-map/reduce.f.html#def-REDUCE">REDUCE</a> (central conditions at point 1); luminosity totals by source; per-point physics stored for output and other routines.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+COEFFT
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/debhu_mod.f.html#def-DEBHU_MOD'>DEBHU_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/dpmix_mod.f.html#def-DPMIX_MOD'>DPMIX_MOD</a>, <a href='../yrec-map/fluxes_mod.f.html#def-FLUXES_MOD'>FLUXES_MOD</a>, <a href='../yrec-map/grab_mod.f.html#def-GRAB_MOD'>GRAB_MOD</a>, <a href='../yrec-map/masschg2_mod.f.html#def-MASSCHG2_MOD'>MASSCHG2_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/pualpha_mod.f.html#def-PUALPHA_MOD'>PUALPHA_MOD</a>, <a href='../yrec-map/pulse1_mod.f.html#def-PULSE1_MOD'>PULSE1_MOD</a>, <a href='../yrec-map/pulse2_mod.f.html#def-PULSE2_MOD'>PULSE2_MOD</a>, <a href='../yrec-map/rotder_mod.f.html#def-ROTDER_MOD'>ROTDER_MOD</a>, <a href='../yrec-map/roten_mod.f.html#def-ROTEN_MOD'>ROTEN_MOD</a>, <a href='../yrec-map/scrtch_mod.f.html#def-SCRTCH_MOD'>SCRTCH_MOD</a>, <a href='../yrec-map/sound_mod.f.html#def-SOUND_MOD'>SOUND_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/engeb.f.html#def-ENGEB'>ENGEB</a> <span class='muted'>(engeb.f)</span></li>
+<li><a href='../yrec-map/eqstat.f.html#def-EQSTAT'>EQSTAT</a> <span class='muted'>(eqstat.f)</span></li>
+<li><a href='../yrec-map/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span></li>
+<li><a href='../yrec-map/reduce.f.html#def-REDUCE'>REDUCE</a> <span class='muted'>(reduce.f)</span></li>
+<li><a href='../yrec-map/tpgrad.f.html#def-TPGRAD'>TPGRAD</a> <span class='muted'>(tpgrad.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/crrect.f.html#def-CRRECT'>CRRECT</a> <span class='muted'>(crrect.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">5</span>      SUBROUTINE COEFFT(DELTS,M,HD,HHA,HHB,HHC,HL,HMAX,HP,HPP,HR,HS,HS1,
+<span class="ln">6</span>     *HS2,HT,HTT,HCOMP,LC,TLUMX,LATMO,LDERIV,LMIX,LOCOND,QDT,QDP,KSAHA,
+<span class="ln">7</span>C      *MODEL,FP,FT,HKEROT,HKEROTO,JENV,TEFFL)  ! KC 2025-05-31
+<span class="ln">8</span>     *FP,FT,HKEROT,HKEROTO,JENV,TEFFL,CMIXL)
+<span class="ln">9</span>C 10/15/26 MHP via Claude
+<span class="ln">10</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">11</span>C PARAMETER(JSON=5000) here.
+<span class="ln">12</span>      USE DIMENSIONS_MOD
+<span class="ln">13</span>C 10/14/26 MHP via Claude
+<span class="ln">14</span>C code changed to convert COMMON/SOUND/ into SOUND_MOD.
+<span class="ln">15</span>      USE SOUND_MOD
+<span class="ln">16</span>C 10/14/26 MHP via Claude
+<span class="ln">17</span>C code changed to convert COMMON/SCRTCH/ into SCRTCH_MOD.
+<span class="ln">18</span>      USE SCRTCH_MOD
+<span class="ln">19</span>C 10/14/26 MHP via Claude
+<span class="ln">20</span>C code changed to convert COMMON/ROTEN/ into ROTEN_MOD.
+<span class="ln">21</span>      USE ROTEN_MOD
+<span class="ln">22</span>C 10/14/26 MHP via Claude
+<span class="ln">23</span>C code changed to convert COMMON/ROTDER/ into ROTDER_MOD.
+<span class="ln">24</span>      USE ROTDER_MOD
+<span class="ln">25</span>C 10/14/26 MHP via Claude
+<span class="ln">26</span>C code changed to convert COMMON/PULSE2/ into PULSE2_MOD.
+<span class="ln">27</span>      USE PULSE2_MOD
+<span class="ln">28</span>C 10/14/26 MHP via Claude
+<span class="ln">29</span>C code changed to convert COMMON/PULSE1/ into PULSE1_MOD.
+<span class="ln">30</span>      USE PULSE1_MOD
+<span class="ln">31</span>C 10/14/26 MHP via Claude
+<span class="ln">32</span>C code changed to convert COMMON/PUALPHA/ into PUALPHA_MOD.
+<span class="ln">33</span>      USE PUALPHA_MOD
+<span class="ln">34</span>C 10/14/26 MHP via Claude
+<span class="ln">35</span>C code changed to convert COMMON/MASSCHG2/ into MASSCHG2_MOD.
+<span class="ln">36</span>      USE MASSCHG2_MOD
+<span class="ln">37</span>C 10/14/26 MHP via Claude
+<span class="ln">38</span>C code changed to convert COMMON/GRAB/ into GRAB_MOD.
+<span class="ln">39</span>      USE GRAB_MOD
+<span class="ln">40</span>C 10/14/26 MHP via Claude
+<span class="ln">41</span>C code changed to convert COMMON/FLUXES/ into FLUXES_MOD.
+<span class="ln">42</span>      USE FLUXES_MOD
+<span class="ln">43</span>C 10/14/26 MHP via Claude
+<span class="ln">44</span>C code changed to convert COMMON/DPMIX/ into DPMIX_MOD.
+<span class="ln">45</span>      USE DPMIX_MOD
+<span class="ln">46</span>C 10/14/26 MHP via Claude
+<span class="ln">47</span>C code changed to convert COMMON/DEBHU/ into DEBHU_MOD.
+<span class="ln">48</span>      USE DEBHU_MOD
+<span class="ln">49</span>C 10/14/26 MHP via Claude
+<span class="ln">50</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">51</span>      USE NMLPAR_MOD
+<span class="ln">52</span>C 10/14/26 MHP via Claude
+<span class="ln">53</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">54</span>      USE CONSTANTS_MOD
+<span class="ln">55</span>C 10/20/26 MHP via Claude
+<span class="ln">56</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">57</span>C explicit declarations.
+<span class="ln">58</span>      IMPLICIT NONE
+<span class="ln">59</span>      REAL*8 AMU,B,BE7MFLOC,BETA,BETA14,BETAI,CCCQL,CHRH,CHT,CMIXL,CV,D,
+<span class="ln">60</span>     *       DEL,DELA,DELR,DELTS,DELTSI,DL,DT,E,EALPCA,ECA,EG,EGG11,
+<span class="ln">61</span>     *       EGG22,EGG33,EGG44,EGG55,EGNEUT,EGRAV,EMU,ENTR,ENTR1,ENTR2,
+<span class="ln">62</span>     *       ENTR3,ENU,ESUMI,ETA,ETOT,FP,FPL,FT,FTL,FXION,HCOMP,HD,HF1,
+<span class="ln">63</span>     *       HF2,HHA,HHB,HHC,HKEROT,HKEROTO,HL,HMAX,HP,HPP,HPPP,HR,HR1,
+<span class="ln">64</span>     *       HR10,HR11,HR12,HR13,HR2,HR3,HR4,HR5,HR6,HR7,HR8,HR9,HS,HS1,
+<span class="ln">65</span>     *       HS2,HT,HTT,HTTT,O,OL,P,PL,QACP,QACR,QACT,QAP,QAT,QCP,QCPP,
+<span class="ln">66</span>     *       QCPT,QDP,QDT,QDTP,QDTT,QED,QET,QL,QL0,QLP,QLP0,QLT,QLT0,
+<span class="ln">67</span>     *       QOD,QOT,QP0,QPP,QPP0,QPR,QPR0,QR,QR0,QRP,QRP0,QRR,QRR0,QRT,
+<span class="ln">68</span>     *       QRT0,QT0,QTEMP,QTL0,QTP,QTP0,QTR,QTR0,QTT,QTT0,RL,RMU,SL,
+<span class="ln">69</span>     *       SUM1,T,TEFFL,THL,TIME,TIMEI,TL,TLUMX,VEL,X,XBE9,XC12,XC13,
+<span class="ln">70</span>     *       XH2,XHE3,XLI6,XLI7,XN14,XN15,XO16,XO17,XO18,Y,Z
+<span class="ln">71</span>      INTEGER IM,IM1,IU,J,JENV,KSAHA,M
+<span class="ln">72</span>      LOGICAL*4 LATMO,LC,LCONV,LDERIV,LMIX,LNTRPY,LOCOND
+<span class="ln">73</span>C 2/91 MHP FLAG TO TOGGLE BETWEEN OLD/NEW ENERGY GENERATION ROUTINES
+<span class="ln">74</span>C ADDED (COMMON BLOCK NEWENG).
+<span class="ln">75</span>
+<span class="ln">76</span>C 10/13/26 MHP via Claude: removed the unused COMMON/IOUNITS/ declaration
+<span class="ln">77</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">78</span>C 10/11/26 MHP via Claude
+<span class="ln">79</span>C code changed to remove LSCRIB from COMMON/CCOUT/: it was declared
+<span class="ln">80</span>C positionally in all 17 files sharing this block but never read or
+<span class="ln">81</span>C written in executable code anywhere, and no namelist file sets it.
+<span class="ln">82</span>C 10/12/26 MHP via Claude
+<span class="ln">83</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">84</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">85</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">86</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">87</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">88</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">89</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">90</span>C
+<span class="ln">91</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">92</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">93</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">94</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CCOUT/ declaration
+<span class="ln">95</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">96</span>C 9/25/26 MHP via Claude
+<span class="ln">97</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">98</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">99</span>C 9/24/26 MHP via Claude
+<span class="ln">100</span>C code changed to pass CMIXL as an explicit argument instead of via
+<span class="ln">101</span>C common block, to reduce implicit global state ahead of the F90
+<span class="ln">102</span>C module conversion
+<span class="ln">103</span>C 10/13/26 MHP via Claude
+<span class="ln">104</span>C code changed to drop COMMON/CTLIM/, declared here but never used.
+<span class="ln">105</span>C 10/12/26 MHP via Claude
+<span class="ln">106</span>C code changed to remove COMMON/OPTAB/ entirely.  Once OPTOL moved to the
+<span class="ln">107</span>C consolidated namelist block, every remaining member was write-only:
+<span class="ln">108</span>C ZSI appeared only in a DATA statement in parmin.f, and IDT and IDD were
+<span class="ln">109</span>C assigned the constants 15 and 5 in coefft.f, envint.f, physic.f and
+<span class="ln">110</span>C starin.f and read nowhere in the code.  They are leftovers from the
+<span class="ln">111</span>C removed opacity-table interpolation schemes.
+<span class="ln">112</span>C DBG PULSE
+<span class="ln">113</span>C 10/13/26 MHP via Claude
+<span class="ln">114</span>C code changed to drop COMMON/PULSE/, declared here but never used.
+<span class="ln">115</span>C DBG
+<span class="ln">116</span>C*** MHP 5/90 ADD COMMON BLOCK FOR SOLAR NEUTRINO I/O
+<span class="ln">117</span>C*** MHP 5/91 ADD COMMON BLOCK FOR ENERGY FROM ALPHA CAPTURE REACTIONS
+<span class="ln">118</span>C  AND LOSSES FROM NEUTRINO-COOLED CORES IN EVOVLED STARS.
+<span class="ln">119</span>C 10/13/26 MHP via Claude
+<span class="ln">120</span>C code changed to replace COMMON/NEWEPS/ with explicit arguments: engeb.f
+<span class="ln">121</span>C computes EALPCA and ENU, and coefft.f and ytime.f read them right after
+<span class="ln">122</span>C their own CALL ENGEB, so they are returned as arguments.  main.f, the
+<span class="ln">123</span>C third caller, passes locals it does not use.
+<span class="ln">124</span>C DBG 7/92 COMMON BLOCK ADDED TO COMPUTE DEBYE-HUCKEL CORRECTION.
+<span class="ln">125</span>C DBG 7/95 To store variables for pulse output
+<span class="ln">126</span>C MHP 7/96 COMMON BLOCK ADDED FOR SOUND SPEED
+<span class="ln">127</span>C MHP 06/02 COMMON BLOCK ADDED FOR DERIVATIVES OF
+<span class="ln">128</span>C CAPPA AND EPSILON
+<span class="ln">129</span>C 10/13/26 MHP via Claude
+<span class="ln">130</span>C code changed to drop the write-only members SQOD and SQED from
+<span class="ln">131</span>C COMMON/ROTDER/.  coefft.f assigned both and nothing ever read them;
+<span class="ln">132</span>C setupv.f, the block&#x27;s only reader, uses SQOT, SQET and FRACNUC.  That
+<span class="ln">133</span>C frees 10,000 words.  The block itself stays: coefft.f and setupv.f sit
+<span class="ln">134</span>C in different phases -- setupv.f is reached via seculr.f -- so passing
+<span class="ln">135</span>C the rest explicitly would mean threading 15,000-word arrays through
+<span class="ln">136</span>C main.f and GETW.
+<span class="ln">137</span>
+<span class="ln">138</span>C JVS 10/11 Common block for He3+He3 luminosity
+<span class="ln">139</span>C JVS end
+<span class="ln">140</span>
+<span class="ln">141</span>      DIMENSION FXION(3),EG(6),TLUMX(8),HD(JSON),HHA(4,2,JSON),
+<span class="ln">142</span>     *HHB(4,JSON),HHC(JSON),HL(JSON),HMAX(4),HP(JSON),HPP(JSON),
+<span class="ln">143</span>     *HR(JSON),HS(JSON),HS1(JSON),HS2(JSON),HT(JSON),HTT(JSON),LC(JSON),
+<span class="ln">144</span>     *HCOMP(15,JSON),FP(JSON),FT(JSON)
+<span class="ln">145</span>      DIMENSION HF1(JSON),HF2(JSON),HR1(JSON),HR2(JSON),HR3(JSON),
+<span class="ln">146</span>     *HR4(JSON),HR5(JSON),HR6(JSON),HR7(JSON),HR8(JSON),HR9(JSON),
+<span class="ln">147</span>     *HR10(JSON),HR11(JSON),HR12(JSON),HR13(JSON)
+<span class="ln">148</span>      DIMENSION HKEROT(JSON),HKEROTO(JSON)
+<span class="ln">149</span>      SAVE
+<span class="ln">150</span>
+<span class="ln">151</span>C 7/91 MHP
+<span class="ln">152</span>C ZERO OUT SOLAR NEUTRINO FLUXES.
+<span class="ln">153</span>C FLUXTOT = TOTAL FLUX OF EACH OF THE NEUTRINOS PRODUCED IN THE SUN
+<span class="ln">154</span>      IF(LSNU) THEN
+<span class="ln">155</span>         DO 5 J = 1,10
+<span class="ln">156</span>            FLUXTOT(J) = 0.0D0
+<span class="ln">157</span>   5     CONTINUE
+<span class="ln">158</span>      ENDIF
+<span class="ln">159</span>C MHP 10/02 QFPR,QFTR NOT USED - OMIT
+<span class="ln">160</span>c      IF(.NOT.LROT) THEN
+<span class="ln">161</span>C       QFPR = 0.0D0
+<span class="ln">162</span>C       QFTR = 0.0D0
+<span class="ln">163</span>c      ENDIF
+<span class="ln">164</span>      LOCOND = .TRUE.
+<span class="ln">165</span>      LDERIV = .TRUE.
+<span class="ln">166</span>      LATMO = .FALSE.
+<span class="ln">167</span>      LMIX = .FALSE.
+<span class="ln">168</span>      LNTRPY = DELTS.GT.0.0D0
+<span class="ln">169</span>      IF(LNTRPY) THEN
+<span class="ln">170</span>       DELTSI = 1.0D0/DELTS
+<span class="ln">171</span>       TIME = 3.1558D7
+<span class="ln">172</span>       TIMEI = 3.1688D-8
+<span class="ln">173</span>      ENDIF
+<span class="ln">174</span>      DO 10 J = 1,8
+<span class="ln">175</span>       TLUMX(J) = 0.0D0
+<span class="ln">176</span>   10 CONTINUE
+<span class="ln">177</span>      DO 30 IM = 1,M
+<span class="ln">178</span>C SET UP LOCAL VARIABLES FOR CALLS TO BASIC PHYSICS ROUTINES
+<span class="ln">179</span>       THL = 0.0D0
+<span class="ln">180</span>       SL = HS(IM)
+<span class="ln">181</span>       TL = HT(IM)
+<span class="ln">182</span>       PL = HP(IM)
+<span class="ln">183</span>       RL = HR(IM)
+<span class="ln">184</span>       B = HL(IM)
+<span class="ln">185</span>       X = HCOMP(1,IM)
+<span class="ln">186</span>       Y = HCOMP(2,IM)
+<span class="ln">187</span>       Z = HCOMP(3,IM)
+<span class="ln">188</span>       XHE3 = HCOMP(4,IM)
+<span class="ln">189</span>       XC12 = HCOMP(5,IM)
+<span class="ln">190</span>       XC13 = HCOMP(6,IM)
+<span class="ln">191</span>       XN14 = HCOMP(7,IM)
+<span class="ln">192</span>       XN15 = HCOMP(8,IM)
+<span class="ln">193</span>       XO16 = HCOMP(9,IM)
+<span class="ln">194</span>       XO17 = HCOMP(10,IM)
+<span class="ln">195</span>       XO18 = HCOMP(11,IM)
+<span class="ln">196</span>C MHP 05/02 DEFINE THESE ALWAYS; THEY
+<span class="ln">197</span>C ARE PASSED TO THE SR ANYWAY.
+<span class="ln">198</span>C       IF(LEXCOM) THEN
+<span class="ln">199</span>          XH2 = HCOMP(12,IM)
+<span class="ln">200</span>          XLI6 = HCOMP(13,IM)
+<span class="ln">201</span>          XLI7 = HCOMP(14,IM)
+<span class="ln">202</span>          XBE9 = HCOMP(15,IM)
+<span class="ln">203</span>C       ENDIF
+<span class="ln">204</span>       IU = IM
+<span class="ln">205</span>       DL = HD(IM)
+<span class="ln">206</span>       FPL = FP(IM)
+<span class="ln">207</span>        FTL = FT(IM)
+<span class="ln">208</span>C 9/22/26 MHP via Claude
+<span class="ln">209</span>C code changed to remove the MHD equation of state
+<span class="ln">210</span>         IF (LDH) THEN
+<span class="ln">211</span>            XXDH = HCOMP(1,IM)
+<span class="ln">212</span>            YYDH = HCOMP(2,IM)+HCOMP(4,IM)
+<span class="ln">213</span>            ZZDH = HCOMP(3,IM)
+<span class="ln">214</span>            ZDH(1) = HCOMP(5,IM)+HCOMP(6,IM)
+<span class="ln">215</span>            ZDH(2) = HCOMP(7,IM)+HCOMP(8,IM)
+<span class="ln">216</span>            ZDH(3) = HCOMP(9,IM)+HCOMP(10,IM)+HCOMP(11,IM)
+<span class="ln">217</span>         END IF
+<span class="ln">218</span>         CALL <a href="../yrec-map/eqstat.f.html#def-EQSTAT" title="EQSTAT in eqstat.f">EQSTAT</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">219</span>     *        AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,
+<span class="ln">220</span>     *        QCPP,LDERIV,LATMO,KSAHA)
+<span class="ln">221</span>C DBG 12/95 GET OPACITY
+<span class="ln">222</span>         CALL <a href="../yrec-map/getopac.f.html#def-GETOPAC" title="GETOPAC in getopac.f">GETOPAC</a>(DL, TL, X, Z, O, OL, QOD, QOT, FXION)
+<span class="ln">223</span>         IOVIM = IM
+<span class="ln">224</span>         CALL <a href="../yrec-map/tpgrad.f.html#def-TPGRAD" title="TPGRAD in tpgrad.f">TPGRAD</a>(TL,T,PL,P,D,RL,SL,B,O,QDT,QDP,QOT,QOD,QCP,DEL,
+<span class="ln">225</span>     *        DELR,DELA,QDTT,QDTP,QAT,QAP,QACT,QACP,QACR,QCPT,QCPP,
+<span class="ln">226</span>     *        VEL,LDERIV,LCONV,FPL,FTL,TEFFL,CMIXL)
+<span class="ln">227</span>       HD(IM) = DL
+<span class="ln">228</span>C COMPUTE DERIVATIVES
+<span class="ln">229</span>c       IF(LROT) THEN
+<span class="ln">230</span>C  CALCULATE D(LOG FP)/D(LOG R) AND D(LOG FT)/D(LOG R)
+<span class="ln">231</span>c            IF(IM.GT.1) THEN
+<span class="ln">232</span>c             IF(IM.LT.M) THEN
+<span class="ln">233</span>c              QFPR = (DLOG(FP(IM+1)) - DLOG(FP(IM-1)))/
+<span class="ln">234</span>c     *                 (CLN*(HR(IM+1) - HR(IM-1)))
+<span class="ln">235</span>c              QFTR = (DLOG(FT(IM+1)) - DLOG(FT(IM-1)))/
+<span class="ln">236</span>c     *                 (CLN*(HR(IM+1) - HR(IM-1)))
+<span class="ln">237</span>c             ELSE
+<span class="ln">238</span>c              QFPR = (DLOG(FP(M)) - DLOG(FP(M-1)))/
+<span class="ln">239</span>c     *                 (CLN*(HR(M) - HR(M-1)))
+<span class="ln">240</span>c              QFTR = (DLOG(FT(M)) - DLOG(FT(M-1)))/
+<span class="ln">241</span>c     *                 (CLN*(HR(M) - HR(M-1)))
+<span class="ln">242</span>c             ENDIF
+<span class="ln">243</span>c          ELSE
+<span class="ln">244</span>c             QFPR = (DLOG(FP(2)) - DLOG(FP(1)))/
+<span class="ln">245</span>c     *              (CLN*(HR(2) - HR(1)))
+<span class="ln">246</span>c             QFTR = (DLOG(FT(2)) - DLOG(FT(1)))/
+<span class="ln">247</span>c     *              (CLN*(HR(2) - HR(1)))
+<span class="ln">248</span>c          ENDIF
+<span class="ln">249</span>c       ENDIF
+<span class="ln">250</span>       QTEMP = C4PIL + RL + RL + RL
+<span class="ln">251</span>       QR =+DEXP(CLN*(SL - DL - QTEMP))
+<span class="ln">252</span>       QRR = - QR - QR - QR
+<span class="ln">253</span>       QRP = -QR*QDP
+<span class="ln">254</span>       QRT = -QR*QDT
+<span class="ln">255</span>       QP =-DEXP(CLN*(CGL + SL + SL - PL - QTEMP - RL ))*FP(IM)
+<span class="ln">256</span>C       QPR = -QP - QP - QP - QP*(1.0D0 - QFPR)
+<span class="ln">257</span>       QPR = -QP - QP - QP - QP
+<span class="ln">258</span>       QPP = -QP
+<span class="ln">259</span>       LC(IM) = LCONV
+<span class="ln">260</span>       QT = DEL*QP
+<span class="ln">261</span>       QTR = -QT - QT - QT - QT
+<span class="ln">262</span>C       QTR = -QT - QT - QT - QT*(1.0D0 - QFTR)
+<span class="ln">263</span>       IF(.NOT.LCONV) THEN
+<span class="ln">264</span>C TEMPERATURE GRADIENT IS RADIATIVE
+<span class="ln">265</span>          QTL = CLNI*QT/B
+<span class="ln">266</span>          QTP = QT*QOD*QDP
+<span class="ln">267</span>          QTT = QT*(-4.0D0 + QOT + QOD*QDT)
+<span class="ln">268</span>       ELSE
+<span class="ln">269</span>C TEMPERATURE GRADIENT IS CONVECTIVE
+<span class="ln">270</span>          QTL = 0.0D0
+<span class="ln">271</span>          QTP = QT*(-1.0D0 + QACP)
+<span class="ln">272</span>          QTT = QT*QACT
+<span class="ln">273</span>          QTR = QTR + QT*QACR
+<span class="ln">274</span>       ENDIF
+<span class="ln">275</span>       QL = 0.0D0
+<span class="ln">276</span>       QLT = 0.0D0
+<span class="ln">277</span>       QLP = 0.0D0
+<span class="ln">278</span>       IF(TL.GT.TCUT(1)) THEN
+<span class="ln">279</span>C SET UP NUCLEAR ENERGY TERMS
+<span class="ln">280</span>C 10/13/26 MHP via Claude
+<span class="ln">281</span>C code changed to pass BE7MFLOC for ENGEB&#x27;s new BE7MASSFRACTION
+<span class="ln">282</span>C argument, which replaces COMMON/BE7/.  This routine does not use the
+<span class="ln">283</span>C value; only main.f reads it.
+<span class="ln">284</span>            CALL <a href="../yrec-map/engeb.f.html#def-ENGEB" title="ENGEB in engeb.f">ENGEB</a>(EGG11,EGG22,EGG33,EGG44,EGG55,QED,QET,SUM1,DL,
+<span class="ln">285</span>C      *           TL,QDT,QDP,X,Y,Z,XHE3,XC12,XC13,XN14,XN15,XO16,XO17,
+<span class="ln">286</span>C      *           XO18,XH2,XLI6,XLI7,XBE9,IU,HR1,HR2,HR3,HR4,HR5,HR6,HR7,  ! KC 2025-05-31
+<span class="ln">287</span>     *           TL,X,Y,XHE3,XC12,XC13,XN14,XO16,
+<span class="ln">288</span>     *           XO18,XH2,IU,HR1,HR2,HR3,HR4,HR5,HR6,HR7,
+<span class="ln">289</span>     *           HR8,HR9,HR10,HR11,HR12,HR13,HF1,HF2,BE7MFLOC,EALPCA,ENU)
+<span class="ln">290</span>            E = SUM1
+<span class="ln">291</span>            EG(1) = EGG11
+<span class="ln">292</span>            EG(2) = EGG22
+<span class="ln">293</span>            EG(3) = EGG33
+<span class="ln">294</span>            EG(4) = EGG44
+<span class="ln">295</span>            EG(5) = EGG55
+<span class="ln">296</span>            EG(6) = ENU
+<span class="ln">297</span>            ECA = EALPCA
+<span class="ln">298</span>C 7/91 MHP
+<span class="ln">299</span>C CONVERT NEUTRINO FLUX RATES (UNITS 10**10 ERGS PER GM)
+<span class="ln">300</span>C TO UNITS OF 10**10 ERGS BY MULTIPLYING BY THE MASS.
+<span class="ln">301</span>            IF(LSNU) THEN
+<span class="ln">302</span>               DO 17 J = 1,10
+<span class="ln">303</span>                  FLUXTOT(J) = FLUXTOT(J) + FLUX(J)*HS2(IM)
+<span class="ln">304</span> 17            CONTINUE
+<span class="ln">305</span>            ENDIF
+<span class="ln">306</span>            DO 20 J = 1,6
+<span class="ln">307</span>               TLUMX(J) = TLUMX(J) + (HS2(IM)/CLSUN)*EG(J)
+<span class="ln">308</span>               THL = THL + (HS2(IM)/CLSUN)*EG(J)
+<span class="ln">309</span> 20         CONTINUE
+<span class="ln">310</span>C JVS 10/11 Calculate the He3+He3 and sum of He3+He3 and He3+He4 luminosity
+<span class="ln">311</span>            UMHE33(IM) = (HS2(IM)/CLSUN)*ENGHE3
+<span class="ln">312</span>            UMHEAL(IM) = (HS2(IM)/CLSUN)*HE3ALL
+<span class="ln">313</span>C JVS end
+<span class="ln">314</span>            TLUMX(8)=TLUMX(8)+(HS2(IM)/CLSUN)*ECA
+<span class="ln">315</span>            THL = THL + (HS2(IM)/CLSUN)*ECA
+<span class="ln">316</span>            QL = E
+<span class="ln">317</span>            QLT = QLT + QET + QED*QDT
+<span class="ln">318</span>            QLP = QLP + QED*QDP
+<span class="ln">319</span>         ENDIF
+<span class="ln">320</span>         IF(LNTRPY) THEN
+<span class="ln">321</span>C SET UP ENTROPY TERMS
+<span class="ln">322</span>            DT = DELTSI
+<span class="ln">323</span>            IF(LMDOT.AND.DMDT0.GT.0.0D0)THEN
+<span class="ln">324</span>               IF(IM.GE.JENV)THEN
+<span class="ln">325</span>                  HTTT = HTT(IM)+DLOGT
+<span class="ln">326</span>                  HPPP = HPP(IM)+DLOGP
+<span class="ln">327</span>               ELSE
+<span class="ln">328</span>                  HTTT = HTT(IM)
+<span class="ln">329</span>                  HPPP = HPP(IM)
+<span class="ln">330</span>               ENDIF
+<span class="ln">331</span>            ELSE
+<span class="ln">332</span>               HTTT = HTT(IM)
+<span class="ln">333</span>               HPPP = HPP(IM)
+<span class="ln">334</span>            ENDIF
+<span class="ln">335</span>            IF(HCOMP(1,IM).GT.0.01D0 .AND. DELTS.LT.TIME)DT = TIMEI
+<span class="ln">336</span>            ENTR1 = P*QDT/D
+<span class="ln">337</span>            ENTR2 = ENTR1/DELA
+<span class="ln">338</span>            ENTR = (ENTR2*HTTT - ENTR1*HPPP)*CLN
+<span class="ln">339</span>            ENTR3 = ENTR2*CLN*HTTT
+<span class="ln">340</span>C            ENTR = (ENTR2*HTT(IM) - ENTR1*HPP(IM))*CLN
+<span class="ln">341</span>C            ENTR3 = ENTR2*CLN*HTT(IM)
+<span class="ln">342</span>            EGRAV = DT*ENTR
+<span class="ln">343</span>            HHC(IM) = EGRAV
+<span class="ln">344</span>            TLUMX(7) = TLUMX(7) + (HS2(IM)/CLSUN)*EGRAV
+<span class="ln">345</span>            QL = QL + EGRAV
+<span class="ln">346</span>            QLP = QLP + DT*(ENTR*(1.0D0-QDP+QDTP)-ENTR1 - ENTR3*QAP)
+<span class="ln">347</span>            QLT = QLT + DT*(ENTR*(-QDT+QDTT) + ENTR2 - ENTR3*QAT)
+<span class="ln">348</span>C 7/92 INCLUDE CHANGE IN ROTATIONAL KINETIC ENERGY IN ENERGY EQUATION.
+<span class="ln">349</span>            IF(LROT)THEN
+<span class="ln">350</span>               DEROT(IM) = DT*(HKEROT(IM)-HKEROTO(IM))/HS2(IM)
+<span class="ln">351</span>               QL = QL - DEROT(IM)
+<span class="ln">352</span>            ENDIF
+<span class="ln">353</span>C ADD CHANGE IN ENTROPY FROM ACCRETED MATERIAL
+<span class="ln">354</span>C            IF(LMDOT.AND.DMDT0.GT.0.0D0)THEN
+<span class="ln">355</span>C               IF(IM.GE.JENV)THEN
+<span class="ln">356</span>C                  QACC = - T*SCEN*DMDT0/CSECYR/SMASS0
+<span class="ln">357</span>C                  WRITE(*,*)QL,QACC
+<span class="ln">358</span>C                  QL = QL + QACC
+<span class="ln">359</span>C               ENDIF
+<span class="ln">360</span>C            ENDIF
+<span class="ln">361</span>         ENDIF
+<span class="ln">362</span>         CCCQL = CLNSUN*HS1(IM)
+<span class="ln">363</span>         QL = CCCQL*QL
+<span class="ln">364</span>         QLP = CCCQL*QLP
+<span class="ln">365</span>         QLT = CCCQL*QLT
+<span class="ln">366</span>         IF(IM.GT.1) THEN
+<span class="ln">367</span>C REDUCE MATRIX FOR PAIR OF POINTS (IM-1,IM)
+<span class="ln">368</span>            IM1 = IM
+<span class="ln">369</span>            CALL <a href="../yrec-map/reduce.f.html#def-REDUCE" title="REDUCE in reduce.f">REDUCE</a>(IM1,HHA,HHB,HL,HMAX,HP,HR,HS,HT,QP0,QP,QPR0,
+<span class="ln">370</span>     *      QPR,QPP0,QPP,QT0,QT,QTR0,QTR,QTL0,QTL,QTP0,QTP,QTT0,QTT,
+<span class="ln">371</span>     *      QR0,QR,QRR0,QRR,QRP0,QRP,QRT0,QRT,QL0,QL,QLP0,QLP,QLT0,QLT)
+<span class="ln">372</span>         ELSE
+<span class="ln">373</span>C SETUP CENTRAL BOUNDARY CONDITIONS
+<span class="ln">374</span>            HHA(3,1,1) = CC13*QDP
+<span class="ln">375</span>            HHA(3,2,1) = CC13*QDT
+<span class="ln">376</span>            HHB(3,1) = -CC13*(C4PI3L + DL - SL) - RL
+<span class="ln">377</span>            HHA(4,1,1) = -QLP
+<span class="ln">378</span>            HHA(4,2,1) = -QLT
+<span class="ln">379</span>            HHB(4,1) = CLNI*QL - B
+<span class="ln">380</span>         ENDIF
+<span class="ln">381</span>         QP0 = QP
+<span class="ln">382</span>         QPR0 = QPR
+<span class="ln">383</span>         QPP0 = QPP
+<span class="ln">384</span>         QT0 = QT
+<span class="ln">385</span>         QTR0 = QTR
+<span class="ln">386</span>         QTL0 = QTL
+<span class="ln">387</span>         QTP0 = QTP
+<span class="ln">388</span>         QTT0 = QTT
+<span class="ln">389</span>         QR0 = QR
+<span class="ln">390</span>         QRR0 = QRR
+<span class="ln">391</span>         QRP0 = QRP
+<span class="ln">392</span>         QRT0 = QRT
+<span class="ln">393</span>         QL0 = QL
+<span class="ln">394</span>         QLP0 = QLP
+<span class="ln">395</span>         QLT0 = QLT
+<span class="ln">396</span>C MHP 02/12 REMOVED RESTRICTIONS ON WHERE INTERMEDIATE VARIABLES
+<span class="ln">397</span>C SUCH AS OPACITY ARE SAVED; PRIOR RESTRICTIONS WERE BASED ON OBSOLETE
+<span class="ln">398</span>C MEMORY RESTRICTIONS IN LEGACY CODE
+<span class="ln">399</span>C         IF(LMDOT.AND.DMDT0.GT.0.0D0)THEN
+<span class="ln">400</span>         SVEL(IM) = VEL
+<span class="ln">401</span>C         ENDIF
+<span class="ln">402</span>C  STORE VARIABLES FOR OUTPUT IN SCRIB2 IF MODEL IS TO BE PRINTED OUT
+<span class="ln">403</span>C DBG PULSE STORE VARIABLES FOR PULSATION OUPUT
+<span class="ln">404</span>C DBG 3/91 CHANGED TO ALWAYS EXECUTE THIS STUFF
+<span class="ln">405</span>C         LONG = MOD(MODEL,NPRT2).EQ.0 .OR. LROT
+<span class="ln">406</span>C MHP 10/02 LSHORT NOT USED, OMIT
+<span class="ln">407</span>C         LSHORT = .NOT.LONG .AND. MOD(MODEL,NPRT1).EQ.0
+<span class="ln">408</span>C  ZERO OUT NUCLEAR ENERGY TERMS IF T &lt; NUCLEAR CUTOFF.
+<span class="ln">409</span>         IF(HT(IM).LT.TCUT(1)) THEN
+<span class="ln">410</span>            SESUM(IM) = 0.0D0
+<span class="ln">411</span>            SEG(7,IM) = HHC(IM)
+<span class="ln">412</span>            DO J = 1,6
+<span class="ln">413</span>               SEG(J,IM) = 0.0D0
+<span class="ln">414</span>           END DO
+<span class="ln">415</span>         ELSE
+<span class="ln">416</span>C         ELSE IF(LONG) THEN
+<span class="ln">417</span>C  LONG OUTPUT NEEDED
+<span class="ln">418</span>            SESUM(IM) = EG(1)+EG(2)+EG(3)+EG(4)+EG(5)
+<span class="ln">419</span>            SEG(6,IM) = EG(6)
+<span class="ln">420</span>            SEG(7,IM) = HHC(IM)
+<span class="ln">421</span>            IF(SESUM(IM).GT.1.0D-22) THEN
+<span class="ln">422</span>               ESUMI = 1.0D0/SESUM(IM)
+<span class="ln">423</span>            ELSE
+<span class="ln">424</span>               ESUMI = 0.0D0
+<span class="ln">425</span>            ENDIF
+<span class="ln">426</span>            DO J = 1,5
+<span class="ln">427</span>               SEG(J,IM) = EG(J)*ESUMI
+<span class="ln">428</span>              END DO
+<span class="ln">429</span>C  SHORT OUTPUT ONLY
+<span class="ln">430</span>C         ELSE
+<span class="ln">431</span>C            SESUM(IM) = EG(1)+EG(2)+EG(3)+EG(4)+EG(5)
+<span class="ln">432</span>C            SEG(6,IM) = EG(6)
+<span class="ln">433</span>C            SEG(7,IM) = HHC(IM)
+<span class="ln">434</span>         ENDIF
+<span class="ln">435</span>         SBETA(IM) = BETA
+<span class="ln">436</span>         SETA(IM) = ETA
+<span class="ln">437</span>         LOCONS(IM) = LOCOND
+<span class="ln">438</span>         SO(IM) = O
+<span class="ln">439</span>         SDEL(1,IM) = DELR
+<span class="ln">440</span>         SDEL(2,IM) = DEL
+<span class="ln">441</span>         SDEL(3,IM) = DELA
+<span class="ln">442</span>         DO J = 1,3
+<span class="ln">443</span>            SFXION(J,IM) = FXION(J)
+<span class="ln">444</span>         END DO
+<span class="ln">445</span>         SVEL(IM) = VEL
+<span class="ln">446</span>         SCP(IM) = QCP
+<span class="ln">447</span>C MHP 02/12 COMMENTED CODE OUT, AS REPLICATED BELOW
+<span class="ln">448</span>C         IF(LSOUND) THEN
+<span class="ln">449</span>C MHP 7/96 CALCULATION OF GAMMA1 FROM GUENTHER 1995 P.C.
+<span class="ln">450</span>C            CHRH = 1.0D0/QDP
+<span class="ln">451</span>C            CHT = -CHRH*QDT
+<span class="ln">452</span>C            CV = QCP - EXP(CLN*(HP(IM)-HD(IM)-HT(IM)))*CHT**2/CHRH
+<span class="ln">453</span>C            GAM1(IM) = CHRH*QCP/CV
+<span class="ln">454</span>C            PQDP(IM) = QDP
+<span class="ln">455</span>C         ENDIF
+<span class="ln">456</span>
+<span class="ln">457</span>C JVS 01/11 always want gamma:
+<span class="ln">458</span>            CHRH = 1.0D0/QDP
+<span class="ln">459</span>            CHT = -CHRH*QDT
+<span class="ln">460</span>            CV = QCP - EXP(CLN*(HP(IM)-HD(IM)-HT(IM)))*CHT**2/CHRH
+<span class="ln">461</span>            GAM1(IM) = CHRH*QCP/CV
+<span class="ln">462</span>            PQDP(IM) = QDP
+<span class="ln">463</span>            PQDT(IM) = QDT
+<span class="ln">464</span>C JVS END
+<span class="ln">465</span>
+<span class="ln">466</span>
+<span class="ln">467</span>         IF(LROT)THEN
+<span class="ln">468</span>            SQOT(IM) = QOT
+<span class="ln">469</span>C MHP 10/02 variable index error
+<span class="ln">470</span>            IF(SESUM(IM).GT.0.0D0)THEN
+<span class="ln">471</span>C            IF(SESUM(I).GT.0.0D0)THEN
+<span class="ln">472</span>C               ETOT = SESUM(I)
+<span class="ln">473</span>C               EGNEUT = SEG(6,I)+SEG(7,I)
+<span class="ln">474</span>               ETOT = SESUM(IM)
+<span class="ln">475</span>               EGNEUT = SEG(6,IM)+SEG(7,IM)
+<span class="ln">476</span>               FRACNUC(IM) = (ETOT - EGNEUT)/ETOT
+<span class="ln">477</span>            ELSE
+<span class="ln">478</span>               FRACNUC(IM) = 0.0D0
+<span class="ln">479</span>            ENDIF
+<span class="ln">480</span>            SQET(IM) = QET
+<span class="ln">481</span>         ENDIF
+<span class="ln">482</span>C DBG PULSE
+<span class="ln">483</span>         IF (LPULSE) THEN
+<span class="ln">484</span>            PQDP(IM) = QDP
+<span class="ln">485</span>            PQED(IM) = QED
+<span class="ln">486</span>            PQET(IM) = QET
+<span class="ln">487</span>            PQOD(IM) = QOD
+<span class="ln">488</span>            PQOT(IM) = QOT
+<span class="ln">489</span>            PQCP(IM) = QCP
+<span class="ln">490</span>            PRMU(IM) = RMU
+<span class="ln">491</span>            PEMU(IM) = EMU
+<span class="ln">492</span>            PQDT(IM) = QDT
+<span class="ln">493</span>            VALFMLT(IM) = ALFMLT
+<span class="ln">494</span>            VPHMLT(IM) = PHMLT
+<span class="ln">495</span>            VCMXMLT(IM) = CMXMLT
+<span class="ln">496</span>         END IF
+<span class="ln">497</span> 30   CONTINUE
+<span class="ln">498</span>
+<span class="ln">499</span>      RETURN
+<span class="ln">500</span>      END</pre></details>
+<details class='py' id='py-coefft'><summary>Python version: coefft</summary><pre class='doc'>For each point: the equation of state, opacity, temperature gradient
+and nuclear energy; the structure equations and their derivatives,
+passed to REDUCE (the central conditions at point 1); the luminosity by
+source; and per-point physics stored for output and other routines.
+
+Translates: coefft.f#COEFFT (09c3b9b)
+
+Arguments: delts, the time step (s); m, the number of points; the
+model hd, hl, hp, hr, hs, ht (log rho, L/L_sun, log P, log r, log m,
+log T), hs1, hs2 (the mass at each point and in each shell), htt, hpp
+(the changes of log T, log P over the step), hcomp[species, point];
+the matrices hha[k, l, point], hhb[k, point], hhc (the gravothermal
+energy), hmax; lc (convective or not), tlumx[1..8] (the luminosity by
+source); fp, ft, the rotational factors; hkerot, hkeroto, the
+rotational kinetic energies; jenv; teffl; cmixl, the mixing length.
+Arrays have index 0 unused and are changed in place.
+
+Returns (latmo, lderiv, lmix, locond, qdt, qdp, ksaha): the flags set
+here, rho_T and rho_P at the last point, and the EOS&#x27;s KSAHA.</pre><pre class='src'><span class="ln">43</span>def coefft(delts, m, hd, hha, hhb, hhc, hl, hmax, hp, hpp, hr, hs, hs1,
+<span class="ln">44</span>           hs2, ht, htt, hcomp, lc, tlumx, latmo, lderiv, lmix, locond,
+<span class="ln">45</span>           qdt, qdp, ksaha, fp, ft, hkerot, hkeroto, jenv, teffl, cmixl):
+<span class="ln">46</span>    &quot;&quot;&quot;For each point: the equation of state, opacity, temperature gradient
+<span class="ln">47</span>    and nuclear energy; the structure equations and their derivatives,
+<span class="ln">48</span>    passed to REDUCE (the central conditions at point 1); the luminosity by
+<span class="ln">49</span>    source; and per-point physics stored for output and other routines.
+<span class="ln">50</span>
+<span class="ln">51</span>    Translates: coefft.f#COEFFT (09c3b9b)
+<span class="ln">52</span>
+<span class="ln">53</span>    Arguments: delts, the time step (s); m, the number of points; the
+<span class="ln">54</span>    model hd, hl, hp, hr, hs, ht (log rho, L/L_sun, log P, log r, log m,
+<span class="ln">55</span>    log T), hs1, hs2 (the mass at each point and in each shell), htt, hpp
+<span class="ln">56</span>    (the changes of log T, log P over the step), hcomp[species, point];
+<span class="ln">57</span>    the matrices hha[k, l, point], hhb[k, point], hhc (the gravothermal
+<span class="ln">58</span>    energy), hmax; lc (convective or not), tlumx[1..8] (the luminosity by
+<span class="ln">59</span>    source); fp, ft, the rotational factors; hkerot, hkeroto, the
+<span class="ln">60</span>    rotational kinetic energies; jenv; teffl; cmixl, the mixing length.
+<span class="ln">61</span>    Arrays have index 0 unused and are changed in place.
+<span class="ln">62</span>
+<span class="ln">63</span>    Returns (latmo, lderiv, lmix, locond, qdt, qdp, ksaha): the flags set
+<span class="ln">64</span>    here, rho_T and rho_P at the last point, and the EOS&#x27;s KSAHA.
+<span class="ln">65</span>    &quot;&quot;&quot;
+<span class="ln">66</span>    global qed, qet
+<span class="ln">67</span>    c = constants_mod
+<span class="ln">68</span>    nml = nmlpar_mod
+<span class="ln">69</span>    s = scrtch_mod
+<span class="ln">70</span>    fxion = np.zeros(4)
+<span class="ln">71</span>    # The previous point&#x27;s equations, for REDUCE (set at point 1 first).
+<span class="ln">72</span>    qp0 = qpr0 = qpp0 = qt0 = qtr0 = qtl0 = qtp0 = qtt0 = 0.0
+<span class="ln">73</span>    qr0 = qrr0 = qrp0 = qrt0 = ql0 = qlp0 = qlt0 = 0.0
+<span class="ln">74</span>
+<span class="ln">75</span>    if nml.lsnu:
+<span class="ln">76</span>        for j in range(1, 11):
+<span class="ln">77</span>            fluxes_mod.fluxtot[j] = 0.0
+<span class="ln">78</span>    locond = True
+<span class="ln">79</span>    lderiv = True
+<span class="ln">80</span>    latmo = False
+<span class="ln">81</span>    lmix = False
+<span class="ln">82</span>    lntrpy = delts &gt; 0.0
+<span class="ln">83</span>    if lntrpy:
+<span class="ln">84</span>        deltsi = 1.0 / delts
+<span class="ln">85</span>        # Question (see the page): a one-year floor, hard-coded.
+<span class="ln">86</span>        time = 3.1558e7
+<span class="ln">87</span>        timei = 3.1688e-8
+<span class="ln">88</span>    for j in range(1, 9):
+<span class="ln">89</span>        tlumx[j] = 0.0
+<span class="ln">90</span>
+<span class="ln">91</span>    for im in range(1, m + 1):  # label 30
+<span class="ln">92</span>        # Local variables for the physics routines.
+<span class="ln">93</span>        thl = 0.0
+<span class="ln">94</span>        sl = hs[im]
+<span class="ln">95</span>        tl = ht[im]
+<span class="ln">96</span>        pl = hp[im]
+<span class="ln">97</span>        rl = hr[im]
+<span class="ln">98</span>        b = hl[im]
+<span class="ln">99</span>        x = hcomp[1, im]
+<span class="ln">100</span>        y = hcomp[2, im]
+<span class="ln">101</span>        z = hcomp[3, im]
+<span class="ln">102</span>        xhe3 = hcomp[4, im]
+<span class="ln">103</span>        xc12 = hcomp[5, im]
+<span class="ln">104</span>        xc13 = hcomp[6, im]
+<span class="ln">105</span>        xn14 = hcomp[7, im]
+<span class="ln">106</span>        xo16 = hcomp[9, im]
+<span class="ln">107</span>        xo18 = hcomp[11, im]
+<span class="ln">108</span>        xh2 = hcomp[12, im]
+<span class="ln">109</span>        iu = im
+<span class="ln">110</span>        dl = hd[im]
+<span class="ln">111</span>        fpl = fp[im]
+<span class="ln">112</span>        ftl = ft[im]
+<span class="ln">113</span>        # Debye-Hueckel composition.
+<span class="ln">114</span>        if nml.ldh:
+<span class="ln">115</span>            debhu_mod.xxdh = hcomp[1, im]
+<span class="ln">116</span>            debhu_mod.yydh = hcomp[2, im] + hcomp[4, im]
+<span class="ln">117</span>            debhu_mod.zzdh = hcomp[3, im]
+<span class="ln">118</span>            debhu_mod.zdh[1] = hcomp[5, im] + hcomp[6, im]
+<span class="ln">119</span>            debhu_mod.zdh[2] = hcomp[7, im] + hcomp[8, im]
+<span class="ln">120</span>            debhu_mod.zdh[3] = hcomp[9, im] + hcomp[10, im] + hcomp[11, im]
+<span class="ln">121</span>        (t, p, dl, d, beta, betai, beta14, rmu, amu, emu, eta, qdt, qdp,
+<span class="ln">122</span>         qcp, dela, qdtt, qdtp, qat, qap, qcpt, qcpp, ksaha) = eqstat(
+<span class="ln">123</span>            tl, 0.0, pl, 0.0, dl, 0.0, x, z, 0.0, 0.0, 0.0, fxion, 0.0, 0.0,
+<span class="ln">124</span>            0.0, 0.0, qdt, qdp, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+<span class="ln">125</span>            lderiv, latmo, ksaha)
+<span class="ln">126</span>        o, ol, qod, qot = getopac(dl, tl, x, z, 0.0, 0.0, 0.0, 0.0, fxion)
+<span class="ln">127</span>        dpmix_mod.iovim = im
+<span class="ln">128</span>        (dele, delr, qact, qacp, qacr, vel, lconv) = tpgrad(
+<span class="ln">129</span>            tl, t, pl, p, d, rl, sl, b, o, qdt, qdp, qot, qod, qcp, 0.0,
+<span class="ln">130</span>            0.0, dela, qdtt, qdtp, qat, qap, 0.0, 0.0, 0.0, qcpt, qcpp,
+<span class="ln">131</span>            0.0, lderiv, False, fpl, ftl, teffl, cmixl)
+<span class="ln">132</span>        hd[im] = dl
+<span class="ln">133</span>
+<span class="ln">134</span>        # The structure equations (d/d ln m) and their derivatives.
+<span class="ln">135</span>        qtemp = c.c4pil + rl + rl + rl
+<span class="ln">136</span>        qr = math.exp(c.cln * (sl - dl - qtemp))
+<span class="ln">137</span>        qrr = -qr - qr - qr
+<span class="ln">138</span>        qrp = -qr * qdp
+<span class="ln">139</span>        qrt = -qr * qdt
+<span class="ln">140</span>        # Question (see the page): f_P only, f_T unused, and constant.
+<span class="ln">141</span>        qp = -math.exp(c.cln * (c.cgl + sl + sl - pl - qtemp - rl)) * fp[im]
+<span class="ln">142</span>        qpr = -qp - qp - qp - qp
+<span class="ln">143</span>        qpp = -qp
+<span class="ln">144</span>        lc[im] = lconv
+<span class="ln">145</span>        qt = dele * qp
+<span class="ln">146</span>        qtr = -qt - qt - qt - qt
+<span class="ln">147</span>        if not lconv:
+<span class="ln">148</span>            qtl = c.clni * qt / b
+<span class="ln">149</span>            qtp = qt * qod * qdp
+<span class="ln">150</span>            qtt = qt * (-4.0 + qot + qod * qdt)
+<span class="ln">151</span>        else:
+<span class="ln">152</span>            qtl = 0.0
+<span class="ln">153</span>            qtp = qt * (-1.0 + qacp)
+<span class="ln">154</span>            qtt = qt * qact
+<span class="ln">155</span>            qtr = qtr + qt * qacr
+<span class="ln">156</span>        ql = 0.0
+<span class="ln">157</span>        qlt = 0.0
+<span class="ln">158</span>        qlp = 0.0
+<span class="ln">159</span>
+<span class="ln">160</span>        # Nuclear energy above TCUT(1).
+<span class="ln">161</span>        if tl &gt; nml.tcut[1]:
+<span class="ln">162</span>            (egg11, egg22, egg33, egg44, egg55, qed, qet, sum1, be7mfloc,
+<span class="ln">163</span>             ealpca, enu) = engeb(
+<span class="ln">164</span>                0.0, 0.0, 0.0, 0.0, 0.0, qed, qet, 0.0, dl, tl, x, y, xhe3,
+<span class="ln">165</span>                xc12, xc13, xn14, xo16, xo18, xh2, iu, hr1, hr2, hr3, hr4,
+<span class="ln">166</span>                hr5, hr6, hr7, hr8, hr9, hr10, hr11, hr12, hr13, hf1, hf2,
+<span class="ln">167</span>                0.0, 0.0, 0.0)
+<span class="ln">168</span>            e = sum1
+<span class="ln">169</span>            eg[1] = egg11
+<span class="ln">170</span>            eg[2] = egg22
+<span class="ln">171</span>            eg[3] = egg33
+<span class="ln">172</span>            eg[4] = egg44
+<span class="ln">173</span>            eg[5] = egg55
+<span class="ln">174</span>            eg[6] = enu
+<span class="ln">175</span>            eca = ealpca
+<span class="ln">176</span>            if nml.lsnu:
+<span class="ln">177</span>                for j in range(1, 11):
+<span class="ln">178</span>                    fluxes_mod.fluxtot[j] += fluxes_mod.flux[j] * hs2[im]
+<span class="ln">179</span>            for j in range(1, 7):  # label 20
+<span class="ln">180</span>                tlumx[j] = tlumx[j] + (hs2[im] / c.clsun) * eg[j]
+<span class="ln">181</span>                thl = thl + (hs2[im] / c.clsun) * eg[j]
+<span class="ln">182</span>            grab_mod.umhe33[im] = (hs2[im] / c.clsun) * grab_mod.enghe3
+<span class="ln">183</span>            grab_mod.umheal[im] = (hs2[im] / c.clsun) * grab_mod.he3all
+<span class="ln">184</span>            tlumx[8] = tlumx[8] + (hs2[im] / c.clsun) * eca
+<span class="ln">185</span>            thl = thl + (hs2[im] / c.clsun) * eca
+<span class="ln">186</span>            ql = e
+<span class="ln">187</span>            qlt = qlt + qet + qed * qdt
+<span class="ln">188</span>            qlp = qlp + qed * qdp
+<span class="ln">189</span>
+<span class="ln">190</span>        # Gravothermal energy.
+<span class="ln">191</span>        if lntrpy:
+<span class="ln">192</span>            dt = deltsi
+<span class="ln">193</span>            # Accretion: points at and above JENV add DLOGT, DLOGP.
+<span class="ln">194</span>            # Question (see the page): accretion entropy.
+<span class="ln">195</span>            if nml.lmdot and nml.dmdt0 &gt; 0.0:
+<span class="ln">196</span>                if im &gt;= jenv:
+<span class="ln">197</span>                    httt = htt[im] + masschg2_mod.dlogt
+<span class="ln">198</span>                    hppp = hpp[im] + masschg2_mod.dlogp
+<span class="ln">199</span>                else:
+<span class="ln">200</span>                    httt = htt[im]
+<span class="ln">201</span>                    hppp = hpp[im]
+<span class="ln">202</span>            else:
+<span class="ln">203</span>                httt = htt[im]
+<span class="ln">204</span>                hppp = hpp[im]
+<span class="ln">205</span>            if hcomp[1, im] &gt; 0.01 and delts &lt; time:
+<span class="ln">206</span>                dt = timei
+<span class="ln">207</span>            entr1 = p * qdt / d
+<span class="ln">208</span>            entr2 = entr1 / dela
+<span class="ln">209</span>            entr = (entr2 * httt - entr1 * hppp) * c.cln
+<span class="ln">210</span>            entr3 = entr2 * c.cln * httt
+<span class="ln">211</span>            egrav = dt * entr
+<span class="ln">212</span>            hhc[im] = egrav
+<span class="ln">213</span>            tlumx[7] = tlumx[7] + (hs2[im] / c.clsun) * egrav
+<span class="ln">214</span>            ql = ql + egrav
+<span class="ln">215</span>            qlp = qlp + dt * (entr * (1.0 - qdp + qdtp) - entr1 - entr3 * qap)
+<span class="ln">216</span>            qlt = qlt + dt * (entr * (-qdt + qdtt) + entr2 - entr3 * qat)
+<span class="ln">217</span>            if nml.lrot:
+<span class="ln">218</span>                roten_mod.derot[im] = (dt * (hkerot[im] - hkeroto[im])
+<span class="ln">219</span>                                       / hs2[im])
+<span class="ln">220</span>                ql = ql - roten_mod.derot[im]
+<span class="ln">221</span>        cccql = c.clnsun * hs1[im]
+<span class="ln">222</span>        ql = cccql * ql
+<span class="ln">223</span>        qlp = cccql * qlp
+<span class="ln">224</span>        qlt = cccql * qlt
+<span class="ln">225</span>
+<span class="ln">226</span>        # REDUCE for each pair of points; the central conditions at 1.
+<span class="ln">227</span>        if im &gt; 1:
+<span class="ln">228</span>            im1 = im
+<span class="ln">229</span>            reduce(im1, hha, hhb, hl, hmax, hp, hr, hs, ht, qp0, qp, qpr0,
+<span class="ln">230</span>                   qpr, qpp0, qpp, qt0, qt, qtr0, qtr, qtl0, qtl, qtp0, qtp,
+<span class="ln">231</span>                   qtt0, qtt, qr0, qr, qrr0, qrr, qrp0, qrp, qrt0, qrt, ql0,
+<span class="ln">232</span>                   ql, qlp0, qlp, qlt0, qlt)
+<span class="ln">233</span>        else:
+<span class="ln">234</span>            hha[3, 1, 1] = c.cc13 * qdp
+<span class="ln">235</span>            hha[3, 2, 1] = c.cc13 * qdt
+<span class="ln">236</span>            hhb[3, 1] = -c.cc13 * (c.c4pi3l + dl - sl) - rl
+<span class="ln">237</span>            hha[4, 1, 1] = -qlp
+<span class="ln">238</span>            hha[4, 2, 1] = -qlt
+<span class="ln">239</span>            hhb[4, 1] = c.clni * ql - b
+<span class="ln">240</span>        qp0 = qp
+<span class="ln">241</span>        qpr0 = qpr
+<span class="ln">242</span>        qpp0 = qpp
+<span class="ln">243</span>        qt0 = qt
+<span class="ln">244</span>        qtr0 = qtr
+<span class="ln">245</span>        qtl0 = qtl
+<span class="ln">246</span>        qtp0 = qtp
+<span class="ln">247</span>        qtt0 = qtt
+<span class="ln">248</span>        qr0 = qr
+<span class="ln">249</span>        qrr0 = qrr
+<span class="ln">250</span>        qrp0 = qrp
+<span class="ln">251</span>        qrt0 = qrt
+<span class="ln">252</span>        ql0 = ql
+<span class="ln">253</span>        qlp0 = qlp
+<span class="ln">254</span>        qlt0 = qlt
+<span class="ln">255</span>
+<span class="ln">256</span>        # Per-point physics for output and other routines.
+<span class="ln">257</span>        s.svel[im] = vel
+<span class="ln">258</span>        if ht[im] &lt; nml.tcut[1]:
+<span class="ln">259</span>            s.sesum[im] = 0.0
+<span class="ln">260</span>            s.seg[7, im] = hhc[im]
+<span class="ln">261</span>            for j in range(1, 7):
+<span class="ln">262</span>                s.seg[j, im] = 0.0
+<span class="ln">263</span>        else:
+<span class="ln">264</span>            s.sesum[im] = eg[1] + eg[2] + eg[3] + eg[4] + eg[5]
+<span class="ln">265</span>            s.seg[6, im] = eg[6]
+<span class="ln">266</span>            s.seg[7, im] = hhc[im]
+<span class="ln">267</span>            if s.sesum[im] &gt; 1.0e-22:
+<span class="ln">268</span>                esumi = 1.0 / s.sesum[im]
+<span class="ln">269</span>            else:
+<span class="ln">270</span>                esumi = 0.0
+<span class="ln">271</span>            for j in range(1, 6):
+<span class="ln">272</span>                s.seg[j, im] = eg[j] * esumi
+<span class="ln">273</span>        s.sbeta[im] = beta
+<span class="ln">274</span>        s.seta[im] = eta
+<span class="ln">275</span>        s.locons[im] = locond
+<span class="ln">276</span>        s.so[im] = o
+<span class="ln">277</span>        s.sdel[1, im] = delr
+<span class="ln">278</span>        s.sdel[2, im] = dele
+<span class="ln">279</span>        s.sdel[3, im] = dela
+<span class="ln">280</span>        for j in range(1, 4):
+<span class="ln">281</span>            s.sfxion[j, im] = fxion[j]
+<span class="ln">282</span>        s.svel[im] = vel
+<span class="ln">283</span>        s.scp[im] = qcp
+<span class="ln">284</span>        # Gamma_1, always (JVS 01/11).
+<span class="ln">285</span>        chrh = 1.0 / qdp
+<span class="ln">286</span>        cht = -chrh * qdt
+<span class="ln">287</span>        cv = qcp - math.exp(c.cln * (hp[im] - hd[im] - ht[im])) * cht**2 / chrh
+<span class="ln">288</span>        sound_mod.gam1[im] = chrh * qcp / cv
+<span class="ln">289</span>        pulse1_mod.pqdp[im] = qdp
+<span class="ln">290</span>        pulse1_mod.pqdt[im] = qdt
+<span class="ln">291</span>        if nml.lrot:
+<span class="ln">292</span>            rotder_mod.sqot[im] = qot
+<span class="ln">293</span>            if s.sesum[im] &gt; 0.0:
+<span class="ln">294</span>                etot = s.sesum[im]
+<span class="ln">295</span>                egneut = s.seg[6, im] + s.seg[7, im]
+<span class="ln">296</span>                rotder_mod.fracnuc[im] = (etot - egneut) / etot
+<span class="ln">297</span>            else:
+<span class="ln">298</span>                rotder_mod.fracnuc[im] = 0.0
+<span class="ln">299</span>            rotder_mod.sqet[im] = qet
+<span class="ln">300</span>        if nml.lpulse:
+<span class="ln">301</span>            p1 = pulse1_mod
+<span class="ln">302</span>            pa = pualpha_mod
+<span class="ln">303</span>            p1.pqdp[im] = qdp
+<span class="ln">304</span>            p1.pqed[im] = qed
+<span class="ln">305</span>            p1.pqet[im] = qet
+<span class="ln">306</span>            p1.pqod[im] = qod
+<span class="ln">307</span>            p1.pqot[im] = qot
+<span class="ln">308</span>            p1.pqcp[im] = qcp
+<span class="ln">309</span>            p1.prmu[im] = rmu
+<span class="ln">310</span>            p1.pemu[im] = emu
+<span class="ln">311</span>            p1.pqdt[im] = qdt
+<span class="ln">312</span>            pa.valfmlt[im] = pa.alfmlt
+<span class="ln">313</span>            pa.vphmlt[im] = pa.phmlt
+<span class="ln">314</span>            pa.vcmxmlt[im] = pa.cmxmlt
+<span class="ln">315</span>    return latmo, lderiv, lmix, locond, qdt, qdp, ksaha</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Unclear. "the energy fractions <code>SEG</code>": only <code>SEG(1:5)</code> are fractions of <code>SESUM</code> (the five nuclear terms); <code>SEG(6)</code> (neutrinos) and <code>SEG(7)</code> (gravothermal, <code>HHC</code>) are rates in erg g$^{-1}$ s$^{-1}$; with rotation <code>FRACNUC</code> $= (\mathtt{SESUM} - \mathtt{SEG(6)} - \mathtt{SEG(7)})/\mathtt{SESUM}$. Fix: say so.</li>
+<li>Missing. The point index: COEFFT passes <code>IU = IM</code> to ENGEB, so here the rates <code>HR1</code>… are stored at the right point (unlike main.f's call, see <a href="../yrec-map/engeb.f.html#def-ENGEB">ENGEB</a> question 7). Fix: a clause.</li>
+<li>Missing. <code>JENV</code> comes from CRRECT, which has it from MIX only at levels 3 and 4 (CRRECT's question 5). Also "points above <code>JENV</code>" is "at and above" (<code>IM</code> $\ge$ <code>JENV</code>). Fix: reword.</li>
+</ol>
+<p>Otherwise checked: the structure equations and their derivatives, $\epsilon_\mathrm{grav}$, the central conditions, $\Gamma_1$, <code>TLUMX</code>, KC's changes and the five questions hold.</p>
+<p>Revised: <code>SEG</code> and <code>FRACNUC</code> explained; the index <code>IU = IM</code> and where <code>JENV</code> comes from added.</p></div></details>
+</main></body></html>

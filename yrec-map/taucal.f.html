@@ -1,0 +1,398 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>taucal.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ taucal.f</span></header><main>
+<h1>taucal.f</h1>
+<p class='muted'>231 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/taucal.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>taucal.py</code>, 110 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>TAUCAL</code> computes the convective overturn time scale $\tau_\mathrm{cz}$ (<code>TAUCZ</code>) near the base of the surface convection zone, for a convection zone that lies within the envelope (JVS 02/12). Its comments say the code was taken from <code>MIDMOD</code>, and that the routine is called only from <code>ENVINT</code>.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the envelope's profile, passed by <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a> as arguments: the shell masses <code>HS2</code>, unlogged masses <code>HS1</code>, convective flags <code>LCZ</code>, $\log r$ (<code>HR</code>), $\log P$ (<code>HP</code>), $\log\rho$ (<code>HD</code>), gravity <code>HG</code>, the convective velocity <code>SVEL</code>, and two temperature gradients <code>DEL1</code>, <code>DEL2</code> (<code>EDEL1</code> and <code>EDEL2</code> in <code>ENVINT</code>, copied from <code>EDELS(1,·)</code> and <code>EDELS(2,·)</code>, which <a href="../yrec-map/stitch.f.html#def-STITCH">STITCH</a>'s column list names the radiative and the actual gradient; their difference changes sign at the zone's edge).</li>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a>.</li>
+<li><strong>Output:</strong> <code>TAUCZ</code> in <code>OVRTRN_MOD</code>, shared with <a href="../yrec-map/gettau.f.html#def-GETTAU">GETTAU</a>, <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a>, <a href="../yrec-map/massloss.f.html#def-MASSLOSS">MASSLOSS</a>, <a href="../yrec-map/getw.f.html#def-GETW">GETW</a> and others (the wind and mass-loss routines, by their names).</li>
+<li><strong>Modules:</strong> <code>OVRTRN_MOD</code>, <code>NMLPAR_MOD</code> (<code>LROT</code>) and <code>CONSTANTS_MOD</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Going down from the surface, find the first convective shell, then the base of that zone, <code>IMAX</code>; note whether a second, deeper convective zone exists (<code>LTWOCZ</code>, its top <code>ICZTOP</code>).</li>
+<li>Locate the base $r_b$ where $\nabla_1 - \nabla_2$ changes sign, by linear interpolation between shells <code>IMAX-1</code> and <code>IMAX</code> (factor $f$), and the pressure scale height there,
+   $$H_P = \frac{P}{\rho\,g},\qquad g = \frac{G m}{r^2}\ \text{(computed here only without rotation)},$$
+   interpolated with the same $f$.</li>
+<li>If the zone is thin, that is, with $r_\mathrm{top}$ the radius of shell <code>ICZTOP</code>,
+   $$\left|1 - \frac{r_b + H_P - r_\mathrm{IMAX}}{r_\mathrm{top} - r_\mathrm{IMAX}}\right| &lt; 0.5,$$
+   so that the point $r_b + H_P$ lies between the zone's middle and half a width above its top, or there are two zones, the mass-weighted mean velocity over shells <code>IMAX</code> to <code>ICZTOP</code> is used:
+   $$\bar v = \frac{\sum_j \Delta m_j\,\tfrac12 (v_j + v_{j+1})}{\sum_j \Delta m_j},\qquad \tau_\mathrm{cz} = \frac{|r_\mathrm{top} - r_\mathrm{IMAX}|}{\bar v}.$$</li>
+<li>Otherwise (the original method), the velocity at one pressure scale height above the base, $v(r_b + H_P)$, by linear interpolation in $\log r$, gives
+   $$\tau_\mathrm{cz} = \frac{H_P}{v(r_b + H_P)} .$$</li>
+<li>With no convective zone the code sets <code>IMAX = M</code> and, unless <code>LALLCZ</code> is set, computes $\tau_\mathrm{cz}$ at the surface anyway (from shells <code>M-1</code> and <code>M</code>). $\tau_\mathrm{cz} = 0$ only when <code>LALLCZ</code> is set, by the test <code>IMAX .LT. 1</code>, which depends on a value of <code>IMAX</code> left from an earlier call (question 1).</li>
+</ol>
+<p><strong>Design.</strong> The routine prints "TauCal" to the screen at every call. A large commented-out block handled fully convective cases.</p>
+<p><strong>KC's changes.</strong> The unused arguments <code>HCOMP</code> and <code>MINT</code> were removed (2025-05-31).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (<code>/OVRTRN/</code> to <code>OVRTRN_MOD</code>, <code>/ROT/</code> to <code>NMLPAR_MOD</code>, the constants to <code>CONSTANTS_MOD</code>; the unused <code>/COMP/</code> and <code>/DEUTER/</code> dropped), the array size <code>JSON</code> from <code>DIMENSIONS_MOD</code>, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>IMAX</code> and <code>ICZTOP</code> may be undefined.</strong> <code>IMAX</code> is set only when the loop leaves a convective zone; otherwise it keeps the value <code>SAVE</code>d from an earlier call, and the test <code>IMAX .LT. 1</code> (for a zone reaching the bottom) relies on that. <code>ICZTOP</code> is set only when there are two zones, but the averaging branch also runs for one thin zone (the first condition), and then uses <code>ICZTOP</code> undefined.</li>
+<li><strong><code>.AND.</code> became <code>.OR.</code></strong> The commented-out test required a thin zone <em>and</em> two zones; the active one takes either. Which is intended?</li>
+<li><strong>A debugging print.</strong> <code>print*, 'TauCal'</code> writes to the screen at every call.</li>
+<li><strong>Two widths.</strong> In the averaging branch, the width is $r_\mathrm{top} - r_\mathrm{IMAX}$, from the shells, rather than from the interpolated base $r_b$.</li>
+<li><strong><code>LCZSUR</code>.</strong> The test <code>(HSTOP-HSBOT)/CMSUN .GT. 0</code> is true for any zone, and <code>LCZSUR</code> is no longer used (its test was commented out, JVS 10/11/13).</li>
+<li><strong>No convective zone, but a turnover time.</strong> Without a convective zone (<code>LCZEX</code> false), <code>IMAX = M</code>, and unless <code>LALLCZ</code> happens to be set, $\tau_\mathrm{cz}$ is computed from the surface shells <code>M-1</code> and <code>M</code> as if a zone ended there. Should <code>TAUCZ</code> be 0 in that case?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+SUBROUTINE TAUCAL(HCOMP,HS2,HS1,LCZ,HR,HP,HD,HG,M,SVEL,DEL1,DEL2,MINT)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-TAUCAL'>TAUCAL</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-TAUCAL'><h3><span class='kind'>subroutine</span>TAUCAL</h3>
+<p class='muted'>lines 3–231 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/taucal.f#L3-L231'>GitHub</a></p>
+<pre>SUBROUTINE TAUCAL(HS2,HS1,LCZ,HR,HP,HD,HG,M,SVEL,DEL1,DEL2)</pre>
+<div class='notes'><p>The convective overturn time near the base of a surface convection zone within the envelope, $H_P/v$ one scale height above the base, or a zone's width over its mean velocity for thin or double zones.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+SUBROUTINE TAUCAL(HCOMP,HS2,HS1,LCZ,HR,HP,HD,HG,M,SVEL,DEL1,DEL2,MINT)  ! KC 2025-05-31</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/ovrtrn_mod.f.html#def-OVRTRN_MOD'>OVRTRN_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE TAUCAL(HS2,HS1,LCZ,HR,HP,HD,HG,M,SVEL,DEL1,DEL2)
+<span class="ln">4</span>C 10/15/26 MHP via Claude
+<span class="ln">5</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">6</span>C PARAMETER(JSON=5000) here.
+<span class="ln">7</span>      USE DIMENSIONS_MOD
+<span class="ln">8</span>C 10/14/26 MHP via Claude
+<span class="ln">9</span>C code changed to convert COMMON/OVRTRN/ into OVRTRN_MOD.
+<span class="ln">10</span>      USE OVRTRN_MOD
+<span class="ln">11</span>C 10/14/26 MHP via Claude
+<span class="ln">12</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">13</span>      USE NMLPAR_MOD
+<span class="ln">14</span>C 10/14/26 MHP via Claude
+<span class="ln">15</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">16</span>      USE CONSTANTS_MOD
+<span class="ln">17</span>C 10/20/26 MHP via Claude
+<span class="ln">18</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">19</span>C explicit declarations.
+<span class="ln">20</span>      IMPLICIT NONE
+<span class="ln">21</span>      REAL*8 CVEAVG,CVEL,CZWIDE,DD1,DD2,DEL1,DEL2,DENOM,ENVR,ENVRL,FX,
+<span class="ln">22</span>     *       HD,HG,HP,HR,HS1,HS2,HSBOT,HSTOP,PS1,PS2,PSCA,RTESTL,SVEL,
+<span class="ln">23</span>     *       TOL,UMER
+<span class="ln">24</span>      INTEGER I,ICZTOP,J,K,M
+<span class="ln">25</span>      LOGICAL*4 LALLCZ,LCZ,LCZEX,LCZSUR,LFLAG,LTWOCZ
+<span class="ln">26</span>      INTEGER*4 IMAX
+<span class="ln">27</span>C 10/13/26 MHP via Claude: removed the unused COMMON/COMP/ declaration
+<span class="ln">28</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">29</span>C 10/13/26 MHP via Claude: removed the unused COMMON/DEUTER/ declaration
+<span class="ln">30</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">31</span>C 10/12/26 MHP via Claude
+<span class="ln">32</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">33</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">34</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">35</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">36</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">37</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">38</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">39</span>C
+<span class="ln">40</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">41</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">42</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">43</span>C 9/25/26 MHP via Claude
+<span class="ln">44</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">45</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">46</span>C G Somers 3/17, ADDING NEW TAUCZ COMMON BLOCK
+<span class="ln">47</span>C       DIMENSION HCOMP(15,JSON),HS2(JSON),LCZ(JSON),  ! KC 2025-05-31
+<span class="ln">48</span>      DIMENSION HS2(JSON),LCZ(JSON),
+<span class="ln">49</span>     *     HR(JSON), HP(JSON), HD(JSON), HG(JSON), HS1(JSON),  ! XSUM(15)
+<span class="ln">50</span>     *     DEL1(JSON), DEL2(JSON), SVEL(JSON)
+<span class="ln">51</span>      SAVE
+<span class="ln">52</span>
+<span class="ln">53</span>
+<span class="ln">54</span>
+<span class="ln">55</span>C JVS 02/12 CALCULATE THE LOCAL CONVECTIVE OVERTURN TIMESCALE AT THE BASE
+<span class="ln">56</span>C OF THE CZ. IN OLDER VERSIONS THIS WAS ONLY DONE FOR ROTATING MODELS;
+<span class="ln">57</span>C THIS MAKES IT SO TAUCZ IS CALCULATED FOR ALL MODELS. THIS PARTICULAR SUBROUTINE
+<span class="ln">58</span>C DOES CALCULATES THE OVERTURN TIMESCALES IN MODELS WHERE THE CZ IS WITHIN
+<span class="ln">59</span>C THE ENVELOPE
+<span class="ln">60</span>
+<span class="ln">61</span>C THIS CODE SNAGGED FROM MIDMOD
+<span class="ln">62</span>
+<span class="ln">63</span>C  DETERMINE EXTENT OF SURFACE CONVECTION ZONE.
+<span class="ln">64</span>      LALLCZ = .FALSE.
+<span class="ln">65</span>C JVS Allows the last point to be stable.
+<span class="ln">66</span>C JVS 05/14 removed requirement for last point to be convective, since this routine
+<span class="ln">67</span>C is only called from ENVINT, the near surface points in the envelope are often
+<span class="ln">68</span>C radiative, despite the fact that a convective envelope exists. Code now checks
+<span class="ln">69</span>C to make sure there is a CZ somewhere in the envelope.
+<span class="ln">70</span>C      IF(LCZ(M) .OR. LCZ(M-1) .OR. LCZ(M-2))THEN
+<span class="ln">71</span>
+<span class="ln">72</span>
+<span class="ln">73</span>
+<span class="ln">74</span>C  SURFACE C.Z. EXISTS.  FIND LOWEST SHELL (IMAX), WHICH IS ALSO THE
+<span class="ln">75</span>C  UPPERMOST ZONE CONSIDERED FOR STABILITY AGAINST ROTATIONALLY INDUCED MIXING.
+<span class="ln">76</span>C         DO 71 I = M-1,1,-1
+<span class="ln">77</span>C            IF(.NOT.LCZ(I)) GOTO 81
+<span class="ln">78</span>C   71    CONTINUE
+<span class="ln">79</span>C         LALLCZ = .TRUE.
+<span class="ln">80</span>C         I = 0
+<span class="ln">81</span>C   81    IMAX = I + 1
+<span class="ln">82</span>
+<span class="ln">83</span>C DEAL THE POSSIBILITY OF TWO OR MORE SURFACE CONVECTION ZONES IN THE ENVELOPE
+<span class="ln">84</span>        LFLAG = .FALSE.
+<span class="ln">85</span>        LTWOCZ = .FALSE.
+<span class="ln">86</span>        LCZEX = .FALSE. ! Flag for the existence of a CZ
+<span class="ln">87</span>        DO 71 I = M-1,1,-1
+<span class="ln">88</span>            IF(.NOT.LCZ(I) .AND. .NOT. LFLAG .AND. LCZEX) THEN ! EXITING CZ
+<span class="ln">89</span>                  IMAX = I+1
+<span class="ln">90</span>                  LFLAG = .TRUE.
+<span class="ln">91</span>            ELSE IF (LFLAG .AND. LCZ(I)) THEN ! TWO CZS WITH RADIATIVE ZONE BETWEEN
+<span class="ln">92</span>                  LFLAG = .FALSE.
+<span class="ln">93</span>                  LTWOCZ = .TRUE.
+<span class="ln">94</span>                  ICZTOP = I
+<span class="ln">95</span>            ELSE IF( LCZ(I) .AND. .NOT. LCZEX) THEN !First convective point from surface
+<span class="ln">96</span>                  LCZEX = .TRUE.
+<span class="ln">97</span>            ENDIF
+<span class="ln">98</span>   71    CONTINUE
+<span class="ln">99</span>         IF(IMAX .LT. 1)THEN
+<span class="ln">100</span>              LALLCZ = .TRUE.
+<span class="ln">101</span>         ENDIF
+<span class="ln">102</span>
+<span class="ln">103</span>      IF(LCZEX) THEN ! REPLACES &quot;IF(LCZ(M)&quot; THEN JVS 05/14
+<span class="ln">104</span>
+<span class="ln">105</span>
+<span class="ln">106</span>C  HSTOP IS THE MASS AT THE TOP OF THE C.Z.
+<span class="ln">107</span>C  HSBOT IS THE MASS AT THE BOTTOM OF THE C.Z.
+<span class="ln">108</span>         HSTOP = HS1(M)
+<span class="ln">109</span>         IF(IMAX.GT.1)THEN
+<span class="ln">110</span>            HSBOT = 0.5D0*(HS1(IMAX)+HS1(IMAX-1))
+<span class="ln">111</span>         ELSE
+<span class="ln">112</span>            HSBOT = HS1(1)
+<span class="ln">113</span>         ENDIF
+<span class="ln">114</span>C  LCZSUR=T IF A SURFACE C.Z.DEEP ENOUGH FOR ANGULAR MOMENTUM LOSS EXISTS
+<span class="ln">115</span>         IF((HSTOP-HSBOT)/CMSUN.GT.0.0D0)THEN
+<span class="ln">116</span>            LCZSUR = .TRUE.
+<span class="ln">117</span>         ELSE
+<span class="ln">118</span>            LCZSUR= .FALSE.
+<span class="ln">119</span>         ENDIF
+<span class="ln">120</span>      ELSE
+<span class="ln">121</span>C  NO SURFACE C.Z.
+<span class="ln">122</span>         IMAX = M
+<span class="ln">123</span>         LCZSUR = .FALSE.
+<span class="ln">124</span>      ENDIF
+<span class="ln">125</span>
+<span class="ln">126</span>C JVS 10/11/13 Concerned that this is inappropriate for LCZSUR = FALSE.
+<span class="ln">127</span>C Should never be the case, but removed it.
+<span class="ln">128</span>C      IF(LCZSUR)THEN
+<span class="ln">129</span>         IF(.NOT.LALLCZ)THEN
+<span class="ln">130</span>            IF(.NOT.LROT)THEN
+<span class="ln">131</span>               HG(IMAX)=HS1(IMAX)*EXP(CLN*(CGL-2.0D0*HR(IMAX)))
+<span class="ln">132</span>               HG(IMAX-1)=HS1(IMAX-1)*EXP(CLN*(CGL-2.0D0*HR(IMAX-1)))
+<span class="ln">133</span>            ENDIF
+<span class="ln">134</span>C PINPOINT RCZ
+<span class="ln">135</span>            DD2 = DEL1(IMAX-1)-DEL2(IMAX-1)
+<span class="ln">136</span>            DD1 = DEL1(IMAX)-DEL2(IMAX)
+<span class="ln">137</span>            FX = DD2/(DD2-DD1)
+<span class="ln">138</span>C INFER HP
+<span class="ln">139</span>            ENVRL = HR(IMAX-1)+FX*(HR(IMAX)-HR(IMAX-1))
+<span class="ln">140</span>            ENVR = EXP(CLN*ENVRL)
+<span class="ln">141</span>            PS2 = EXP(CLN*(HP(IMAX)-HD(IMAX)))/HG(IMAX)
+<span class="ln">142</span>            PS1 = EXP(CLN*(HP(IMAX-1)-HD(IMAX-1)))/HG(IMAX-1)
+<span class="ln">143</span>            PSCA = PS1 + FX*(PS2-PS1)
+<span class="ln">144</span>            RTESTL = DLOG10(ENVR+PSCA)
+<span class="ln">145</span>C JVS 03/14 WHEN THERE ARE TWO CZS, THE DEEPER ONE CAN BE ~HP THICK. IN
+<span class="ln">146</span>C THIS CASE, WE&quot;LL WANT AND AVERAGE CONVECTIVE VELOCITY ACROSS THE REGION
+<span class="ln">147</span>C--------------------------------------------------------------
+<span class="ln">148</span>            TOL = 0.5
+<span class="ln">149</span>C            IF(ABS(1.0 - ((DEXP(CLN*(RTESTL-HR(IMAX))) - 1.0)/
+<span class="ln">150</span>C     *         (DEXP(CLN*(HR(ICZTOP)-HR(IMAX))) - 1.0))) .LT. TOL
+<span class="ln">151</span>C     *          .AND. LTWOCZ) THEN
+<span class="ln">152</span>            IF((ABS(1.0 - ((DEXP(CLN*(RTESTL-HR(IMAX))) - 1.0)/
+<span class="ln">153</span>     *         (DEXP(CLN*(HR(ICZTOP)-HR(IMAX))) - 1.0))) .LT. TOL) .OR. LTWOCZ) THEN
+<span class="ln">154</span>                  ! TAKE AVERAGE CONV VELOCITY
+<span class="ln">155</span>                  CVEAVG = 0.0
+<span class="ln">156</span>C                  DENOM = ABS(HS1(ICZTOP)-HS1(IMAX))/DEXP(CLN*STOTAL) ! MASS IN CZ
+<span class="ln">157</span>                  DENOM = 0.0
+<span class="ln">158</span>                  UMER = 0.0
+<span class="ln">159</span>                  CZWIDE = ABS(DEXP(CLN*HR(ICZTOP))-DEXP(CLN*HR(IMAX)))
+<span class="ln">160</span>                  DO J=IMAX,ICZTOP,1
+<span class="ln">161</span>                        DENOM = DENOM + HS2(J)
+<span class="ln">162</span>                        UMER = UMER+ 0.5d0*(SVEL(J)+SVEL(J+1))*HS2(J)
+<span class="ln">163</span>                  ENDDO
+<span class="ln">164</span>                  CVEAVG = UMER/DENOM
+<span class="ln">165</span>                  TAUCZ = CZWIDE/CVEAVG
+<span class="ln">166</span>            ELSE
+<span class="ln">167</span>C             (ORIGINAL ROUTINE)
+<span class="ln">168</span>C             FIND V
+<span class="ln">169</span>                       DO K = IMAX+1,M
+<span class="ln">170</span>                           IF(HR(K).GT.RTESTL)THEN
+<span class="ln">171</span>                                      FX = (RTESTL-HR(K-1))/(HR(K)-HR(K-1))
+<span class="ln">172</span>                                      CVEL = SVEL(K-1)+FX*(SVEL(K)-SVEL(K-1))
+<span class="ln">173</span>                                      GOTO 85
+<span class="ln">174</span>                           ENDIF
+<span class="ln">175</span>                    END DO
+<span class="ln">176</span>                    CVEL = SVEL(M)
+<span class="ln">177</span> 85                CONTINUE
+<span class="ln">178</span>C                  DEFINE TAUCZ
+<span class="ln">179</span>                  TAUCZ = PSCA/CVEL
+<span class="ln">180</span>            ENDIF
+<span class="ln">181</span>
+<span class="ln">182</span>C JVS 10/11/13
+<span class="ln">183</span>C         ELSE
+<span class="ln">184</span>CC INFER HP
+<span class="ln">185</span>C            IF(.NOT.LROT)THEN
+<span class="ln">186</span>C               HG(1)=HS1(1)*EXP(CLN*(CGL-2.0D0*HR(1)))
+<span class="ln">187</span>C            ENDIF
+<span class="ln">188</span>C            PSCA2 = EXP(CLN*(HP(1)-HD(1)))/HG(1)
+<span class="ln">189</span>C            RTEST2 = EXP(CLN*HR(1))
+<span class="ln">190</span>C            IF(PSCA2.LE.RTEST2)THEN
+<span class="ln">191</span>CC HP &lt; R AT THE FIRST POINT.  ASSUME V CONSTANT INSIDE AND HP = K/R FOR
+<span class="ln">192</span>CC SLOWLY VARYING DENSITY AND PRESSURE NEAR THE CENTER.
+<span class="ln">193</span>C               CVEL = SVEL(1)
+<span class="ln">194</span>C               PSCA = (PSCA2*RTEST2)**0.5D0
+<span class="ln">195</span>C               TAUCZ = PSCA/CVEL
+<span class="ln">196</span>C            ELSE
+<span class="ln">197</span>C               DO K = 2,M
+<span class="ln">198</span>C                  PSCA1 = PSCA2
+<span class="ln">199</span>C                  RTEST1 = RTEST2
+<span class="ln">200</span>C                  IF(.NOT.LROT)THEN
+<span class="ln">201</span>C                     HG(K)=HS1(K)*EXP(CLN*(CGL-2.0D0*HR(K)))
+<span class="ln">202</span>C                  ENDIF
+<span class="ln">203</span>C                  PSCA2 = EXP(CLN*(HP(K)-HD(K)))/HG(K)
+<span class="ln">204</span>C                  RTEST2 = EXP(CLN*HR(K))
+<span class="ln">205</span>CC FIND LOCATION WHERE HP = R
+<span class="ln">206</span>C                  IF(PSCA2.LE.RTEST2)THEN
+<span class="ln">207</span>C                     FX = (RTEST1-PSCA1)/((PSCA2-RTEST2)-(PSCA1-RTEST1))
+<span class="ln">208</span>CC FIND V
+<span class="ln">209</span>C                     CVEL = SVEL(K-1)+FX*(SVEL(K)-SVEL(K-1))
+<span class="ln">210</span>C                     PSCA = PSCA1+FX*(PSCA2-PSCA1)
+<span class="ln">211</span>CC DEFINE TAUCZ
+<span class="ln">212</span>C                     TAUCZ = PSCA/CVEL
+<span class="ln">213</span>C                     GOTO 95
+<span class="ln">214</span>C                  ENDIF
+<span class="ln">215</span>C               END DO
+<span class="ln">216</span>C               K = M
+<span class="ln">217</span>C               CVEL = SVEL(M)
+<span class="ln">218</span>C               PSCA = PSCA2
+<span class="ln">219</span>C               TAUCZ = PSCA/CVEL
+<span class="ln">220</span>C 95            CONTINUE
+<span class="ln">221</span>C            ENDIF
+<span class="ln">222</span>C         ENDIF
+<span class="ln">223</span>      ELSE
+<span class="ln">224</span>         TAUCZ = 0.0D0
+<span class="ln">225</span>      ENDIF
+<span class="ln">226</span>      print*, &#x27;TauCal&#x27;
+<span class="ln">227</span>
+<span class="ln">228</span>C END JVS
+<span class="ln">229</span>
+<span class="ln">230</span>      RETURN
+<span class="ln">231</span>      END</pre></details>
+<details class='py' id='py-taucal'><summary>Python version: taucal</summary><pre class='doc'>Set ovrtrn_mod.taucz, the convective overturn time near the base of
+the surface convection zone of the envelope: H_P / v one pressure scale
+height above the base or, for a thin zone or two zones, the zone&#x27;s
+width over its mass-weighted mean velocity.
+
+Translates: taucal.f#TAUCAL (09c3b9b)
+
+Arguments: hs2 (shell masses), hs1 (masses), lcz (convective flags),
+hr, hp, hd (log r, log P, log rho), hg (gravity; changed in place at
+the base when there is no rotation), m, svel (convective velocities),
+del1, del2 (two temperature gradients). None is returned.</pre><pre class='src'><span class="ln">17</span>def taucal(hs2, hs1, lcz, hr, hp, hd, hg, m, svel, del1, del2):
+<span class="ln">18</span>    &quot;&quot;&quot;Set ovrtrn_mod.taucz, the convective overturn time near the base of
+<span class="ln">19</span>    the surface convection zone of the envelope: H_P / v one pressure scale
+<span class="ln">20</span>    height above the base or, for a thin zone or two zones, the zone&#x27;s
+<span class="ln">21</span>    width over its mass-weighted mean velocity.
+<span class="ln">22</span>
+<span class="ln">23</span>    Translates: taucal.f#TAUCAL (09c3b9b)
+<span class="ln">24</span>
+<span class="ln">25</span>    Arguments: hs2 (shell masses), hs1 (masses), lcz (convective flags),
+<span class="ln">26</span>    hr, hp, hd (log r, log P, log rho), hg (gravity; changed in place at
+<span class="ln">27</span>    the base when there is no rotation), m, svel (convective velocities),
+<span class="ln">28</span>    del1, del2 (two temperature gradients). None is returned.
+<span class="ln">29</span>    &quot;&quot;&quot;
+<span class="ln">30</span>    global imax, icztop
+<span class="ln">31</span>    c = constants_mod
+<span class="ln">32</span>    lallcz = False
+<span class="ln">33</span>    lflag = False
+<span class="ln">34</span>    ltwocz = False
+<span class="ln">35</span>    lczex = False  # a convection zone exists
+<span class="ln">36</span>    # Down from the surface: the first convective shell, the zone&#x27;s base
+<span class="ln">37</span>    # IMAX, and a second, deeper zone (top ICZTOP).
+<span class="ln">38</span>    for i in range(m - 1, 0, -1):
+<span class="ln">39</span>        if not lcz[i] and not lflag and lczex:  # leaving the zone
+<span class="ln">40</span>            imax = i + 1
+<span class="ln">41</span>            lflag = True
+<span class="ln">42</span>        elif lflag and lcz[i]:  # two zones with a radiative one between
+<span class="ln">43</span>            lflag = False
+<span class="ln">44</span>            ltwocz = True
+<span class="ln">45</span>            icztop = i
+<span class="ln">46</span>        elif lcz[i] and not lczex:  # first convective shell from the top
+<span class="ln">47</span>            lczex = True
+<span class="ln">48</span>    if imax &lt; 1:
+<span class="ln">49</span>        lallcz = True
+<span class="ln">50</span>    if lczex:
+<span class="ln">51</span>        hstop = hs1[m]
+<span class="ln">52</span>        if imax &gt; 1:
+<span class="ln">53</span>            hsbot = 0.5 * (hs1[imax] + hs1[imax - 1])
+<span class="ln">54</span>        else:
+<span class="ln">55</span>            hsbot = hs1[1]
+<span class="ln">56</span>        # Question (see the page): LCZSUR is true for any zone and unused.
+<span class="ln">57</span>        if (hstop - hsbot) / c.cmsun &gt; 0.0:
+<span class="ln">58</span>            lczsur = True
+<span class="ln">59</span>        else:
+<span class="ln">60</span>            lczsur = False
+<span class="ln">61</span>    else:
+<span class="ln">62</span>        # Question (see the page): no zone, but a turnover time below.
+<span class="ln">63</span>        imax = m
+<span class="ln">64</span>        lczsur = False
+<span class="ln">65</span>
+<span class="ln">66</span>    if not lallcz:
+<span class="ln">67</span>        if not nmlpar_mod.lrot:
+<span class="ln">68</span>            hg[imax] = hs1[imax] * math.exp(c.cln * (c.cgl - 2.0 * hr[imax]))
+<span class="ln">69</span>            hg[imax - 1] = hs1[imax - 1] * math.exp(
+<span class="ln">70</span>                c.cln * (c.cgl - 2.0 * hr[imax - 1]))
+<span class="ln">71</span>        # The base r_b, where DEL1 - DEL2 changes sign, and H_P there.
+<span class="ln">72</span>        dd2 = del1[imax - 1] - del2[imax - 1]
+<span class="ln">73</span>        dd1 = del1[imax] - del2[imax]
+<span class="ln">74</span>        fx = dd2 / (dd2 - dd1)
+<span class="ln">75</span>        envrl = hr[imax - 1] + fx * (hr[imax] - hr[imax - 1])
+<span class="ln">76</span>        envr = math.exp(c.cln * envrl)
+<span class="ln">77</span>        ps2 = math.exp(c.cln * (hp[imax] - hd[imax])) / hg[imax]
+<span class="ln">78</span>        ps1 = math.exp(c.cln * (hp[imax - 1] - hd[imax - 1])) / hg[imax - 1]
+<span class="ln">79</span>        psca = ps1 + fx * (ps2 - ps1)
+<span class="ln">80</span>        rtestl = math.log10(envr + psca)
+<span class="ln">81</span>        tol = 0.5
+<span class="ln">82</span>        # Question (see the page): .OR., not .AND.; ICZTOP may be unset.
+<span class="ln">83</span>        if (abs(1.0 - ((math.exp(c.cln * (rtestl - hr[imax])) - 1.0)
+<span class="ln">84</span>                       / (math.exp(c.cln * (hr[icztop] - hr[imax])) - 1.0)))
+<span class="ln">85</span>                &lt; tol or ltwocz):
+<span class="ln">86</span>            # The mass-weighted mean convective velocity.
+<span class="ln">87</span>            # Question (see the page): the width from the shells.
+<span class="ln">88</span>            denom = 0.0
+<span class="ln">89</span>            umer = 0.0
+<span class="ln">90</span>            czwide = abs(math.exp(c.cln * hr[icztop])
+<span class="ln">91</span>                         - math.exp(c.cln * hr[imax]))
+<span class="ln">92</span>            for j in range(imax, icztop + 1):
+<span class="ln">93</span>                denom = denom + hs2[j]
+<span class="ln">94</span>                umer = umer + 0.5 * (svel[j] + svel[j + 1]) * hs2[j]
+<span class="ln">95</span>            cveavg = umer / denom
+<span class="ln">96</span>            ovrtrn_mod.taucz = czwide / cveavg
+<span class="ln">97</span>        else:
+<span class="ln">98</span>            # The velocity one scale height above the base.
+<span class="ln">99</span>            for k in range(imax + 1, m + 1):
+<span class="ln">100</span>                if hr[k] &gt; rtestl:
+<span class="ln">101</span>                    fx = (rtestl - hr[k - 1]) / (hr[k] - hr[k - 1])
+<span class="ln">102</span>                    cvel = svel[k - 1] + fx * (svel[k] - svel[k - 1])
+<span class="ln">103</span>                    break  # to label 85
+<span class="ln">104</span>            else:
+<span class="ln">105</span>                cvel = svel[m]
+<span class="ln">106</span>            ovrtrn_mod.taucz = psca / cvel  # label 85
+<span class="ln">107</span>    else:
+<span class="ln">108</span>        ovrtrn_mod.taucz = 0.0
+<span class="ln">109</span>    # Question (see the page): a debugging print at every call.
+<span class="ln">110</span>    print(&quot; TauCal&quot;)</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> Step 5, "With no convective zone … $\tau_\mathrm{cz} = 0$": with no convective zone the code sets <code>IMAX = M</code> and, unless <code>LALLCZ</code>, computes $\tau_\mathrm{cz}$ at the surface anyway; <code>TAUCZ = 0</code> only when <code>LALLCZ</code>, which depends on a stale <code>IMAX &lt; 1</code>. <strong>Fix:</strong> correct step 5 and add a question.</li>
+<li><strong>Unclear.</strong> Step 3, "the point $r_b + H_P$ lies in the upper half of the zone": the test is $\left|1 - \frac{r_b + H_P - r_\mathrm{IMAX}}{r_\mathrm{top} - r_\mathrm{IMAX}}\right| &lt; 0.5$, so the point lies between the zone's middle and half a width above its top. <strong>Fix:</strong> write the test.</li>
+<li><strong>Wrong.</strong> <code>DEL1</code>, <code>DEL2</code> "probably the radiative and adiabatic gradients": ENVINT passes <code>EDELS(1,·)</code> and <code>EDELS(2,·)</code>, which STITCH's column list names the radiative and the actual gradient. <strong>Fix:</strong> say so.</li>
+</ol>
+<p>Revised: step 3's test written out; step 5 corrected, new question 6; <code>DEL1</code>, <code>DEL2</code> named.</p></div></details>
+</main></body></html>

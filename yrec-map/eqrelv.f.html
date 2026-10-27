@@ -1,0 +1,669 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>eqrelv.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ eqrelv.f</span></header><main>
+<h1>eqrelv.f</h1>
+<p class='muted'>331 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/eqrelv.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>eqrelv.py</code>, 272 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>EQRELV</code> is the equation of state for fully ionized gas with partially degenerate, possibly relativistic electrons. Given $\log T$ and $\log P$, it finds the density whose total pressure (ions, electrons and radiation, plus an optional Debye–Hückel correction) equals $P$, and then the thermodynamic derivatives the structure equations need. The comment points to "Prather's thesis" for details.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/eqstat2.f.html#def-EQSTAT2">EQSTAT2</a>: alone where the gas is fully ionized ($\log T \ge$ <code>TSCUT</code>), and blended with the Saha solution (<a href="../yrec-map/eqsaha.f.html#def-EQSAHA">EQSAHA</a>) in a transition band below that.</li>
+<li><strong>Inputs:</strong> <code>TL</code>, <code>PL</code> ($\log_{10}$ of T and P), <code>BETA</code> ($P_\mathrm{gas}/P$), <code>AMU</code> (ions per unit mass, in units of $1/m_\mathrm{H}$), <code>EMU</code> (electrons per unit mass, same units); <code>DL</code> is the starting guess.</li>
+<li><strong>Outputs:</strong> density <code>DL</code>, <code>D</code>; electron degeneracy <code>ETA</code>; and the derivatives: <code>QDT</code> $=\partial\ln\rho/\partial\ln T$, <code>QDP</code> $=\partial\ln\rho/\partial\ln P$, <code>QCP</code> ($c_P$), <code>DELA</code> ($\nabla_\mathrm{ad}$), and their logarithmic derivatives <code>QDTT</code>, <code>QDTP</code>, <code>QCPT</code>, <code>QCPP</code>, <code>QAT</code>, <code>QAP</code>.</li>
+<li><strong>Modules:</strong> <a href="../yrec-map/ccr_mod.f.html#def-CCR_MOD"><code>CCR_MOD</code></a> (formerly <code>/CCR/</code>) holds the electron (Fermi) table <code>DTABLE</code>, its abscissae <code>DVAL</code>, the degeneracy <code>ETAT8</code> and an index table <code>IDEN</code>; it is shared only with <a href="../yrec-map/setups.f.html#def-SETUPS">SETUPS</a>, which reads it from the Fermi-table file (unit <code>IFERMI</code>) and builds <code>IDEN</code>. <a href="../yrec-map/debhu_mod.f.html#def-DEBHU_MOD"><code>DEBHU_MOD</code></a> (formerly <code>/DEBHU/</code>) holds the Debye–Hückel constant <code>CDH</code> and the composition, and <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a> the settings <code>ETADH0</code>, <code>ETADH1</code> (the ramp limits) and the flag <code>LDH</code>; the callers of the equation of state (PHYSIC, COEFFT, CRRECT, SCONVEC, HSUBP, <a href="../yrec-map/getnewenv.f.html#def-GETNEWENV">GETNEWENV</a>, STARIN, WRTMOD, WRTOUT) set its composition <code>XXDH</code>, <code>YYDH</code>, <code>ZZDH</code>, <code>ZDH</code> from the shell's <code>HCOMP</code> before each call. <code>CONSTANTS_MOD</code> holds the constants ($\ln 10$ = <code>CLN</code>, $R$ = <code>CGAS</code>); <code>IOUNITS_MOD</code> the output unit <code>ISHORT</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Table lookup.</strong> The electron pressure is tabulated as a function of $x = \log\rho + \log\mu_e^{-1} - \tfrac32\log T$ and $y = \log T$ (columns of <code>DTABLE</code>: $\log P_e$, $\log U_e$, and derivatives). The code interpolates with three points in each direction: Newton (equal spacing) in $y$, column $j$ at $\log T = 5 + 0.2j$, so the 20 columns span $\log T = 5.2$ to 9.0; Lagrange in $x$ (unequal spacing).</li>
+<li>
+<p><strong>Pressure balance.</strong> With $P_\mathrm{rad} = (1-\beta)P$ and $P_\mathrm{ion} = R\mu_\mathrm{ion}^{-1}\rho T$ (<code>PA</code> = <code>CGAS*AMU*T*D</code>),
+$$P_\mathrm{tot}(\rho) = P_\mathrm{ion} + P_e + P_\mathrm{rad}\;(+\,P_\mathrm{DH}),\qquad P_\mathrm{DH} = C_\mathrm{DH}\,c_\mathrm{mix}\,\rho^{3/2}T^{-1/2}.$$
+It solves $\log P_\mathrm{tot} = \log P$ for $\log\rho$ by a Newton step with a second-order correction: with $f = (\log P_\mathrm{tot} - \log P)/\chi_\rho$ (<code>PR8</code>), $\chi_\rho = \partial\log P_\mathrm{tot}/\partial\log\rho$ (<code>PR7</code>) and the curvature term <code>PR9</code>,
+$$\Delta\log\rho = -f - \tfrac12\,\mathrm{PR9}\,f^2,$$
+limited to $\pm 4$ dex, until $|\Delta| &lt; 10^{-8}$, at most 20 iterations.</p>
+</li>
+<li>
+<p><strong>Debye–Hückel ramp.</strong> With $c_0 = 2X + \tfrac32 Y + \tfrac12(Z + \alpha)$ (<code>CMFDH0</code>), $c_1 = X + Y + \tfrac12\alpha$ (<code>CMFDH1</code>) and $\alpha = \sum_i$ <code>DHNUE(i)*ZDH(i)</code> over the metal mixture, the composition factor $c_\mathrm{mix}$ is $c_0^{3/2}$ for non-degenerate electrons ($\eta &lt;$ <code>ETADH0</code>), $c_0\sqrt{c_1}$ for degenerate ones ($\eta &gt;$ <code>ETADH1</code>), and linear in $\eta$ between; the comment calls this "not correct but, hopefully, close enough".</p>
+</li>
+<li><strong>Derivatives.</strong> From the table's derivative columns it forms $\partial\ln P/\partial\ln T$ and $\partial\ln P/\partial\ln\rho$ and their second derivatives, then inverts them: $Q_{\rho P} = 1/\chi_\rho$, $Q_{\rho T} = -\chi_T/\chi_\rho$. The internal energy is $U = \tfrac32 P_\mathrm{ion}/\rho + U_e + 3P_\mathrm{rad}/\rho\;(+\,3P_\mathrm{DH}/\rho)$, and
+$$c_P = -\frac{P}{\rho T}Q_{\rho T}\,\chi_T + \frac{U}{T}\,\frac{\partial\ln U}{\partial\ln T}\Big|_\rho, \qquad \nabla_\mathrm{ad} = -\frac{P}{\rho T}\frac{Q_{\rho T}}{c_P}.$$</li>
+</ol>
+<p><strong>KC's changes.</strong> The unused argument <code>X</code> was removed (2025-05-31).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>. This settles two former questions: <code>/DEBHU/</code>'s X element, named <code>XXDY</code> in EQSTAT, now has the one name <code>XXDH</code> in <code>DEBHU_MOD</code>, and the unused <code>/CONST3/</code> is gone.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Unconverged return.</strong> After 20 iterations without convergence the routine writes a message and returns at once (the <code>STOP</code> is commented out). It returns before <code>DL = DL8</code>, so <code>DL</code> and <code>D</code> keep the caller's starting guess, and the derivatives (all arguments) keep whatever the caller's variables held. Is this fallback intended, and does any caller check for it?</li>
+<li><strong>Table edges.</strong> The temperature index is forced into the table (<code>JT1</code> between 1 and 18) and the density index into 1..261; outside the table the values are extrapolated silently. Should a warning be written?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+EQRELV
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-EQRELV'>EQRELV</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-EQRELV'><h3><span class='kind'>subroutine</span>EQRELV</h3>
+<p class='muted'>lines 6–331 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/eqrelv.f#L6-L331'>GitHub</a></p>
+<pre>SUBROUTINE EQRELV(TL,T,PL,P,DL,D,BETA,AMU,EMU,ETA,QDT,QDP,QCP,</pre>
+<div class='notes'><p>Solves the pressure balance for $\rho$ with the electron table and returns $\rho$, $\eta$, $c_P$, $\nabla_\mathrm{ad}$ and their derivatives for fully ionized gas (method above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+EQRELV
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/ccr_mod.f.html#def-CCR_MOD'>CCR_MOD</a>, <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/debhu_mod.f.html#def-DEBHU_MOD'>DEBHU_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/eqstat2.f.html#def-EQSTAT2'>EQSTAT2</a> <span class='muted'>(eqstat2.f)</span> ×2</li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE EQRELV(TL,T,PL,P,DL,D,BETA,AMU,EMU,ETA,QDT,QDP,QCP,
+<span class="ln">7</span>C      1   DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP,X)  ! KC 2025-05-31
+<span class="ln">8</span>     1   DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP)
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/DEBHU/ into DEBHU_MOD.
+<span class="ln">11</span>      USE DEBHU_MOD
+<span class="ln">12</span>C 10/14/26 MHP via Claude
+<span class="ln">13</span>C code changed to convert COMMON/CCR/ into CCR_MOD.
+<span class="ln">14</span>      USE CCR_MOD
+<span class="ln">15</span>C 10/14/26 MHP via Claude
+<span class="ln">16</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">17</span>      USE NMLPAR_MOD
+<span class="ln">18</span>C 10/14/26 MHP via Claude
+<span class="ln">19</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">20</span>      USE CONSTANTS_MOD
+<span class="ln">21</span>C 10/14/26 MHP via Claude
+<span class="ln">22</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">23</span>      USE IOUNITS_MOD
+<span class="ln">24</span>C 10/20/26 MHP via Claude
+<span class="ln">25</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">26</span>C explicit declarations.
+<span class="ln">27</span>      IMPLICIT NONE
+<span class="ln">28</span>      REAL*8 ACP,ALMIX,AMU,BCP,BETA,BETA1,CDEN1,CDEN2,CDEN3,CL1,CL2,CL3,
+<span class="ln">29</span>     *       CMFDH,CMFDH0,CMFDH1,CORR,D,D8,DCL1,DCL2,DCL3,DELA,DF1,DF2,
+<span class="ln">30</span>     *       DL,DL8,DML,DPEL1,DPEL2,DX1,DX2,DX3,EMU,EMUL,EMUL8,ETA,FACT,
+<span class="ln">31</span>     *       FACTL,FACTOR,FF,FFE,P,PA,PD,PDH,PDHP,PDT,PDU,PE,PEL,PEQ,
+<span class="ln">32</span>     *       PINV,PL,PL8,PR,PR1,PR2,PR3,PR4,PR5,PR6,PR7,PR8,PR8L,PR9,
+<span class="ln">33</span>     *       PR9L,PT,PTL,QAP,QAT,QCP,QCPI,QCPP,QCPT,QDP,QDPP,QDT,QDTP,
+<span class="ln">34</span>     *       QDTT,QPD,QPED,QPEQD,QPEQT,QPT,QQPDD,QQPDT,QQPEDD,QQPTT,
+<span class="ln">35</span>     *       QQUDT,QQUTT,QUDT,QUEQT,QUTD,QUTP,RAMU,RAMUT,SLOPE,T,T0,T1,
+<span class="ln">36</span>     *       TL,TL8,TTCU,TTDCU,TTUD,U,UA,UDH,UDHU,UE,UEQ,UI,UR,XX
+<span class="ln">37</span>      INTEGER ID,ID1,ID1P,ID2,ID3,II,JT1,JT2,JT3,KK,NDEN,NN
+<span class="ln">38</span>
+<span class="ln">39</span>C          QDTT,QDTP = NAT-LOG DERIVATIVES OF QDT=D(LOG D )/D(LOG T )
+<span class="ln">40</span>C          QAT,QAP = NAT-LOG DERIVATIVES OF THE ADIABATIC DERIVATIVE
+<span class="ln">41</span>C DBG 7/92 MODIFIED TO INCLUDE DEBYE-HUCKEL CORRECTION.
+<span class="ln">42</span>C     CORRECTION IS APPLIED TO PRESSURE AND ALL THERMODYNAMIC VARIABLES.
+<span class="ln">43</span>C     TREATMENT IS ALSO VALID FOR ELECTRON DEGENERACY.  A RAMP FUNCTION
+<span class="ln">44</span>C     BETWEEN THE NONDEGENERATE AND DEGERNATE ELECTRON GAS CASES OF THE
+<span class="ln">45</span>C     D.H. CORRECTION IS USED (THIS IS NOT CORRECT BUT, HOPEFULLY IS
+<span class="ln">46</span>C     CLOSE ENOUGH.  CONSTANT TERM CDH IS CALCULATED IN SETUPS.
+<span class="ln">47</span>
+<span class="ln">48</span>
+<span class="ln">49</span>C 9/25/26 MHP via Claude
+<span class="ln">50</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">51</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">52</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">53</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">54</span>C COMMON/IOUNITS/
+<span class="ln">55</span>C 9/25/26 MHP via Claude
+<span class="ln">56</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">57</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">58</span>C 9/24/26 MHP via Claude
+<span class="ln">59</span>C code changed to remove dead CMIXL from COMMON/CONST3/; it is now
+<span class="ln">60</span>C passed as an explicit argument where actually used
+<span class="ln">61</span>C DBG 7/92 CDH IS CONSTANT TERM DEFINED IN SETUPS
+<span class="ln">62</span>C     RAMP FUNCTION BETWEEN NO ELECTRON DEGENERACY ETA .LT. ETADH0
+<span class="ln">63</span>C     AND FULL ELECTRON DEGENERACY ETA .GT. ETADH1 VERSION OF D.H.
+<span class="ln">64</span>C     CORRECTION.
+<span class="ln">65</span>C     IF LDH = .TRUE. THEN APPLY D.H. CORRECTION.
+<span class="ln">66</span>C     ZDH IS ARRAY OF RELATIVE MASS FRACTIONS OF LAOL METAL MIXTURE
+<span class="ln">67</span>C     SUMMED TO 1.0.
+<span class="ln">68</span>C DBG 7/92 COMMON BLOCK ADDED TO COMPUTE DEBYE-HUCKEL CORRECTION.
+<span class="ln">69</span>C 10/12/26 MHP via Claude
+<span class="ln">70</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">71</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">72</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">73</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">74</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">75</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">76</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">77</span>C
+<span class="ln">78</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">79</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">80</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">81</span>      DIMENSION DF1(5,3),DF2(5,3),FF(5,3),FFE(5)
+<span class="ln">82</span>      SAVE
+<span class="ln">83</span>
+<span class="ln">84</span>C  THE ELECTRON PRESSURE (TABULATED IN FERMI TABLE) FOR A GIVEN (RHO,T)
+<span class="ln">85</span>C  IS FOUND HERE; THE DENSITY IS ADJUSTED SO THAT THE RESULTING TOTAL
+<span class="ln">86</span>C  PRESSURE (PE + PA + PR) EQUALS THE INITIAL P.  FOR DETAILS
+<span class="ln">87</span>C  CONSULT PRATHER&#x27;S THESIS.
+<span class="ln">88</span>C  SUFFIX E=ELECTRON;R=RADIATION;A=NUCLEON;I.E.PA=PRESSURE DUE TO NUCLEI
+<span class="ln">89</span>      PINV = 1.0D0/P
+<span class="ln">90</span>      BETA1 = 1.0D0 - BETA
+<span class="ln">91</span>      TL8 = TL
+<span class="ln">92</span>      PL8 = PL
+<span class="ln">93</span>      PR = BETA1*P
+<span class="ln">94</span>      RAMU = CGAS*AMU
+<span class="ln">95</span>      RAMUT = RAMU*T
+<span class="ln">96</span>      EMUL = DLOG10(EMU)
+<span class="ln">97</span>      EMUL8 = EMUL
+<span class="ln">98</span>C  PE IS TABULATED AS A FUNCTION OF X(=LOG D - LOG MUE - 3/2LOG T) AND
+<span class="ln">99</span>C  Y(= LOG T). FIND INDEX(JT1,JT2,JT3) FOR 3 PT INTERPOLATION IN Y.
+<span class="ln">100</span>C MHP 10/02 CORRECTED MIXED TYPE
+<span class="ln">101</span>      JT1 = INT(5.0D0*(TL - 5.0D0))
+<span class="ln">102</span>      JT1 = MAX0(1,MIN0(JT1,18))  ! Force jt1 to be in the table
+<span class="ln">103</span>      JT2 = JT1 + 1
+<span class="ln">104</span>      JT3 = JT1 + 2
+<span class="ln">105</span>      TTUD = 5.0D0*(TL8 - (5.0D0 + 0.20D0*DFLOAT(JT1)))
+<span class="ln">106</span>      TTCU = 0.50D0*TTUD*(TTUD - 1.0D0)
+<span class="ln">107</span>      TTDCU = TTUD - 0.50D0
+<span class="ln">108</span>      DML = DL + EMUL
+<span class="ln">109</span>      NDEN = 1
+<span class="ln">110</span>      ID1P = -100
+<span class="ln">111</span>C DBG 7/92 CALCULATE D.H. TERMS: ALPHA-MIXTURE, MASS-FRAC0, MASS-FRAC1
+<span class="ln">112</span>      IF (LDH) THEN
+<span class="ln">113</span>         ALMIX = 0.0D0
+<span class="ln">114</span>         DO II=1,18
+<span class="ln">115</span>            ALMIX = ALMIX + DHNUE(II)*ZDH(II)
+<span class="ln">116</span>         END DO
+<span class="ln">117</span>         CMFDH0 = 2.0D0*XXDH+1.5D0*YYDH+0.5D0*(ZZDH+ALMIX)
+<span class="ln">118</span>         CMFDH1 = XXDH+YYDH+0.5D0*ALMIX
+<span class="ln">119</span>      END IF
+<span class="ln">120</span>   10 CONTINUE
+<span class="ln">121</span>C BEGIN ITERATION LOOP FOR CORRECT DENSITY
+<span class="ln">122</span>C  FIND INDEX (ID1,ID2,ID3) FOR 3-PT INTERPOLATION IN X
+<span class="ln">123</span>      XX = DML - 1.50D0*TL8
+<span class="ln">124</span>      PR6= 20.0D0*(XX - DVAL(1)) + 1.0D0
+<span class="ln">125</span>C MHP 10/02 CORRECTED MIXED TYPE
+<span class="ln">126</span>      KK = INT(PR6)
+<span class="ln">127</span>C      KK = PR6
+<span class="ln">128</span>      KK = MIN0(261,MAX0(1,KK))
+<span class="ln">129</span>      ID1 = IDEN(KK)
+<span class="ln">130</span>C  IF INDEX UNCHANGED FROM PREVIOUS LOOP,SKIP THIS SECTION
+<span class="ln">131</span>      IF (ID1.EQ.ID1P)  GO TO 30
+<span class="ln">132</span>      ID1P = ID1
+<span class="ln">133</span>      ID2 = ID1 + 1
+<span class="ln">134</span>      ID3 = ID1 + 2
+<span class="ln">135</span>      PR9 = 1.0D0/( DVAL(ID3) - DVAL(ID2) )
+<span class="ln">136</span>      PR8 = 1.0D0/( DVAL(ID2) - DVAL(ID1) )
+<span class="ln">137</span>      PR7 = 1.0D0/( DVAL(ID1) - DVAL(ID3) )
+<span class="ln">138</span>      CDEN1 = -PR7*PR8
+<span class="ln">139</span>      CDEN2 = -PR8*PR9
+<span class="ln">140</span>      CDEN3 = -PR9*PR7
+<span class="ln">141</span>C  INTERPOLATION IN Y IS NEWTONIAN(EQUAL SPACING IN Y)
+<span class="ln">142</span>      DO 20 NN = 1,3
+<span class="ln">143</span>       ID = ID1 + NN - 1
+<span class="ln">144</span>       DF1(1,NN) = DTABLE(1,ID,JT2) - DTABLE(1,ID,JT1)
+<span class="ln">145</span>       DF2(1,NN) = DTABLE(1,ID,JT3)-DTABLE(1,ID,JT2)-DF1(1,NN)
+<span class="ln">146</span>       FF(1,NN) = DTABLE(1,ID,JT1) + TTUD*DF1(1,NN) + TTCU*DF2(1,NN)
+<span class="ln">147</span>   20 CONTINUE
+<span class="ln">148</span>      DPEL2 = 2.0D0*(FF(1,1)*CDEN1 + FF(1,2)*CDEN2 + FF(1,3)*CDEN3)
+<span class="ln">149</span>   30 DX1 = XX - DVAL(ID1)
+<span class="ln">150</span>      DX2 = XX - DVAL(ID2)
+<span class="ln">151</span>      DX3 = XX - DVAL(ID3)
+<span class="ln">152</span>C  INTERPOLATION IN X IS LAGRANGIAN(UNEQUAL TABLE SPACING IN X)
+<span class="ln">153</span>      CL1 = DX2*DX3*CDEN1
+<span class="ln">154</span>      CL2 = DX3*DX1*CDEN2
+<span class="ln">155</span>      CL3 = DX1*DX2*CDEN3
+<span class="ln">156</span>      DCL1 = (DX2 + DX3)*CDEN1
+<span class="ln">157</span>      DCL2 = (DX3 + DX1)*CDEN2
+<span class="ln">158</span>      DCL3 = (DX1 + DX2)*CDEN3
+<span class="ln">159</span>      IF (LDH) THEN
+<span class="ln">160</span>         ETA = CL1*ETAT8(ID1) + CL2*ETAT8(ID2) + CL3*ETAT8(ID3)
+<span class="ln">161</span>         IF (ETA .LT. ETADH0) THEN
+<span class="ln">162</span>            CMFDH = CMFDH0*SQRT(CMFDH0)
+<span class="ln">163</span>         ELSE IF (ETA .GT. ETADH1) THEN
+<span class="ln">164</span>            CMFDH = CMFDH0*SQRT(CMFDH1)
+<span class="ln">165</span>         ELSE
+<span class="ln">166</span>            T0 = CMFDH0*SQRT(CMFDH0)
+<span class="ln">167</span>            T1 = CMFDH0*SQRT(CMFDH1)
+<span class="ln">168</span>            SLOPE = (T1-T0)/(ETADH1-ETADH0)
+<span class="ln">169</span>            CMFDH = T0+(ETA-ETADH0)*SLOPE
+<span class="ln">170</span>         END IF
+<span class="ln">171</span>      END IF
+<span class="ln">172</span>C  NOW FIND PE AND ITS 1ST AND 2ND DERIVS.W/R/T DENSITY
+<span class="ln">173</span>      PEL =  CL1*FF(1,1) +  CL2*FF(1,2) +  CL3*FF(1,3)
+<span class="ln">174</span>      DPEL1 = DCL1*FF(1,1) + DCL2*FF(1,2) + DCL3*FF(1,3)
+<span class="ln">175</span>      DL8 = DML - EMUL8
+<span class="ln">176</span>      D8 = DEXP(CLN*DL8)
+<span class="ln">177</span>      PA = RAMUT*D8
+<span class="ln">178</span>      PE = DEXP(CLN*PEL)
+<span class="ln">179</span>      IF (LDH) THEN
+<span class="ln">180</span>         PDH = CDH*CMFDH*SQRT(D8/T)*D8
+<span class="ln">181</span>      END IF
+<span class="ln">182</span>      PT = PA + PE + PR
+<span class="ln">183</span>      IF (LDH) THEN
+<span class="ln">184</span>         PT = PT + PDH
+<span class="ln">185</span>         PDHP = PDH/PT
+<span class="ln">186</span>      END IF
+<span class="ln">187</span>      PTL = DLOG10(PT)
+<span class="ln">188</span>      PR7 = (PA + PE*DPEL1)/PT
+<span class="ln">189</span>      IF (LDH) THEN
+<span class="ln">190</span>         PR7 = PR7 + 1.5D0*PDHP
+<span class="ln">191</span>      END IF
+<span class="ln">192</span>      PR8 = (PTL - PL8)/PR7
+<span class="ln">193</span>      PR9 = CLN*( (PA + PE*(DPEL1**2+DPEL2/CLN))/(PT*PR7) - PR7 )
+<span class="ln">194</span>      IF (LDH) THEN
+<span class="ln">195</span>         PR9 = PR9 + 2.25D0*PDHP/PR7
+<span class="ln">196</span>      END IF
+<span class="ln">197</span>C FACTOR IS THE DIFFERENCE BETWEEN THE P PREDICTED FROM THE GIVEN RHO
+<span class="ln">198</span>C AND THE TRUE P; IF TOO LARGE INCREMENT RHO AND TRY AGAIN.
+<span class="ln">199</span>      FACTOR=DABS(PR8)
+<span class="ln">200</span>      IF(factor .lt. 1D-15) factor = 1D-15
+<span class="ln">201</span>      PR8L=DLOG10(FACTOR)
+<span class="ln">202</span>      PR9L=DLOG10(DABS(PR9))
+<span class="ln">203</span>      FACTL=DLOG10(0.5D0)+PR9L+2.D0*PR8L
+<span class="ln">204</span>      FACT=DEXP(CLN*FACTL)
+<span class="ln">205</span>      FACT=DSIGN(FACT,PR9)
+<span class="ln">206</span>      CORR=-PR8-FACT
+<span class="ln">207</span>c  limit range of changes in density to a factor of 10**4   llp  1/31/07
+<span class="ln">208</span>      if(corr .gt.  4D0) corr =  4d0
+<span class="ln">209</span>      if(corr .lt. -4D0) corr = -4D0
+<span class="ln">210</span>      IF(DABS(CORR).GE.1.0D-08) THEN
+<span class="ln">211</span>       DML = DML + CORR
+<span class="ln">212</span>       NDEN = NDEN + 1
+<span class="ln">213</span>       IF(NDEN.LE.20) GO TO 10
+<span class="ln">214</span>       WRITE(ISHORT,40) TL,PL,PTL,DML,CORR
+<span class="ln">215</span>   40    FORMAT(&#x27;EQRELV: Did not Converge: T,P,Pcalc,Dcalc,CORR&#x27;,
+<span class="ln">216</span>     *          4F10.6,F20.12)
+<span class="ln">217</span>c       PAUSE
+<span class="ln">218</span>       RETURN
+<span class="ln">219</span>c         STOP &#x27;ERRELV failed&#x27;
+<span class="ln">220</span>      ENDIF
+<span class="ln">221</span>      DL = DL8
+<span class="ln">222</span>      D = D8
+<span class="ln">223</span>      DO 60 KK = 2,5
+<span class="ln">224</span>       DO 50 NN = 1,3
+<span class="ln">225</span>          ID = ID1 + NN - 1
+<span class="ln">226</span>          DF1(KK,NN) = DTABLE(KK,ID,JT2) - DTABLE(KK,ID,JT1)
+<span class="ln">227</span>          DF2(KK,NN)=(DTABLE(KK,ID,JT3)-DTABLE(KK,ID,JT2))-DF1(KK,NN)
+<span class="ln">228</span>          FF(KK,NN)=DTABLE(KK,ID,JT1)+TTUD*DF1(KK,NN)+TTCU*DF2(KK,NN)
+<span class="ln">229</span>   50    CONTINUE
+<span class="ln">230</span>       FFE(KK) = CL1*FF(KK,1) + CL2*FF(KK,2) + CL3*FF(KK,3)
+<span class="ln">231</span>   60 CONTINUE
+<span class="ln">232</span>C DERIVATIVES OF P
+<span class="ln">233</span>      PEQ = DEXP(CLN*FFE(3))
+<span class="ln">234</span>      QPED = FFE(4)
+<span class="ln">235</span>      QQPEDD =(DCL1*FF(4,1) + DCL2*FF(4,2) + DCL3*FF(4,3))*CLNI
+<span class="ln">236</span>      PR1 = DF1(3,1)+TTDCU*DF2(3,1)
+<span class="ln">237</span>      PR2 = DF1(3,2)+TTDCU*DF2(3,2)
+<span class="ln">238</span>      PR3 = DF1(3,3)+TTDCU*DF2(3,3)
+<span class="ln">239</span>      PR4 = DCL1*FF(3,1) + DCL2*FF(3,2) + DCL3*FF(3,3)
+<span class="ln">240</span>      PR5 =   5.0D0*(CL1*PR1 + CL2*PR2 + CL3*PR3)
+<span class="ln">241</span>      QPEQD = PEQ*PR4
+<span class="ln">242</span>      QPEQT = PEQ*(PR5 - 1.50D0*PR4)
+<span class="ln">243</span>      QPT = (PA + PEQ)*PINV + 4.0D0*BETA1
+<span class="ln">244</span>      IF (LDH) THEN
+<span class="ln">245</span>         QPT = QPT - 0.5D0*PDHP
+<span class="ln">246</span>      END IF
+<span class="ln">247</span>      QPD = (PA + PE*QPED)*PINV
+<span class="ln">248</span>      IF (LDH) THEN
+<span class="ln">249</span>         QPD = QPD + 1.5D0*PDHP
+<span class="ln">250</span>      END IF
+<span class="ln">251</span>      QQPTT = (PA + QPEQT)*PINV + 16.0D0*BETA1 - QPT**2
+<span class="ln">252</span>      IF (LDH) THEN
+<span class="ln">253</span>         QQPTT = QQPTT+(0.5D0*QPT+0.25D0)*PDHP
+<span class="ln">254</span>      END IF
+<span class="ln">255</span>      QQPDT = (PA + QPEQD)*PINV - QPT*QPD
+<span class="ln">256</span>      IF (LDH) THEN
+<span class="ln">257</span>         QQPDT = QQPDT+(0.5D0*QPT-0.75D0)*PDHP
+<span class="ln">258</span>      END IF
+<span class="ln">259</span>      QQPDD = (PA + PE*(QPED**2 + QQPEDD))*PINV - QPD**2
+<span class="ln">260</span>      IF (LDH) THEN
+<span class="ln">261</span>        QQPDD = QQPDD + (-1.5D0*QPD+2.25D0)*PDHP
+<span class="ln">262</span>      END IF
+<span class="ln">263</span>C DERIVATIVES OF DENSITY
+<span class="ln">264</span>      QDP = 1.0D0/QPD
+<span class="ln">265</span>      QDT = -QPT*QDP
+<span class="ln">266</span>      PR1 = QDP**2
+<span class="ln">267</span>      QDPP = -QQPDD*QDP*PR1
+<span class="ln">268</span>      QDTP = -QPT*QDPP - QQPDT*PR1
+<span class="ln">269</span>      QDTT = -QPT*QDTP - QDP*(QQPTT + QDT*QQPDT)
+<span class="ln">270</span>C INTERNAL ENERGY TERM(U) AND ITS DERIVATIVES
+<span class="ln">271</span>      UE  = DEXP(CLN*(FFE(2) + EMUL))
+<span class="ln">272</span>      UEQ = DEXP(CLN*(FFE(5) + EMUL))
+<span class="ln">273</span>      PR1 = DF1(5,1)+TTDCU*DF2(5,1)
+<span class="ln">274</span>      PR2 = DF1(5,2)+TTDCU*DF2(5,2)
+<span class="ln">275</span>      PR3 = DF1(5,3)+TTDCU*DF2(5,3)
+<span class="ln">276</span>      PR4 = DCL1*FF(5,1) + DCL2*FF(5,2) + DCL3*FF(5,3)
+<span class="ln">277</span>      PR5 =   5.0D0*(CL1*PR1 + CL2*PR2 + CL3*PR3)
+<span class="ln">278</span>      QUEQT = UEQ*(PR5 - 1.50D0*PR4)
+<span class="ln">279</span>      PD = P/D
+<span class="ln">280</span>      PDT = PD/T
+<span class="ln">281</span>      UA = 1.50D0*RAMUT
+<span class="ln">282</span>      UR = 3.0D0*BETA1*PD
+<span class="ln">283</span>      IF (LDH) THEN
+<span class="ln">284</span>         UDH = 3.0D0*PDH/D8
+<span class="ln">285</span>      END IF
+<span class="ln">286</span>      U = UA + UE + UR
+<span class="ln">287</span>      IF (LDH) THEN
+<span class="ln">288</span>         U = U + UDH
+<span class="ln">289</span>         UDHU = UDH/U
+<span class="ln">290</span>      END IF
+<span class="ln">291</span>      UI = 1.0D0/U
+<span class="ln">292</span>      PDU = PD*UI
+<span class="ln">293</span>      QUTD = (UA + UEQ + 4.0D0*UR)*UI
+<span class="ln">294</span>      IF(LDH) THEN
+<span class="ln">295</span>         QUTD = QUTD -0.5D0*UDHU
+<span class="ln">296</span>      END IF
+<span class="ln">297</span>      QUDT = PDU*(1.0D0 - QPT)
+<span class="ln">298</span>      IF (LDH) THEN
+<span class="ln">299</span>         QUDT = QUDT + 0.5D0*UDHU
+<span class="ln">300</span>      END IF
+<span class="ln">301</span>      QUTP = QUTD + QDT*QUDT
+<span class="ln">302</span>      QQUTT = (UA + QUEQT + 16.0D0*UR)*UI - QUTD**2
+<span class="ln">303</span>      IF (LDH) THEN
+<span class="ln">304</span>         QQUTT = QQUTT + (0.5D0*QUTD+0.25D0)*UDHU
+<span class="ln">305</span>      END IF
+<span class="ln">306</span>      QQUDT = QUDT*(QPT - QUTD) - PDU*QQPTT
+<span class="ln">307</span>      IF (LDH) THEN
+<span class="ln">308</span>         QQUDT = QQUDT + (0.5D0*QUDT-0.25D0)*UDHU
+<span class="ln">309</span>      END IF
+<span class="ln">310</span>C SPECIFIC HEAT(QCP) AND ITS DERIVATIVES
+<span class="ln">311</span>      PR1 =-PDT*QDT
+<span class="ln">312</span>      PR2 = U/T
+<span class="ln">313</span>      PR3 = -(1.0D0 + QDT) +  QDTT/QDT
+<span class="ln">314</span>      PR4 = (1.0D0 - QDP) +  QDTP/QDT
+<span class="ln">315</span>      ACP = PR1*QPT
+<span class="ln">316</span>      BCP = PR2*QUTD
+<span class="ln">317</span>      QCP = ACP + BCP
+<span class="ln">318</span>      QCPI = 1.0D0/QCP
+<span class="ln">319</span>      QCPT = ACP*PR3 + PR1*(QQPTT + QDT*QQPDT) +
+<span class="ln">320</span>     1        BCP*(QUTP - 1.0D0) + PR2*(QQUTT + QDT*QQUDT)
+<span class="ln">321</span>      QCPP = ACP*PR4 + QDP*(PR1*QQPDT + BCP*QUDT + PR2*QQUDT)
+<span class="ln">322</span>      QCPT = QCPT*QCPI
+<span class="ln">323</span>      QCPP = QCPP*QCPI
+<span class="ln">324</span>C ADIABATIC GRADIENT(DELA) AND DERIVATIVES ( ALL DERIVS ARE LN(DELA)/LN(
+<span class="ln">325</span>      DELA = PR1*QCPI
+<span class="ln">326</span>      QAT = PR3 - QCPT
+<span class="ln">327</span>      QAP = PR4 - QCPP
+<span class="ln">328</span>      ETA = CL1*ETAT8(ID1) + CL2*ETAT8(ID2) + CL3*ETAT8(ID3)
+<span class="ln">329</span>
+<span class="ln">330</span>      RETURN
+<span class="ln">331</span>      END</pre></details>
+<details class='py' id='py-eqrelv'><summary>Python version: eqrelv</summary><pre class='doc'>Find the density at which ions, electrons (from the Fermi table) and
+radiation, plus an optional Debye-Hueckel term, give the pressure p,
+then the thermodynamic derivatives the structure equations need.
+
+Translates: eqrelv.f#EQRELV (09c3b9b)
+
+Arguments: tl, t (log10 T and T); pl, p (log10 P and P); dl, the
+starting guess of log10 rho; d; beta (P_gas/P); amu, emu (ions and
+electrons per unit mass, in units of 1/m_H); eta, qdt, qdp, qcp, dela,
+qdtt, qdtp, qat, qap, qcpt, qcpp (set only).
+
+Returns (dl, d, eta, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap, qcpt,
+qcpp): the density and its log, the electron degeneracy, d ln rho /
+d ln T and / d ln P, c_P, nabla_ad, and their logarithmic derivatives.
+If the iteration does not converge, a message is written and the
+arguments come back as they were passed (eta possibly set).</pre><pre class='src'><span class="ln">16</span>def eqrelv(tl, t, pl, p, dl, d, beta, amu, emu, eta, qdt, qdp, qcp,
+<span class="ln">17</span>           dela, qdtt, qdtp, qat, qap, qcpt, qcpp):
+<span class="ln">18</span>    &quot;&quot;&quot;Find the density at which ions, electrons (from the Fermi table) and
+<span class="ln">19</span>    radiation, plus an optional Debye-Hueckel term, give the pressure p,
+<span class="ln">20</span>    then the thermodynamic derivatives the structure equations need.
+<span class="ln">21</span>
+<span class="ln">22</span>    Translates: eqrelv.f#EQRELV (09c3b9b)
+<span class="ln">23</span>
+<span class="ln">24</span>    Arguments: tl, t (log10 T and T); pl, p (log10 P and P); dl, the
+<span class="ln">25</span>    starting guess of log10 rho; d; beta (P_gas/P); amu, emu (ions and
+<span class="ln">26</span>    electrons per unit mass, in units of 1/m_H); eta, qdt, qdp, qcp, dela,
+<span class="ln">27</span>    qdtt, qdtp, qat, qap, qcpt, qcpp (set only).
+<span class="ln">28</span>
+<span class="ln">29</span>    Returns (dl, d, eta, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap, qcpt,
+<span class="ln">30</span>    qcpp): the density and its log, the electron degeneracy, d ln rho /
+<span class="ln">31</span>    d ln T and / d ln P, c_P, nabla_ad, and their logarithmic derivatives.
+<span class="ln">32</span>    If the iteration does not converge, a message is written and the
+<span class="ln">33</span>    arguments come back as they were passed (eta possibly set).
+<span class="ln">34</span>    &quot;&quot;&quot;
+<span class="ln">35</span>    c = constants_mod
+<span class="ln">36</span>    dval = ccr_mod.dval
+<span class="ln">37</span>    etat8 = ccr_mod.etat8
+<span class="ln">38</span>    dtable = ccr_mod.dtable
+<span class="ln">39</span>    iden = ccr_mod.iden
+<span class="ln">40</span>    ldh = nmlpar_mod.ldh
+<span class="ln">41</span>    etadh0 = nmlpar_mod.etadh0
+<span class="ln">42</span>    etadh1 = nmlpar_mod.etadh1
+<span class="ln">43</span>    df1 = np.zeros((5 + 1, 3 + 1))
+<span class="ln">44</span>    df2 = np.zeros((5 + 1, 3 + 1))
+<span class="ln">45</span>    ff = np.zeros((5 + 1, 3 + 1))
+<span class="ln">46</span>    ffe = np.zeros(5 + 1)
+<span class="ln">47</span>
+<span class="ln">48</span>    pinv = 1.0 / p
+<span class="ln">49</span>    beta1 = 1.0 - beta
+<span class="ln">50</span>    tl8 = tl
+<span class="ln">51</span>    pl8 = pl
+<span class="ln">52</span>    pr = beta1 * p
+<span class="ln">53</span>    ramu = c.cgas * amu
+<span class="ln">54</span>    ramut = ramu * t
+<span class="ln">55</span>    emul = math.log10(emu)
+<span class="ln">56</span>    emul8 = emul
+<span class="ln">57</span>    # Newton interpolation in log T: three columns from jt1.
+<span class="ln">58</span>    # Question (see the page): forced into the table, extrapolating silently.
+<span class="ln">59</span>    jt1 = int(5.0 * (tl - 5.0))
+<span class="ln">60</span>    jt1 = max(1, min(jt1, 18))
+<span class="ln">61</span>    jt2 = jt1 + 1
+<span class="ln">62</span>    jt3 = jt1 + 2
+<span class="ln">63</span>    ttud = 5.0 * (tl8 - (5.0 + 0.20 * float(jt1)))
+<span class="ln">64</span>    ttcu = 0.50 * ttud * (ttud - 1.0)
+<span class="ln">65</span>    ttdcu = ttud - 0.50
+<span class="ln">66</span>    dml = dl + emul
+<span class="ln">67</span>    nden = 1
+<span class="ln">68</span>    id1p = -100
+<span class="ln">69</span>    if ldh:
+<span class="ln">70</span>        almix = 0.0
+<span class="ln">71</span>        for ii in range(1, 19):
+<span class="ln">72</span>            almix = almix + debhu_mod.dhnue[ii] * debhu_mod.zdh[ii]
+<span class="ln">73</span>        cmfdh0 = (2.0 * debhu_mod.xxdh + 1.5 * debhu_mod.yydh
+<span class="ln">74</span>                  + 0.5 * (debhu_mod.zzdh + almix))
+<span class="ln">75</span>        cmfdh1 = debhu_mod.xxdh + debhu_mod.yydh + 0.5 * almix
+<span class="ln">76</span>
+<span class="ln">77</span>    # Newton iteration on log rho for the pressure balance.
+<span class="ln">78</span>    while True:  # label 10
+<span class="ln">79</span>        xx = dml - 1.50 * tl8
+<span class="ln">80</span>        pr6 = 20.0 * (xx - dval[1]) + 1.0
+<span class="ln">81</span>        kk = int(pr6)
+<span class="ln">82</span>        kk = min(261, max(1, kk))
+<span class="ln">83</span>        id1 = iden[kk]
+<span class="ln">84</span>        if id1 != id1p:  # else GO TO 30: same three table rows
+<span class="ln">85</span>            id1p = id1
+<span class="ln">86</span>            id2 = id1 + 1
+<span class="ln">87</span>            id3 = id1 + 2
+<span class="ln">88</span>            pr9 = 1.0 / (dval[id3] - dval[id2])
+<span class="ln">89</span>            pr8 = 1.0 / (dval[id2] - dval[id1])
+<span class="ln">90</span>            pr7 = 1.0 / (dval[id1] - dval[id3])
+<span class="ln">91</span>            cden1 = -pr7 * pr8
+<span class="ln">92</span>            cden2 = -pr8 * pr9
+<span class="ln">93</span>            cden3 = -pr9 * pr7
+<span class="ln">94</span>            for nn in range(1, 4):  # label 20
+<span class="ln">95</span>                id_ = id1 + nn - 1
+<span class="ln">96</span>                df1[1, nn] = dtable[1, id_, jt2] - dtable[1, id_, jt1]
+<span class="ln">97</span>                df2[1, nn] = dtable[1, id_, jt3] - dtable[1, id_, jt2] - df1[1, nn]
+<span class="ln">98</span>                ff[1, nn] = dtable[1, id_, jt1] + ttud * df1[1, nn] + ttcu * df2[1, nn]
+<span class="ln">99</span>            dpel2 = 2.0 * (ff[1, 1] * cden1 + ff[1, 2] * cden2 + ff[1, 3] * cden3)
+<span class="ln">100</span>        # label 30: Lagrange interpolation in x.
+<span class="ln">101</span>        dx1 = xx - dval[id1]
+<span class="ln">102</span>        dx2 = xx - dval[id2]
+<span class="ln">103</span>        dx3 = xx - dval[id3]
+<span class="ln">104</span>        cl1 = dx2 * dx3 * cden1
+<span class="ln">105</span>        cl2 = dx3 * dx1 * cden2
+<span class="ln">106</span>        cl3 = dx1 * dx2 * cden3
+<span class="ln">107</span>        dcl1 = (dx2 + dx3) * cden1
+<span class="ln">108</span>        dcl2 = (dx3 + dx1) * cden2
+<span class="ln">109</span>        dcl3 = (dx1 + dx2) * cden3
+<span class="ln">110</span>        if ldh:
+<span class="ln">111</span>            # Debye-Hueckel composition factor, ramped in eta.
+<span class="ln">112</span>            eta = cl1 * etat8[id1] + cl2 * etat8[id2] + cl3 * etat8[id3]
+<span class="ln">113</span>            if eta &lt; etadh0:
+<span class="ln">114</span>                cmfdh = cmfdh0 * math.sqrt(cmfdh0)
+<span class="ln">115</span>            elif eta &gt; etadh1:
+<span class="ln">116</span>                cmfdh = cmfdh0 * math.sqrt(cmfdh1)
+<span class="ln">117</span>            else:
+<span class="ln">118</span>                t0 = cmfdh0 * math.sqrt(cmfdh0)
+<span class="ln">119</span>                t1 = cmfdh0 * math.sqrt(cmfdh1)
+<span class="ln">120</span>                slope = (t1 - t0) / (etadh1 - etadh0)
+<span class="ln">121</span>                cmfdh = t0 + (eta - etadh0) * slope
+<span class="ln">122</span>        pel = cl1 * ff[1, 1] + cl2 * ff[1, 2] + cl3 * ff[1, 3]
+<span class="ln">123</span>        dpel1 = dcl1 * ff[1, 1] + dcl2 * ff[1, 2] + dcl3 * ff[1, 3]
+<span class="ln">124</span>        dl8 = dml - emul8
+<span class="ln">125</span>        d8 = math.exp(c.cln * dl8)
+<span class="ln">126</span>        pa = ramut * d8
+<span class="ln">127</span>        pe = math.exp(c.cln * pel)
+<span class="ln">128</span>        if ldh:
+<span class="ln">129</span>            pdh = debhu_mod.cdh * cmfdh * math.sqrt(d8 / t) * d8
+<span class="ln">130</span>        pt = pa + pe + pr
+<span class="ln">131</span>        if ldh:
+<span class="ln">132</span>            pt = pt + pdh
+<span class="ln">133</span>            pdhp = pdh / pt
+<span class="ln">134</span>        ptl = math.log10(pt)
+<span class="ln">135</span>        pr7 = (pa + pe * dpel1) / pt
+<span class="ln">136</span>        if ldh:
+<span class="ln">137</span>            pr7 = pr7 + 1.5 * pdhp
+<span class="ln">138</span>        pr8 = (ptl - pl8) / pr7
+<span class="ln">139</span>        pr9 = c.cln * ((pa + pe * (dpel1**2 + dpel2 / c.cln)) / (pt * pr7) - pr7)
+<span class="ln">140</span>        if ldh:
+<span class="ln">141</span>            pr9 = pr9 + 2.25 * pdhp / pr7
+<span class="ln">142</span>        # Second-order correction 0.5*pr9*pr8**2, formed through logs.
+<span class="ln">143</span>        factor = abs(pr8)
+<span class="ln">144</span>        if factor &lt; 1e-15:
+<span class="ln">145</span>            factor = 1e-15
+<span class="ln">146</span>        pr8l = math.log10(factor)
+<span class="ln">147</span>        pr9l = math.log10(abs(pr9))
+<span class="ln">148</span>        factl = math.log10(0.5) + pr9l + 2.0 * pr8l
+<span class="ln">149</span>        fact = math.exp(c.cln * factl)
+<span class="ln">150</span>        fact = math.copysign(fact, pr9)
+<span class="ln">151</span>        corr = -pr8 - fact
+<span class="ln">152</span>        if corr &gt; 4.0:
+<span class="ln">153</span>            corr = 4.0
+<span class="ln">154</span>        if corr &lt; -4.0:
+<span class="ln">155</span>            corr = -4.0
+<span class="ln">156</span>        if abs(corr) &gt;= 1.0e-08:
+<span class="ln">157</span>            dml = dml + corr
+<span class="ln">158</span>            nden = nden + 1
+<span class="ln">159</span>            if nden &lt;= 20:
+<span class="ln">160</span>                continue
+<span class="ln">161</span>            # Question (see the page): returns unconverged, with dl, d and
+<span class="ln">162</span>            # the derivatives as the caller passed them.
+<span class="ln">163</span>            iounits_mod.write(
+<span class="ln">164</span>                iounits_mod.ishort,
+<span class="ln">165</span>                f&quot;EQRELV: Did not Converge: T,P,Pcalc,Dcalc,CORR&quot;
+<span class="ln">166</span>                f&quot;{tl:10.6f}{pl:10.6f}{ptl:10.6f}{dml:10.6f}{corr:20.12f}&quot;)
+<span class="ln">167</span>            return (dl, d, eta, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap,
+<span class="ln">168</span>                    qcpt, qcpp)
+<span class="ln">169</span>        break
+<span class="ln">170</span>
+<span class="ln">171</span>    dl = dl8
+<span class="ln">172</span>    d = d8
+<span class="ln">173</span>    # The other table columns: log U_e, and the derivatives.
+<span class="ln">174</span>    for kk in range(2, 6):  # label 60
+<span class="ln">175</span>        for nn in range(1, 4):  # label 50
+<span class="ln">176</span>            id_ = id1 + nn - 1
+<span class="ln">177</span>            df1[kk, nn] = dtable[kk, id_, jt2] - dtable[kk, id_, jt1]
+<span class="ln">178</span>            df2[kk, nn] = (dtable[kk, id_, jt3] - dtable[kk, id_, jt2]) - df1[kk, nn]
+<span class="ln">179</span>            ff[kk, nn] = dtable[kk, id_, jt1] + ttud * df1[kk, nn] + ttcu * df2[kk, nn]
+<span class="ln">180</span>        ffe[kk] = cl1 * ff[kk, 1] + cl2 * ff[kk, 2] + cl3 * ff[kk, 3]
+<span class="ln">181</span>
+<span class="ln">182</span>    # Pressure derivatives.
+<span class="ln">183</span>    peq = math.exp(c.cln * ffe[3])
+<span class="ln">184</span>    qped = ffe[4]
+<span class="ln">185</span>    qqpedd = (dcl1 * ff[4, 1] + dcl2 * ff[4, 2] + dcl3 * ff[4, 3]) * c.clni
+<span class="ln">186</span>    pr1 = df1[3, 1] + ttdcu * df2[3, 1]
+<span class="ln">187</span>    pr2 = df1[3, 2] + ttdcu * df2[3, 2]
+<span class="ln">188</span>    pr3 = df1[3, 3] + ttdcu * df2[3, 3]
+<span class="ln">189</span>    pr4 = dcl1 * ff[3, 1] + dcl2 * ff[3, 2] + dcl3 * ff[3, 3]
+<span class="ln">190</span>    pr5 = 5.0 * (cl1 * pr1 + cl2 * pr2 + cl3 * pr3)
+<span class="ln">191</span>    qpeqd = peq * pr4
+<span class="ln">192</span>    qpeqt = peq * (pr5 - 1.50 * pr4)
+<span class="ln">193</span>    qpt = (pa + peq) * pinv + 4.0 * beta1
+<span class="ln">194</span>    if ldh:
+<span class="ln">195</span>        qpt = qpt - 0.5 * pdhp
+<span class="ln">196</span>    qpd = (pa + pe * qped) * pinv
+<span class="ln">197</span>    if ldh:
+<span class="ln">198</span>        qpd = qpd + 1.5 * pdhp
+<span class="ln">199</span>    qqptt = (pa + qpeqt) * pinv + 16.0 * beta1 - qpt**2
+<span class="ln">200</span>    if ldh:
+<span class="ln">201</span>        qqptt = qqptt + (0.5 * qpt + 0.25) * pdhp
+<span class="ln">202</span>    qqpdt = (pa + qpeqd) * pinv - qpt * qpd
+<span class="ln">203</span>    if ldh:
+<span class="ln">204</span>        qqpdt = qqpdt + (0.5 * qpt - 0.75) * pdhp
+<span class="ln">205</span>    qqpdd = (pa + pe * (qped**2 + qqpedd)) * pinv - qpd**2
+<span class="ln">206</span>    if ldh:
+<span class="ln">207</span>        qqpdd = qqpdd + (-1.5 * qpd + 2.25) * pdhp
+<span class="ln">208</span>
+<span class="ln">209</span>    # Density derivatives, by inversion.
+<span class="ln">210</span>    qdp = 1.0 / qpd
+<span class="ln">211</span>    qdt = -qpt * qdp
+<span class="ln">212</span>    pr1 = qdp**2
+<span class="ln">213</span>    qdpp = -qqpdd * qdp * pr1
+<span class="ln">214</span>    qdtp = -qpt * qdpp - qqpdt * pr1
+<span class="ln">215</span>    qdtt = -qpt * qdtp - qdp * (qqptt + qdt * qqpdt)
+<span class="ln">216</span>
+<span class="ln">217</span>    # Internal energy and its derivatives.
+<span class="ln">218</span>    ue = math.exp(c.cln * (ffe[2] + emul))
+<span class="ln">219</span>    ueq = math.exp(c.cln * (ffe[5] + emul))
+<span class="ln">220</span>    pr1 = df1[5, 1] + ttdcu * df2[5, 1]
+<span class="ln">221</span>    pr2 = df1[5, 2] + ttdcu * df2[5, 2]
+<span class="ln">222</span>    pr3 = df1[5, 3] + ttdcu * df2[5, 3]
+<span class="ln">223</span>    pr4 = dcl1 * ff[5, 1] + dcl2 * ff[5, 2] + dcl3 * ff[5, 3]
+<span class="ln">224</span>    pr5 = 5.0 * (cl1 * pr1 + cl2 * pr2 + cl3 * pr3)
+<span class="ln">225</span>    queqt = ueq * (pr5 - 1.50 * pr4)
+<span class="ln">226</span>    pd = p / d
+<span class="ln">227</span>    pdt = pd / t
+<span class="ln">228</span>    ua = 1.50 * ramut
+<span class="ln">229</span>    ur = 3.0 * beta1 * pd
+<span class="ln">230</span>    if ldh:
+<span class="ln">231</span>        udh = 3.0 * pdh / d8
+<span class="ln">232</span>    u = ua + ue + ur
+<span class="ln">233</span>    if ldh:
+<span class="ln">234</span>        u = u + udh
+<span class="ln">235</span>        udhu = udh / u
+<span class="ln">236</span>    ui = 1.0 / u
+<span class="ln">237</span>    pdu = pd * ui
+<span class="ln">238</span>    qutd = (ua + ueq + 4.0 * ur) * ui
+<span class="ln">239</span>    if ldh:
+<span class="ln">240</span>        qutd = qutd - 0.5 * udhu
+<span class="ln">241</span>    qudt = pdu * (1.0 - qpt)
+<span class="ln">242</span>    if ldh:
+<span class="ln">243</span>        qudt = qudt + 0.5 * udhu
+<span class="ln">244</span>    qutp = qutd + qdt * qudt
+<span class="ln">245</span>    qqutt = (ua + queqt + 16.0 * ur) * ui - qutd**2
+<span class="ln">246</span>    if ldh:
+<span class="ln">247</span>        qqutt = qqutt + (0.5 * qutd + 0.25) * udhu
+<span class="ln">248</span>    qqudt = qudt * (qpt - qutd) - pdu * qqptt
+<span class="ln">249</span>    if ldh:
+<span class="ln">250</span>        qqudt = qqudt + (0.5 * qudt - 0.25) * udhu
+<span class="ln">251</span>
+<span class="ln">252</span>    # c_P, nabla_ad and their derivatives.
+<span class="ln">253</span>    pr1 = -pdt * qdt
+<span class="ln">254</span>    pr2 = u / t
+<span class="ln">255</span>    pr3 = -(1.0 + qdt) + qdtt / qdt
+<span class="ln">256</span>    pr4 = (1.0 - qdp) + qdtp / qdt
+<span class="ln">257</span>    acp = pr1 * qpt
+<span class="ln">258</span>    bcp = pr2 * qutd
+<span class="ln">259</span>    qcp = acp + bcp
+<span class="ln">260</span>    qcpi = 1.0 / qcp
+<span class="ln">261</span>    qcpt = (acp * pr3 + pr1 * (qqptt + qdt * qqpdt)
+<span class="ln">262</span>            + bcp * (qutp - 1.0) + pr2 * (qqutt + qdt * qqudt))
+<span class="ln">263</span>    qcpp = acp * pr4 + qdp * (pr1 * qqpdt + bcp * qudt + pr2 * qqudt)
+<span class="ln">264</span>    qcpt = qcpt * qcpi
+<span class="ln">265</span>    qcpp = qcpp * qcpi
+<span class="ln">266</span>    dela = pr1 * qcpi
+<span class="ln">267</span>    qat = pr3 - qcpt
+<span class="ln">268</span>    qap = pr4 - qcpp
+<span class="ln">269</span>    eta = cl1 * etat8[id1] + cl2 * etat8[id2] + cl3 * etat8[id3]
+<span class="ln">270</span>
+<span class="ln">271</span>    return (dl, d, eta, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap, qcpt,
+<span class="ln">272</span>            qcpp)</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> Question 1: "<code>DL</code>, <code>D</code> and all derivatives then keep the values of the previous call (the routine has <code>SAVE</code>)". They are dummy arguments, not saved locals: on failure the routine returns before <code>DL = DL8</code>, so <code>DL</code> and <code>D</code> keep the caller's starting guess and the derivatives whatever the caller's variables held. Fix: say so.</li>
+<li><strong>Wrong.</strong> "solves … for $\ln\rho$" while the update is in $\log_{10}$ (<code>DML</code>, the limit of $\pm4$ is a factor $10^4$). Fix: "$\log\rho$".</li>
+<li><strong>Unclear.</strong> "Newton (equal spacing) in $y$, with step 0.2 starting at $\log T = 5$". The code places column $j$ at $\log T = 5 + 0.2j$ (<code>TTUD</code>), so the 20 columns span $\log T = 5.2$ to 9.0. Fix: state that.</li>
+<li><strong>Missing.</strong> The Debye–Hückel composition factors: $c_0 = 2X + \tfrac32 Y + \tfrac12(Z + \alpha)$ (<code>CMFDH0</code>), $c_1 = X + Y + \tfrac12\alpha$ (<code>CMFDH1</code>), with $\alpha = \sum_i \nu_i Z_i$ over the metal mixture (<code>DHNUE</code>, <code>ZDH</code>). Fix: add to step 3.</li>
+<li><strong>Wrong.</strong> "<code>/CCR/</code> … shared only with SETUPS, which presumably fills it." SETUPS reads it from the Fermi-table file (unit <code>IFERMI</code>): <code>DVAL</code>, <code>ETAT8</code>, <code>DTABLE</code> read, <code>IDEN</code> built. Fix: state it.</li>
+<li><strong>Wrong / unclear.</strong> "<a href="../yrec-map/getnewenv.f.html#def-GETNEWENV">GETNEWENV</a> and others set its composition"; question 2 suggests the composition may be stale. In fact each caller of the equation of state sets <code>XXDH</code>, <code>YYDH</code>, <code>ZZDH</code> (and <code>ZDH</code>) from the shell's <code>HCOMP</code> before the call (PHYSIC, COEFFT, CRRECT, SCONVEC, HSUBP, GETNEWENV, STARIN, WRTMOD, WRTOUT). Fix: say so in the COMMON blocks and reduce question 2 to the naming difference.</li>
+</ol>
+<p>Revised: all six applied.</p></div></details>
+</main></body></html>

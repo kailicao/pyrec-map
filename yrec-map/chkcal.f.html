@@ -1,0 +1,362 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>chkcal.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ chkcal.f</span></header><main>
+<h1>chkcal.f</h1>
+<p class='muted'>180 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/chkcal.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>chkcal.py</code>, 133 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file drives the solar calibration: after each solar model, it checks whether the model has the solar luminosity and radius (and, optionally, the solar surface $Z/X$) at the solar age; if not, it computes new guesses for the hydrogen abundance $X$ and the mixing length $\alpha$ (and $Z$) for the next model, by a Newton step.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>BL</code> ($\log L/L_\odot$ of the model), <code>RL</code> ($\log R/R_\odot$, computed by the caller from $L$ and $T_\mathrm{eff}$), <code>N</code> (the current kind card) and <code>SOLZX</code> (the model's surface $Z/X$); the tolerances <code>TOLL</code>, <code>TOLR</code>, <code>TOLZ</code>, the switch <code>LCALSOLZX</code> and the target <code>CALSOLZX</code> in <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a>, set in <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a> and <a href="../yrec-map/setcal.f.html#def-SETCAL">SETCAL</a>.</li>
+<li><strong>Who calls it:</strong> the main program (<a href="../yrec-map/main.f.html#def-_file_level_">main.f</a>), when solar calibration is on (<code>LCALS</code>), at every third kind card (<code>MOD(NK,3).EQ.0</code>): "solar models in 3 kind cards" (MHP 5/96).</li>
+<li><strong>Outputs:</strong> the arguments <code>LSOL</code> and the derivatives <code>DLDX</code>, <code>DRDX</code>, <code>DLDA</code>, <code>DRDA</code>, which the main program keeps (they were in <code>/CALSUN/</code>, also used by WRTMONTE, removed since <code>rp_1</code>); the new $X$ (<code>RESCAL(2,N+1)</code>, and <code>XENV0A</code> for cards $N+1$ to $N+3$), $\alpha$ (<code>CMIXLA</code>, cards $N+1$ to $N+3$) and $Z$ (<code>RESCAL(3,N+1)</code>, <code>ZENV0A</code>) in <a href="../yrec-map/runloop_mod.f.html#def-RUNLOOP_MOD"><code>RUNLOOP_MOD</code></a> (<code>RESCAL</code>) and <code>NMLPAR_MOD</code> (the others); lines to unit <code>IOWR</code>.</li>
+<li><strong>Kept between calls:</strong> the previous model's <code>BLP</code>, <code>RLP</code> and the steps <code>DX</code>, <code>DA</code>, now local variables kept by <code>SAVE</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Converged</strong> if $|\log L/L_\odot| &lt;$ <code>TOLL</code> and $|\log R/R_\odot| &lt;$ <code>TOLR</code> and, with the $Z/X$ option, $|\log_{10}(Z/X) - \log_{10}(Z/X)_\odot| &lt;$ <code>TOLZ</code>: set <code>LSOL</code> and return. The target is thus exactly $L_\odot$ and $R_\odot$.</li>
+<li>
+<p><strong>Newton step</strong> with fixed partial derivatives ("empirical", LLP 6/28/09): $\partial\log L/\partial X = -3.78$, $\partial\log R/\partial X = -0.89$, $\partial\log L/\partial\alpha = 0.0139$, $\partial\log R/\partial\alpha = -0.050$. It solves
+$$\log L + L_X\,\Delta X + L_\alpha\,\Delta\alpha = 0, \qquad \log R + R_X\,\Delta X + R_\alpha\,\Delta\alpha = 0,$$
+that is
+$$\Delta\alpha = \frac{\log L\,R_X/L_X - \log R}{R_\alpha - L_\alpha R_X/L_X}, \qquad \Delta X = -\frac{\log L + L_\alpha\,\Delta\alpha}{L_X}.$$</p>
+</li>
+<li>
+<p>The new values go to kind cards $N+1$ to $N+3$, starting from those of card $N-2$ (the start of the current cycle). With the $Z/X$ option, $Z$ is scaled: $Z_\mathrm{new} = Z_\mathrm{old}\,(Z/X)_\odot / (Z/X)_\mathrm{model}$.</p>
+</li>
+</ol>
+<p><strong>Design.</strong> An older method, which measured the derivatives with extra runs at kind cards 3, 6 and 9, is still in the file but skipped by <code>GOTO 1234</code>.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> <code>/CALSUN/</code> retired: the derivatives and <code>LSOL</code> are now arguments, and <code>BLP</code>, <code>RLP</code>, <code>DX</code>, <code>DA</code> saved locals; COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A derivative off by ten?</strong> <code>DLDA = 0.0139D0</code> carries the comment "empirical result: +0.139". Which is right? With a value ten times too small, the Newton step in $\alpha$ is too large, though the iteration may still converge.</li>
+<li><strong>The header.</strong> It says "only called for even NK", but main.f calls it when <code>NK</code> is a multiple of 3, which matches the use of <code>N-2</code> and <code>N+1..N+3</code>.</li>
+<li><strong>$Z/X$ not converged.</strong> If $L$ and $R$ are within tolerance but $Z/X$ is not, the routine falls through to the Newton step and also changes $X$ and $\alpha$ slightly. Intended? Also, the convergence test uses $Z/X$ only when <code>CALSOLZX &gt; 0</code>, but the update of $Z$ tests only <code>LCALSOLZX</code>, so a target of 0 would set $Z = 0$ (the default target is 0.02292).</li>
+<li><strong>Dead code.</strong> The skipped derivative runs (with <code>DX</code>, <code>DA</code> never set on that path) and the unused <code>ZLP</code>: can they go?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-CHKCAL'>CHKCAL</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-CHKCAL'><h3><span class='kind'>subroutine</span>CHKCAL</h3>
+<p class='muted'>lines 2–180 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/chkcal.f#L2-L180'>GitHub</a></p>
+<pre>SUBROUTINE CHKCAL(BL,RL,N,SOLZX,DLDX,DRDX,DLDA,DRDA,LSOL)</pre>
+<div class='notes'><p>Checks a solar model against $L_\odot$, $R_\odot$ (and $Z/X$); if not calibrated, sets new $X$, $\alpha$ (and $Z$) for the next three kind cards by a Newton step with fixed derivatives.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/runloop_mod.f.html#def-RUNLOOP_MOD'>RUNLOOP_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE CHKCAL(BL,RL,N,SOLZX,DLDX,DRDX,DLDA,DRDA,LSOL)
+<span class="ln">3</span>C 10/14/26 MHP via Claude
+<span class="ln">4</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">5</span>      USE NMLPAR_MOD
+<span class="ln">6</span>C 10/14/26 MHP via Claude
+<span class="ln">7</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">8</span>      USE IOUNITS_MOD
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/RUNLOOP/ into RUNLOOP_MOD.  A blanket
+<span class="ln">11</span>C USE imports exactly the names the COMMON declaration made global here,
+<span class="ln">12</span>C so it cannot change meaning.  See runloop_mod.f for the block history
+<span class="ln">13</span>C and for why the module declares the types the implicit rules supplied.
+<span class="ln">14</span>      USE RUNLOOP_MOD
+<span class="ln">15</span>C 10/20/26 MHP via Claude
+<span class="ln">16</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">17</span>C explicit declarations.
+<span class="ln">18</span>      IMPLICIT NONE
+<span class="ln">19</span>      REAL*8 BL,BLP,DA,DLDA,DLDX,DRDA,DRDX,DX,DZ,RL,RLP,SOLZX,ZL,ZLP
+<span class="ln">20</span>      INTEGER N
+<span class="ln">21</span>      LOGICAL*4 LSOL
+<span class="ln">22</span>C     ONLY CALLED FOR EVEN NK, ASSUMES RESCALING ON ODD NK AND EVOLVING
+<span class="ln">23</span>C     ON EVEN NK
+<span class="ln">24</span>C 10/12/26 MHP via Claude
+<span class="ln">25</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">26</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">27</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">28</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">29</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">30</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">31</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">32</span>C
+<span class="ln">33</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">34</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">35</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">36</span>C MHP 10/24 ADDED STOP CRITERIA FOR CENTRAL H,D,AND HE4
+<span class="ln">37</span>C 10/13/26 MHP via Claude: removed the unused COMMON/SETT/ declaration
+<span class="ln">38</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">39</span>C 10/13/26 MHP via Claude
+<span class="ln">40</span>C code changed to replace COMMON/CALSUN/ with explicit arguments.  This
+<span class="ln">41</span>C routine wrote all nine members; only the four derivatives and LSOL are
+<span class="ln">42</span>C read outside it, by main.f, so those are now arguments.  BLP, RLP, DX
+<span class="ln">43</span>C and DA never left this routine and are now locals, kept across calls by
+<span class="ln">44</span>C the blanket SAVE below -- which they need, since BLP and RLP are stored
+<span class="ln">45</span>C on one call and differenced against on the next.
+<span class="ln">46</span>C MHP 6/13 ADD OPTION TO CALIBRATE SOLAR Z/X, SOLAR Z/X, SOLAR AGE
+<span class="ln">47</span>C      COMMON/CALS2/TOLL,TOLR,LCALS
+<span class="ln">48</span>C MHP 10/02 MISSING LOGICAL UNIT IOWR ADDED
+<span class="ln">49</span>C 9/25/26 MHP via Claude
+<span class="ln">50</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">51</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">52</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">53</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">54</span>C COMMON/IOUNITS/
+<span class="ln">55</span>      SAVE
+<span class="ln">56</span>C     DATA TOLL,TOLR/1.0D-5,1.0D-4/
+<span class="ln">57</span>C CHECK TO SEE IF THE MODEL IS A CALIBRATED SOLAR MODEL.
+<span class="ln">58</span>C IF NOT, ESTIMATE CORRECTIONS TO X AND ALPHA.
+<span class="ln">59</span>      IF(ABS(BL).LT.TOLL .AND. ABS(RL).LT.TOLR)THEN
+<span class="ln">60</span>C ADD CHECK FOR Z/X
+<span class="ln">61</span>         IF(LCALSOLZX .AND.CALSOLZX.GT.0.0D0)THEN
+<span class="ln">62</span>            ZL = LOG10(SOLZX)-LOG10(CALSOLZX)
+<span class="ln">63</span>            IF(ABS(ZL).LT.TOLZ)THEN
+<span class="ln">64</span>               LSOL = .TRUE.
+<span class="ln">65</span>               GOTO 9999
+<span class="ln">66</span>            ENDIF
+<span class="ln">67</span>         ELSE
+<span class="ln">68</span>C CALIBRATED SOLAR MODEL.  SET UP OUTPUT FLAGS AND EXIT
+<span class="ln">69</span>            LSOL = .TRUE.
+<span class="ln">70</span>            GOTO 9999
+<span class="ln">71</span>         ENDIF
+<span class="ln">72</span>      ENDIF
+<span class="ln">73</span>
+<span class="ln">74</span>c Added code to use pre-determined partial derivatives    LLP  6/28/09
+<span class="ln">75</span>      DLDX = -3.78D0            ! empirical result:  -3.783    RMS error .070
+<span class="ln">76</span>      DRDX = -0.89D0             ! empirical result:  -0.890    RMS error .048
+<span class="ln">77</span>      DLDA = 0.0139D0            ! empirical result:  +0.139    RMS error .0022
+<span class="ln">78</span>      DRDA = -0.050D0            ! empirical result:  -0.0504   RMS error .0059
+<span class="ln">79</span>      GOTO 1234            ! Bypass partial derivative code
+<span class="ln">80</span>c mhp 5/96 added change to compute solar calibration for 3 kind cards
+<span class="ln">81</span>      IF(N.EQ.3)THEN
+<span class="ln">82</span>C     SET UP RUN TO DETERMINE DERIVATIVE OF L AND R WITH RESPECT TO X.
+<span class="ln">83</span>C
+<span class="ln">84</span>C     3.7 is empirical average dL/dX, so trial DX is BL / (dL/dX)   ! llp 6/18/09
+<span class="ln">85</span>c         DX = BL/3.7D0
+<span class="ln">86</span>C         DX = +.01
+<span class="ln">87</span>         RESCAL(2,N+1) = RESCAL(2,1)+DX
+<span class="ln">88</span>C STORE PREVIOUS L AND R.
+<span class="ln">89</span>         XENV0A(N+1) = RESCAL(2,N+1)
+<span class="ln">90</span>         XENV0A(N+2)=XENV0A(N+1)
+<span class="ln">91</span>         XENV0A(N+3)=XENV0A(N+1)
+<span class="ln">92</span>         BLP = BL
+<span class="ln">93</span>         RLP = RL
+<span class="ln">94</span>         GOTO 9999
+<span class="ln">95</span>      ELSE IF(N.EQ.6)THEN
+<span class="ln">96</span>C     EVALUATE DERIVATIVE OF L AND R WITH RESPECT TO X.
+<span class="ln">97</span>c         DLDX = (BL - BLP)/DX
+<span class="ln">98</span>c         DRDX = (RL - RLP)/DX
+<span class="ln">99</span>c         WRITE(IOWR,*) &quot;DX,DLDX,BL,BLP,DRDX,RL,RLP: &quot;,
+<span class="ln">100</span>c     *      DX,DLDX,BL,BLP,DRDX,RL,RLP
+<span class="ln">101</span>C     SET UP RUN TO DETERMINE DERIVATIVE OF L AND R WITH RESPECT TO ALPHA.
+<span class="ln">102</span>
+<span class="ln">103</span>C     .042 is typical average dR/dA, so trial DA is RL / (dR/dA)   ! llp 6/18/09
+<span class="ln">104</span>c         DA = RL/0.042D0
+<span class="ln">105</span>         CMIXLA(N+1) = CMIXLA(1)+DA
+<span class="ln">106</span>         CMIXLA(N+2) = CMIXLA(N+1)
+<span class="ln">107</span>         CMIXLA(N+3) = CMIXLA(N+1)
+<span class="ln">108</span>         RESCAL(2,N+1) = RESCAL(2,1)
+<span class="ln">109</span>         XENV0A(N+1)=XENV0A(1)
+<span class="ln">110</span>         XENV0A(N+2)=XENV0A(N+1)
+<span class="ln">111</span>         XENV0A(N+3)=XENV0A(N+1)
+<span class="ln">112</span>         BLP = BL
+<span class="ln">113</span>         RLP = RL
+<span class="ln">114</span>         GOTO 9999
+<span class="ln">115</span>      ELSE IF(N.EQ.9)THEN
+<span class="ln">116</span>C     EVALUATE DERIVATIVE OF L AND R WITH RESPECT TO ALPHA.
+<span class="ln">117</span>         DLDA = (BL - BLP)/DA
+<span class="ln">118</span>         DRDA = (RL - RLP)/DA
+<span class="ln">119</span>         WRITE(IOWR,*) &quot;DA,DLDA,BL,BLP,DRDA,RL,RLP: &quot;,
+<span class="ln">120</span>     *       DA,DLDA,BL,BLP,DRDA,RL,RLP
+<span class="ln">121</span>C     USE DERIVATIVES OF L AND R WITH RESPECT TO X AND ALPHA TO
+<span class="ln">122</span>C     GET IMPROVED GUESSES FOR ALPHA AND X.
+<span class="ln">123</span>         DA = ((BL*DRDX/DLDX-RL)/(DRDA-DLDA*DRDX/DLDX))
+<span class="ln">124</span>         DX = -(BL + DLDA*DA)/DLDX
+<span class="ln">125</span>         CMIXLA(N+1) = CMIXLA(1)+DA
+<span class="ln">126</span>         CMIXLA(N+2) = CMIXLA(N+1)
+<span class="ln">127</span>         CMIXLA(N+3) = CMIXLA(N+1)
+<span class="ln">128</span>         RESCAL(2,N+1) = RESCAL(2,1)+DX
+<span class="ln">129</span>         XENV0A(N+1) = RESCAL(2,N+1)
+<span class="ln">130</span>         XENV0A(N+2) = RESCAL(2,N+1)
+<span class="ln">131</span>         XENV0A(N+3) = RESCAL(2,N+1)
+<span class="ln">132</span>         BLP = BL
+<span class="ln">133</span>         RLP = RL
+<span class="ln">134</span>         WRITE(IOWR,*) &quot;New X, Old X, Calc DX: &quot;,
+<span class="ln">135</span>     *       RESCAL(2,N+1), RESCAL(2,1), DX
+<span class="ln">136</span>         WRITE(IOWR,*) &quot;New A, Old A, Calc DA: &quot;,
+<span class="ln">137</span>     *       CMIXLA(N+1), CMIXLA(1), DA
+<span class="ln">138</span>         GOTO 9999
+<span class="ln">139</span>c      ELSE
+<span class="ln">140</span>      endif   ! terrminate old partial derivative code
+<span class="ln">141</span>
+<span class="ln">142</span> 1234 Continue
+<span class="ln">143</span>C     USE DERIVATIVES OF L AND R WITH RESPECT TO X AND ALPHA TO
+<span class="ln">144</span>C     GET IMPROVED GUESSES FOR ALPHA AND X.
+<span class="ln">145</span>         DA = ((BL*DRDX/DLDX-RL)/(DRDA-DLDA*DRDX/DLDX))
+<span class="ln">146</span>         DX = -(BL + DLDA*DA)/DLDX
+<span class="ln">147</span>         CMIXLA(N+1) = CMIXLA(N-2)+DA
+<span class="ln">148</span>         CMIXLA(N+2) = CMIXLA(N+1)
+<span class="ln">149</span>         CMIXLA(N+3) = CMIXLA(N+1)
+<span class="ln">150</span>         IF(LCALSOLZX)THEN
+<span class="ln">151</span>            RESCAL(3,N+1) = RESCAL(3,N-2)*CALSOLZX/SOLZX
+<span class="ln">152</span>            DZ = RESCAL(3,N+1) - RESCAL(3,N-2)
+<span class="ln">153</span>            ZENV0A(N+1) = RESCAL(3,N+1)
+<span class="ln">154</span>            ZENV0A(N+2) = RESCAL(3,N+1)
+<span class="ln">155</span>            ZENV0A(N+3) = RESCAL(3,N+1)
+<span class="ln">156</span>         ENDIF
+<span class="ln">157</span>         RESCAL(2,N+1) = RESCAL(2,N-2)+DX
+<span class="ln">158</span>         XENV0A(N+1) = RESCAL(2,N+1)
+<span class="ln">159</span>         XENV0A(N+2) = RESCAL(2,N+1)
+<span class="ln">160</span>         XENV0A(N+3) = RESCAL(2,N+1)
+<span class="ln">161</span>         WRITE(IOWR,*) &quot;New BL, Old BL, Delta BL: &quot;,
+<span class="ln">162</span>     *       BL, BLP, BL-BLP
+<span class="ln">163</span>         WRITE(IOWR,*) &quot;New RL, Old RL, Delta RL: &quot;,
+<span class="ln">164</span>     *       RL, RLP, RL-RLP
+<span class="ln">165</span>         WRITE(IOWR,*) &quot;New X, Old X, DX: &quot;,
+<span class="ln">166</span>     *       RESCAL(2,N+1), RESCAL(2,N-2), DX
+<span class="ln">167</span>         WRITE(IOWR,*) &quot;New A, Old A, DA: &quot;,
+<span class="ln">168</span>     *       CMIXLA(N+1), CMIXLA(N-2), DA
+<span class="ln">169</span>         IF(LCALSOLZX)THEN
+<span class="ln">170</span>            WRITE(IOWR,*) &quot;New Z, Old Z, DZ: &quot;,
+<span class="ln">171</span>     *       RESCAL(3,N+1), RESCAL(3,N-2), DZ
+<span class="ln">172</span>         ENDIF
+<span class="ln">173</span>         BLP = BL
+<span class="ln">174</span>         RLP = RL
+<span class="ln">175</span>         ZLP = ZL
+<span class="ln">176</span>         GOTO 9999
+<span class="ln">177</span>C      ENDIF
+<span class="ln">178</span> 9999 CONTINUE
+<span class="ln">179</span>      RETURN
+<span class="ln">180</span>      END</pre></details>
+<details class='py' id='py-chkcal'><summary>Python version: chkcal</summary><pre class='doc'>Check a solar model against L_sun, R_sun (and the solar Z/X); if it
+is not calibrated, set new X, alpha (and Z) for kind cards n+1 to n+3
+by a Newton step with fixed derivatives.
+
+Translates: chkcal.f#CHKCAL (09c3b9b)
+
+Arguments: bl, log L/L_sun; rl, log R/R_sun; n, the current kind card;
+solzx, the model&#x27;s surface Z/X; the derivatives dldx, drdx, dlda, drda
+(set here); lsol, whether the calibration has converged.
+
+Returns (dldx, drdx, dlda, drda, lsol). The new X, alpha and Z go to
+runloop_mod.rescal and nmlpar_mod.xenv0a, cmixla, zenv0a.</pre><pre class='src'><span class="ln">21</span>def chkcal(bl, rl, n, solzx, dldx, drdx, dlda, drda, lsol):
+<span class="ln">22</span>    &quot;&quot;&quot;Check a solar model against L_sun, R_sun (and the solar Z/X); if it
+<span class="ln">23</span>    is not calibrated, set new X, alpha (and Z) for kind cards n+1 to n+3
+<span class="ln">24</span>    by a Newton step with fixed derivatives.
+<span class="ln">25</span>
+<span class="ln">26</span>    Translates: chkcal.f#CHKCAL (09c3b9b)
+<span class="ln">27</span>
+<span class="ln">28</span>    Arguments: bl, log L/L_sun; rl, log R/R_sun; n, the current kind card;
+<span class="ln">29</span>    solzx, the model&#x27;s surface Z/X; the derivatives dldx, drdx, dlda, drda
+<span class="ln">30</span>    (set here); lsol, whether the calibration has converged.
+<span class="ln">31</span>
+<span class="ln">32</span>    Returns (dldx, drdx, dlda, drda, lsol). The new X, alpha and Z go to
+<span class="ln">33</span>    runloop_mod.rescal and nmlpar_mod.xenv0a, cmixla, zenv0a.
+<span class="ln">34</span>    &quot;&quot;&quot;
+<span class="ln">35</span>    global blp, rlp, dx, da, dz, zl, zlp
+<span class="ln">36</span>    nml = nmlpar_mod
+<span class="ln">37</span>    rescal = runloop_mod.rescal
+<span class="ln">38</span>    iowr = iounits_mod.iowr
+<span class="ln">39</span>
+<span class="ln">40</span>    # Converged? Question (see the page): Z/X not converged.
+<span class="ln">41</span>    if abs(bl) &lt; nml.toll and abs(rl) &lt; nml.tolr:
+<span class="ln">42</span>        if nml.lcalsolzx and nml.calsolzx &gt; 0.0:
+<span class="ln">43</span>            zl = math.log10(solzx) - math.log10(nml.calsolzx)
+<span class="ln">44</span>            if abs(zl) &lt; nml.tolz:
+<span class="ln">45</span>                lsol = True
+<span class="ln">46</span>                return dldx, drdx, dlda, drda, lsol
+<span class="ln">47</span>        else:
+<span class="ln">48</span>            lsol = True
+<span class="ln">49</span>            return dldx, drdx, dlda, drda, lsol
+<span class="ln">50</span>
+<span class="ln">51</span>    # Fixed, empirical derivatives (LLP 6/28/09).
+<span class="ln">52</span>    dldx = -3.78   # empirical result:  -3.783    RMS error .070
+<span class="ln">53</span>    drdx = -0.89   # empirical result:  -0.890    RMS error .048
+<span class="ln">54</span>    # Question (see the page): a derivative off by ten?
+<span class="ln">55</span>    dlda = 0.0139  # empirical result:  +0.139    RMS error .0022
+<span class="ln">56</span>    drda = -0.050  # empirical result:  -0.0504   RMS error .0059
+<span class="ln">57</span>
+<span class="ln">58</span>    # GOTO 1234 bypasses the older method, which measured the derivatives
+<span class="ln">59</span>    # with extra runs at kind cards 3, 6 and 9.
+<span class="ln">60</span>    # Question (see the page): dead code.
+<span class="ln">61</span>    if False:
+<span class="ln">62</span>        if n == 3:
+<span class="ln">63</span>            rescal[2, n + 1] = rescal[2, 1] + dx
+<span class="ln">64</span>            nml.xenv0a[n + 1] = rescal[2, n + 1]
+<span class="ln">65</span>            nml.xenv0a[n + 2] = nml.xenv0a[n + 1]
+<span class="ln">66</span>            nml.xenv0a[n + 3] = nml.xenv0a[n + 1]
+<span class="ln">67</span>            blp = bl
+<span class="ln">68</span>            rlp = rl
+<span class="ln">69</span>            return dldx, drdx, dlda, drda, lsol
+<span class="ln">70</span>        elif n == 6:
+<span class="ln">71</span>            nml.cmixla[n + 1] = nml.cmixla[1] + da
+<span class="ln">72</span>            nml.cmixla[n + 2] = nml.cmixla[n + 1]
+<span class="ln">73</span>            nml.cmixla[n + 3] = nml.cmixla[n + 1]
+<span class="ln">74</span>            rescal[2, n + 1] = rescal[2, 1]
+<span class="ln">75</span>            nml.xenv0a[n + 1] = nml.xenv0a[1]
+<span class="ln">76</span>            nml.xenv0a[n + 2] = nml.xenv0a[n + 1]
+<span class="ln">77</span>            nml.xenv0a[n + 3] = nml.xenv0a[n + 1]
+<span class="ln">78</span>            blp = bl
+<span class="ln">79</span>            rlp = rl
+<span class="ln">80</span>            return dldx, drdx, dlda, drda, lsol
+<span class="ln">81</span>        elif n == 9:
+<span class="ln">82</span>            dlda = (bl - blp) / da
+<span class="ln">83</span>            drda = (rl - rlp) / da
+<span class="ln">84</span>            iounits_mod.write(iowr, f&quot; DA,DLDA,BL,BLP,DRDA,RL,RLP:  {da} &quot;
+<span class="ln">85</span>                              f&quot;{dlda} {bl} {blp} {drda} {rl} {rlp}&quot;)
+<span class="ln">86</span>            da = ((bl * drdx / dldx - rl) / (drda - dlda * drdx / dldx))
+<span class="ln">87</span>            dx = -(bl + dlda * da) / dldx
+<span class="ln">88</span>            nml.cmixla[n + 1] = nml.cmixla[1] + da
+<span class="ln">89</span>            nml.cmixla[n + 2] = nml.cmixla[n + 1]
+<span class="ln">90</span>            nml.cmixla[n + 3] = nml.cmixla[n + 1]
+<span class="ln">91</span>            rescal[2, n + 1] = rescal[2, 1] + dx
+<span class="ln">92</span>            nml.xenv0a[n + 1] = rescal[2, n + 1]
+<span class="ln">93</span>            nml.xenv0a[n + 2] = rescal[2, n + 1]
+<span class="ln">94</span>            nml.xenv0a[n + 3] = rescal[2, n + 1]
+<span class="ln">95</span>            blp = bl
+<span class="ln">96</span>            rlp = rl
+<span class="ln">97</span>            iounits_mod.write(iowr, f&quot; New X, Old X, Calc DX:  &quot;
+<span class="ln">98</span>                              f&quot;{rescal[2, n + 1]} {rescal[2, 1]} {dx}&quot;)
+<span class="ln">99</span>            iounits_mod.write(iowr, f&quot; New A, Old A, Calc DA:  &quot;
+<span class="ln">100</span>                              f&quot;{nml.cmixla[n + 1]} {nml.cmixla[1]} {da}&quot;)
+<span class="ln">101</span>            return dldx, drdx, dlda, drda, lsol
+<span class="ln">102</span>
+<span class="ln">103</span>    # label 1234: the Newton step, from the values of card n-2.
+<span class="ln">104</span>    da = ((bl * drdx / dldx - rl) / (drda - dlda * drdx / dldx))
+<span class="ln">105</span>    dx = -(bl + dlda * da) / dldx
+<span class="ln">106</span>    nml.cmixla[n + 1] = nml.cmixla[n - 2] + da
+<span class="ln">107</span>    nml.cmixla[n + 2] = nml.cmixla[n + 1]
+<span class="ln">108</span>    nml.cmixla[n + 3] = nml.cmixla[n + 1]
+<span class="ln">109</span>    if nml.lcalsolzx:
+<span class="ln">110</span>        rescal[3, n + 1] = rescal[3, n - 2] * nml.calsolzx / solzx
+<span class="ln">111</span>        dz = rescal[3, n + 1] - rescal[3, n - 2]
+<span class="ln">112</span>        nml.zenv0a[n + 1] = rescal[3, n + 1]
+<span class="ln">113</span>        nml.zenv0a[n + 2] = rescal[3, n + 1]
+<span class="ln">114</span>        nml.zenv0a[n + 3] = rescal[3, n + 1]
+<span class="ln">115</span>    rescal[2, n + 1] = rescal[2, n - 2] + dx
+<span class="ln">116</span>    nml.xenv0a[n + 1] = rescal[2, n + 1]
+<span class="ln">117</span>    nml.xenv0a[n + 2] = rescal[2, n + 1]
+<span class="ln">118</span>    nml.xenv0a[n + 3] = rescal[2, n + 1]
+<span class="ln">119</span>    iounits_mod.write(iowr, f&quot; New BL, Old BL, Delta BL:  {bl} {blp} &quot;
+<span class="ln">120</span>                      f&quot;{bl - blp}&quot;)
+<span class="ln">121</span>    iounits_mod.write(iowr, f&quot; New RL, Old RL, Delta RL:  {rl} {rlp} &quot;
+<span class="ln">122</span>                      f&quot;{rl - rlp}&quot;)
+<span class="ln">123</span>    iounits_mod.write(iowr, f&quot; New X, Old X, DX:  {rescal[2, n + 1]} &quot;
+<span class="ln">124</span>                      f&quot;{rescal[2, n - 2]} {dx}&quot;)
+<span class="ln">125</span>    iounits_mod.write(iowr, f&quot; New A, Old A, DA:  {nml.cmixla[n + 1]} &quot;
+<span class="ln">126</span>                      f&quot;{nml.cmixla[n - 2]} {da}&quot;)
+<span class="ln">127</span>    if nml.lcalsolzx:
+<span class="ln">128</span>        iounits_mod.write(iowr, f&quot; New Z, Old Z, DZ:  {rescal[3, n + 1]} &quot;
+<span class="ln">129</span>                          f&quot;{rescal[3, n - 2]} {dz}&quot;)
+<span class="ln">130</span>    blp = bl
+<span class="ln">131</span>    rlp = rl
+<span class="ln">132</span>    zlp = zl
+<span class="ln">133</span>    return dldx, drdx, dlda, drda, lsol</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Unclear. "for the next three kind cards, the new $X$ (<code>RESCAL(2,·)</code>, <code>XENV0A</code>) … $Z$ (<code>RESCAL(3,·)</code>, <code>ZENV0A</code>)": <code>RESCAL</code> is set only for card $N+1$ (the rescaling card); <code>XENV0A</code>, <code>ZENV0A</code> and <code>CMIXLA</code> for $N+1$ to $N+3$. Fix: say so.</li>
+<li>Missing (question 3). The convergence test uses $Z/X$ only when <code>LCALSOLZX</code> and <code>CALSOLZX &gt; 0</code>; the update of $Z$ tests only <code>LCALSOLZX</code>, so a target of 0 would set $Z = 0$. (The default target is 0.02292, in PARMIN.) Fix: add a clause.</li>
+</ol>
+<p>Otherwise checked: the convergence test, the Newton step and its formula, the derivatives, the call from main.f (<code>MOD(NK,3).EQ.0</code>) and the questions hold.</p>
+<p>Revised: which cards get <code>RESCAL</code> and which the other values stated; question 3 extended to the <code>CALSOLZX &gt; 0</code> test.</p></div></details>
+</main></body></html>

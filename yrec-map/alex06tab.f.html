@@ -1,0 +1,277 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>alex06tab.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ alex06tab.f</span></header><main>
+<h1>alex06tab.f</h1>
+<p class='muted'>126 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/alex06tab.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>alex06tab.py</code>, 105 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file builds the low-temperature opacity table of Alexander (the 2006 tables, as the names <code>ALEX06</code>/<code>ALOT06</code> say) for one composition $(X, Z)$, by interpolating between the stored tables of the grid in $X$ and $Z$. The result is a single table of opacity against $\log T$ and $\log R$ that <a href="../yrec-map/getalex06.f.html#def-GETALEX06">GETALEX06</a> then interpolates in.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the full set of tables, <code>CAPTALEX06</code> in <code>ALOT06ALL_MOD</code>, read once by <a href="../yrec-map/readalex06.f.html#def-READALEX06">READALEX06</a>, and the grid values <code>XXG06</code>, <code>ZZG06</code> in <code>GALOT06_MOD</code> (initialized there); the requested composition <code>XE</code>, <code>ZE</code> in <code>ALOT06_MOD</code>.</li>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/getalex06.f.html#def-GETALEX06">GETALEX06</a>, whenever the $X$ or $Z$ of the point differs from the composition of the current table by more than $10^{-8}$. GETALEX06 sets <code>XE</code>, <code>ZE</code> before the call.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/intrp2.f.html#def-INTRP2">INTRP2</a>, 4-point Lagrange weights.</li>
+<li><strong>Output:</strong> <code>CAPALEX06(NUMT,NUMD)</code> in <code>ALOT06_MOD</code>, read by GETALEX06. It also sets the index <code>IX</code> in <code>ALOT06_MOD</code>.</li>
+<li><strong>Modules:</strong> <code>GALOT06_MOD</code> and <code>ALOT06_MOD</code> (with GETALEX06 and READALEX06), <code>ALOT06ALL_MOD</code> (with READALEX06); the formerly shared COMMON blocks <code>/GALOT06/</code>, <code>/ALOT06/</code> and <code>/ALOT06ALL/</code>.</li>
+</ul>
+<p><strong>The grid.</strong> READALEX06 stores the tables as <code>CAPTALEX06(JJ, T, R)</code> with $JJ = (i_X - 1)\,N_Z + i_Z$, for $N_X = 9$ values of $X$ (eight from 0 to 0.9, then a ninth set at $X = 1 - Z$, which <code>XXG06(9) = 1.0</code> stands for) and $N_Z = 16$ values of $Z$ (0 to 0.10): 143 tables in all, since there is no extra table at $X = 1 - Z$ for $Z = 0.10$ (the $X = 0.9$ table doubles for it). Each table has 85 temperatures and 19 values of $\log R$.</p>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Check the composition: $0 \le X \le 1 - Z$, and $0 \le Z \le Z_{16} + (Z_{16} - Z_{15}) = 0.12$, an extrapolation by one grid step in $Z$. Otherwise the run stops.</li>
+<li>Choose 4 neighboring grid values in $Z$ (starting index <code>IZ</code>) and in $X$ (<code>IX</code>). Above $X = 0.8$ the start is <code>NUMX-3</code>, or <code>NUMX-4</code> if $Z \ge 0.1$.</li>
+<li>
+<p>Interpolate in $Z$ for each of the 4 values of $X$, with the 4-point Lagrange weights $w_k(Z)$:
+$$\kappa_m(T,R) = \sum_{k=1}^{4} w_k(Z)\,\kappa(X_m, Z_{k}; T, R), \qquad w_k(Z) = \prod_{l \ne k} \frac{Z - Z_l}{Z_k - Z_l}.$$
+The 4th value of $X$ needs its own indexing near the corner of the grid ($X = 1 - Z$, $Z = 0.1$).</p>
+</li>
+<li>
+<p>Interpolate in $X$ the same way over the 4 results (<code>CAPTEMP</code>), giving <code>CAPALEX06</code>. When <code>IZ = NUMZ-3</code>, the 4th node in $X$ is placed at $1 - Z$.</p>
+</li>
+</ol>
+<p>The tabulated quantity is probably $\log \kappa$ (READALEX06 reads it with format <code>F7.3</code>); the interpolation is linear in whatever is stored.</p>
+<p><strong>Design.</strong> All state is in modules; the routine has no arguments. It stops the run on a bad composition, with a message that names "ALEX06".</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code> (the unused <code>NUMXZ</code> parameter is now in <code>ALOT06ALL_MOD</code>).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The 4th node in $X$.</strong> <code>QR(4) = 1-ZE</code> whenever <code>IZ = NUMZ-3</code> (that is, for $Z &gt; 0.06$), whatever <code>IX</code> is. But the 4th table is at $X = 1 - Z$ only when <code>IX = NUMX-3</code>; for smaller $X$ it is <code>XXG06(IX+3)</code> (for example 0.35 when <code>IX = 1</code>). Should the test be on <code>IX</code> as well? As written, the $X$ interpolation for $Z &gt; 0.06$ and $X \lesssim 0.7$ uses a wrong abscissa.</li>
+<li><strong>The last row at small $Z$.</strong> When <code>IX = NUMX-3</code> and <code>IZ &lt; NUMZ-3</code>, the 4th node is <code>XXG06(9) = 1.0</code>, although the table stored there is at $X = 1 - Z$. Is the difference (up to 0.06) accepted on purpose?</li>
+<li><strong>Extrapolation to $Z = 0.12$.</strong> Between $Z = 0.10$ and 0.12 the code extrapolates; for $X$ near $1-Z$ the corner table is the $X = 0.9$ one at $Z = 0.10$. Is this range meant to be used?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>SUBROUTINE FOR GENERATING SURFACE X AND Z TABLES FOR ALEXANDER OPACITIES</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-ALEX06TAB'>ALEX06TAB</a> <span class='muted'>subroutine · SUBROUTINE FOR GENERATING SURFACE X AND Z TABLES FOR ALEXANDER OPACITIES</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-ALEX06TAB'><h3><span class='kind'>subroutine</span>ALEX06TAB</h3>
+<p class='muted'>lines 2–126 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/alex06tab.f#L2-L126'>GitHub</a></p>
+<pre>SUBROUTINE ALEX06TAB</pre>
+<div class='notes'><p>Interpolates the stored Alexander tables to the composition (<code>XE</code>, <code>ZE</code>) in <code>ALOT06_MOD</code>: first in $Z$, then in $X$, each with 4-point Lagrange weights from <a href="../yrec-map/intrp2.f.html#def-INTRP2">INTRP2</a>. Writes <code>CAPALEX06</code>.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>SUBROUTINE FOR GENERATING SURFACE X AND Z TABLES FOR ALEXANDER OPACITIES</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/alot06all_mod.f.html#def-ALOT06ALL_MOD'>ALOT06ALL_MOD</a>, <a href='../yrec-map/alot06_mod.f.html#def-ALOT06_MOD'>ALOT06_MOD</a>, <a href='../yrec-map/galot06_mod.f.html#def-GALOT06_MOD'>GALOT06_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/intrp2.f.html#def-INTRP2'>INTRP2</a> <span class='muted'>(intrp2.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/getalex06.f.html#def-GETALEX06'>GETALEX06</a> <span class='muted'>(getalex06.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE ALEX06TAB
+<span class="ln">3</span>C 10/14/26 MHP via Claude
+<span class="ln">4</span>C code changed to convert COMMON/GALOT06/ into GALOT06_MOD.
+<span class="ln">5</span>      USE GALOT06_MOD
+<span class="ln">6</span>C 10/14/26 MHP via Claude
+<span class="ln">7</span>C code changed to convert COMMON/ALOT06/ into ALOT06_MOD.
+<span class="ln">8</span>      USE ALOT06_MOD
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/ALOT06ALL/ into ALOT06ALL_MOD.
+<span class="ln">11</span>      USE ALOT06ALL_MOD
+<span class="ln">12</span>C 10/20/26 MHP via Claude
+<span class="ln">13</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">14</span>C explicit declarations.
+<span class="ln">15</span>      IMPLICIT NONE
+<span class="ln">16</span>      REAL*8 X,XMAX,ZMAX
+<span class="ln">17</span>      INTEGER I,IZ,J,K,KK,KK2,KK3,KK4,NUMD,NUMT,NUMX,NUMZ
+<span class="ln">18</span>      PARAMETER (NUMX=9)
+<span class="ln">19</span>      PARAMETER (NUMZ=16)
+<span class="ln">20</span>      PARAMETER (NUMT=85)
+<span class="ln">21</span>      PARAMETER (NUMD=19)
+<span class="ln">22</span>      REAL*8 QR(4),FX(4), CAPTEMP(4,NUMT,NUMD)
+<span class="ln">23</span>      SAVE
+<span class="ln">24</span>C  XE = DESIRED X; ZE = DESIRED Z
+<span class="ln">25</span>      XMAX = 1.0D0 - ZE
+<span class="ln">26</span>C CHECK THAT THE REQUESTED COMPOSITION IS INSIDE TABLE BOUNDS
+<span class="ln">27</span>      IF(XE.LT.0.0D0 .OR. XE. GT. XMAX)THEN
+<span class="ln">28</span>         WRITE(*,5) XE,ZE
+<span class="ln">29</span> 5       FORMAT(&#x27;ILLEGAL COMPOSITION (X,Z) = &#x27;,2F6.2,&#x27; IN ALEX06.RUN STOPPED&#x27;)
+<span class="ln">30</span>         STOP
+<span class="ln">31</span>      ENDIF
+<span class="ln">32</span>C PERMIT EXTRAPOLATION IN Z BY UP TO 1 TABLE ELEMENT
+<span class="ln">33</span>      ZMAX = ZZG06(NUMZ)+(ZZG06(NUMZ)-ZZG06(NUMZ-1))
+<span class="ln">34</span>      IF(ZE.LT.0.0D0 .OR. ZE. GT. ZMAX)THEN
+<span class="ln">35</span>         WRITE(*,5) XE,ZE
+<span class="ln">36</span>         STOP
+<span class="ln">37</span>      ENDIF
+<span class="ln">38</span>C FIND 4 NEAREST TABLES IN Z.
+<span class="ln">39</span>      DO I = 3,NUMZ-2
+<span class="ln">40</span>         IF(ZE.LE.ZZG06(I))THEN
+<span class="ln">41</span>            IZ = I - 2
+<span class="ln">42</span>            GOTO 7
+<span class="ln">43</span>         ENDIF
+<span class="ln">44</span>      END DO
+<span class="ln">45</span>      IZ = NUMZ - 3
+<span class="ln">46</span> 7    CONTINUE
+<span class="ln">47</span>C FIND 4 NEAREST TABLES IN X.
+<span class="ln">48</span>      DO I = 3,NUMX-2
+<span class="ln">49</span>         IF(XE.LE.XXG06(I))THEN
+<span class="ln">50</span>            IX = I - 2
+<span class="ln">51</span>            GOTO 10
+<span class="ln">52</span>         ENDIF
+<span class="ln">53</span>      END DO
+<span class="ln">54</span>C NO TABLE FOR X &gt; 0.9 IF Z =0.10 OR MORE
+<span class="ln">55</span>      IF(ZE.GE.0.1D0)THEN
+<span class="ln">56</span>         IX = NUMX - 4
+<span class="ln">57</span>      ELSE
+<span class="ln">58</span>         IX = NUMX - 3
+<span class="ln">59</span>      ENDIF
+<span class="ln">60</span> 10   CONTINUE
+<span class="ln">61</span>C INTERPOLATION FACTORS FOR Z
+<span class="ln">62</span>      DO I = 1,4
+<span class="ln">63</span>         QR(I) = ZZG06(IZ+I-1)
+<span class="ln">64</span>      END DO
+<span class="ln">65</span>C      WRITE(*,*)ZE,(QR(I),I=1,4)
+<span class="ln">66</span>      X = ZE
+<span class="ln">67</span>      CALL <a href="../yrec-map/intrp2.f.html#def-INTRP2" title="INTRP2 in intrp2.f">INTRP2</a>(QR,FX,X)
+<span class="ln">68</span>C THE DIFFERENCE IN THE NUMBER OF TABLES FOR THE Z=0.1 CASE REQUIRES SOME
+<span class="ln">69</span>C CARE IN X INTERPOLATION.  FIRST 3 X CASES CAN BE TREATED NORMALLY.
+<span class="ln">70</span>      DO K = 1,3
+<span class="ln">71</span>         KK = NUMZ*(IX+K-2)+IZ
+<span class="ln">72</span>         KK2 = KK + 1
+<span class="ln">73</span>         KK3 = KK2 + 1
+<span class="ln">74</span>         KK4 = KK3 + 1
+<span class="ln">75</span>         DO I = 1,NUMT
+<span class="ln">76</span>            DO J = 1,NUMD
+<span class="ln">77</span>               CAPTEMP(K,I,J) = FX(1)*CAPTALEX06(KK,I,J)+
+<span class="ln">78</span>     *         FX(2)*CAPTALEX06(KK2,I,J) + FX(3)*CAPTALEX06(KK3,I,J) +
+<span class="ln">79</span>     *         FX(4)*CAPTALEX06(KK4,I,J)
+<span class="ln">80</span>            END DO
+<span class="ln">81</span>         END DO
+<span class="ln">82</span>      END DO
+<span class="ln">83</span>C IF IN THE HIGH Z AND HIGH X DOMAIN THE TOP TABLE IS X = 1-Z (ENTRY NUMX) EXCEPT
+<span class="ln">84</span>C FOR THE Z=0.10 CASE (WHERE THE X=0.9 CASE DOUBLES AS THE X=1-Z CASE).
+<span class="ln">85</span>      IF(IX.EQ.NUMX-3.AND.IZ.EQ.NUMZ-3)THEN
+<span class="ln">86</span>C USE DIFFERENT INDEXING FOR THE LAST TABLE
+<span class="ln">87</span>         KK = NUMZ*(IX+2)+IZ
+<span class="ln">88</span>         KK2 = KK + 1
+<span class="ln">89</span>         KK3 = KK2 + 1
+<span class="ln">90</span>         KK4 = NUMZ*(IX+2)
+<span class="ln">91</span>      ELSE
+<span class="ln">92</span>         KK = NUMZ*(IX+2)+IZ
+<span class="ln">93</span>         KK2 = KK + 1
+<span class="ln">94</span>         KK3 = KK2 + 1
+<span class="ln">95</span>         KK4 = KK3 + 1
+<span class="ln">96</span>      ENDIF
+<span class="ln">97</span>      DO I = 1,NUMT
+<span class="ln">98</span>         DO J = 1,NUMD
+<span class="ln">99</span>            CAPTEMP(4,I,J) = FX(1)*CAPTALEX06(KK,I,J)+
+<span class="ln">100</span>     *      FX(2)*CAPTALEX06(KK2,I,J) + FX(3)*CAPTALEX06(KK3,I,J) +
+<span class="ln">101</span>     *      FX(4)*CAPTALEX06(KK4,I,J)
+<span class="ln">102</span>         END DO
+<span class="ln">103</span>      END DO
+<span class="ln">104</span>C NOW DO X INTERPOLATION
+<span class="ln">105</span>C INTERPOLATION FACTORS FOR X
+<span class="ln">106</span>      DO I = 1,3
+<span class="ln">107</span>         QR(I) = XXG06(IX+I-1)
+<span class="ln">108</span>      END DO
+<span class="ln">109</span>      IF(IZ.EQ.NUMZ-3)THEN
+<span class="ln">110</span>         QR(4) = 1.0D0-ZE
+<span class="ln">111</span>      ELSE
+<span class="ln">112</span>         QR(4) = XXG06(IX+3)
+<span class="ln">113</span>      ENDIF
+<span class="ln">114</span>      X = XE
+<span class="ln">115</span>      CALL <a href="../yrec-map/intrp2.f.html#def-INTRP2" title="INTRP2 in intrp2.f">INTRP2</a>(QR,FX,X)
+<span class="ln">116</span>C      WRITE(*,*)XE,(QR(I),I=1,4)
+<span class="ln">117</span>      DO I = 1,NUMT
+<span class="ln">118</span>         DO J = 1,NUMD
+<span class="ln">119</span>            CAPALEX06(I,J) = FX(1)*CAPTEMP(1,I,J)+
+<span class="ln">120</span>     *      FX(2)*CAPTEMP(2,I,J) + FX(3)*CAPTEMP(3,I,J) +
+<span class="ln">121</span>     *      FX(4)*CAPTEMP(4,I,J)
+<span class="ln">122</span>         END DO
+<span class="ln">123</span>      END DO
+<span class="ln">124</span>C      WRITE(*,*)TGR06(NUMT),R0GR06(NUMD),CAPALEX06(NUMT,NUMD)
+<span class="ln">125</span>      RETURN
+<span class="ln">126</span>      END</pre></details>
+<details class='py' id='py-alex06tab'><summary>Python version: alex06tab</summary><pre class='doc'>Interpolate the stored Alexander tables CAPTALEX06 to the composition
+XE, ZE of ALOT06_MOD, first in Z, then in X, each with 4-point Lagrange
+weights, giving CAPALEX06 (and setting IX).
+
+Translates: alex06tab.f#ALEX06TAB (09c3b9b)
+
+No arguments; nothing is returned. The tables are stored as
+CAPTALEX06(JJ, T, R) with JJ = NUMZ*(IX-1) + IZ.</pre><pre class='src'><span class="ln">38</span>def alex06tab():
+<span class="ln">39</span>    &quot;&quot;&quot;Interpolate the stored Alexander tables CAPTALEX06 to the composition
+<span class="ln">40</span>    XE, ZE of ALOT06_MOD, first in Z, then in X, each with 4-point Lagrange
+<span class="ln">41</span>    weights, giving CAPALEX06 (and setting IX).
+<span class="ln">42</span>
+<span class="ln">43</span>    Translates: alex06tab.f#ALEX06TAB (09c3b9b)
+<span class="ln">44</span>
+<span class="ln">45</span>    No arguments; nothing is returned. The tables are stored as
+<span class="ln">46</span>    CAPTALEX06(JJ, T, R) with JJ = NUMZ*(IX-1) + IZ.
+<span class="ln">47</span>    &quot;&quot;&quot;
+<span class="ln">48</span>    a = alot06_mod
+<span class="ln">49</span>    g = galot06_mod
+<span class="ln">50</span>    # XE = desired X; ZE = desired Z
+<span class="ln">51</span>    xmax = 1.0 - a.ze
+<span class="ln">52</span>    # Check that the requested composition is inside the table bounds.
+<span class="ln">53</span>    if a.xe &lt; 0.0 or a.xe &gt; xmax:
+<span class="ln">54</span>        _stop_composition()
+<span class="ln">55</span>    # Permit extrapolation in Z by up to 1 table element.
+<span class="ln">56</span>    zmax = g.zzg06[NUMZ] + (g.zzg06[NUMZ] - g.zzg06[NUMZ - 1])
+<span class="ln">57</span>    if a.ze &lt; 0.0 or a.ze &gt; zmax:
+<span class="ln">58</span>        _stop_composition()
+<span class="ln">59</span>    # Find the 4 nearest tables in Z.
+<span class="ln">60</span>    for i in range(3, NUMZ - 2 + 1):
+<span class="ln">61</span>        if a.ze &lt;= g.zzg06[i]:
+<span class="ln">62</span>            iz = i - 2
+<span class="ln">63</span>            break
+<span class="ln">64</span>    else:
+<span class="ln">65</span>        iz = NUMZ - 3
+<span class="ln">66</span>    # label 7: find the 4 nearest tables in X.
+<span class="ln">67</span>    for i in range(3, NUMX - 2 + 1):
+<span class="ln">68</span>        if a.xe &lt;= g.xxg06[i]:
+<span class="ln">69</span>            a.ix = i - 2
+<span class="ln">70</span>            break
+<span class="ln">71</span>    else:
+<span class="ln">72</span>        # No table for X &gt; 0.9 if Z = 0.10 or more.
+<span class="ln">73</span>        if a.ze &gt;= 0.1:
+<span class="ln">74</span>            a.ix = NUMX - 4
+<span class="ln">75</span>        else:
+<span class="ln">76</span>            a.ix = NUMX - 3
+<span class="ln">77</span>    ix = a.ix
+<span class="ln">78</span>    # label 10: interpolation factors for Z.
+<span class="ln">79</span>    for i in range(1, 5):
+<span class="ln">80</span>        qr[i] = g.zzg06[iz + i - 1]
+<span class="ln">81</span>    intrp2(qr, fx, a.ze)
+<span class="ln">82</span>    # The first 3 X cases can be treated normally.
+<span class="ln">83</span>    for k in range(1, 4):
+<span class="ln">84</span>        kk = NUMZ * (ix + k - 2) + iz
+<span class="ln">85</span>        captemp[k, 1:, 1:] = _combine(kk, kk + 1, kk + 2, kk + 3)
+<span class="ln">86</span>    # In the high-Z, high-X domain the top table is X = 1-Z (entry NUMX)
+<span class="ln">87</span>    # except for Z = 0.10, where the X = 0.9 table doubles for it.
+<span class="ln">88</span>    kk = NUMZ * (ix + 2) + iz
+<span class="ln">89</span>    if ix == NUMX - 3 and iz == NUMZ - 3:
+<span class="ln">90</span>        kk4 = NUMZ * (ix + 2)
+<span class="ln">91</span>    else:
+<span class="ln">92</span>        kk4 = kk + 3
+<span class="ln">93</span>    captemp[4, 1:, 1:] = _combine(kk, kk + 1, kk + 2, kk4)
+<span class="ln">94</span>    # Interpolation factors for X.
+<span class="ln">95</span>    for i in range(1, 4):
+<span class="ln">96</span>        qr[i] = g.xxg06[ix + i - 1]
+<span class="ln">97</span>    if iz == NUMZ - 3:
+<span class="ln">98</span>        # Question (see the page): 1-Z is used whatever IX is.
+<span class="ln">99</span>        qr[4] = 1.0 - a.ze
+<span class="ln">100</span>    else:
+<span class="ln">101</span>        # Question (see the page): XXG06(9) = 1.0 stands for X = 1-Z.
+<span class="ln">102</span>        qr[4] = g.xxg06[ix + 3]
+<span class="ln">103</span>    intrp2(qr, fx, a.xe)
+<span class="ln">104</span>    a.capalex06[1:, 1:] = (fx[1] * captemp[1, 1:, 1:] + fx[2] * captemp[2, 1:, 1:]
+<span class="ln">105</span>                           + fx[3] * captemp[3, 1:, 1:] + fx[4] * captemp[4, 1:, 1:])</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_stop_composition'><summary>Python version: _stop_composition</summary><pre class='doc'>FORMAT 5, then STOP.</pre><pre class='src'><span class="ln">22</span>def _stop_composition():
+<span class="ln">23</span>    &quot;&quot;&quot;FORMAT 5, then STOP.&quot;&quot;&quot;
+<span class="ln">24</span>    a = alot06_mod
+<span class="ln">25</span>    print(f&quot;ILLEGAL COMPOSITION (X,Z) = {a.xe:6.2f}{a.ze:6.2f}&quot;
+<span class="ln">26</span>          f&quot; IN ALEX06.RUN STOPPED&quot;)
+<span class="ln">27</span>    raise SystemExit</pre></details>
+<details class='py' id='py-_combine'><summary>Python version: _combine</summary><pre class='doc'>FX(1)*T(KK) + FX(2)*T(KK2) + FX(3)*T(KK3) + FX(4)*T(KK4), over all
+(T, R), in the Fortran&#x27;s order of the sum.</pre><pre class='src'><span class="ln">30</span>def _combine(kk, kk2, kk3, kk4):
+<span class="ln">31</span>    &quot;&quot;&quot;FX(1)*T(KK) + FX(2)*T(KK2) + FX(3)*T(KK3) + FX(4)*T(KK4), over all
+<span class="ln">32</span>    (T, R), in the Fortran&#x27;s order of the sum.&quot;&quot;&quot;
+<span class="ln">33</span>    t = alot06all_mod.captalex06
+<span class="ln">34</span>    return (fx[1] * t[kk, 1:, 1:] + fx[2] * t[kk2, 1:, 1:]
+<span class="ln">35</span>            + fx[3] * t[kk3, 1:, 1:] + fx[4] * t[kk4, 1:, 1:])</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Unclear. "for $N_X = 9$ values of $X$ (0 to 0.9, then a last set at $X = 1 - Z$)": the 9 are eight values 0 to 0.9 plus the set at $1-Z$ (<code>XXG06(9) = 1.0</code> stands for it). Fix: say so.</li>
+</ol>
+<p>Otherwise checked against READALEX06 and GETALEX06: the grid, the indexing, the stencils and the three questions hold.</p>
+<p>Revised: the nine values of $X$ explained (eight plus the set at $1-Z$, <code>XXG06(9) = 1.0</code>).</p></div></details>
+</main></body></html>

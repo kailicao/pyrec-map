@@ -1,0 +1,384 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>mixcz.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ mixcz.f</span></header><main>
+<h1>mixcz.f</h1>
+<p class='muted'>248 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/mixcz.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>mixcz.py</code>, 88 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Homogenizes the composition of every convection zone (mass-weighted mean over the zone), then applies light clean-ups to the composition.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> <code>HCOMP</code>, the shell masses <code>HS2</code>, the convection flags <code>LCZ</code> and <code>M</code>; <code>ZENVM</code> from <code>COMP_MOD</code>; <code>LEXCOM</code> from <code>NMLPAR_MOD</code>.</li>
+<li><strong>Who calls it:</strong> the main program in <a href="../yrec-map/main.f.html">main.f</a>, <a href="../yrec-map/getw.f.html#def-GETW">GETW</a> (twice) and <a href="../yrec-map/seculr.f.html#def-SECULR">SECULR</a>.</li>
+<li><strong>Output:</strong> <code>HCOMP</code> in place. It also writes <code>LCZ(M+1) = .FALSE.</code> as a sentinel.</li>
+<li><strong>Modules:</strong> <code>COMP_MOD</code> (<code>ZENVM</code>), <code>NMLPAR_MOD</code> (<code>LEXCOM</code>) and <code>DIMENSIONS_MOD</code> (<code>JSON</code>). A convective turnover time calculation is commented out ("it is now passed in in the OVRTRN common block", G. Somers 3/17); the COMMON blocks <code>rp_1</code> declared for it (<code>/DEUTER/</code>, <code>/SCRTCH/</code>, <code>/CONST1/</code>, <code>/CONST2/</code>, <code>/ROT/</code>, <code>/MDPHY/</code>, <code>/OVRTRN/</code>) are no longer declared.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Zones.</strong> Runs of convective shells give up to 12 zones (<code>MXZONE</code>, pairs of first and last shell).</li>
+<li>
+<p><strong>Mixing.</strong> In each zone (one shell is enough at the centre), every species $k$ (11, or 15 with <code>LEXCOM</code>) becomes
+$$\bar X_k = \frac{\sum_j X_{k,j}\,\Delta m_j}{\sum_j \Delta m_j}.$$</p>
+</li>
+<li>
+<p><strong>Clean-up,</strong> at every shell: $X \ge 0$; $Z \le 1 - X$; and ¹⁶O (row 9) at least $0.99\times10^{-3}\,(Z - Z_\mathrm{env,m})$, where $Z_\mathrm{env,m}$ = <code>ZENVM</code>.</p>
+</li>
+</ol>
+<p><strong>KC's changes.</strong> 2025-05-31: the arguments <code>HS1</code>, <code>HR</code>, <code>HP</code>, <code>HD</code>, <code>HG</code> and <code>IFSTCL</code> removed, used only by the commented-out turnover time.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (those of the commented-out turnover time dropped), <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Helium after the clean-up.</strong> $X$ is floored and $Z$ capped, but $Y$ is not recomputed, so $X+Y+Z+X_{^3\mathrm{He}}$ may differ from 1 afterwards. Is this restored elsewhere?</li>
+<li><strong>The oxygen floor.</strong> <code>HCOMP(9,I) = MAX(HCOMP(9,I), 0.99D-3*(HCOMP(3,I)-ZENVM))</code>: what is this floor for, and where does $0.99\times10^{-3}$ come from? (Probably a guard for helium-burning regions, where $Z$ exceeds the envelope's; this is a guess.)</li>
+<li><strong>The sentinel.</strong> <code>LCZ(M+1) = .FALSE.</code> writes past the model into the caller's array; it is safe only while <code>M &lt; JSON</code>.</li>
+<li><strong>Twelve zones.</strong> More than 12 convection zones are silently ignored (the loop stops at <code>J = 24</code>).</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+SUBROUTINE MIXCZ(HCOMP,HS2,HS1,LCZ,HR,HP,HD,HG,M,IFSTCL)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MIXCZ'>MIXCZ</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MIXCZ'><h3><span class='kind'>subroutine</span>MIXCZ</h3>
+<p class='muted'>lines 3–248 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/mixcz.f#L3-L248'>GitHub</a></p>
+<pre>SUBROUTINE MIXCZ(HCOMP,HS2,LCZ,M)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+SUBROUTINE MIXCZ(HCOMP,HS2,HS1,LCZ,HR,HP,HD,HG,M,IFSTCL)  ! KC 2025-05-31</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/comp_mod.f.html#def-COMP_MOD'>COMP_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/getw.f.html#def-GETW'>GETW</a> <span class='muted'>(getw.f)</span> ×2</li>
+<li><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span></li>
+<li><a href='../yrec-map/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE MIXCZ(HCOMP,HS2,LCZ,M)
+<span class="ln">4</span>C 10/15/26 MHP via Claude
+<span class="ln">5</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">6</span>C PARAMETER(JSON=5000) here.
+<span class="ln">7</span>      USE DIMENSIONS_MOD
+<span class="ln">8</span>C 10/14/26 MHP via Claude
+<span class="ln">9</span>C code changed to convert COMMON/COMP/ into COMP_MOD.
+<span class="ln">10</span>      USE COMP_MOD
+<span class="ln">11</span>C 10/14/26 MHP via Claude
+<span class="ln">12</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">13</span>      USE NMLPAR_MOD
+<span class="ln">14</span>C 10/20/26 MHP via Claude
+<span class="ln">15</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">16</span>C explicit declarations.
+<span class="ln">17</span>      IMPLICIT NONE
+<span class="ln">18</span>      REAL*8 HCOMP,HS2,WTSUM,XSUM
+<span class="ln">19</span>      INTEGER I,I1,I2,IEND,J,JJ,M,MP1,MXZONE
+<span class="ln">20</span>      LOGICAL*4 LCC,LCZ
+<span class="ln">21</span>
+<span class="ln">22</span>C 10/12/26 MHP via Claude
+<span class="ln">23</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">24</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">25</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">26</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">27</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">28</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">29</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">30</span>C
+<span class="ln">31</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">32</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">33</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">34</span>C JVS 02/12 COMMON BLOCKS ADDED FOR THE CALCULATION OF TAUCZ
+<span class="ln">35</span>C 10/13/26 MHP via Claude: removed the unused COMMON/DEUTER/ declaration
+<span class="ln">36</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">37</span>C 10/13/26 MHP via Claude: removed the unused COMMON/SCRTCH/ declaration
+<span class="ln">38</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">39</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CONSTANTS/ declaration
+<span class="ln">40</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">41</span>
+<span class="ln">42</span>C END JVS
+<span class="ln">43</span>C MHP 02/12 ADDED ROTATION INFORMATION.  HG VECTOR IS NOT DEFINED FOR
+<span class="ln">44</span>C SPHERICAL MODELS AND IS USED FOR TAUCZ; ADDED INFORMATION SO THAT
+<span class="ln">45</span>C TAUCZ IS PROPERLY COMPUTED FOR SUCH MODELS.
+<span class="ln">46</span>      DIMENSION HCOMP(15,JSON),HS2(JSON),LCZ(JSON),MXZONE(24),XSUM(15)
+<span class="ln">47</span>C      *     XSUM(15), HR(JSON), HP(JSON), HD(JSON), HG(JSON), HS1(JSON)  ! KC 2025-05-31
+<span class="ln">48</span>
+<span class="ln">49</span>C G Somers 6/14, ADDED IFSTCL TO THE ROUTINE CALL, STANDING
+<span class="ln">50</span>C FOR &#x27;FIRST CALL&#x27;. THIS IS A BOOL THAT IS TRUE IF MIXCZ IS
+<span class="ln">51</span>C CALLED BEFORE MIDMOD, OR FALSE IF IT IS CALLED AFTER MIDMOD.
+<span class="ln">52</span>C THIS ALLOWS THE CORRECT GRADIENTS TO BE USED WHEN CALCULATING TAUCZ.
+<span class="ln">53</span>C THE COMMON BLOCK WITH THE NECESSARY VARIABLES IS IMPORTED HERE.
+<span class="ln">54</span>C 10/13/26 MHP via Claude: removed the unused COMMON/MDPHY/ declaration
+<span class="ln">55</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">56</span>C G Somers END
+<span class="ln">57</span>C G Somers 3/17, ADDING NEW TAUCZ COMMON BLOCK
+<span class="ln">58</span>C 10/13/26 MHP via Claude: removed the unused COMMON/OVRTRN/ declaration
+<span class="ln">59</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">60</span>      SAVE
+<span class="ln">61</span>
+<span class="ln">62</span>C COMPUTE STANDARD CONVECTION ZONES
+<span class="ln">63</span>      J = 1
+<span class="ln">64</span>      LCC = .FALSE.
+<span class="ln">65</span>      MP1 = M + 1
+<span class="ln">66</span>      LCZ(MP1) = .FALSE.
+<span class="ln">67</span>      DO 11 I=1,MP1
+<span class="ln">68</span>      IF(.NOT.LCZ(I)) GO TO 10
+<span class="ln">69</span>C CONVECTION ZONE
+<span class="ln">70</span>      IF(LCC) GO TO 11
+<span class="ln">71</span>C START OF CONVECTION ZONE
+<span class="ln">72</span>      LCC = .TRUE.
+<span class="ln">73</span>      I1 = I
+<span class="ln">74</span>      GO TO 11
+<span class="ln">75</span>   10 IF(.NOT.LCC) GO TO 11
+<span class="ln">76</span>C   END OF CONVECTION ZONE
+<span class="ln">77</span>      LCC = .FALSE.
+<span class="ln">78</span>      MXZONE(J) = I1
+<span class="ln">79</span>      MXZONE(J+1) = I - 1
+<span class="ln">80</span>      J = J + 2
+<span class="ln">81</span>      IF(J.LT.24) GO TO 11
+<span class="ln">82</span>      GO TO 12
+<span class="ln">83</span>   11 CONTINUE
+<span class="ln">84</span>      MXZONE(J) = 0
+<span class="ln">85</span>   12 CONTINUE
+<span class="ln">86</span>      IEND = 11
+<span class="ln">87</span>      IF(LEXCOM) IEND = 15
+<span class="ln">88</span>C MIX ALL CONVECTIVE ZONES
+<span class="ln">89</span>      DO 100 J=1,24,2
+<span class="ln">90</span>         IF(MXZONE(J).LE.0) GO TO 110
+<span class="ln">91</span>         I1 = MXZONE(J)
+<span class="ln">92</span>         I2 = MIN0(M,MXZONE(J+1))
+<span class="ln">93</span>C   903    IF(I1.NE.1 .AND. I1.GE.I2) GOTO 100
+<span class="ln">94</span>         IF(I1.NE.1 .AND. I1.GE.I2) GOTO 100
+<span class="ln">95</span>C INITIALIZE SUMS
+<span class="ln">96</span>C   904    WTSUM = 0.0D0
+<span class="ln">97</span>         WTSUM = 0.0D0
+<span class="ln">98</span>         DO 40 I = 1,IEND
+<span class="ln">99</span>            XSUM(I) = 0.0D0
+<span class="ln">100</span>   40    CONTINUE
+<span class="ln">101</span>         DO 60 JJ = I1,I2
+<span class="ln">102</span>            WTSUM = WTSUM + HS2(JJ)
+<span class="ln">103</span>            DO 50 I = 1,IEND
+<span class="ln">104</span>               XSUM(I) = XSUM(I) + HCOMP(I,JJ)*HS2(JJ)
+<span class="ln">105</span>   50       CONTINUE
+<span class="ln">106</span>   60    CONTINUE
+<span class="ln">107</span>         DO 70 I = 1,IEND
+<span class="ln">108</span>            XSUM(I) = XSUM(I)/WTSUM
+<span class="ln">109</span>   70    CONTINUE
+<span class="ln">110</span>         DO 90 JJ = I1,I2
+<span class="ln">111</span>            DO 80 I = 1,IEND
+<span class="ln">112</span>               HCOMP(I,JJ) = XSUM(I)
+<span class="ln">113</span>   80       CONTINUE
+<span class="ln">114</span>   90    CONTINUE
+<span class="ln">115</span>  100 CONTINUE
+<span class="ln">116</span>  110 CONTINUE
+<span class="ln">117</span>C RENORMALIZE COMPOSITION IF NECESSARY
+<span class="ln">118</span>      DO 140 I = 1,M
+<span class="ln">119</span>         HCOMP(1,I) = DMAX1(HCOMP(1,I),0.0D0)
+<span class="ln">120</span>         HCOMP(3,I) = DMIN1(HCOMP(3,I),1.0D0-HCOMP(1,I))
+<span class="ln">121</span>         HCOMP(9,I) = DMAX1(HCOMP(9,I),0.99D-3*(HCOMP(3,I)-ZENVM))
+<span class="ln">122</span>  140 CONTINUE
+<span class="ln">123</span>
+<span class="ln">124</span>C G Somers 3/17, COMMENTED OUT THIS TAUCZ CALCULATION. IT IS NOW PASSED
+<span class="ln">125</span>C IN IN THE OVRTRN COMMON BLOCK
+<span class="ln">126</span>C
+<span class="ln">127</span>C JVS 02/12 CALCULATE THE LOCAL CONVECTIVE OVERTURN TIMESCALE AT THE BASE
+<span class="ln">128</span>C OF THE CZ. IN OLDER VERSIONS THIS WAS ONLY DONE FOR ROTATING MODELS;
+<span class="ln">129</span>C THIS MAKES IT SO TAUCZ IS CALCULATED FOR ALL MODELS.
+<span class="ln">130</span>C THIS CODE SNAGGED FROM MIDMOD
+<span class="ln">131</span>C
+<span class="ln">132</span>CC  DETERMINE EXTENT OF SURFACE CONVECTION ZONE.
+<span class="ln">133</span>C      LALLCZ = .FALSE.
+<span class="ln">134</span>C      IF(LCZ(M))THEN
+<span class="ln">135</span>CC  SURFACE C.Z. EXISTS.  FIND LOWEST SHELL (IMAX), WHICH IS ALSO THE
+<span class="ln">136</span>CC  UPPERMOST ZONE CONSIDERED FOR STABILITY AGAINST ROTATIONALLY INDUCED MIXING.
+<span class="ln">137</span>C         DO 71 I = M-1,1,-1
+<span class="ln">138</span>C            IF(.NOT.LCZ(I)) GOTO 81
+<span class="ln">139</span>C   71    CONTINUE
+<span class="ln">140</span>C         LALLCZ = .TRUE.
+<span class="ln">141</span>C         I = 0
+<span class="ln">142</span>C   81    IMAX = I + 1
+<span class="ln">143</span>CC  HSTOP IS THE MASS AT THE TOP OF THE C.Z.
+<span class="ln">144</span>CC  HSBOT IS THE MASS AT THE BOTTOM OF THE C.Z.
+<span class="ln">145</span>C         HSTOP = EXP(CLN*STOTAL)
+<span class="ln">146</span>C         IF(IMAX.GT.1)THEN
+<span class="ln">147</span>C            HSBOT = 0.5D0*(HS1(IMAX)+HS1(IMAX-1))
+<span class="ln">148</span>C         ELSE
+<span class="ln">149</span>C            HSBOT = 0.0D0
+<span class="ln">150</span>C         ENDIF
+<span class="ln">151</span>CC  LCZSUR=T IF A SURFACE C.Z.DEEP ENOUGH FOR ANGULAR MOMENTUM LOSS EXISTS
+<span class="ln">152</span>C         IF((HSTOP-HSBOT)/CMSUN.GT.0.0D0)THEN
+<span class="ln">153</span>C            LCZSUR = .TRUE.
+<span class="ln">154</span>C         ELSE
+<span class="ln">155</span>C            LCZSUR= .FALSE.
+<span class="ln">156</span>C         ENDIF
+<span class="ln">157</span>C      ELSE
+<span class="ln">158</span>CC  NO SURFACE C.Z.
+<span class="ln">159</span>C         IMAX = M
+<span class="ln">160</span>C         LCZSUR = .FALSE.
+<span class="ln">161</span>C      ENDIF
+<span class="ln">162</span>C
+<span class="ln">163</span>C      IF(LCZSUR)THEN
+<span class="ln">164</span>C         IF(.NOT.LALLCZ)THEN
+<span class="ln">165</span>C            IF(.NOT.LROT)THEN
+<span class="ln">166</span>C               HG(IMAX)=HS1(IMAX)*EXP(CLN*(CGL-2.0D0*HR(IMAX)))
+<span class="ln">167</span>C               HG(IMAX-1)=HS1(IMAX-1)*EXP(CLN*(CGL-2.0D0*HR(IMAX-1)))
+<span class="ln">168</span>C            ENDIF
+<span class="ln">169</span>CC PINPOINT RCZ
+<span class="ln">170</span>CC G Somers 6/14, CHECK WHETHER THIS RUN OF MIXCZ OCCURED BEFORE
+<span class="ln">171</span>CC OR AFTER MIDMOD. IF BEFORE, USE SDEL. IF AFTER, USE THE UPDATED
+<span class="ln">172</span>CC VARIABLES DELRM AND DELAM.
+<span class="ln">173</span>C            IF(IFSTCL.EQ..TRUE.)THEN
+<span class="ln">174</span>C               DD2 = SDEL(1,IMAX-1)-SDEL(3,IMAX-1)
+<span class="ln">175</span>C               DD1 = SDEL(1,IMAX)-SDEL(3,IMAX)
+<span class="ln">176</span>C            ELSE
+<span class="ln">177</span>C               DD2 = DELRM(IMAX-1)-DELAM(IMAX-1)
+<span class="ln">178</span>C               DD1 = DELRM(IMAX)-DELAM(IMAX)
+<span class="ln">179</span>C            ENDIF
+<span class="ln">180</span>CC G Somers END
+<span class="ln">181</span>C            FX = DD2/(DD2-DD1)
+<span class="ln">182</span>CC INFER HP
+<span class="ln">183</span>C            ENVRL = HR(IMAX-1)+FX*(HR(IMAX)-HR(IMAX-1))
+<span class="ln">184</span>C            ENVR = EXP(CLN*ENVRL)
+<span class="ln">185</span>C            PS2 = EXP(CLN*(HP(IMAX)-HD(IMAX)))/HG(IMAX)
+<span class="ln">186</span>C            PS1 = EXP(CLN*(HP(IMAX-1)-HD(IMAX-1)))/HG(IMAX-1)
+<span class="ln">187</span>C            PSCA = PS1 + FX*(PS2-PS1)
+<span class="ln">188</span>C            RTESTL = DLOG10(ENVR+PSCA)
+<span class="ln">189</span>CC FIND V
+<span class="ln">190</span>C            DO K = IMAX+1,M
+<span class="ln">191</span>C               IF(HR(K).GT.RTESTL)THEN
+<span class="ln">192</span>C                  FX = (RTESTL-HR(K-1))/(HR(K)-HR(K-1))
+<span class="ln">193</span>C                  CVEL = SVEL(K-1)+FX*(SVEL(K)-SVEL(K-1))
+<span class="ln">194</span>C                  GOTO 85
+<span class="ln">195</span>C               ENDIF
+<span class="ln">196</span>C            END DO
+<span class="ln">197</span>C            CVEL = SVEL(M)
+<span class="ln">198</span>C 85         CONTINUE
+<span class="ln">199</span>CC DEFINE TAUCZ
+<span class="ln">200</span>C            TAUCZ = PSCA/CVEL
+<span class="ln">201</span>C         ELSE
+<span class="ln">202</span>CC INFER HP
+<span class="ln">203</span>C            IF(.NOT.LROT)THEN
+<span class="ln">204</span>C               HG(1)=HS1(1)*EXP(CLN*(CGL-2.0D0*HR(1)))
+<span class="ln">205</span>C            ENDIF
+<span class="ln">206</span>C            PSCA2 = EXP(CLN*(HP(1)-HD(1)))/HG(1)
+<span class="ln">207</span>C            RTEST2 = EXP(CLN*HR(1))
+<span class="ln">208</span>C            IF(PSCA2.LE.RTEST2)THEN
+<span class="ln">209</span>CC HP &lt; R AT THE FIRST POINT.  ASSUME V CONSTANT INSIDE AND HP = K/R FOR
+<span class="ln">210</span>CC SLOWLY VARYING DENSITY AND PRESSURE NEAR THE CENTER.
+<span class="ln">211</span>C               CVEL = SVEL(1)
+<span class="ln">212</span>C               PSCA = (PSCA2*RTEST2)**0.5D0
+<span class="ln">213</span>C               TAUCZ = PSCA/CVEL
+<span class="ln">214</span>C            ELSE
+<span class="ln">215</span>C               DO K = 2,M
+<span class="ln">216</span>C                  PSCA1 = PSCA2
+<span class="ln">217</span>C                  RTEST1 = RTEST2
+<span class="ln">218</span>C                  IF(.NOT.LROT)THEN
+<span class="ln">219</span>C                     HG(K)=HS1(K)*EXP(CLN*(CGL-2.0D0*HR(K)))
+<span class="ln">220</span>C                  ENDIF
+<span class="ln">221</span>C                  PSCA2 = EXP(CLN*(HP(K)-HD(K)))/HG(K)
+<span class="ln">222</span>C                  RTEST2 = EXP(CLN*HR(K))
+<span class="ln">223</span>CC FIND LOCATION WHERE HP = R
+<span class="ln">224</span>C                  IF(PSCA2.LE.RTEST2)THEN
+<span class="ln">225</span>C                     FX = (RTEST1-PSCA1)/((PSCA2-RTEST2)-(PSCA1-RTEST1))
+<span class="ln">226</span>CC FIND V
+<span class="ln">227</span>C                     CVEL = SVEL(K-1)+FX*(SVEL(K)-SVEL(K-1))
+<span class="ln">228</span>C                     PSCA = PSCA1+FX*(PSCA2-PSCA1)
+<span class="ln">229</span>CC DEFINE TAUCZ
+<span class="ln">230</span>C                     TAUCZ = PSCA/CVEL
+<span class="ln">231</span>C                     GOTO 95
+<span class="ln">232</span>C                  ENDIF
+<span class="ln">233</span>C               END DO
+<span class="ln">234</span>C               K = M
+<span class="ln">235</span>C               CVEL = SVEL(M)
+<span class="ln">236</span>C               PSCA = PSCA2
+<span class="ln">237</span>C               TAUCZ = PSCA/CVEL
+<span class="ln">238</span>C 95            CONTINUE
+<span class="ln">239</span>C            ENDIF
+<span class="ln">240</span>C         ENDIF
+<span class="ln">241</span>C      ELSE
+<span class="ln">242</span>C         TAUCZ = 0.0D0
+<span class="ln">243</span>C      ENDIF
+<span class="ln">244</span>
+<span class="ln">245</span>C END JVS
+<span class="ln">246</span>
+<span class="ln">247</span>      RETURN
+<span class="ln">248</span>      END</pre></details>
+<details class='py' id='py-mixcz'><summary>Python version: mixcz</summary><pre class='doc'>Mix each convection zone to its mass-weighted mean composition
+(species 1..11, or 1..15 with LEXCOM), then at every shell floor X at
+zero, cap Z at 1 - X and floor O16 (row 9) at 0.99e-3 (Z - ZENVM).
+
+Translates: mixcz.f#MIXCZ (09c3b9b)
+
+Arguments: the model hcomp[k, j], the shell masses hs2 and the
+convective flags lcz, with m shells (arrays with index 0 unused; lcz
+needs room for the sentinel lcz[m + 1]).
+
+Sets in place: hcomp, and lcz[m + 1] = False. Returns nothing.</pre><pre class='src'><span class="ln">15</span>def mixcz(hcomp, hs2, lcz, m):
+<span class="ln">16</span>    &quot;&quot;&quot;Mix each convection zone to its mass-weighted mean composition
+<span class="ln">17</span>    (species 1..11, or 1..15 with LEXCOM), then at every shell floor X at
+<span class="ln">18</span>    zero, cap Z at 1 - X and floor O16 (row 9) at 0.99e-3 (Z - ZENVM).
+<span class="ln">19</span>
+<span class="ln">20</span>    Translates: mixcz.f#MIXCZ (09c3b9b)
+<span class="ln">21</span>
+<span class="ln">22</span>    Arguments: the model hcomp[k, j], the shell masses hs2 and the
+<span class="ln">23</span>    convective flags lcz, with m shells (arrays with index 0 unused; lcz
+<span class="ln">24</span>    needs room for the sentinel lcz[m + 1]).
+<span class="ln">25</span>
+<span class="ln">26</span>    Sets in place: hcomp, and lcz[m + 1] = False. Returns nothing.
+<span class="ln">27</span>    &quot;&quot;&quot;
+<span class="ln">28</span>    # The standard convection zones.
+<span class="ln">29</span>    j = 1
+<span class="ln">30</span>    lcc = False
+<span class="ln">31</span>    mp1 = m + 1
+<span class="ln">32</span>    # Question (see the page): the sentinel is written past the model.
+<span class="ln">33</span>    lcz[mp1] = False
+<span class="ln">34</span>    i1 = 0
+<span class="ln">35</span>    full = False
+<span class="ln">36</span>    for i in range(1, mp1 + 1):                          # loop 11
+<span class="ln">37</span>        if lcz[i]:
+<span class="ln">38</span>            if not lcc:
+<span class="ln">39</span>                # Start of a convection zone.
+<span class="ln">40</span>                lcc = True
+<span class="ln">41</span>                i1 = i
+<span class="ln">42</span>        elif lcc:
+<span class="ln">43</span>            # End of a convection zone (label 10).
+<span class="ln">44</span>            lcc = False
+<span class="ln">45</span>            mxzone[j] = i1
+<span class="ln">46</span>            mxzone[j + 1] = i - 1
+<span class="ln">47</span>            j = j + 2
+<span class="ln">48</span>            # Question (see the page): more than 12 zones are ignored.
+<span class="ln">49</span>            if j &gt;= 24:
+<span class="ln">50</span>                full = True
+<span class="ln">51</span>                break                                    # GOTO 12
+<span class="ln">52</span>    if not full:
+<span class="ln">53</span>        mxzone[j] = 0
+<span class="ln">54</span>    # label 12
+<span class="ln">55</span>    iend = 11
+<span class="ln">56</span>    if nmlpar_mod.lexcom:
+<span class="ln">57</span>        iend = 15
+<span class="ln">58</span>    # Mix all convective zones.
+<span class="ln">59</span>    for j in range(1, 25, 2):                            # loop 100
+<span class="ln">60</span>        if mxzone[j] &lt;= 0:
+<span class="ln">61</span>            break                                        # GOTO 110
+<span class="ln">62</span>        i1 = mxzone[j]
+<span class="ln">63</span>        i2 = min(m, mxzone[j + 1])
+<span class="ln">64</span>        # One shell is enough only at the centre.
+<span class="ln">65</span>        if i1 != 1 and i1 &gt;= i2:
+<span class="ln">66</span>            continue
+<span class="ln">67</span>        wtsum = 0.0
+<span class="ln">68</span>        for i in range(1, iend + 1):
+<span class="ln">69</span>            xsum[i] = 0.0
+<span class="ln">70</span>        for jj in range(i1, i2 + 1):
+<span class="ln">71</span>            wtsum = wtsum + hs2[jj]
+<span class="ln">72</span>            for i in range(1, iend + 1):
+<span class="ln">73</span>                xsum[i] = xsum[i] + hcomp[i, jj] * hs2[jj]
+<span class="ln">74</span>        for i in range(1, iend + 1):
+<span class="ln">75</span>            xsum[i] = xsum[i] / wtsum
+<span class="ln">76</span>        for jj in range(i1, i2 + 1):
+<span class="ln">77</span>            for i in range(1, iend + 1):
+<span class="ln">78</span>                hcomp[i, jj] = xsum[i]
+<span class="ln">79</span>    # label 110: renormalize the composition if necessary.
+<span class="ln">80</span>    # Question (see the page): Y is not recomputed after these.
+<span class="ln">81</span>    for i in range(1, m + 1):                            # loop 140
+<span class="ln">82</span>        hcomp[1, i] = max(hcomp[1, i], 0.0)
+<span class="ln">83</span>        hcomp[3, i] = min(hcomp[3, i], 1.0 - hcomp[1, i])
+<span class="ln">84</span>        # Question (see the page): the oxygen floor.
+<span class="ln">85</span>        hcomp[9, i] = max(hcomp[9, i],
+<span class="ln">86</span>                          0.99e-3 * (hcomp[3, i] - comp_mod.zenvm))</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked the zones, the mixing, the clean-up, the callers (main, GETW twice, SECULR), the COMMON blocks and KC's change. Nothing to fix.</p>
+<p>Revised: no change.</p></div></details>
+</main></body></html>

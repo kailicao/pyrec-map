@@ -1,0 +1,878 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>getw.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ getw.f</span></header><main>
+<h1>getw.f</h1>
+<p class='muted'>480 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/getw.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>getw.py</code>, 336 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>GETW</code> evolves the internal rotation over one model time step. In its header's words (MHP 11/91, replacing the old <code>FINDW</code>): it "enforces local conservation of angular momentum in radiative regions, and enforces the user-specified rotation law in convective regions"; it solves for the transport of angular momentum and the associated mixing if desired (<code>LINSTB</code>), accounts for angular momentum loss by a magnetic wind (<code>LJDOT0</code>), and, with instabilities, burns lithium and beryllium (<code>LEXCOM</code>). The method is that of Pinsonneault, Kawaler, Sofia and Demarque (1989, ApJ 338, 424), as the header cites. It is the central routine of YREC's rotation.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only the main program (<a href="../yrec-map/main.f.html#def-_file_level_">main.f</a>), once per model step.</li>
+<li><strong>Inputs:</strong> the model at the end of the step (<code>HCOMP</code>, <code>HD</code>, <code>HL</code>, <code>HP</code>, <code>HR</code>, <code>HS</code>, <code>HS1</code>, <code>HS2</code>, <code>HT</code>, <code>LC</code>, <code>M</code>, <code>HSTOT</code>, <code>BL</code>, <code>TEFFL</code>, <code>SMASS</code>), the form factors <code>FP</code>, <code>FT</code>, the step <code>DELTS</code>, the limit <code>DWMAX</code>, <code>HJM</code> ($j$ per shell), the mixing-length parameter <code>CMIXL</code> (passed to <code>PHYSIC</code> and <code>GETTAU</code>) and the print flag <code>LPRT0</code> (set by the main program); both are arguments since <code>rp_1</code>. The model at the start of the step comes from the modules <code>OLDMOD_MOD</code>, <code>OLDPHY_MOD</code>, <code>OLDROT_MOD</code>, <code>OLDROT2_MOD</code>.</li>
+<li><strong>What it calls</strong> (in order of use): <a href="../yrec-map/ovrot.f.html#def-OVROT">OVROT</a> (convective and overshoot zones for angular momentum: the flags <code>LCZ</code>), <a href="../yrec-map/getrot.f.html#def-GETROT">GETROT</a> ($\Omega$ from $j$), <a href="../yrec-map/mwind.f.html#def-MWIND">MWIND</a> (wind loss) and <a href="../yrec-map/wczimp.f.html#def-WCZIMP">WCZIMP</a> (rotation law in the surface convection zone after the loss), <a href="../yrec-map/physic.f.html#def-PHYSIC">PHYSIC</a> (gradients, viscosities, diffusivities), <a href="../yrec-map/gettau.f.html#def-GETTAU">GETTAU</a> (convective overturn time for the wind), <a href="../yrec-map/midmod.f.html#def-MIDMOD">MIDMOD</a> (the structure interpolated in time within the step), <a href="../yrec-map/mixcz.f.html#def-MIXCZ">MIXCZ</a> (homogenize convection zones), <a href="../yrec-map/seculr.f.html#def-SECULR">SECULR</a> (the secular instabilities, solved as diffusion equations), <a href="../yrec-map/convec.f.html#def-CONVEC">CONVEC</a>, <a href="../yrec-map/lirate88.f.html#def-LIRATE88">LIRATE88</a>, <a href="../yrec-map/liburn.f.html#def-LIBURN">LIBURN</a> or <a href="../yrec-map/liburn2.f.html#def-LIBURN2">LIBURN2</a> (light-element burning), and <a href="../yrec-map/bursmix.f.html#def-BURSMIX">BURSMIX</a> (Bulirsch–Stoer mixing plus burning).</li>
+<li><strong>Outputs:</strong> <code>HJM</code>, <code>OMEGA</code>, <code>HI</code>, <code>ETA2</code>, <code>QIW</code>, <code>R0</code> (new rotation), <code>HCOMP</code> (mixed and burned composition), <code>LJDOT</code>, <code>JENV0</code>; and through modules: <code>HCOMPP</code> in <code>OLDMOD_MOD</code> (beginning-of-step composition for the next step), the lithium rates in <code>OLDRAT_MOD</code>, <code>PSCAL0</code>/<code>PSCAL1</code> in <code>LIOV_MOD</code>, <code>FRACSTEP</code> and <code>TAUCZ</code> in <code>OVRTRN_MOD</code>. <code>HCOMPS</code>, the composition at the start of the step (the former <code>/OLDAB/</code>), is now GETW's own array, filled by <code>MIDMOD</code> and passed to <code>SECULR</code>.</li>
+<li><strong>Modules</strong> (COMMON blocks until <code>rp_1</code>, about thirty then, several of them unused): <code>NMLPAR_MOD</code> for the run's settings (<code>LINSTB</code>, <code>LSOLID</code>, <code>IMPJMOD</code>, <code>LJDOT0</code>, <code>LDISK</code>, <code>TDISK</code>, <code>DTDIF</code>, <code>DTWIND</code>, <code>LEXCOM</code>, and the overshoot's <code>LOVSTE</code>, <code>ALPHAE</code>), <code>DISK_MOD</code> (<code>SAGE</code>), <code>OLDMOD_MOD</code>, <code>OLDROT_MOD</code>, <code>OLDROT2_MOD</code> (previous model), <code>MDPHY_MOD</code>, <code>TEMP_MOD</code>, <code>OLDPHY_MOD</code> (physics at mid-step and at the start), <code>NEWRAT_MOD</code>, <code>OLDRAT_MOD</code> (lithium rates), <code>QUADRU_MOD</code> (quadrupole moment, from <a href="../yrec-map/getqua.f.html#def-GETQUA">GETQUA</a>), <code>LIOV_MOD</code> (overshoot), <code>OVRTRN_MOD</code>, <code>DIMENSIONS_MOD</code>, <code>CONSTANTS_MOD</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><code>OVROT</code> marks the shells that rotate as convective (convection zones plus overshoot). Disk locking holds the surface rotation while the age is below <code>TDISK</code>.</li>
+<li><strong>Without instabilities</strong> (<code>LINSTB</code> false): $\Omega$ from $j$ (<code>GETROT</code>; with <code>LSOLID</code> or <code>IMPJMOD</code> = 1 the whole star is treated as convective, so it rotates as a solid body). If the wind is on and the surface is convective, <code>MWIND</code> removes angular momentum over the whole step from the surface convection zone (or the whole star), with <code>FRACSTEP</code> = 0.5 ("timestep average loss rate"), and <code>WCZIMP</code> resets its rotation. Done.</li>
+<li><strong>With instabilities</strong>, the step is divided into $N$ diffusion substeps, $\Delta t = \Delta t_\mathrm{model}/N$, $N = \min(\lceil \mathrm{DWMAX}/\mathrm{DTDIF}\rceil, \lceil \mathrm{DTWIND}/\mathrm{DTDIF}\rceil)$. All three are fractional changes of $\Omega$, not times: <code>DWMAX</code> is the largest $2|\Omega-\Omega_\mathrm{old}|/(\Omega+\Omega_\mathrm{old})$ of the last step (<a href="../yrec-map/wtime.f.html#def-WTIME">WTIME</a>), <code>DTWIND</code> the largest $\Delta\Omega/\Omega$ allowed per model step (WTIME's comment), <code>DTDIF</code> the largest per substep (<a href="../yrec-map/remap.f.html#def-REMAP">REMAP</a> sets them from <code>TIME_DW_GLOBAL</code> and <code>TIME_DW_MIX</code>); <code>DWMAX</code> = 0 is replaced by <code>DTWIND</code>. <code>PHYSIC</code> and <code>GETTAU</code> are called once. Then, for each substep:</li>
+<li><code>MIDMOD</code> interpolates the structure linearly in time to the substep's fraction $f$ = <code>SUMDT/DELTS</code>, and the time derivative of $\theta$ (Maeder &amp; Zahn 1998, per the comment) is updated from $\Omega$: $\theta \propto \bar\Omega\,\Delta\Omega/\Delta r$;</li>
+<li>for a fully convective star (<code>LALLCZ</code>), <code>MWIND</code> and <code>WCZIMP</code> remove angular momentum over the substep here; otherwise the wind's quantities (<code>HICZ</code>, <code>HSBOT</code>, <code>HSTOP</code>, <code>OMEGAS</code>, <code>LCZSUR</code>) go to <code>SECULR</code>, which calls <code>MWIND</code> itself;</li>
+<li>unless the star is fully convective, <code>MIXCZ</code> homogenizes convection zones and <code>SECULR</code> solves the diffusion equations for $j$ and composition. If it asks for a shorter step (<code>LREDO</code>), <a href="../yrec-map/checkj.f.html#def-CHECKJ">CHECKJ</a> or <a href="../yrec-map/checkc.f.html#def-CHECKC">CHECKC</a> has already halved <code>DT</code>; $j$, the composition and $\mu$ are restored, <code>SUMDT</code> goes back by $2\,$<code>DT</code> (the old substep), and the substep is redone;</li>
+<li>the composition at the start of the next substep is stored (<code>HCOMPP</code>);</li>
+<li>with the extended composition (<code>LEXCOM</code>): the depth of the convection zone (<code>CONVEC</code>), the overshoot depth $\ell = \alpha_e H_P$ with $H_P = Pr^2/(\rho Gm)$, the light-element rates (<code>LIRATE88</code>) and burning (<code>LIBURN</code>, or <code>LIBURN2</code> with the Bulirsch–Stoer option), mixing, and abundances below $10^{-24}$ set to zero.</li>
+<li>At the end, $\Omega$ is recomputed from the final $j$ with <code>GETROT</code>.</li>
+<li>If <code>LPRT0</code> is set, it prints the surface quadrupole term: with $R$ from $L$ and $T_\mathrm{eff}$, $Q_\mathrm{surf} = (r_M/R)^3\,\phi_M$, $\Phi = GM/R$, and $-\tfrac32 Q_\mathrm{surf}/\Phi$.</li>
+</ol>
+<p><strong>KC's changes.</strong> Unused arguments removed (2025-05-31): <code>MODEL</code> and <code>SJTOT</code> from <code>GETW</code>; and in its calls, from <code>MWIND</code> (<code>SJTOT</code>, <code>LFIRST</code>), <code>PHYSIC</code> (<code>LCZ</code>), <code>GETTAU</code> (<code>HG</code>), <code>MIDMOD</code> (<code>LCZ</code>), <code>SECULR</code> (several, including <code>DELTS</code>, <code>MODEL</code>, <code>LFIRST</code> and the zone arrays), <code>LIBURN</code>/<code>LIBURN2</code> (<code>HDM</code>) and <code>MIXCZ</code> (several). A commented-out call with a tab character was rewritten to silence compiler warnings (2025-05-30).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Two new arguments, <code>CMIXL</code> (passed on to <code>PHYSIC</code> and <code>GETTAU</code>) and <code>LPRT0</code> (formerly <code>/ROTPRT/</code>); <code>HCOMPS</code> (formerly <code>/OLDAB/</code>) is a local array passed to <code>MIDMOD</code> and <code>SECULR</code>; the local <code>LFIRST</code> renamed <code>LFIRSTIT</code>; COMMON blocks to modules, <code>IMPLICIT NONE</code>, and the unused blocks removed. Question 3 stays (<code>ENVR</code> is now declared, but still a misleading name).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Bulirsch–Stoer path never taken.</strong> <code>LBURS</code> is set to false at the top and never changed, so <code>BURSMIX</code> is never called and <code>LIBURN2</code> is never used. Is this option retired, or should <code>LBURS</code> come from the run's settings?</li>
+<li><strong><code>BL</code> overwritten.</strong> When <code>LPRT0</code> is set, the argument <code>BL</code> is set to $\log_{10}$<code>HL(M)</code> before printing. Since <code>BL</code> is an argument, the caller's value changes. Is that harmless (is <code>HL(M)</code> in solar units, matching <code>BL</code>)?</li>
+<li><strong><code>ENVR</code> in the call to <code>GETTAU</code>.</strong> <code>GETTAU</code>'s <code>RBCZ</code> argument, the base of the convection zone, receives <code>ENVR</code>, a local scalar (declared <code>REAL*8</code> since <code>rp_1</code>), whose value is never used afterwards. Elsewhere <code>ENVR</code> is the envelope radius array of <code>ENVSTRUCT_MOD</code>. A rename would avoid confusion.</li>
+<li><strong>Wind without instabilities.</strong> In step 2 the wind acts once over the whole step with <code>FRACSTEP</code> = 0.5, whereas with instabilities it acts per substep. Are the two treatments meant to agree for the same model?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+11/91 MHP REVISED SUBROUTINE (REPLACES OLD FINDW).
+GETW EVOLVES THE ANGULAR MOMENTUM DISTRIBUTION IN TIME.
+IT ENFORCES LOCAL CONSERVATION OF ANGULAR MOMENTUM IN RADIATIVE REGIONS,
+AND ENFORCES THE USER-SPECIFIED ROTATION LAW IN CONVECTIVE REGIONS.
+BOTH MERIDIONAL CIRCULATION AND DIFFERENTIAL ROTATION WITH DEPTH CAN
+CAUSE THE RADIAL TRANSPORT OF ANGULAR MOMENTUM AND MATERIAL.
+GETW SOLVES FOR THE TRANSPORT OF ANGULAR MOMENTUM AND THE ASSOCIATED MIXING
+IF DESIRED (LINSTB=T), AND ACCOUNTS FOR ANGULAR MOMENTUM LOSS CAUSED BY A
+MAGNETIC STELLAR WIND IF DESIRED (LJDOT0=T).
+IF INSTABILITIES ARE BEING TREATED, THE BURNING OF THE LIGHT ELEMENTS
+LITHIUM AND BERYLLIUM ARE CONSIDERED HERE IF DESIRED (LEXCOM=T).
+FOR A DISCUSSION OF THE OVERALL TECHNIQUE USED SEE PINSONNEAULT, KAWALER,
+SOFIA, AND DEMARQUE (1989), AP.J. VOL. 338, P.424.
+11/91 JENV0 ADDED TO CALL.</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-GETW'>GETW</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-GETW'><h3><span class='kind'>subroutine</span>GETW</h3>
+<p class='muted'>lines 16–480 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/getw.f#L16-L480'>GitHub</a></p>
+<pre>SUBROUTINE GETW(BL,DELTS,DWMAX,FP,FT,HCOMP,HD,HJM,HL,HP,HR,HS,</pre>
+<div class='notes'><p>Evolves $j$ and $\Omega$ over a model step: rotation laws in convective regions, wind loss, diffusion of angular momentum and composition by secular instabilities in substeps, and light-element burning (method above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+11/91 MHP REVISED SUBROUTINE (REPLACES OLD FINDW).
+GETW EVOLVES THE ANGULAR MOMENTUM DISTRIBUTION IN TIME.
+IT ENFORCES LOCAL CONSERVATION OF ANGULAR MOMENTUM IN RADIATIVE REGIONS,
+AND ENFORCES THE USER-SPECIFIED ROTATION LAW IN CONVECTIVE REGIONS.
+BOTH MERIDIONAL CIRCULATION AND DIFFERENTIAL ROTATION WITH DEPTH CAN
+CAUSE THE RADIAL TRANSPORT OF ANGULAR MOMENTUM AND MATERIAL.
+GETW SOLVES FOR THE TRANSPORT OF ANGULAR MOMENTUM AND THE ASSOCIATED MIXING
+IF DESIRED (LINSTB=T), AND ACCOUNTS FOR ANGULAR MOMENTUM LOSS CAUSED BY A
+MAGNETIC STELLAR WIND IF DESIRED (LJDOT0=T).
+IF INSTABILITIES ARE BEING TREATED, THE BURNING OF THE LIGHT ELEMENTS
+LITHIUM AND BERYLLIUM ARE CONSIDERED HERE IF DESIRED (LEXCOM=T).
+FOR A DISCUSSION OF THE OVERALL TECHNIQUE USED SEE PINSONNEAULT, KAWALER,
+SOFIA, AND DEMARQUE (1989), AP.J. VOL. 338, P.424.
+11/91 JENV0 ADDED TO CALL.</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/disk_mod.f.html#def-DISK_MOD'>DISK_MOD</a>, <a href='../yrec-map/liov_mod.f.html#def-LIOV_MOD'>LIOV_MOD</a>, <a href='../yrec-map/mdphy_mod.f.html#def-MDPHY_MOD'>MDPHY_MOD</a>, <a href='../yrec-map/newrat_mod.f.html#def-NEWRAT_MOD'>NEWRAT_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/oldmod_mod.f.html#def-OLDMOD_MOD'>OLDMOD_MOD</a>, <a href='../yrec-map/oldphy_mod.f.html#def-OLDPHY_MOD'>OLDPHY_MOD</a>, <a href='../yrec-map/oldrat_mod.f.html#def-OLDRAT_MOD'>OLDRAT_MOD</a>, <a href='../yrec-map/oldrot2_mod.f.html#def-OLDROT2_MOD'>OLDROT2_MOD</a>, <a href='../yrec-map/oldrot_mod.f.html#def-OLDROT_MOD'>OLDROT_MOD</a>, <a href='../yrec-map/ovrtrn_mod.f.html#def-OVRTRN_MOD'>OVRTRN_MOD</a>, <a href='../yrec-map/quadru_mod.f.html#def-QUADRU_MOD'>QUADRU_MOD</a>, <a href='../yrec-map/temp_mod.f.html#def-TEMP_MOD'>TEMP_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/bursmix.f.html#def-BURSMIX'>BURSMIX</a> <span class='muted'>(bursmix.f)</span></li>
+<li><a href='../yrec-map/convec.f.html#def-CONVEC'>CONVEC</a> <span class='muted'>(convec.f)</span></li>
+<li><a href='../yrec-map/getrot.f.html#def-GETROT'>GETROT</a> <span class='muted'>(getrot.f)</span> ×3</li>
+<li><a href='../yrec-map/gettau.f.html#def-GETTAU'>GETTAU</a> <span class='muted'>(gettau.f)</span></li>
+<li><a href='../yrec-map/liburn.f.html#def-LIBURN'>LIBURN</a> <span class='muted'>(liburn.f)</span></li>
+<li><a href='../yrec-map/liburn2.f.html#def-LIBURN2'>LIBURN2</a> <span class='muted'>(liburn2.f)</span></li>
+<li><a href='../yrec-map/lirate88.f.html#def-LIRATE88'>LIRATE88</a> <span class='muted'>(lirate88.f)</span></li>
+<li><a href='../yrec-map/midmod.f.html#def-MIDMOD'>MIDMOD</a> <span class='muted'>(midmod.f)</span></li>
+<li><a href='../yrec-map/mixcz.f.html#def-MIXCZ'>MIXCZ</a> <span class='muted'>(mixcz.f)</span> ×2</li>
+<li><a href='../yrec-map/mwind.f.html#def-MWIND'>MWIND</a> <span class='muted'>(mwind.f)</span> ×2</li>
+<li><a href='../yrec-map/ovrot.f.html#def-OVROT'>OVROT</a> <span class='muted'>(ovrot.f)</span></li>
+<li><a href='../yrec-map/physic.f.html#def-PHYSIC'>PHYSIC</a> <span class='muted'>(physic.f)</span></li>
+<li><a href='../yrec-map/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span></li>
+<li><a href='../yrec-map/wczimp.f.html#def-WCZIMP'>WCZIMP</a> <span class='muted'>(wczimp.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">16</span>      SUBROUTINE GETW(BL,DELTS,DWMAX,FP,FT,HCOMP,HD,HJM,HL,HP,HR,HS,
+<span class="ln">17</span>C      *             HS1,HS2,HSTOT,HT,LC,LJDOT,M,MODEL,SJTOT,SMASS,  ! KC 2025-05-31
+<span class="ln">18</span>     *             HS1,HS2,HSTOT,HT,LC,LJDOT,M,SMASS,
+<span class="ln">19</span>     *                 TEFFL,ETA2,HG,HI,OMEGA,QIW,R0,JENV0,CMIXL,LPRT0)
+<span class="ln">20</span>C 10/15/26 MHP via Claude
+<span class="ln">21</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">22</span>C PARAMETER(JSON=5000) here.
+<span class="ln">23</span>      USE DIMENSIONS_MOD
+<span class="ln">24</span>C 10/14/26 MHP via Claude
+<span class="ln">25</span>C code changed to convert COMMON/TEMP/ into TEMP_MOD.
+<span class="ln">26</span>      USE TEMP_MOD
+<span class="ln">27</span>C 10/14/26 MHP via Claude
+<span class="ln">28</span>C code changed to convert COMMON/QUADRU/ into QUADRU_MOD.
+<span class="ln">29</span>      USE QUADRU_MOD
+<span class="ln">30</span>C 10/14/26 MHP via Claude
+<span class="ln">31</span>C code changed to convert COMMON/OVRTRN/ into OVRTRN_MOD.
+<span class="ln">32</span>      USE OVRTRN_MOD
+<span class="ln">33</span>C 10/14/26 MHP via Claude
+<span class="ln">34</span>C code changed to convert COMMON/OLDROT2/ into OLDROT2_MOD.
+<span class="ln">35</span>      USE OLDROT2_MOD
+<span class="ln">36</span>C 10/14/26 MHP via Claude
+<span class="ln">37</span>C code changed to convert COMMON/OLDROT/ into OLDROT_MOD.
+<span class="ln">38</span>      USE OLDROT_MOD
+<span class="ln">39</span>C 10/14/26 MHP via Claude
+<span class="ln">40</span>C code changed to convert COMMON/OLDRAT/ into OLDRAT_MOD.
+<span class="ln">41</span>      USE OLDRAT_MOD
+<span class="ln">42</span>C 10/14/26 MHP via Claude
+<span class="ln">43</span>C code changed to convert COMMON/OLDPHY/ into OLDPHY_MOD.
+<span class="ln">44</span>      USE OLDPHY_MOD
+<span class="ln">45</span>C 10/14/26 MHP via Claude
+<span class="ln">46</span>C code changed to convert COMMON/OLDMOD/ into OLDMOD_MOD.
+<span class="ln">47</span>      USE OLDMOD_MOD
+<span class="ln">48</span>C 10/14/26 MHP via Claude
+<span class="ln">49</span>C code changed to convert COMMON/NEWRAT/ into NEWRAT_MOD.
+<span class="ln">50</span>      USE NEWRAT_MOD
+<span class="ln">51</span>C 10/14/26 MHP via Claude
+<span class="ln">52</span>C code changed to convert COMMON/MDPHY/ into MDPHY_MOD.
+<span class="ln">53</span>      USE MDPHY_MOD
+<span class="ln">54</span>C 10/14/26 MHP via Claude
+<span class="ln">55</span>C code changed to convert COMMON/LIOV/ into LIOV_MOD.
+<span class="ln">56</span>      USE LIOV_MOD
+<span class="ln">57</span>C 10/14/26 MHP via Claude
+<span class="ln">58</span>C code changed to convert COMMON/DISK/ into DISK_MOD.
+<span class="ln">59</span>      USE DISK_MOD
+<span class="ln">60</span>C 10/14/26 MHP via Claude
+<span class="ln">61</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">62</span>      USE NMLPAR_MOD
+<span class="ln">63</span>C 10/14/26 MHP via Claude
+<span class="ln">64</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">65</span>      USE CONSTANTS_MOD
+<span class="ln">66</span>C 10/20/26 MHP via Claude
+<span class="ln">67</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">68</span>C explicit declarations.
+<span class="ln">69</span>      IMPLICIT NONE
+<span class="ln">70</span>      REAL*8 BL,CMIXL,COD2,DELTS,DR,DT,DWMAX,ENVR,ETA2,ETA2M,FP,FT,FX,
+<span class="ln">71</span>     *       HCOMP,HCOMPS,HD,HDM,HG,HGM,HI,HICZ,HIM,HJM,HJMSAV,HL,HLM,
+<span class="ln">72</span>     *       HP,HPM,HR,HRM,HS,HS1,HS2,HSBOT,HSTOP,HSTOT,HT,HTM,HV,OMEGA,
+<span class="ln">73</span>     *       OMEGAM,OMEGAS,PSURF,QIW,QIWM,QSURF,QW,R0,R0M,RL,SMASS,
+<span class="ln">74</span>     *       SUMDT,TEFFL,TEST,WMID
+<span class="ln">75</span>      INTEGER I,IEND,IMAX,IMIN,IREDO,J,JCORE1,JENV0,JENV1,M,MRZONE,
+<span class="ln">76</span>     *       MXZON0,MXZONE,NRZONE,NSPEC,NSTEP,NSTEP2,NZONE,NZONE0
+<span class="ln">77</span>      LOGICAL*4 LALLCZ,LBURS,LC,LCM,LCZ,LCZM,LCZSUR,LFIRSTIT,LIMIX,
+<span class="ln">78</span>     *       LJDOT,LOCK,LOK,LPRT0,LREDO,LSKIP
+<span class="ln">79</span>C 10/13/26 MHP via Claude
+<span class="ln">80</span>C HCOMPS was COMMON/OLDAB/; getw.f now owns it and passes it to MIDMOD
+<span class="ln">81</span>C and SECULR, its only users.
+<span class="ln">82</span>      DIMENSION HCOMPS(15,JSON)
+<span class="ln">83</span>      DIMENSION HD(JSON),HJM(JSON),HR(JSON),HS(JSON),HS2(JSON),LC(JSON),
+<span class="ln">84</span>     * ETA2(JSON),HI(JSON),OMEGA(JSON),R0(JSON),HCOMP(15,JSON),
+<span class="ln">85</span>     * HL(JSON),HP(JSON),HT(JSON),FP(JSON),FT(JSON),HG(JSON),LCZ(JSON),
+<span class="ln">86</span>     * QIW(JSON),HJMSAV(JSON),HS1(JSON),
+<span class="ln">87</span>     * ETA2M(JSON),HDM(JSON),HGM(JSON),HIM(JSON),HLM(JSON),HPM(JSON),
+<span class="ln">88</span>     * HRM(JSON),HTM(JSON),LCM(JSON),OMEGAM(JSON),QIWM(JSON),R0M(JSON),
+<span class="ln">89</span>     * LCZM(JSON)
+<span class="ln">90</span>C MHP 6/00 ADDED COD2, HV TO ALLOW BUR-ST MIXING PLUS BURNING.
+<span class="ln">91</span>      DIMENSION COD2(JSON),HV(JSON)
+<span class="ln">92</span>      DIMENSION MXZONE(12,2),MXZON0(12,2),MRZONE(13,2)
+<span class="ln">93</span>C 9/25/26 MHP via Claude
+<span class="ln">94</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">95</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">96</span>C 9/24/26 MHP via Claude
+<span class="ln">97</span>C code changed to pass CMIXL as an explicit argument instead of via
+<span class="ln">98</span>C common block, to reduce implicit global state ahead of the F90
+<span class="ln">99</span>C module conversion (also drops the unused CMIXZ alias for this slot)
+<span class="ln">100</span>C 11/91 COMMON BLOCKS ADDED FOR PRESSURE SCALE HEIGHT CALC. FOR LIBURN
+<span class="ln">101</span>C 10/12/26 MHP via Claude
+<span class="ln">102</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">103</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">104</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">105</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">106</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">107</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">108</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">109</span>C
+<span class="ln">110</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">111</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">112</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">113</span>C 10/13/26 MHP via Claude: removed the unused COMMON/DPMIX/ declaration
+<span class="ln">114</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">115</span>C 10/13/26 MHP via Claude
+<span class="ln">116</span>C code changed to drop COMMON/CTLIM/, declared here but never used.
+<span class="ln">117</span>C MHP 8/17 ADDED EXCEN, C_2 TO COMMON BLOCK FOR MATT ET AL. 2012 CENT. TERM
+<span class="ln">118</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CWIND/ declaration
+<span class="ln">119</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">120</span>C 10/13/26 MHP via Claude: removed the unused COMMON/IOUNITS/ declaration
+<span class="ln">121</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">122</span>C 7/91 NEW LITHIUM BURNING COMMON BLOCKS ADDED.
+<span class="ln">123</span>C 10/13/26 MHP via Claude
+<span class="ln">124</span>C code changed to replace COMMON/OLDAB/ with an explicit argument: midmod.f
+<span class="ln">125</span>C fills HCOMPS and seculr.f reads it, both called only from getw.f, which
+<span class="ln">126</span>C now owns the storage.
+<span class="ln">127</span>C 8/92 COMMON BLOCK FOR COMPUTATION OF BEGINNING OF STEP MU
+<span class="ln">128</span>C BARRIER.
+<span class="ln">129</span>C 10/13/26 MHP via Claude: removed the unused COMMON/TEMP2/ declaration
+<span class="ln">130</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">131</span>C 10/13/26 MHP via Claude
+<span class="ln">132</span>C code changed to replace COMMON/ROTPRT/ with an explicit argument: main.f
+<span class="ln">133</span>C sets LPRT0 and getw.f is its only reader.
+<span class="ln">134</span>C MHP 3/99 ADDED FLAG TO TREAT THE ENTIRE STAR AS &#x27;CONVECTIVE&#x27;
+<span class="ln">135</span>C FOR ANGULAR MOMENTUM PURPOSES.
+<span class="ln">136</span>C JNT 09/2025 FOR 05/15 ADD IMPJMOD
+<span class="ln">137</span>C MHP 06/02
+<span class="ln">138</span>C Time change of theta
+<span class="ln">139</span>      SAVE
+<span class="ln">140</span>      LBURS = .FALSE.
+<span class="ln">141</span>C DETERMINE THE NUMBER OF DIFFERENT ELEMENTS AND ISOTOPES BEING TRACKED
+<span class="ln">142</span>C BY THE CODE (NSPEC).
+<span class="ln">143</span>      NSPEC = 11
+<span class="ln">144</span>      IF(LEXCOM) NSPEC = 15
+<span class="ln">145</span>C  CONVECTIVE AND RADIATIVE REGIONS ARE TREATED DIFFERENTLY FOR ANGULAR
+<span class="ln">146</span>C  MOMENTUM PURPOSES; IF CONVECTIVE OVERSHOOT IS BEING INCLUDED THE
+<span class="ln">147</span>C  OVERSHOOT REGION IS TREATED AS CONVECTIVE FOR ANGULAR MOMENTUM PURPOSES.
+<span class="ln">148</span>C  ***NOTE : IF LINSTB=T THERE MUST BE AT LEAST ONE SHELL IN THE OVERSHOOT
+<span class="ln">149</span>C  REGION, TO COUPLE THE RADIATIVE AND CONVECTIVE REGIONS AND TO AVOID
+<span class="ln">150</span>C  NUMERICAL PROBLEMS IN SOME OF THE TERMS WHICH ARISE IN THE SOLUTION OF
+<span class="ln">151</span>C  THE DIFFUSION EQUATIONS.
+<span class="ln">152</span>C
+<span class="ln">153</span>C  OVROT CALCULATES CONVECTIVE OVERSHOOT BY ARBITRARILY MIXING TO A
+<span class="ln">154</span>C  USER-SPECIFIED FRACTION OF A PRESSURE SCALE HEIGHT ABOVE OR BELOW A
+<span class="ln">155</span>C  CONVECTIVE REGION.  IT RETURNS A VECTOR LCZ, WHICH IS TRUE IF A SHELL IS
+<span class="ln">156</span>C  CONVECTIVE FOR ANGULAR MOMENTUM PURPOSES.
+<span class="ln">157</span>C 7/91 CHANGED CALL TO OVROT.
+<span class="ln">158</span>      CALL <a href="../yrec-map/ovrot.f.html#def-OVROT" title="OVROT in ovrot.f">OVROT</a>(HCOMP,HD,HP,HR,HS,HT,LC,M,LCZ,MRZONE,MXZONE,NRZONE,
+<span class="ln">159</span>     *           NZONE)
+<span class="ln">160</span>C MHP 9/94 ADDED DISK LOCKING OPTION.
+<span class="ln">161</span>      LOCK = .FALSE.
+<span class="ln">162</span>      IF(LDISK .AND. SAGE.LE.TDISK)LOCK = .TRUE.
+<span class="ln">163</span>      IF(.NOT.LINSTB)THEN
+<span class="ln">164</span>C  STORE THE SURFACE ANGULAR VELOCITY FROM THE BEGINNING OF THE TIMESTEP.
+<span class="ln">165</span>         OMEGAS = OMEGA(M)
+<span class="ln">166</span>C  ENFORCE SB ROTATION (OR UNIFORM ROTATION LAW IN ENTIRE STAR) IF DESIRED.
+<span class="ln">167</span>C JNT 2025/09 FOR 05/15 MAKE IMPJMOD=1 ACT LIKE LSOLID
+<span class="ln">168</span>         IF(LSOLID .OR. (IMPJMOD.EQ.1))THEN
+<span class="ln">169</span>            DO I = 1,M
+<span class="ln">170</span>               LCZ(I) = .TRUE.
+<span class="ln">171</span>            END DO
+<span class="ln">172</span>         ENDIF
+<span class="ln">173</span>C  GETROT TAKES THE ANGULAR MOMENTUM DISTRIBUTION AND FINDS THE
+<span class="ln">174</span>C  ROTATION CURVE THAT CORRESPONDS TO IT.  CONVECTIVE REGIONS HAVE
+<span class="ln">175</span>C  SOLID BODY ROTATION ENFORCED ON THEM.
+<span class="ln">176</span>         CALL <a href="../yrec-map/getrot.f.html#def-GETROT" title="GETROT in getrot.f">GETROT</a>(HD,HJM,HR,HS,HS2,LCZ,M,ETA2,HI,OMEGA,QIW,R0)
+<span class="ln">177</span>C  ANGULAR MOMENTUM LOSS WITHOUT INTERNAL ANGULAR MOMENTUM TRANSPORT.
+<span class="ln">178</span>C         DO I = 1,M
+<span class="ln">179</span>C            WOLD(I) = OMEGA(I)
+<span class="ln">180</span>C         END DO
+<span class="ln">181</span>         IF(.NOT.LOCK .AND. LJDOT0 .AND. LC(M)) THEN
+<span class="ln">182</span>C  FIND MOMENT OF INERTIA OF THE SURFACE C.Z.
+<span class="ln">183</span>            HICZ = 0.0D0
+<span class="ln">184</span>C  ENFORCE SB ROTATION (OR UNIFORM ROTATION LAW IN ENTIRE STAR) IF DESIRED.
+<span class="ln">185</span>            IF(LSOLID.OR. (IMPJMOD.EQ.1))THEN
+<span class="ln">186</span>              IMAX = 1
+<span class="ln">187</span>            ELSE
+<span class="ln">188</span>              IMAX = MXZONE(NZONE,1)
+<span class="ln">189</span>            ENDIF
+<span class="ln">190</span>            DO I = IMAX,M
+<span class="ln">191</span>               HICZ = HICZ + HI(I)
+<span class="ln">192</span>            END DO
+<span class="ln">193</span>C  FIND LOWEST SHELL IN SURFACE CZ (IMAX)
+<span class="ln">194</span>C            IMAX = MXZONE(NZONE,1)
+<span class="ln">195</span>C  HSTOP IS THE MASS AT THE TOP OF THE C.Z.
+<span class="ln">196</span>C  HSBOT IS THE MASS AT THE BOTTOM OF THE C.Z.
+<span class="ln">197</span>            HSTOP = EXP(CLN*HSTOT)
+<span class="ln">198</span>            IF(IMAX.GT.1)THEN
+<span class="ln">199</span>               HSBOT = 0.5D0*(HS1(IMAX)+HS1(IMAX-1))
+<span class="ln">200</span>            ELSE
+<span class="ln">201</span>               HSBOT = 0.0D0
+<span class="ln">202</span>            ENDIF
+<span class="ln">203</span>            LJDOT = LJDOT0
+<span class="ln">204</span>C MHP 10/02 UNUSED LFIRSTIT REMOVED FROM CALL
+<span class="ln">205</span>C MHP 10/17 timestep average loss rate
+<span class="ln">206</span>C            FRACSTEP = 1.
+<span class="ln">207</span>            FRACSTEP = 0.5
+<span class="ln">208</span>            CALL <a href="../yrec-map/mwind.f.html#def-MWIND" title="MWIND in mwind.f">MWIND</a>(BL,DELTS,HSBOT,HSTOP,IMAX,M,LJDOT,OMEGAS,
+<span class="ln">209</span>C      *                SJTOT,SMASS,TEFFL,HICZ,HJM,LFIRSTIT)  ! KC 2025-05-31
+<span class="ln">210</span>     *                 SMASS,TEFFL,HICZ,HJM)
+<span class="ln">211</span>C  FIND THE NEW RUN OF OMEGA IN THE CONVECTION ZONE AFTER THE WIND.
+<span class="ln">212</span>C MHP 10/02 REPLACED IEND WITH M IN CALL, DEFINED IEND=M
+<span class="ln">213</span>            IEND = M
+<span class="ln">214</span>C JNT 09/2025 FOR 05/15 REPLACE WCZ WITH WCZIMP
+<span class="ln">215</span>            CALL <a href="../yrec-map/wczimp.f.html#def-WCZIMP" title="WCZIMP in wczimp.f">WCZIMP</a>(HD,HJM,HR,HS,HS2,IMAX,IEND,ETA2,HI,OMEGA,
+<span class="ln">216</span>     *               QIW,R0,M)
+<span class="ln">217</span>         ENDIF
+<span class="ln">218</span>         GOTO 9999
+<span class="ln">219</span>      ENDIF
+<span class="ln">220</span>C  GETROT TAKES THE ANGULAR MOMENTUM DISTRIBUTION AND FINDS THE
+<span class="ln">221</span>C  ROTATION CURVE THAT CORRESPONDS TO IT.  CONVECTIVE REGIONS HAVE
+<span class="ln">222</span>C  SOLID BODY ROTATION ENFORCED ON THEM.
+<span class="ln">223</span>      CALL <a href="../yrec-map/getrot.f.html#def-GETROT" title="GETROT in getrot.f">GETROT</a>(HD,HJM,HR,HS,HS2,LCZ,M,ETA2,HI,OMEGA,QIW,R0)
+<span class="ln">224</span>      LSKIP = .NOT.LINSTB .AND. .NOT.LJDOT
+<span class="ln">225</span>      IF(LSKIP.OR.DELTS.LE.0.0D0) GOTO 9999
+<span class="ln">226</span>C  NOW LIMIT THE DIFFUSION TIMESTEP TO A MAXIMUM CHANGE IN OMEGA
+<span class="ln">227</span>C  FROM THE PREVIOUS MODEL.
+<span class="ln">228</span>      IF(DWMAX.EQ.0.0D0) DWMAX = DTWIND
+<span class="ln">229</span>      NSTEP = INT(DWMAX/DTDIF)
+<span class="ln">230</span>      IF (MOD(DWMAX,DTDIF).NE.0.0D0) NSTEP = NSTEP + 1
+<span class="ln">231</span>      NSTEP2 = INT(DTWIND/DTDIF)
+<span class="ln">232</span>      IF (MOD(DTWIND,DTDIF).NE.0.0D0) NSTEP2 = NSTEP2 + 1
+<span class="ln">233</span>C     NSTEP = MAX(NSTEP,NSTEP2/2)
+<span class="ln">234</span>      NSTEP = MIN(NSTEP,NSTEP2)
+<span class="ln">235</span>      DT = DELTS/DFLOAT(NSTEP)
+<span class="ln">236</span>C  FIND BASIC PHYSICAL QUANTITIES NEEDED FOR BOTH SECULAR AND DYNAMICAL
+<span class="ln">237</span>C  INSTABILITES: ADIABATIC AND ACTUAL TEMPERATURE GRADIENTS,OPACITIES,
+<span class="ln">238</span>C  KINEMATIC VISCOSITIES,THERMOMETRIC DIFFUSIVITY, AND HEAT CAPACITY.
+<span class="ln">239</span>C       CALL PHYSIC(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,LCZ,M,TEFFL)  ! KC 2025-05-31
+<span class="ln">240</span>      CALL <a href="../yrec-map/physic.f.html#def-PHYSIC" title="PHYSIC in physic.f">PHYSIC</a>(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,M,TEFFL,CMIXL)
+<span class="ln">241</span>C 8/17 DETERMINE TAUCZ AND PPHOT
+<span class="ln">242</span>C       CALL GETTAU(HCOMP,HR,HP,HD,HG,HS1,HT,FP,FT,TEFFL,  ! KC 2025-05-31
+<span class="ln">243</span>      CALL <a href="../yrec-map/gettau.f.html#def-GETTAU" title="GETTAU in gettau.f">GETTAU</a>(HCOMP,HR,HP,HD,HS1,HT,FP,FT,TEFFL,
+<span class="ln">244</span>     *            HSTOT,BL,M,LC,ENVR,CMIXL)
+<span class="ln">245</span>C IF DT IS LESS THAN DELTS, THEN THE MODEL TIMESTEP IS TOO LONG FOR THE
+<span class="ln">246</span>C DIFFUSION CALCULATIONS.  IF THIS OCCURS,
+<span class="ln">247</span>C USE A SERIES OF SMALLER TIMESTEPS THAT DON&#x27;T VIOLATE THIS CONDITION.
+<span class="ln">248</span>C INTERPOLATE THE MODEL STRUCTURE BETWEEN THE OLD MODEL AND THE NEW ONE
+<span class="ln">249</span>C TO CALCULATE DIFFUSION AND WIND BETWEEN MODELS.
+<span class="ln">250</span>      SUMDT = 0.0D0
+<span class="ln">251</span>      LFIRSTIT = .TRUE.
+<span class="ln">252</span>C      DO 20 I = 1,M
+<span class="ln">253</span>C         WOLD(I) = OMEGA(I)
+<span class="ln">254</span>C   20 CONTINUE
+<span class="ln">255</span>C  ENTRY FOR SERIES OF DIFFUSION TIMESTEPS.
+<span class="ln">256</span>   30 CONTINUE
+<span class="ln">257</span>      IREDO = 0
+<span class="ln">258</span>C  ENTRY FOR DIFFUSION TIMESTEP CUTTING.
+<span class="ln">259</span>   40 CONTINUE
+<span class="ln">260</span>C MHP 06/02 CHANGED TO ELIMINATE OCCASIONAL
+<span class="ln">261</span>C ALMOST ZERO TIMESTEP FROM ROUNDOFF ERROR
+<span class="ln">262</span>      TEST = DELTS - DELTS*1.0D-6
+<span class="ln">263</span>      IF(SUMDT+DT.GE.TEST)THEN
+<span class="ln">264</span>         DT = DELTS - SUMDT
+<span class="ln">265</span>         SUMDT = DELTS
+<span class="ln">266</span>      ELSE
+<span class="ln">267</span>         SUMDT = SUMDT + DT
+<span class="ln">268</span>      ENDIF
+<span class="ln">269</span>C COPY OVER PRIOR THETA(TIME) TERM TO TEMPORARY SLOT
+<span class="ln">270</span>C FOR USE IN THE ADVECTION/DIFFUSION TREATMENT OF MAEDER&amp;ZAHN 1998
+<span class="ln">271</span>      IF(LFIRSTIT)THEN
+<span class="ln">272</span>         THP(1) = THO(1)
+<span class="ln">273</span>         WMST(1) = WOLD(1)
+<span class="ln">274</span>         DO I = 2,M
+<span class="ln">275</span>            QWRMST(I) = QWRST(I)
+<span class="ln">276</span>            THP(I) = THO(I)
+<span class="ln">277</span>            WMST(I) = WOLD(I)
+<span class="ln">278</span>         END DO
+<span class="ln">279</span>C RECOMPUTE THETA
+<span class="ln">280</span>      ELSE
+<span class="ln">281</span>         WMST(1) = OMEGA(1)
+<span class="ln">282</span>         DO I = 2,M
+<span class="ln">283</span>            WMID = 0.5D0*(OMEGA(I)+OMEGA(I-1))
+<span class="ln">284</span>            DR = 10.0D0**HRM(I)-10.0D0**HRM(I-1)
+<span class="ln">285</span>            QW = (OMEGA(I)-OMEGA(I-1))/DR
+<span class="ln">286</span>            THP(I) = THM(I)*WMID*QW
+<span class="ln">287</span>            QWRMST(I) = QW
+<span class="ln">288</span>            WMST(I) = OMEGA(I)
+<span class="ln">289</span>         END DO
+<span class="ln">290</span>      ENDIF
+<span class="ln">291</span>      FX = SUMDT/DELTS
+<span class="ln">292</span>      FRACSTEP = FX
+<span class="ln">293</span>C INTERPOLATE LINEARLY IN TIME FOR THE MODEL STRUCTURE BETWEEN THE
+<span class="ln">294</span>C START AND END OF THE TIMESTEP.
+<span class="ln">295</span>C JVS
+<span class="ln">296</span>      CALL <a href="../yrec-map/midmod.f.html#def-MIDMOD" title="MIDMOD in midmod.f">MIDMOD</a>(DELTS,DT,FX,HCOMP,HD,HG,HJM,HL,HP,HR,HS,HS1,HS2,
+<span class="ln">297</span>C      *            HSTOT,HT,LC,LCZ,LFIRSTIT,M,ETA2M,HDM,HGM,HICZ,HIM,  ! KC 2025-05-31
+<span class="ln">298</span>     *            HSTOT,HT,LC,LFIRSTIT,M,ETA2M,HDM,HGM,HICZ,HIM,
+<span class="ln">299</span>     *            HLM,HPM,HRM,HSBOT,HSTOP,HTM,IMIN,IMAX,LALLCZ,LCM,
+<span class="ln">300</span>     *            LCZM,LCZSUR,OMEGAM,R0M,QIWM,MRZONE,MXZONE,NRZONE,
+<span class="ln">301</span>     *            NZONE,HCOMPS)
+<span class="ln">302</span>C IF DESIRED, REMOVE ANGULAR MOMENTUM FROM OUTER CONVECTION ZONE
+<span class="ln">303</span>C USING A WEBER-DAVIS MAGNETIC WIND MODEL
+<span class="ln">304</span>      IF(.NOT.LOCK .AND. LJDOT .AND. LCZSUR) THEN
+<span class="ln">305</span>         OMEGAS = OMEGAM(M)
+<span class="ln">306</span>C  WIND CALCULATION WITHOUT INSTABILITIES
+<span class="ln">307</span>         IF(LALLCZ.OR..NOT.LINSTB) THEN
+<span class="ln">308</span>C MHP 10/02 UNUSED LFIRSTIT REMOVED FROM CALL
+<span class="ln">309</span>            CALL <a href="../yrec-map/mwind.f.html#def-MWIND" title="MWIND in mwind.f">MWIND</a>(BL,DT,HSBOT,HSTOP,IMAX,M,LJDOT,OMEGAS,
+<span class="ln">310</span>C      *                SJTOT,SMASS,TEFFL,HICZ,HJM,LFIRSTIT)  ! KC 2025-05-31
+<span class="ln">311</span>     *                 SMASS,TEFFL,HICZ,HJM)
+<span class="ln">312</span>C  FIND THE NEW OMEGA OF THE CONVECTION ZONE AFTER THE WIND.
+<span class="ln">313</span>C MHP 10/02 REPLACED IEND WITH M IN CALL, DEFINED IEND=M
+<span class="ln">314</span>            IEND = M
+<span class="ln">315</span>C JNT 09/2025 FOR 05/15 REPLACE WCZ WITH WCZIMP
+<span class="ln">316</span>            CALL <a href="../yrec-map/wczimp.f.html#def-WCZIMP" title="WCZIMP in wczimp.f">WCZIMP</a>(HDM,HJM,HRM,HS,HS2,IMAX,IEND,ETA2M,HIM,OMEGAM,
+<span class="ln">317</span>     *               QIWM,R0M,M)
+<span class="ln">318</span>         ENDIF
+<span class="ln">319</span>      ENDIF
+<span class="ln">320</span>C  NOW CHECK FOR INSTABILITIES IN RADIATIVE REGIONS
+<span class="ln">321</span>      IF(LINSTB.AND..NOT.LALLCZ) THEN
+<span class="ln">322</span>C  ENSURE THAT CONVECTIVE REGIONS ARE FULLY MIXED.
+<span class="ln">323</span>C  JVS 0212       CALL MIXCZ(HCOMP,HS2,LCZM,M)
+<span class="ln">324</span>C KC 2025-05-30 addressed warning messages from Makefile.legacy
+<span class="ln">325</span>C C G Somers 6/14, SET IMIX = .FALSE. SO THE CORRECT GRADS ARE USED.
+<span class="ln">326</span>C         IMIX = .FALSE.
+<span class="ln">327</span>C         CALL MIXCZ(HCOMP,HS2,HS1,LCZM,HRM,HPM,HDM,HGM,M,IMIX)
+<span class="ln">328</span>C G Somers 6/14, SET LIMIX = .FALSE. SO THE CORRECT GRADS ARE USED.
+<span class="ln">329</span>          LIMIX = .FALSE.
+<span class="ln">330</span>C         CALL MIXCZ(HCOMP,HS2,HS1,LCZM,HRM,HPM,HDM,HGM,M,LIMIX)  ! KC 2025-05-31
+<span class="ln">331</span>          CALL <a href="../yrec-map/mixcz.f.html#def-MIXCZ" title="MIXCZ in mixcz.f">MIXCZ</a>(HCOMP,HS2,LCZM,M)
+<span class="ln">332</span>C G Somers END
+<span class="ln">333</span>C  NOW SOLVE FOR LONG-TIMESCALE(SECULAR) INSTABILITIES.
+<span class="ln">334</span>C  THESE ARE TREATED USING DIFFUSION EQUATIONS.
+<span class="ln">335</span>         DO 60 I = 1,M
+<span class="ln">336</span>            HJMSAV(I) = HJM(I)
+<span class="ln">337</span>   60    CONTINUE
+<span class="ln">338</span>C MHP 6/00 ADDED COD2,HV TO LIST RETURNED FROM SECULR
+<span class="ln">339</span>C FOR THE BUR-ST MIXING ROUTINES
+<span class="ln">340</span>C          CALL SECULR(DELTS,DT,HDM,HGM,HIM,HLM,HPM,HRM,HS,HS1,HS2,
+<span class="ln">341</span>C      *               HTM,HJMSAV,LCZM,LCM,M,MODEL,OMEGAM,
+<span class="ln">342</span>C      *               HJM,ETA2M,QIWM,R0M,HCOMP,LFIRSTIT,IMIN,IMAX,BL,
+<span class="ln">343</span>C      *               HSTOT,SJTOT,SMASS,TEFFL,LREDO,IREDO,  ! KC 2025-05-31
+<span class="ln">344</span>         CALL <a href="../yrec-map/seculr.f.html#def-SECULR" title="SECULR in seculr.f">SECULR</a>(DT,HDM,HGM,HIM,HLM,HPM,HRM,HS,HS1,HS2,
+<span class="ln">345</span>     *               HTM,HJMSAV,LCZM,M,OMEGAM,
+<span class="ln">346</span>     *               HJM,ETA2M,QIWM,R0M,HCOMP,IMIN,IMAX,BL,
+<span class="ln">347</span>     *               HSTOT,SMASS,TEFFL,LREDO,IREDO,
+<span class="ln">348</span>     *               HICZ,HSBOT,HSTOP,OMEGAS,LCZSUR,
+<span class="ln">349</span>C      *               MRZONE,MXZONE,NRZONE,NZONE,  ! KC 2025-05-31
+<span class="ln">350</span>     *               COD2,HV,LOK,HCOMPS)
+<span class="ln">351</span>C  DIFFUSION TIMESTEP CUTTING REQUIRED IF LREDO IS TRUE.
+<span class="ln">352</span>C  RESET MEAN MOLECULAR WEIGHT,COMPOSITION,AND SPECIFIC ANGULAR MOMENTUM
+<span class="ln">353</span>C  TO THE VALUES THEY HAD PRIOR TO THE START OF THE STEP.
+<span class="ln">354</span>         IF(LREDO)THEN
+<span class="ln">355</span>            FX = 2.0D0*DT/DELTS
+<span class="ln">356</span>            SUMDT = SUMDT - 2.0D0*DT
+<span class="ln">357</span>            DO 80 I = 1,M
+<span class="ln">358</span>               HJM(I) = HJMSAV(I)
+<span class="ln">359</span>               AMUM(I) = AMUM(I) - FX*(HAMU(I)-AMUO(I))
+<span class="ln">360</span>               DO 70 J = 1,NSPEC
+<span class="ln">361</span>                  HCOMP(J,I) = HCOMPP(J,I)
+<span class="ln">362</span>   70          CONTINUE
+<span class="ln">363</span>   80       CONTINUE
+<span class="ln">364</span>            GOTO 40
+<span class="ln">365</span>         ENDIF
+<span class="ln">366</span>      ENDIF
+<span class="ln">367</span>C MHP 05/02 TAKEN OUT OF LOOP SO THAT NUCLEAR BURNING
+<span class="ln">368</span>C IS ACCOUNTED FOR IN MODELS THAT ARE FULLY CONVECTIVE
+<span class="ln">369</span>C OR WITHOUT INSTABILITIES
+<span class="ln">370</span>C ADDED CHANGE FOR BURLICH-STORER TREATMENT OF MIXING PLUS
+<span class="ln">371</span>C BURNING - ONLY UPDATED IF NOT USED
+<span class="ln">372</span>      IF(.NOT.LBURS)THEN
+<span class="ln">373</span>         DO I = 1,M
+<span class="ln">374</span>            DO J = 1,11
+<span class="ln">375</span>                  HCOMPP(J,I) = HCOMP(J,I)
+<span class="ln">376</span>            END DO
+<span class="ln">377</span>         END DO
+<span class="ln">378</span>      ENDIF
+<span class="ln">379</span>      LFIRSTIT = .FALSE.
+<span class="ln">380</span>C  CLEAN UP EXTENDED COMP ARRAYS; ZERO VALUES THROUGHOUT MOST OF THE
+<span class="ln">381</span>C  INTERIOR CAN LEAD TO SMALL NEGATIVE VALUES DUE TO ROUNDOFF ERROR IN
+<span class="ln">382</span>C  THE DIFFUSION CALCULATIONS.
+<span class="ln">383</span>      IF(LEXCOM)THEN
+<span class="ln">384</span>C  PERFORM LIGHT ELEMENT BURNING.
+<span class="ln">385</span>C FIND SURFACE C.Z. DEPTH AT THE END OF THE TIME STEP.
+<span class="ln">386</span>         CALL <a href="../yrec-map/convec.f.html#def-CONVEC" title="CONVEC in convec.f">CONVEC</a>(HCOMP,HDM,HPM,HRM,HS,HTM,LCM,M,MRZONE,MXZONE,
+<span class="ln">387</span>     *                MXZON0,JCORE1,JENV1,NRZONE,NZONE,NZONE0)
+<span class="ln">388</span>C 11/91 CHANGED FOR LITHIUM BURNING WITH OVERSHOOT.
+<span class="ln">389</span>         IF(LOVSTE .AND. LCM(M))THEN
+<span class="ln">390</span>            PSCAL1 = ALPHAE*EXP(CLNDP*(HPM(JENV1)+2.0D0*HRM(JENV1)
+<span class="ln">391</span>     *               -HDM(JENV1)-CGL-HS(JENV1)))
+<span class="ln">392</span>         ELSE
+<span class="ln">393</span>            PSCAL1 = 0.0D0
+<span class="ln">394</span>         ENDIF
+<span class="ln">395</span>C FIND LIGHT ELEMENT BURNING RATES AT THE END OF THE TIME STEP.
+<span class="ln">396</span>         CALL <a href="../yrec-map/lirate88.f.html#def-LIRATE88" title="LIRATE88 in lirate88.f">LIRATE88</a>(HCOMP,HDM,HTM,M,2)
+<span class="ln">397</span>C STORE CURRENT &quot;END OF STEP&quot; QUANTITIES AS &quot;BEGINNING&quot; ONES FOR
+<span class="ln">398</span>C THE NEXT STEP.
+<span class="ln">399</span>C ADDED CHANGE FOR BURLICH-STORER TREATMENT OF MIXING PLUS
+<span class="ln">400</span>C BURNING - ONLY UPDATED IF NOT USED
+<span class="ln">401</span>         IF(.NOT.LINSTB .OR. .NOT.LBURS .OR. LALLCZ)THEN
+<span class="ln">402</span>C COMPUTE BURNING.
+<span class="ln">403</span>C             CALL LIBURN(DT,HCOMP,HDM,HRM,HS1,HS2,HTM,JENV1,JENV0,M)  ! KC 2025-05-31
+<span class="ln">404</span>            CALL <a href="../yrec-map/liburn.f.html#def-LIBURN" title="LIBURN in liburn.f">LIBURN</a>(DT,HCOMP,HRM,HS1,HS2,HTM,JENV1,JENV0,M)
+<span class="ln">405</span>            JENV0 = JENV1
+<span class="ln">406</span>            PSCAL0 = PSCAL1
+<span class="ln">407</span>            DO 155 I = 1,M
+<span class="ln">408</span>               RLI60(I) = RLI6(I)
+<span class="ln">409</span>               RLI70(I) = RLI7(I)
+<span class="ln">410</span>               RBE90(I) = RBE9(I)
+<span class="ln">411</span>  155       CONTINUE
+<span class="ln">412</span>         ELSE
+<span class="ln">413</span>C COMPUTE BURNING.
+<span class="ln">414</span>C             CALL LIBURN2(DT,HCOMP,HDM,HRM,HS1,HS2,HTM,JENV1,JENV0,M)  ! KC 2025-05-31
+<span class="ln">415</span>            CALL <a href="../yrec-map/liburn2.f.html#def-LIBURN2" title="LIBURN2 in liburn2.f">LIBURN2</a>(DT,HCOMP,HRM,HS1,HS2,HTM,JENV1,JENV0,M)
+<span class="ln">416</span>         ENDIF
+<span class="ln">417</span>C  ENSURE THAT CONVECTIVE REGIONS ARE FULLY MIXED.
+<span class="ln">418</span>C  JVS 0212       CALL MIXCZ(HCOMP,HS2,LCZM,M)
+<span class="ln">419</span>C KC 2025-05-30 addressed warning messages from Makefile.legacy
+<span class="ln">420</span>C C G Somers 6/14, SET IMIX = .FALSE. SO THE CORRECT GRADS ARE USED.
+<span class="ln">421</span>C         IMIX = .FALSE.
+<span class="ln">422</span>C         CALL MIXCZ(HCOMP,HS2,HS1,LCZM,HRM,HPM,HDM,HGM,M,IMIX)
+<span class="ln">423</span>C G Somers 6/14, SET LIMIX = .FALSE. SO THE CORRECT GRADS ARE USED.
+<span class="ln">424</span>          LIMIX = .FALSE.
+<span class="ln">425</span>C         CALL MIXCZ(HCOMP,HS2,HS1,LCZM,HRM,HPM,HDM,HGM,M,LIMIX)  ! KC 2025-05-31
+<span class="ln">426</span>          CALL <a href="../yrec-map/mixcz.f.html#def-MIXCZ" title="MIXCZ in mixcz.f">MIXCZ</a>(HCOMP,HS2,LCZM,M)
+<span class="ln">427</span>C G Somers END
+<span class="ln">428</span>C  ZERO OUT LOW ABUNDANCES.
+<span class="ln">429</span>         DO 100 I = 1,M
+<span class="ln">430</span>            DO 90 J = 12,15
+<span class="ln">431</span>               IF(HCOMP(J,I).LT.1.0D-24)HCOMP(J,I)=0.0D0
+<span class="ln">432</span>   90       CONTINUE
+<span class="ln">433</span>  100   CONTINUE
+<span class="ln">434</span>C MHP 6/00 ADDED OVERWRITE OF HCOMPP FOR LIGHT ELEMENTS
+<span class="ln">435</span>C ADDED CHANGE FOR BURLICH-STORER TREATMENT OF MIXING PLUS
+<span class="ln">436</span>C BURNING - ONLY UPDATED IF NOT USED
+<span class="ln">437</span>         IF(.NOT.LINSTB.OR.LALLCZ)THEN
+<span class="ln">438</span>            DO I = 1,M
+<span class="ln">439</span>               DO J = 12,15
+<span class="ln">440</span>                  HCOMPP(J,I) = HCOMP(J,I)
+<span class="ln">441</span>               END DO
+<span class="ln">442</span>            END DO
+<span class="ln">443</span>         ELSE IF(.NOT.LBURS)THEN
+<span class="ln">444</span>            DO I = 1,M
+<span class="ln">445</span>               DO J = 12,15
+<span class="ln">446</span>                  HCOMPP(J,I) = HCOMP(J,I)
+<span class="ln">447</span>               END DO
+<span class="ln">448</span>            END DO
+<span class="ln">449</span>         ENDIF
+<span class="ln">450</span>      ENDIF
+<span class="ln">451</span>C MHP 6/00 NOW ADDED THE OPTION OF PERFORMING A BUR-ST EXTRAPOLATION
+<span class="ln">452</span>C TO ZERO TIMESTEP FOR THE COMBINATION OF MIXING AND NUCLEAR BURNING.
+<span class="ln">453</span>      IF(LINSTB .AND. .NOT.LALLCZ)THEN
+<span class="ln">454</span>         IF(LBURS)THEN
+<span class="ln">455</span>        CALL <a href="../yrec-map/bursmix.f.html#def-BURSMIX" title="BURSMIX in bursmix.f">BURSMIX</a>(COD2,DT,HCOMP,HDM,HLM,HPM,HRM,HS,HS1,HS2,HSTOT,
+<span class="ln">456</span>     *                   HTM,HV,IMAX,IMIN,JENV0,JENV1,LOK,LCZM,M,MRZONE,
+<span class="ln">457</span>     *                   MXZONE,NRZONE,NZONE)
+<span class="ln">458</span>         ENDIF
+<span class="ln">459</span>      ENDIF
+<span class="ln">460</span>C  RETURN FOR NEXT SMALL DIFFUSION TIMESTEP IF NEEDED.
+<span class="ln">461</span>      IF(SUMDT.LT.DELTS)GOTO 30
+<span class="ln">462</span>C  UPDATE OMEGA ARRAY TO REFLECT NEW ANGULAR MOMENTUM DISTRIBUTION.
+<span class="ln">463</span>      DO 110 I = 1,M
+<span class="ln">464</span>         OMEGA(I) = OMEGAM(I)
+<span class="ln">465</span>  110 CONTINUE
+<span class="ln">466</span>C MHP 3/96 ADDED CALL TO RECOMPUTE SELF-CONSISTENT SET OF OMEGAS
+<span class="ln">467</span>      CALL <a href="../yrec-map/getrot.f.html#def-GETROT" title="GETROT in getrot.f">GETROT</a>(HD,HJM,HR,HS,HS2,LCZ,M,ETA2,HI,OMEGA,QIW,R0)
+<span class="ln">468</span> 9999 CONTINUE
+<span class="ln">469</span>      IF(LPRT0)THEN
+<span class="ln">470</span>         BL = LOG10(HL(M))
+<span class="ln">471</span>         RL = 0.5D0*(BL + CLSUNL - 4.0D0*TEFFL - C4PIL - CSIGL)
+<span class="ln">472</span>         FX = EXP(CLN*3.0D0*(HR(M)-RL))
+<span class="ln">473</span>         QSURF = FX*QUAD(M)
+<span class="ln">474</span>         PSURF = EXP(CLN*(CGL+HSTOT-RL))
+<span class="ln">475</span>         WRITE(*,9911)QSURF,PSURF,-1.5D0*QSURF/PSURF
+<span class="ln">476</span> 9911    FORMAT(1X,&#x27;QUAD &#x27;,1PE12.3,&#x27; PHIS &#x27;,E12.3,&#x27; 3/2 QUAD/G &#x27;,
+<span class="ln">477</span>     *          E12.3)
+<span class="ln">478</span>      ENDIF
+<span class="ln">479</span>      RETURN
+<span class="ln">480</span>      END</pre></details>
+<details class='py' id='py-getw'><summary>Python version: getw</summary><pre class='doc'>Evolve the angular momentum distribution over one model step.
+
+Enforces local conservation of angular momentum in radiative regions
+and the rotation law in convective regions; with instabilities
+(LINSTB), solves for the transport of angular momentum and the
+associated mixing in substeps, with the wind loss (LJDOT0) and, with
+LEXCOM, lithium and beryllium burning (Pinsonneault et al. 1989).
+
+Translates: getw.f#GETW (09c3b9b)
+
+Parameters
+----------
+bl : float
+    log10 L/Lsun; overwritten when ``lprt0`` is set.
+delts : float
+    The model time step (s).
+dwmax : float
+    Largest fractional change of Omega in the last step; 0 is replaced
+    by DTWIND.
+fp, ft, hcomp, hd, hl, hp, hr, hs, hs1, hs2, ht, lc : arrays
+    The model at the end of the step.
+hjm : array
+    Specific angular momentum per shell; updated.
+hstot, smass, teffl : float
+ljdot : bool
+    Wind on; set to LJDOT0 in the path without instabilities.
+m : int
+eta2, hg, hi, omega, qiw, r0 : arrays
+    Rotation quantities; updated.
+jenv0 : int
+    Base of the convective envelope at the last burning step.
+cmixl : float
+    Mixing-length parameter, passed to PHYSIC and GETTAU.
+lprt0 : bool
+    Print the surface quadrupole term.
+
+Returns
+-------
+bl, dwmax, ljdot, jenv0</pre><pre class='src'><span class="ln">84</span>def getw(bl, delts, dwmax, fp, ft, hcomp, hd, hjm, hl, hp, hr, hs,
+<span class="ln">85</span>         hs1, hs2, hstot, ht, lc, ljdot, m, smass,
+<span class="ln">86</span>         teffl, eta2, hg, hi, omega, qiw, r0, jenv0, cmixl, lprt0):
+<span class="ln">87</span>    &quot;&quot;&quot;Evolve the angular momentum distribution over one model step.
+<span class="ln">88</span>
+<span class="ln">89</span>    Enforces local conservation of angular momentum in radiative regions
+<span class="ln">90</span>    and the rotation law in convective regions; with instabilities
+<span class="ln">91</span>    (LINSTB), solves for the transport of angular momentum and the
+<span class="ln">92</span>    associated mixing in substeps, with the wind loss (LJDOT0) and, with
+<span class="ln">93</span>    LEXCOM, lithium and beryllium burning (Pinsonneault et al. 1989).
+<span class="ln">94</span>
+<span class="ln">95</span>    Translates: getw.f#GETW (09c3b9b)
+<span class="ln">96</span>
+<span class="ln">97</span>    Parameters
+<span class="ln">98</span>    ----------
+<span class="ln">99</span>    bl : float
+<span class="ln">100</span>        log10 L/Lsun; overwritten when ``lprt0`` is set.
+<span class="ln">101</span>    delts : float
+<span class="ln">102</span>        The model time step (s).
+<span class="ln">103</span>    dwmax : float
+<span class="ln">104</span>        Largest fractional change of Omega in the last step; 0 is replaced
+<span class="ln">105</span>        by DTWIND.
+<span class="ln">106</span>    fp, ft, hcomp, hd, hl, hp, hr, hs, hs1, hs2, ht, lc : arrays
+<span class="ln">107</span>        The model at the end of the step.
+<span class="ln">108</span>    hjm : array
+<span class="ln">109</span>        Specific angular momentum per shell; updated.
+<span class="ln">110</span>    hstot, smass, teffl : float
+<span class="ln">111</span>    ljdot : bool
+<span class="ln">112</span>        Wind on; set to LJDOT0 in the path without instabilities.
+<span class="ln">113</span>    m : int
+<span class="ln">114</span>    eta2, hg, hi, omega, qiw, r0 : arrays
+<span class="ln">115</span>        Rotation quantities; updated.
+<span class="ln">116</span>    jenv0 : int
+<span class="ln">117</span>        Base of the convective envelope at the last burning step.
+<span class="ln">118</span>    cmixl : float
+<span class="ln">119</span>        Mixing-length parameter, passed to PHYSIC and GETTAU.
+<span class="ln">120</span>    lprt0 : bool
+<span class="ln">121</span>        Print the surface quadrupole term.
+<span class="ln">122</span>
+<span class="ln">123</span>    Returns
+<span class="ln">124</span>    -------
+<span class="ln">125</span>    bl, dwmax, ljdot, jenv0
+<span class="ln">126</span>    &quot;&quot;&quot;
+<span class="ln">127</span>    global nrzone, nzone
+<span class="ln">128</span>    c = constants_mod
+<span class="ln">129</span>    nml = nmlpar_mod
+<span class="ln">130</span>    o2 = oldrot2_mod
+<span class="ln">131</span>    # Question (see the page): LBURS is never changed, so BURSMIX and
+<span class="ln">132</span>    # LIBURN2 are never used.
+<span class="ln">133</span>    lburs = False
+<span class="ln">134</span>    # The number of species tracked.
+<span class="ln">135</span>    nspec = 11
+<span class="ln">136</span>    if nml.lexcom:
+<span class="ln">137</span>        nspec = 15
+<span class="ln">138</span>    # Shells convective for angular momentum (convection plus overshoot).
+<span class="ln">139</span>    nrzone, nzone = ovrot(hcomp, hd, hp, hr, hs, ht, lc, m, lcz, mrzone,
+<span class="ln">140</span>                          mxzone, nrzone, nzone)
+<span class="ln">141</span>    # Disk locking.
+<span class="ln">142</span>    lock = False
+<span class="ln">143</span>    if nml.ldisk and disk_mod.sage &lt;= nml.tdisk:
+<span class="ln">144</span>        lock = True
+<span class="ln">145</span>
+<span class="ln">146</span>    if not nml.linstb:
+<span class="ln">147</span>        # Without instabilities.
+<span class="ln">148</span>        omegas = omega[m]
+<span class="ln">149</span>        if nml.lsolid or nml.impjmod == 1:
+<span class="ln">150</span>            lcz[1:m + 1] = True
+<span class="ln">151</span>        getrot(hd, hjm, hr, hs, hs2, lcz, m, eta2, hi, omega, qiw, r0)
+<span class="ln">152</span>        if not lock and nml.ljdot0 and lc[m]:
+<span class="ln">153</span>            hicz = 0.0
+<span class="ln">154</span>            if nml.lsolid or nml.impjmod == 1:
+<span class="ln">155</span>                imax = 1
+<span class="ln">156</span>            else:
+<span class="ln">157</span>                imax = mxzone[nzone, 1]
+<span class="ln">158</span>            for i in range(imax, m + 1):
+<span class="ln">159</span>                hicz = hicz + hi[i]
+<span class="ln">160</span>            hstop = math.exp(c.cln * hstot)
+<span class="ln">161</span>            if imax &gt; 1:
+<span class="ln">162</span>                hsbot = 0.5 * (hs1[imax] + hs1[imax - 1])
+<span class="ln">163</span>            else:
+<span class="ln">164</span>                hsbot = 0.0
+<span class="ln">165</span>            ljdot = nml.ljdot0
+<span class="ln">166</span>            # Timestep-average loss rate.
+<span class="ln">167</span>            ovrtrn_mod.fracstep = 0.5
+<span class="ln">168</span>            mwind(bl, delts, hsbot, hstop, imax, m, ljdot, omegas,
+<span class="ln">169</span>                  smass, teffl, hicz, hjm)
+<span class="ln">170</span>            iend = m
+<span class="ln">171</span>            wczimp(hd, hjm, hr, hs, hs2, imax, iend, eta2, hi, omega,
+<span class="ln">172</span>                   qiw, r0, m)
+<span class="ln">173</span>        if lprt0:
+<span class="ln">174</span>            bl = _print_quad(bl, hl, hr, teffl, hstot, m, quadru_mod.quad)
+<span class="ln">175</span>        return bl, dwmax, ljdot, jenv0
+<span class="ln">176</span>
+<span class="ln">177</span>    getrot(hd, hjm, hr, hs, hs2, lcz, m, eta2, hi, omega, qiw, r0)
+<span class="ln">178</span>    lskip = not nml.linstb and not ljdot
+<span class="ln">179</span>    if lskip or delts &lt;= 0.0:
+<span class="ln">180</span>        if lprt0:
+<span class="ln">181</span>            bl = _print_quad(bl, hl, hr, teffl, hstot, m, quadru_mod.quad)
+<span class="ln">182</span>        return bl, dwmax, ljdot, jenv0
+<span class="ln">183</span>
+<span class="ln">184</span>    # The number of diffusion substeps.
+<span class="ln">185</span>    if dwmax == 0.0:
+<span class="ln">186</span>        dwmax = nml.dtwind
+<span class="ln">187</span>    nstep = int(dwmax / nml.dtdif)
+<span class="ln">188</span>    if math.fmod(dwmax, nml.dtdif) != 0.0:
+<span class="ln">189</span>        nstep = nstep + 1
+<span class="ln">190</span>    nstep2 = int(nml.dtwind / nml.dtdif)
+<span class="ln">191</span>    if math.fmod(nml.dtwind, nml.dtdif) != 0.0:
+<span class="ln">192</span>        nstep2 = nstep2 + 1
+<span class="ln">193</span>    nstep = min(nstep, nstep2)
+<span class="ln">194</span>    dt = delts / float(nstep)
+<span class="ln">195</span>
+<span class="ln">196</span>    # Physics and the overturn time, once per step.
+<span class="ln">197</span>    physic(fp, ft, hcomp, hd, hg, hl, hp, hr, hs, ht, lc, m, teffl, cmixl)
+<span class="ln">198</span>    # Question (see the page): ENVR is a scalar local standing for RBCZ.
+<span class="ln">199</span>    envr = 0.0
+<span class="ln">200</span>    envr = gettau(hcomp, hr, hp, hd, hs1, ht, fp, ft, teffl,
+<span class="ln">201</span>                  hstot, bl, m, lc, envr, cmixl)
+<span class="ln">202</span>    sumdt = 0.0
+<span class="ln">203</span>    lfirstit = True
+<span class="ln">204</span>
+<span class="ln">205</span>    while True:                                          # label 30
+<span class="ln">206</span>        iredo = 0
+<span class="ln">207</span>        while True:                                      # label 40
+<span class="ln">208</span>            test = delts - delts * 1.0e-6
+<span class="ln">209</span>            if sumdt + dt &gt;= test:
+<span class="ln">210</span>                dt = delts - sumdt
+<span class="ln">211</span>                sumdt = delts
+<span class="ln">212</span>            else:
+<span class="ln">213</span>                sumdt = sumdt + dt
+<span class="ln">214</span>            # Time change of theta (MHP 06/02).
+<span class="ln">215</span>            if lfirstit:
+<span class="ln">216</span>                o2.thp[1] = o2.tho[1]
+<span class="ln">217</span>                o2.wmst[1] = oldrot_mod.wold[1]
+<span class="ln">218</span>                for i in range(2, m + 1):
+<span class="ln">219</span>                    o2.qwrmst[i] = o2.qwrst[i]
+<span class="ln">220</span>                    o2.thp[i] = o2.tho[i]
+<span class="ln">221</span>                    o2.wmst[i] = oldrot_mod.wold[i]
+<span class="ln">222</span>            else:
+<span class="ln">223</span>                o2.wmst[1] = omega[1]
+<span class="ln">224</span>                for i in range(2, m + 1):
+<span class="ln">225</span>                    wmid = 0.5 * (omega[i] + omega[i - 1])
+<span class="ln">226</span>                    dr = 10.0 ** hrm[i] - 10.0 ** hrm[i - 1]
+<span class="ln">227</span>                    qw = (omega[i] - omega[i - 1]) / dr
+<span class="ln">228</span>                    o2.thp[i] = o2.thm[i] * wmid * qw
+<span class="ln">229</span>                    o2.qwrmst[i] = qw
+<span class="ln">230</span>                    o2.wmst[i] = omega[i]
+<span class="ln">231</span>            fx = sumdt / delts
+<span class="ln">232</span>            ovrtrn_mod.fracstep = fx
+<span class="ln">233</span>            # The structure in the middle of the substep.
+<span class="ln">234</span>            (fx, hicz, hsbot, hstop, imin, imax, lallcz, lczsur,
+<span class="ln">235</span>             nrzone, nzone) = midmod(
+<span class="ln">236</span>                delts, dt, fx, hcomp, hd, hg, hjm, hl, hp, hr, hs, hs1,
+<span class="ln">237</span>                hs2, hstot, ht, lc, lfirstit, m, eta2m, hdm, hgm, 0.0, him,
+<span class="ln">238</span>                hlm, hpm, hrm, 0.0, 0.0, htm, 0, 0, False, lcm,
+<span class="ln">239</span>                lczm, False, omegam, r0m, qiwm, mrzone, mxzone, nrzone,
+<span class="ln">240</span>                nzone, hcomps)
+<span class="ln">241</span>            # The wind, here only for a fully convective star (or without
+<span class="ln">242</span>            # instabilities); otherwise SECULR calls MWIND.
+<span class="ln">243</span>            if not lock and ljdot and lczsur:
+<span class="ln">244</span>                omegas = omegam[m]
+<span class="ln">245</span>                if lallcz or not nml.linstb:
+<span class="ln">246</span>                    mwind(bl, dt, hsbot, hstop, imax, m, ljdot, omegas,
+<span class="ln">247</span>                          smass, teffl, hicz, hjm)
+<span class="ln">248</span>                    iend = m
+<span class="ln">249</span>                    wczimp(hdm, hjm, hrm, hs, hs2, imax, iend, eta2m, him,
+<span class="ln">250</span>                           omegam, qiwm, r0m, m)
+<span class="ln">251</span>            # Instabilities in radiative regions.
+<span class="ln">252</span>            if nml.linstb and not lallcz:
+<span class="ln">253</span>                limix = False       # set but no longer used (G Somers 6/14)
+<span class="ln">254</span>                mixcz(hcomp, hs2, lczm, m)
+<span class="ln">255</span>                for i in range(1, m + 1):                # label 60
+<span class="ln">256</span>                    hjmsav[i] = hjm[i]
+<span class="ln">257</span>                dt, lredo, iredo, hicz, omegas, lok = seculr(
+<span class="ln">258</span>                    dt, hdm, hgm, him, hlm, hpm, hrm, hs, hs1, hs2,
+<span class="ln">259</span>                    htm, hjmsav, lczm, m, omegam,
+<span class="ln">260</span>                    hjm, eta2m, qiwm, r0m, hcomp, imin, imax, bl,
+<span class="ln">261</span>                    hstot, smass, teffl, False, iredo,
+<span class="ln">262</span>                    hicz, hsbot, hstop, omegas, lczsur,
+<span class="ln">263</span>                    cod2, hv, False, hcomps)
+<span class="ln">264</span>                if lredo:
+<span class="ln">265</span>                    # Redo the substep (DT already halved): restore j, the
+<span class="ln">266</span>                    # composition and mu.
+<span class="ln">267</span>                    fx = 2.0 * dt / delts
+<span class="ln">268</span>                    sumdt = sumdt - 2.0 * dt
+<span class="ln">269</span>                    for i in range(1, m + 1):            # label 80
+<span class="ln">270</span>                        hjm[i] = hjmsav[i]
+<span class="ln">271</span>                        mdphy_mod.amum[i] = (mdphy_mod.amum[i]
+<span class="ln">272</span>                                             - fx * (temp_mod.hamu[i]
+<span class="ln">273</span>                                                     - oldphy_mod.amuo[i]))
+<span class="ln">274</span>                        for j in range(1, nspec + 1):    # label 70
+<span class="ln">275</span>                            hcomp[j, i] = oldmod_mod.hcompp[j, i]
+<span class="ln">276</span>                    continue                             # GOTO 40
+<span class="ln">277</span>            break
+<span class="ln">278</span>
+<span class="ln">279</span>        # The composition at the start of the next substep.
+<span class="ln">280</span>        if not lburs:
+<span class="ln">281</span>            for i in range(1, m + 1):
+<span class="ln">282</span>                for j in range(1, 12):
+<span class="ln">283</span>                    oldmod_mod.hcompp[j, i] = hcomp[j, i]
+<span class="ln">284</span>        lfirstit = False
+<span class="ln">285</span>
+<span class="ln">286</span>        # Light elements.
+<span class="ln">287</span>        if nml.lexcom:
+<span class="ln">288</span>            jcore1, jenv1, nrzone, nzone, nzone0 = convec(
+<span class="ln">289</span>                hcomp, hdm, hpm, hrm, hs, htm, lcm, m, mrzone, mxzone,
+<span class="ln">290</span>                mxzon0, 0, 0, nrzone, nzone, 0)
+<span class="ln">291</span>            # Overshoot depth alpha_e H_P, H_P = P r**2 / (rho G m).
+<span class="ln">292</span>            if nml.lovste and lcm[m]:
+<span class="ln">293</span>                liov_mod.pscal1 = nml.alphae * math.exp(
+<span class="ln">294</span>                    c.clndp * (hpm[jenv1] + 2.0 * hrm[jenv1] - hdm[jenv1]
+<span class="ln">295</span>                               - c.cgl - hs[jenv1]))
+<span class="ln">296</span>            else:
+<span class="ln">297</span>                liov_mod.pscal1 = 0.0
+<span class="ln">298</span>            lirate88(hcomp, hdm, htm, m, 2)
+<span class="ln">299</span>            if not nml.linstb or not lburs or lallcz:
+<span class="ln">300</span>                liburn(dt, hcomp, hrm, hs1, hs2, htm, jenv1, jenv0, m)
+<span class="ln">301</span>                jenv0 = jenv1
+<span class="ln">302</span>                liov_mod.pscal0 = liov_mod.pscal1
+<span class="ln">303</span>                for i in range(1, m + 1):                # label 155
+<span class="ln">304</span>                    oldrat_mod.rli60[i] = newrat_mod.rli6[i]
+<span class="ln">305</span>                    oldrat_mod.rli70[i] = newrat_mod.rli7[i]
+<span class="ln">306</span>                    oldrat_mod.rbe90[i] = newrat_mod.rbe9[i]
+<span class="ln">307</span>            else:
+<span class="ln">308</span>                liburn2(dt, hcomp, hrm, hs1, hs2, htm, jenv1, jenv0, m)
+<span class="ln">309</span>            limix = False
+<span class="ln">310</span>            mixcz(hcomp, hs2, lczm, m)
+<span class="ln">311</span>            # Zero out low abundances.
+<span class="ln">312</span>            for i in range(1, m + 1):                    # labels 100, 90
+<span class="ln">313</span>                for j in range(12, 16):
+<span class="ln">314</span>                    if hcomp[j, i] &lt; 1.0e-24:
+<span class="ln">315</span>                        hcomp[j, i] = 0.0
+<span class="ln">316</span>            if not nml.linstb or lallcz:
+<span class="ln">317</span>                oldmod_mod.hcompp[12:16, 1:m + 1] = hcomp[12:16, 1:m + 1]
+<span class="ln">318</span>            elif not lburs:
+<span class="ln">319</span>                oldmod_mod.hcompp[12:16, 1:m + 1] = hcomp[12:16, 1:m + 1]
+<span class="ln">320</span>
+<span class="ln">321</span>        # Bulirsch-Stoer mixing plus burning (never reached: LBURS false).
+<span class="ln">322</span>        if nml.linstb and not lallcz:
+<span class="ln">323</span>            if lburs:
+<span class="ln">324</span>                jenv0 = bursmix(cod2, dt, hcomp, hdm, hlm, hpm, hrm, hs, hs1,
+<span class="ln">325</span>                                hs2, hstot, htm, hv, imax, imin, jenv0, jenv1,
+<span class="ln">326</span>                                lok, lczm, m, mrzone, mxzone, nrzone, nzone)
+<span class="ln">327</span>
+<span class="ln">328</span>        if not sumdt &lt; delts:
+<span class="ln">329</span>            break                                        # else GOTO 30
+<span class="ln">330</span>
+<span class="ln">331</span>    for i in range(1, m + 1):                            # label 110
+<span class="ln">332</span>        omega[i] = omegam[i]
+<span class="ln">333</span>    getrot(hd, hjm, hr, hs, hs2, lcz, m, eta2, hi, omega, qiw, r0)
+<span class="ln">334</span>    if lprt0:                                            # label 9999
+<span class="ln">335</span>        bl = _print_quad(bl, hl, hr, teffl, hstot, m, quadru_mod.quad)
+<span class="ln">336</span>    return bl, dwmax, ljdot, jenv0</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_print_quad'><summary>Python version: _print_quad</summary><pre class='doc'>Label 9999: with LPRT0, print the surface quadrupole term.
+
+Returns BL, which is overwritten (Question 2 on the page).</pre><pre class='src'><span class="ln">68</span>def _print_quad(bl, hl, hr, teffl, hstot, m, quad):
+<span class="ln">69</span>    &quot;&quot;&quot;Label 9999: with LPRT0, print the surface quadrupole term.
+<span class="ln">70</span>
+<span class="ln">71</span>    Returns BL, which is overwritten (Question 2 on the page).
+<span class="ln">72</span>    &quot;&quot;&quot;
+<span class="ln">73</span>    c = constants_mod
+<span class="ln">74</span>    bl = math.log10(hl[m])
+<span class="ln">75</span>    rl = 0.5 * (bl + c.clsunl - 4.0 * teffl - c.c4pil - c.csigl)
+<span class="ln">76</span>    fx = math.exp(c.cln * 3.0 * (hr[m] - rl))
+<span class="ln">77</span>    qsurf = fx * quad[m]
+<span class="ln">78</span>    psurf = math.exp(c.cln * (c.cgl + hstot - rl))
+<span class="ln">79</span>    print(f&quot; QUAD {qsurf:12.3E} PHIS {psurf:12.3E} 3/2 QUAD/G &quot;
+<span class="ln">80</span>          f&quot;{-1.5 * qsurf / psurf:12.3E}&quot;)                 # format 9911
+<span class="ln">81</span>    return bl</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Question 2 answerable.</strong> "<code>DWMAX</code> as a time … What is its unit and meaning?" <code>DWMAX</code> is the largest fractional change of $\Omega$ in the last step, $2|\Omega-\Omega_\mathrm{old}|/(\Omega+\Omega_\mathrm{old})$ (wtime.f lines 31–36, via HTIMER); <code>DTWIND</code> is the largest $\Delta\Omega/\Omega$ allowed per model step (WTIME's comment, line 22) and <code>DTDIF</code> the largest per substep (REMAP sets them from <code>TIME_DW_GLOBAL</code> and <code>TIME_DW_MIX</code>, remap.f lines 253, 256). All dimensionless; the <code>DT</code> prefixes are misleading. Fix: state it in step 3 and drop the question.</li>
+<li><strong>Question 3 answerable.</strong> CHECKJ and CHECKC halve <code>DT</code> before they set <code>LREDO</code> (checkj.f line 103, checkc.f line 90), so $2\,$<code>DT</code> is the old substep and <code>SUMDT</code> returns exactly to the substep's start. Fix: state it and drop the question.</li>
+<li><strong>Wrong.</strong> "the wind removes angular momentum over the substep". In the substep loop GETW calls <code>MWIND</code> and <code>WCZIMP</code> only for a fully convective star (<code>LALLCZ .OR. .NOT.LINSTB</code>, the second always false on this path); otherwise it passes the wind's quantities to SECULR, which calls MWIND (seculr.f line 192). Likewise <code>MIXCZ</code> and <code>SECULR</code> run only when the star is not fully convective. Fix: say so.</li>
+</ol>
+<p>Otherwise checked: the header, the callees, the no-instability path with <code>FRACSTEP</code> = 0.5, the $\theta$ update, the light-element block, the final GETROT, the printed quadrupole term, and questions 1, 4, 5, 6 (now 1–4). (<code>LSKIP</code> at source line 170 is always false on the path that reaches it; not worth a question.) No remark on the false <code>QUAD</code> link remains (a settled point).</p>
+<p>Revised: step 3 gives the meaning of <code>DWMAX</code>, <code>DTWIND</code>, <code>DTDIF</code>, the redo with the halved <code>DT</code>, and where the wind is applied; questions 2 and 3 dropped, the rest renumbered.</p></div></details>
+</main></body></html>

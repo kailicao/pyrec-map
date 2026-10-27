@@ -1,0 +1,176 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>ccoeft.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ ccoeft.f</span></header><main>
+<h1>ccoeft.f</h1>
+<p class='muted'>82 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/ccoeft.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>ccoeft.py</code>, 42 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file sets up the tridiagonal system for one implicit time step of composition transport by rotationally induced mixing, on an evenly spaced grid in the coordinate $\chi$ built by <a href="../yrec-map/getgrid.f.html#def-GETGRID">GETGRID</a> and <a href="../yrec-map/mixgrid.f.html#def-MIXGRID">MIXGRID</a> (the comments' "radius" and "cm" are older than that grid).</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>COD</code> (diffusion coefficients, "computed in SR COEFFT" per the comment), <code>DR</code> (grid spacing: <a href="../yrec-map/mixcom.f.html#def-MIXCOM">MIXCOM</a> passes <code>DCHI</code>, the spacing in $\chi$), <code>DT</code> (time step, s), <code>ECOMP</code> (mass fractions at the start of the step on the even grid), <code>EM</code> (the masses of the grid's shells, g), <code>NTOT</code> (number of points).</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/mixcom.f.html#def-MIXCOM">MIXCOM</a>.</li>
+<li><strong>Outputs:</strong> the coefficients <code>A</code>, <code>B</code>, <code>C</code> and right-hand side <code>D</code> in <a href="../yrec-map/tridi_mod.f.html#def-TRIDI_MOD"><code>TRIDI_MOD</code></a>, which <a href="../yrec-map/ctridi.f.html#def-CTRIDI">CTRIDI</a> then solves (MIXCOM calls only that one); <code>TRIDI_MOD</code> is shared with these and with <a href="../yrec-map/dcoeft.f.html#def-DCOEFT">DCOEFT</a> and <a href="../yrec-map/getqua.f.html#def-GETQUA">GETQUA</a>.</li>
+</ul>
+<p><strong>The method.</strong> The comment gives the equation as
+$$\frac{\partial X}{\partial t} = \frac{1}{4\pi\rho r^2}\frac{\partial}{\partial r}\left(D\,\frac{\partial X}{\partial r}\right),$$
+differenced fully implicitly on the grid in $\chi$ ($\Delta r$ below is <code>DR</code>, that is, $\Delta\chi$; $m_i$ is the shell mass <code>EM</code>):
+$$X_i^{n+1} - X_i^{n} = \frac{\Delta t}{\Delta r\,m_i}\left[D_{i+1}\left(X_{i+1}^{n+1} - X_i^{n+1}\right) - D_i\left(X_i^{n+1} - X_{i-1}^{n+1}\right)\right],$$
+where <code>COD(I)</code> is $D$ at the interface between points $i-1$ and $i$ (written $D_{i-1/2}$ in the comment). So, with $f_i = \Delta t/(\Delta r\, m_i)$:
+$$a_i = -f_i D_i, \qquad b_i = 1 + f_i (D_i + D_{i+1}), \qquad c_i = -f_i D_{i+1}, \qquad d_i = X_i^n.$$
+At both ends there is no flux across the boundary: $a_1 = 0$, $b_1 = 1 + f_1 D_2$; $c_N = 0$, $b_N = 1 + f_N D_N$.</p>
+<p>The scheme conserves mass: <a href="../yrec-map/codiff.f.html#def-CODIFF">CODIFF</a> includes $4\pi$ in <code>COD2</code>, and MIXGRID multiplies the coefficient by $\rho r^2\,d\chi/dr$, so <code>COD</code> is $4\pi\rho r^2 D\,d\chi/dr$, and the flux between shells is <code>COD</code> times the difference in $X$ over $\Delta\chi$.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: <code>/TRIDI/</code> to its module, the unused <code>/CCOUT/</code> and <code>/LUOUT/</code> dropped, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Outdated comments.</strong> The comments speak of an even grid in radius, a spacing in cm, coefficients "computed in SR COEFFT" and "angular momentum" at the boundary, while the routine works on the grid in $\chi$ with coefficients from CODIFF and MIXGRID, for composition. Should the comments be updated?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-CCOEFT'>CCOEFT</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-CCOEFT'><h3><span class='kind'>subroutine</span>CCOEFT</h3>
+<p class='muted'>lines 2–82 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/ccoeft.f#L2-L82'>GitHub</a></p>
+<pre>SUBROUTINE CCOEFT(COD,DR,DT,ECOMP,EM,NTOT)</pre>
+<div class='notes'><p>Builds the implicit tridiagonal diffusion system for composition on the even grid in $\chi$, with zero-flux boundaries, into <code>TRIDI_MOD</code>.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/tridi_mod.f.html#def-TRIDI_MOD'>TRIDI_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/mixcom.f.html#def-MIXCOM'>MIXCOM</a> <span class='muted'>(mixcom.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE CCOEFT(COD,DR,DT,ECOMP,EM,NTOT)
+<span class="ln">3</span>C 10/15/26 MHP via Claude
+<span class="ln">4</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">5</span>C PARAMETER(JSON=5000) here.
+<span class="ln">6</span>      USE DIMENSIONS_MOD
+<span class="ln">7</span>C 10/14/26 MHP via Claude
+<span class="ln">8</span>C code changed to convert COMMON/TRIDI/ into TRIDI_MOD.
+<span class="ln">9</span>      USE TRIDI_MOD
+<span class="ln">10</span>C 10/20/26 MHP via Claude
+<span class="ln">11</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">12</span>C explicit declarations.
+<span class="ln">13</span>      IMPLICIT NONE
+<span class="ln">14</span>      REAL*8 COD,DR,DT,ECOMP,EM,FACT,FACT0
+<span class="ln">15</span>      INTEGER I,NTOT
+<span class="ln">16</span>
+<span class="ln">17</span>C 10/13/26 MHP via Claude: removed the unused COMMON/NMLPAR/ declaration
+<span class="ln">18</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">19</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CCOUT/ declaration
+<span class="ln">20</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">21</span>C 10/13/26 MHP via Claude: removed the unused COMMON/IOUNITS/ declaration
+<span class="ln">22</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">23</span>      DIMENSION COD(JSON),ECOMP(JSON),EM(JSON)
+<span class="ln">24</span>      SAVE
+<span class="ln">25</span>C  SET UP COEFFICIENTS OF DIFFUSION DIFFERENCE EQUATIONS FOR COMPOSITION
+<span class="ln">26</span>C  TRANSPORT DUE TO ROTATIONALLY INDUCED MIXING.
+<span class="ln">27</span>C
+<span class="ln">28</span>C  INPUT VARIABLES:
+<span class="ln">29</span>C  COD : RUN OF DIFFUSION COEFFICIENTS (COMPUTED IN SR COEFFT).
+<span class="ln">30</span>C  DR : GRID SPACING IN RADIUS(CM).
+<span class="ln">31</span>C  DT : DIFFUSION TIMESTEP (SEC).
+<span class="ln">32</span>C  ECOMP : STARTING ARRAY OF COMPOSITION MASS FRACTION AT THE EQUALLY
+<span class="ln">33</span>C          SPACED GRID.
+<span class="ln">34</span>C  EM : RUN OF MASSES OF THE EQUALLY SPACED GRID POINTS (GM).
+<span class="ln">35</span>C  NTOT : NUMBER OF POINTS IN THE EQUALLY SPACED GRID USED TO SOLVE
+<span class="ln">36</span>C         THE DIFFUSION EQUATION.
+<span class="ln">37</span>C  OUTPUT VARIABLES :
+<span class="ln">38</span>C  THE ABUNDANCE OF SHELL I AT TIME N+1 (COMP(I,N+1)) IS A FUNCTION OF
+<span class="ln">39</span>C  COMP(I-1),COMP(I),AND COMP(I+1) AS DISCUSSED BELOW.  THIS CAN BE EXPRESSED
+<span class="ln">40</span>C  AS A TRIDIAGONAL MATRIX.  TERMS WHICH DEPEND ON COMP(I-1) ARE STORED IN
+<span class="ln">41</span>C  ARRAY A; THOSE WHICH DEPEND ON COMP(I) ARE STORED IN ARRAY B; THOSE
+<span class="ln">42</span>C  WHICH DEPEND ON COMP(I+1) ARE STORED IN ARRAY C; AND THE STARTING RUN
+<span class="ln">43</span>C  OF COMPOSITION IS STORED IN ARRAY D.
+<span class="ln">44</span>C
+<span class="ln">45</span>C  THE DIFFUSION EQUATION WE ARE SOLVING IS
+<span class="ln">46</span>C  dX/dT = 1/(4pi*RHO*R**2)d/dR(D*dX/dR)
+<span class="ln">47</span>C  WHERE D IS OUR DIFFUSION COEFFICIENT,X IS THE MASS FRACTION OF THE
+<span class="ln">48</span>C  SPECIES IN QUESTION,T IS TIME,R IS RADIUS, AND RHO IS DENSITY.
+<span class="ln">49</span>C  USING M = 4pi*RHO*R**2*DR THIS IS DIFFERENCED FOR SHELL I AS
+<span class="ln">50</span>C  X(I,N+1)-X(I,N)=(DT/DR)*(1/M)*(D(I+1/2)*(X(I+1,N+1)-X(I,N+1)) -
+<span class="ln">51</span>C  D(I-1/2)*(X(I,N+1)-X(I-1,N+1)))
+<span class="ln">52</span>C  WHERE M IS THE MASS OF SHELL , INDEX N+1 REFERS TO VALUES AT THE
+<span class="ln">53</span>C  END OF THE TIMESTEP, INDEX N REFERS TO VALUES AT THE BEGINNING OF
+<span class="ln">54</span>C  THE TIMESTEP.
+<span class="ln">55</span>C  THIS SYSTEM IS SUPPLEMENTED WITH APPROPRIATE BOUNDARY CONDITIONS.
+<span class="ln">56</span>C
+<span class="ln">57</span>C  STORE THE RUN OF COMPOSITION AT THE BEGINNING OF THE TIMESTEP IN ARRAY D
+<span class="ln">58</span>      DO 10 I = 1,NTOT
+<span class="ln">59</span>         D(I) = ECOMP(I)
+<span class="ln">60</span>   10 CONTINUE
+<span class="ln">61</span>C  FIRST SHELL BOUNDARY CONDITIONS: NO FLOW BELOW THE BOUNDARY
+<span class="ln">62</span>C  I.E. THE ANGULAR MOMENTUM TRANSPORT AT THE FIRST SHELL DOES NOT
+<span class="ln">63</span>C  DEPEND ON THE SHELLS BELOW IT.(SAME USED FOR LAST SHELL B.C.)
+<span class="ln">64</span>      FACT0 = DT/DR
+<span class="ln">65</span>      FACT = FACT0/EM(1)
+<span class="ln">66</span>      A(1) = 0.0D0
+<span class="ln">67</span>      B(1) = 1.0D0 + FACT*COD(2)
+<span class="ln">68</span>      C(1) = -FACT*COD(2)
+<span class="ln">69</span>      DO 20 I = 2,NTOT-1
+<span class="ln">70</span>         FACT = FACT0/EM(I)
+<span class="ln">71</span>         A(I) = -FACT*COD(I)
+<span class="ln">72</span>         B(I) = 1.0D0 + FACT*(COD(I)+COD(I+1))
+<span class="ln">73</span>         C(I) = -FACT*COD(I+1)
+<span class="ln">74</span>   20 CONTINUE
+<span class="ln">75</span>C  LAST SHELL BOUNDARY CONDITIONS.
+<span class="ln">76</span>      FACT = FACT0/EM(NTOT)
+<span class="ln">77</span>      A(NTOT) = -FACT*COD(NTOT)
+<span class="ln">78</span>      B(NTOT) = 1.0D0 + FACT*COD(NTOT)
+<span class="ln">79</span>      C(NTOT) = 0.0D0
+<span class="ln">80</span>
+<span class="ln">81</span>      RETURN
+<span class="ln">82</span>      END</pre></details>
+<details class='py' id='py-ccoeft'><summary>Python version: ccoeft</summary><pre class='doc'>Fill the tridiagonal system a, b, c, d of tridi_mod for one fully
+implicit diffusion step of a mass fraction on the even grid in chi,
+with no flux across either end.
+
+Translates: ccoeft.f#CCOEFT (09c3b9b)
+
+Arguments: cod, the diffusion coefficients at the interfaces (cod[i]
+between points i-1 and i); dr, the grid spacing (MIXCOM passes the
+spacing in chi); dt, the time step (s); ecomp, the mass fractions at
+the start of the step; em, the shell masses (g); ntot, the number of
+points. None is set; the results go to tridi_mod.</pre><pre class='src'><span class="ln">7</span>def ccoeft(cod, dr, dt, ecomp, em, ntot):
+<span class="ln">8</span>    &quot;&quot;&quot;Fill the tridiagonal system a, b, c, d of tridi_mod for one fully
+<span class="ln">9</span>    implicit diffusion step of a mass fraction on the even grid in chi,
+<span class="ln">10</span>    with no flux across either end.
+<span class="ln">11</span>
+<span class="ln">12</span>    Translates: ccoeft.f#CCOEFT (09c3b9b)
+<span class="ln">13</span>
+<span class="ln">14</span>    Arguments: cod, the diffusion coefficients at the interfaces (cod[i]
+<span class="ln">15</span>    between points i-1 and i); dr, the grid spacing (MIXCOM passes the
+<span class="ln">16</span>    spacing in chi); dt, the time step (s); ecomp, the mass fractions at
+<span class="ln">17</span>    the start of the step; em, the shell masses (g); ntot, the number of
+<span class="ln">18</span>    points. None is set; the results go to tridi_mod.
+<span class="ln">19</span>    &quot;&quot;&quot;
+<span class="ln">20</span>    a = tridi_mod.a
+<span class="ln">21</span>    b = tridi_mod.b
+<span class="ln">22</span>    c = tridi_mod.c
+<span class="ln">23</span>    d = tridi_mod.d
+<span class="ln">24</span>    # The composition at the start of the step.
+<span class="ln">25</span>    for i in range(1, ntot + 1):
+<span class="ln">26</span>        d[i] = ecomp[i]
+<span class="ln">27</span>    # First shell: no flow below it.
+<span class="ln">28</span>    fact0 = dt / dr
+<span class="ln">29</span>    fact = fact0 / em[1]
+<span class="ln">30</span>    a[1] = 0.0
+<span class="ln">31</span>    b[1] = 1.0 + fact * cod[2]
+<span class="ln">32</span>    c[1] = -fact * cod[2]
+<span class="ln">33</span>    for i in range(2, ntot):
+<span class="ln">34</span>        fact = fact0 / em[i]
+<span class="ln">35</span>        a[i] = -fact * cod[i]
+<span class="ln">36</span>        b[i] = 1.0 + fact * (cod[i] + cod[i + 1])
+<span class="ln">37</span>        c[i] = -fact * cod[i + 1]
+<span class="ln">38</span>    # Last shell: no flow above it.
+<span class="ln">39</span>    fact = fact0 / em[ntot]
+<span class="ln">40</span>    a[ntot] = -fact * cod[ntot]
+<span class="ln">41</span>    b[ntot] = 1.0 + fact * cod[ntot]
+<span class="ln">42</span>    c[ntot] = 0.0</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Wrong. "on an evenly spaced grid in radius": MIXCOM passes <code>DCHI</code> as <code>DR</code>, the spacing of the grid in the coordinate $\chi$ built by <a href="../yrec-map/getgrid.f.html#def-GETGRID">GETGRID</a> and <a href="../yrec-map/mixgrid.f.html#def-MIXGRID">MIXGRID</a>; the comments about radius and cm are older than that grid.</li>
+<li>Wrong. The solver is <a href="../yrec-map/ctridi.f.html#def-CTRIDI">CTRIDI</a> (MIXCOM calls only that one), not "TRIDIA or CTRIDI".</li>
+<li>Settled. The question on $4\pi\rho r^2$: <a href="../yrec-map/codiff.f.html#def-CODIFF">CODIFF</a> includes $4\pi$ in <code>COD2</code>, and MIXGRID multiplies the coefficient by $\rho r^2\,d\chi/dr$, so <code>COD</code> is $4\pi\rho r^2 D\,d\chi/dr$ and the scheme is the mass-conserving one. Fix: state it; replace the question with one on the outdated comments (radius, cm, "angular momentum" in the boundary comment).</li>
+</ol>
+<p>Revised: the grid in $\chi$, the solver CTRIDI and the mass-conserving coefficient stated; the question replaced by one on the outdated comments.</p></div></details>
+</main></body></html>

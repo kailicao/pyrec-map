@@ -1,0 +1,416 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>eqburn.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ eqburn.f</span></header><main>
+<h1>eqburn.f</h1>
+<p class='muted'>219 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/eqburn.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>eqburn.py</code>, 135 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>EQBURN</code> gives explicit hydrogen and helium burning rates for one shell or one convection zone, assuming that $^3$He and the CN cycle are in equilibrium. Its comment says the result is "an initial guess at the burning rates at the start of the time step", which a fully implicit non-equilibrium calculation can supplement later.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/mix.f.html#def-MIX">MIX</a> (twice, to use the explicit hydrogen burning rate) and <a href="../yrec-map/xtime.f.html#def-XTIME">XTIME</a>, which turns <code>DXDT</code> into a nuclear time step limit.</li>
+<li><strong>Inputs:</strong> the reaction-rate arrays <code>HR1</code>…<code>HR12</code>, which both callers compute with <a href="../yrec-map/rates.f.html#def-RATES">RATES</a> just before the call. <a href="../yrec-map/kemcom.f.html#def-KEMCOM">KEMCOM</a>'s header gives their units: rates "per gigayear per amu", to be multiplied by the reactants' mass fractions and the product's atomic weight; so <code>DXDT</code> and the other outputs are changes of mass fraction per Gyr, the shell masses <code>HS2</code>, the temperatures <code>HT</code> ($\log T$), and the range <code>IBEGIN..IEND</code>. The abundances come from the previous model, <code>HCOMPP</code> in <code>OLDMOD_MOD</code>.</li>
+<li><strong>Outputs:</strong> the rates <code>DXDT</code>, <code>DYDT</code>, <code>DCDT</code>, <code>DODT</code> (hydrogen, helium, $^{12}$C, $^{16}$O) and the zone's mean <code>X</code>, <code>Z</code>, <code>XC12</code>, <code>XO16</code>.</li>
+<li><strong>Modules:</strong> <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a> gives the temperature cutoffs <code>TCUT(1..4)</code> (cutoffs in $\log T$, settings read in <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a>; the defaults are 6.5, 6.5, 6.82, 7.7; formerly <code>/CTLIM/</code>); <a href="../yrec-map/oldmod_mod.f.html#def-OLDMOD_MOD"><code>OLDMOD_MOD</code></a> (formerly <code>/OLDMOD/</code>) holds the previous model, written by the main program and read by many routines (listed on the modules page).</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Below <code>TCUT(1)</code> at the zone's first shell, all rates are zero.</li>
+<li>For a convection zone (<code>IBEGIN</code> ≠ <code>IEND</code>), abundances $X_j$ and rates $R_k$ are mass-weighted means over the zone, $\bar q = \sum_i q_i m_i / \sum_i m_i$ with $m_i$ = <code>HS2</code>.</li>
+<li>
+<p><strong>pp chains</strong> (above <code>TCUT(2)</code>, if $X &gt; 10^{-10}$). The equilibrium $^3$He abundance solves $2R_{33}x^2 + R_{34}Y x - R_{11}X^2 = 0$:
+$$x_{3,\mathrm{eq}} = \frac{\sqrt{(R_{34}Y)^2 + 8R_{33}R_{11}X^2} - R_{34}Y}{4R_{33}},$$
+with $R_{11}$ = <code>GR1</code>, $R_{33}$ = <code>GR2</code>, $R_{34}$ = <code>GR3</code>. The code takes $x_3 = \min(x_3, x_{3,\mathrm{eq}})$ "to avoid spuriously high burning rates in outer layers", and
+$$\dot X = -3R_{11}X^2 + 2R_{33}x_3^2 - R_{34}Y x_3 .$$</p>
+</li>
+<li>
+<p><strong>CN cycle</strong> (above <code>TCUT(3)</code>, and only if step 3 ran). In equilibrium, $X_{12} = X_{14}R_{14}/R_{12}$ and $X_{13} = X_{14}R_{14}/R_{13}$, with $R_{12}, R_{13}, R_{14}$ = <code>GR4</code>, <code>GR5</code>, <code>GR6</code>, and the number of CN nuclei $S = X_{12}/12 + X_{13}/13 + X_{14}/14$ is conserved, so
+$$X_{14} = \frac{S}{R_{14}/(12R_{12}) + R_{14}/(13R_{13}) + 1/14}.$$
+Then $\dot X \mathrel{-}= X\,(R_{12}X_{12} + R_{13}X_{13} + 2R_{14}X_{14} + 2R_{16}X_{16})$, with $R_{16}$ = <code>GR7</code> ($^{16}$O + p).</p>
+</li>
+<li>
+<p><strong>Helium burning</strong> (above <code>TCUT(4)</code>, if $Y &gt; 10^{-10}$): with $r_{3\alpha} = R_{3\alpha}Y^3$ (<code>GR12</code>) and $r_{12\alpha} = R_{12\alpha}YX_{12}$ (<code>GR10</code>),
+$$\dot Y = -4(r_{12\alpha} + 3r_{3\alpha}),\quad \dot X_{12} = 12(r_{3\alpha} - r_{12\alpha}),\quad \dot X_{16} = 16\,r_{12\alpha}.$$</p>
+</li>
+</ol>
+<p><strong>KC's changes.</strong> Unused arguments removed (2025-05-31): <code>HF1</code>, <code>HR8</code>, <code>HR9</code>, <code>HR11</code>; their uses were already commented out.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Equilibrium CN abundances returned.</strong> <code>XC12</code> is overwritten by its CN-equilibrium value in step 4 and returned to the caller. Do <code>MIX</code> and <code>XTIME</code> expect the actual abundance or the equilibrium one? The helium-burning step also uses this equilibrium <code>XC12</code> for $^{12}$C + $\alpha$, except when $X \le 10^{-10}$, where the code jumps past the CN step and uses the actual abundance.</li>
+<li><strong>Division by a rate.</strong> Step 3 divides by <code>GR2</code>, and step 4 by <code>GR4</code> and <code>GR5</code>. Are these rates guaranteed nonzero above the cutoffs?</li>
+<li><strong>Factor 2 for $^{16}$O.</strong> The $^{16}$O + p term counts two protons per reaction, like $^{14}$N + p. Is that the intended accounting for the ON branch?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>SUBROUTINE EQBURN(HF1,HR1,HR2,HR3,HR4,HR5,HR6,HR7,HR8,HR9,
+*                  HR10,HR11,HR12,HS2,HT,IBEGIN,IEND,  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-EQBURN'>EQBURN</a> <span class='muted'>subroutine · SUBROUTINE EQBURN(HF1,HR1,HR2,HR3,HR4,HR5,HR6,HR7,HR8,HR9,</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-EQBURN'><h3><span class='kind'>subroutine</span>EQBURN</h3>
+<p class='muted'>lines 6–219 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/eqburn.f#L6-L219'>GitHub</a></p>
+<pre>SUBROUTINE EQBURN(HR1,HR2,HR3,HR4,HR5,HR6,HR7,</pre>
+<div class='notes'><p>Explicit burning rates for a shell or a convection zone, with $^3$He and CN in equilibrium (equations above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>SUBROUTINE EQBURN(HF1,HR1,HR2,HR3,HR4,HR5,HR6,HR7,HR8,HR9,
+*                  HR10,HR11,HR12,HS2,HT,IBEGIN,IEND,  ! KC 2025-05-31</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/oldmod_mod.f.html#def-OLDMOD_MOD'>OLDMOD_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/mix.f.html#def-MIX'>MIX</a> <span class='muted'>(mix.f)</span> ×2</li>
+<li><a href='../yrec-map/xtime.f.html#def-XTIME'>XTIME</a> <span class='muted'>(xtime.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE EQBURN(HR1,HR2,HR3,HR4,HR5,HR6,HR7,
+<span class="ln">7</span>     *                  HR10,HR12,HS2,HT,IBEGIN,IEND,
+<span class="ln">8</span>     *                  DCDT,DODT,DXDT,DYDT,XC12,XO16,X,Z)
+<span class="ln">9</span>C 10/15/26 MHP via Claude
+<span class="ln">10</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">11</span>C PARAMETER(JSON=5000) here.
+<span class="ln">12</span>      USE DIMENSIONS_MOD
+<span class="ln">13</span>C 10/14/26 MHP via Claude
+<span class="ln">14</span>C code changed to convert COMMON/OLDMOD/ into OLDMOD_MOD.
+<span class="ln">15</span>      USE OLDMOD_MOD
+<span class="ln">16</span>C 10/14/26 MHP via Claude
+<span class="ln">17</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">18</span>      USE NMLPAR_MOD
+<span class="ln">19</span>C 10/20/26 MHP via Claude
+<span class="ln">20</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">21</span>C explicit declarations.
+<span class="ln">22</span>      IMPLICIT NONE
+<span class="ln">23</span>      REAL*8 DCDT,DODT,DXDT,DYDT,GR1,GR10,GR12,GR2,GR3,GR4,GR5,GR6,GR7,
+<span class="ln">24</span>     *       HR1,HR10,HR12,HR2,HR3,HR4,HR5,HR6,HR7,HS2,HT,R11,R1214,
+<span class="ln">25</span>     *       R1314,R34,R3A,R412,SUMCNO,WTSUM,X,XC12,XC13,XHE3,XHE3E,
+<span class="ln">26</span>     *       XN14,XO16,XSUM,Y,Z
+<span class="ln">27</span>      INTEGER I,IBEGIN,IEND,J
+<span class="ln">28</span>
+<span class="ln">29</span>C 10/12/26 MHP via Claude
+<span class="ln">30</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">31</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">32</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">33</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">34</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">35</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">36</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">37</span>C
+<span class="ln">38</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">39</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">40</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">41</span>C 10/13/26 MHP via Claude
+<span class="ln">42</span>C code changed to drop COMMON/CTLIM/, declared here but never used.
+<span class="ln">43</span>      DIMENSION XSUM(11)
+<span class="ln">44</span>      DIMENSION HT(JSON),HR1(JSON),HR2(JSON),HR3(JSON),HR4(JSON),
+<span class="ln">45</span>C      *HR5(JSON),HR6(JSON),HR7(JSON),HR8(JSON),HR9(JSON),HR10(JSON),
+<span class="ln">46</span>C      *HR11(JSON),HR12(JSON),HF1(JSON),HS2(JSON)  ! KC 2025-05-31
+<span class="ln">47</span>     *HR5(JSON),HR6(JSON),HR7(JSON),HR10(JSON),HR12(JSON),HS2(JSON)
+<span class="ln">48</span>      SAVE
+<span class="ln">49</span>
+<span class="ln">50</span>C SKIP BURNING CALCULATIONS IF STARTING SHELL BELOW T CUTOFF FOR REACTIONS.
+<span class="ln">51</span>      DXDT = 0.0D0
+<span class="ln">52</span>      DYDT = 0.0D0
+<span class="ln">53</span>      DCDT = 0.0D0
+<span class="ln">54</span>      DODT = 0.0D0
+<span class="ln">55</span>      IF(HT(IBEGIN).LT.TCUT(1)) RETURN
+<span class="ln">56</span>C COMPUTE EXPLICIT HYDROGEN AND HELIUM BURNING RATES ASSUMING EQUILIBRIUM
+<span class="ln">57</span>C HE3 AND CN CYCLE ABUNDANCES.
+<span class="ln">58</span>C THIS IS USED FOR AN INITIAL GUESS AT THE BURNING RATES AT THE START
+<span class="ln">59</span>C OF THE TIME STEP, AND CAN BE SUPPLEMENTED BY A FULLY IMPLICIT
+<span class="ln">60</span>C NON-EQUILIBRIUM CALCULATION IN THE 3RD AND 4TH LEVELS OF ITERATION.
+<span class="ln">61</span>      IF(IBEGIN.NE.IEND)THEN
+<span class="ln">62</span>C HOMOGENIZE CONVECTION ZONES.
+<span class="ln">63</span>C XSUM IS THE MASS-WEIGHTED AVERAGE ABUNDANCE FOR THE CZ.
+<span class="ln">64</span>C WTSUM IS THE TOTAL MASS OF THE CZ.
+<span class="ln">65</span>C INITIALIZE SUMS.
+<span class="ln">66</span>         WTSUM = 0.0D0
+<span class="ln">67</span>         DO 1 J = 1,11
+<span class="ln">68</span>            XSUM(J) = 0.0D0
+<span class="ln">69</span>    1    CONTINUE
+<span class="ln">70</span>         DO 5 I = IBEGIN,IEND
+<span class="ln">71</span>            WTSUM = WTSUM + HS2(I)
+<span class="ln">72</span>            DO 3 J = 1,11
+<span class="ln">73</span>               XSUM(J) = XSUM(J)+HCOMPP(J,I)*HS2(I)
+<span class="ln">74</span>    3       CONTINUE
+<span class="ln">75</span>    5    CONTINUE
+<span class="ln">76</span>         DO 7 J = 1,11
+<span class="ln">77</span>            XSUM(J) = XSUM(J)/WTSUM
+<span class="ln">78</span>    7    CONTINUE
+<span class="ln">79</span>      ELSE
+<span class="ln">80</span>         DO 9 J = 1,11
+<span class="ln">81</span>            XSUM(J) = HCOMPP(J,IBEGIN)
+<span class="ln">82</span>    9    CONTINUE
+<span class="ln">83</span>      ENDIF
+<span class="ln">84</span>      IF(IBEGIN.EQ.IEND)THEN
+<span class="ln">85</span>C PP
+<span class="ln">86</span>         GR1 = HR1(IBEGIN)
+<span class="ln">87</span>C HE3,HE3
+<span class="ln">88</span>         GR2 = HR2(IBEGIN)
+<span class="ln">89</span>C HE3,HE4
+<span class="ln">90</span>         GR3 = HR3(IBEGIN)
+<span class="ln">91</span>C C12,P
+<span class="ln">92</span>         GR4 = HR4(IBEGIN)
+<span class="ln">93</span>C C13,P
+<span class="ln">94</span>         GR5 = HR5(IBEGIN)
+<span class="ln">95</span>C N14,P + N15,P
+<span class="ln">96</span>         GR6 = HR6(IBEGIN)
+<span class="ln">97</span>C O16,P + O17,P.
+<span class="ln">98</span>         GR7 = HR7(IBEGIN)
+<span class="ln">99</span>C C13,ALPHA
+<span class="ln">100</span>C        GR8 = HR8(IBEGIN)
+<span class="ln">101</span>C O16,ALPHA (NOT USED)
+<span class="ln">102</span>C        GR9 = HR9(IBEGIN)
+<span class="ln">103</span>C C12,ALPHA
+<span class="ln">104</span>         GR10 = HR10(IBEGIN)
+<span class="ln">105</span>C N14,ALPHA
+<span class="ln">106</span>C        GR11 = HR11(IBEGIN)
+<span class="ln">107</span>C TRIPLE ALPHA
+<span class="ln">108</span>         GR12 = HR12(IBEGIN)
+<span class="ln">109</span>C C12,C12 (NOT USED)
+<span class="ln">110</span>C        GR13 = HR13(IBEGIN)
+<span class="ln">111</span>C BRANCHING RATIO FOR N15,P :
+<span class="ln">112</span>C F3 = FRACTION GOING TO C12+ALPHA
+<span class="ln">113</span>C F4 = FRACTION GOING TO O16
+<span class="ln">114</span>C        F3 = HF1(IBEGIN)
+<span class="ln">115</span>C        F4 = 1.0D0 - F3
+<span class="ln">116</span>      ELSE
+<span class="ln">117</span>C USE THE MASS-WEIGHTED AVERAGE RATES FOR THE CZ
+<span class="ln">118</span>         GR1 = 0.0D0
+<span class="ln">119</span>         GR2 = 0.0D0
+<span class="ln">120</span>         GR3 = 0.0D0
+<span class="ln">121</span>         GR4 = 0.0D0
+<span class="ln">122</span>         GR5 = 0.0D0
+<span class="ln">123</span>         GR6 = 0.0D0
+<span class="ln">124</span>         GR7 = 0.0D0
+<span class="ln">125</span>C        GR8 = 0.0D0
+<span class="ln">126</span>         GR10 = 0.0D0
+<span class="ln">127</span>C        GR11 = 0.0D0
+<span class="ln">128</span>         GR12 = 0.0D0
+<span class="ln">129</span>C        F3 = 0.0D0
+<span class="ln">130</span>         DO 15 I = IBEGIN,IEND
+<span class="ln">131</span>            GR1 = GR1 + HS2(I)*HR1(I)
+<span class="ln">132</span>            GR2 = GR2 + HS2(I)*HR2(I)
+<span class="ln">133</span>            GR3 = GR3 + HS2(I)*HR3(I)
+<span class="ln">134</span>            GR4 = GR4 + HS2(I)*HR4(I)
+<span class="ln">135</span>            GR5 = GR5 + HS2(I)*HR5(I)
+<span class="ln">136</span>            GR6 = GR6 + HS2(I)*HR6(I)
+<span class="ln">137</span>            GR7 = GR7 + HS2(I)*HR7(I)
+<span class="ln">138</span>C           GR8 = GR8 + HS2(I)*HR8(I)
+<span class="ln">139</span>            GR10 = GR10 + HS2(I)*HR10(I)
+<span class="ln">140</span>C           GR11 = GR11 + HS2(I)*HR11(I)
+<span class="ln">141</span>            GR12 = GR12 + HS2(I)*HR12(I)
+<span class="ln">142</span>C           F3 = F3 + HS2(I)*HF1(I)
+<span class="ln">143</span>   15    CONTINUE
+<span class="ln">144</span>         GR1 = GR1/WTSUM
+<span class="ln">145</span>         GR2 = GR2/WTSUM
+<span class="ln">146</span>         GR3 = GR3/WTSUM
+<span class="ln">147</span>         GR4 = GR4/WTSUM
+<span class="ln">148</span>         GR5 = GR5/WTSUM
+<span class="ln">149</span>         GR6 = GR6/WTSUM
+<span class="ln">150</span>         GR7 = GR7/WTSUM
+<span class="ln">151</span>C        GR8 = GR8/WTSUM
+<span class="ln">152</span>         GR10 = GR10/WTSUM
+<span class="ln">153</span>C        GR11 = GR11/WTSUM
+<span class="ln">154</span>         GR12 = GR12/WTSUM
+<span class="ln">155</span>C        F3 = F3/WTSUM
+<span class="ln">156</span>C        F4 = 1.0D0 - F3
+<span class="ln">157</span>      ENDIF
+<span class="ln">158</span>C
+<span class="ln">159</span>C INITIAL ABUNDANCES OF SPECIES.
+<span class="ln">160</span>C
+<span class="ln">161</span>      X = XSUM(1)
+<span class="ln">162</span>      XHE3 = XSUM(4)
+<span class="ln">163</span>      Y = XSUM(2)
+<span class="ln">164</span>      Z = XSUM(3)
+<span class="ln">165</span>      XC12 = XSUM(5)
+<span class="ln">166</span>      XC13 = XSUM(6)
+<span class="ln">167</span>      XN14 = XSUM(7)
+<span class="ln">168</span>      XO16 = XSUM(9)
+<span class="ln">169</span>      IF(X.GT.1.0D-10 .AND. HT(IBEGIN).GT.TCUT(2))THEN
+<span class="ln">170</span>C FIND EQUILIBRIUM HELIUM-3 ABUNDANCE, USING THE QUADRATIC FORMULA.
+<span class="ln">171</span>C THE EQUATION IS -2*R(3,3)*XHE3**2 - R(3,4)*XHE3*XHE4 + R(1,1)X**2 = 0.
+<span class="ln">172</span>         R11 = GR1*X**2
+<span class="ln">173</span>         R34 = GR3*Y
+<span class="ln">174</span>         XHE3E = 0.25D0*(SQRT(R34**2+8.0D0*GR2*R11)-R34)/GR2
+<span class="ln">175</span>C USE THE MINIMUM OF THE CURRENT AND EQUILIBRIUM HE3 ABUNDANCE -
+<span class="ln">176</span>C NEEDED TO AVOID SPURIOUSLY HIGH BURNING RATES IN OUTER LAYERS,
+<span class="ln">177</span>C WHERE THE TIMESCALE FOR HELIUM-3 TO REACH EQUILIBRIUM IS LONG.
+<span class="ln">178</span>         XHE3 = MIN(XHE3,XHE3E)
+<span class="ln">179</span>C PP BURNING.
+<span class="ln">180</span>         DXDT = -3.0D0*R11+2.0D0*GR2*XHE3**2-R34*XHE3
+<span class="ln">181</span>      ELSE
+<span class="ln">182</span>         DXDT = 0.0D0
+<span class="ln">183</span>         GOTO 100
+<span class="ln">184</span>      ENDIF
+<span class="ln">185</span>      IF(HT(IBEGIN).GT.TCUT(3))THEN
+<span class="ln">186</span>C FIND EQUILIBRIUM C12,C13,N14 ABUNDANCES TREATING CN PROCESSING AS
+<span class="ln">187</span>C A CLOSED LOOP.
+<span class="ln">188</span>         SUMCNO = XC12/1.2D1+XC13/1.3D1+XN14/1.4D1
+<span class="ln">189</span>C FIND EXPLICIT RATES FOR P+C12,P+C13,P+N14(==R121,R131,R141)
+<span class="ln">190</span>         R1214 = GR6/GR4
+<span class="ln">191</span>         R1314 = GR6/GR5
+<span class="ln">192</span>C IN EQUILIBRIUM WE HAVE
+<span class="ln">193</span>C XC12 = XN14{R(1,14)/R(1,12)}
+<span class="ln">194</span>C XC13 = XN14{R(1,14)/R(1,13)}
+<span class="ln">195</span>C AND FROM CONSERVATION OF SPECIES XC12/12 +XC13/13 + XN14/14 IS UNCHANGED.
+<span class="ln">196</span>C EXPRESSING C12 AND C13 AS FUNCTIONS OF N14, SOLVE FOR THE NEW N14
+<span class="ln">197</span>C EQUILIBRIUM ABUNDANCE.
+<span class="ln">198</span>         XN14 = SUMCNO/(R1214/1.2D1 + R1314/1.3D1 + 1.0D0/1.4D1)
+<span class="ln">199</span>         XC12 = XN14*R1214
+<span class="ln">200</span>         XC13 = XN14*R1314
+<span class="ln">201</span>         DXDT = DXDT - GR4*X*XC12 - GR5*X*XC13 - 2.0D0*GR6*X*XN14
+<span class="ln">202</span>     *          - 2.0D0*GR7*X*XO16
+<span class="ln">203</span>      ENDIF
+<span class="ln">204</span>  100 CONTINUE
+<span class="ln">205</span>C HELIUM BURNING REACTIONS.
+<span class="ln">206</span>      IF(Y.GT.1.0D-10 .AND. HT(IBEGIN).GT.TCUT(4))THEN
+<span class="ln">207</span>         R3A = GR12*Y**3
+<span class="ln">208</span>         R412 = GR10*Y*XC12
+<span class="ln">209</span>         DYDT = -4.0D0*(R412 + 3.0D0*R3A)
+<span class="ln">210</span>         DCDT = 1.2D1*(R3A-R412)
+<span class="ln">211</span>         DODT = 1.6D1*R412
+<span class="ln">212</span>      ELSE
+<span class="ln">213</span>         DYDT = 0.0D0
+<span class="ln">214</span>         DCDT = 0.0D0
+<span class="ln">215</span>         DODT = 0.0D0
+<span class="ln">216</span>      ENDIF
+<span class="ln">217</span>
+<span class="ln">218</span>      RETURN
+<span class="ln">219</span>      END</pre></details>
+<details class='py' id='py-eqburn'><summary>Python version: eqburn</summary><pre class='doc'>Explicit burning rates for shells ibegin..iend (mass-weighted means
+over a zone), with 3He and the CN cycle in equilibrium: an initial
+guess at the rates at the start of the step.
+
+Translates: eqburn.f#EQBURN (09c3b9b)
+
+Arguments: hr1..hr12, the reaction-rate arrays from RATES; hs2, the
+shell masses; ht, log T; ibegin, iend, the shell or zone; dcdt, dodt,
+dxdt, dydt, xc12, xo16, x, z (set only, except below tcut[1], where
+xc12, xo16, x, z keep their values).
+
+Returns (dcdt, dodt, dxdt, dydt, xc12, xo16, x, z): the rates of change
+of 12C, 16O, H and He (mass fraction per Gyr) and the zone&#x27;s mean
+12C (its CN-equilibrium value if the CN step ran), 16O, X and Z.</pre><pre class='src'><span class="ln">16</span>def eqburn(hr1, hr2, hr3, hr4, hr5, hr6, hr7, hr10, hr12, hs2, ht,
+<span class="ln">17</span>           ibegin, iend, dcdt, dodt, dxdt, dydt, xc12, xo16, x, z):
+<span class="ln">18</span>    &quot;&quot;&quot;Explicit burning rates for shells ibegin..iend (mass-weighted means
+<span class="ln">19</span>    over a zone), with 3He and the CN cycle in equilibrium: an initial
+<span class="ln">20</span>    guess at the rates at the start of the step.
+<span class="ln">21</span>
+<span class="ln">22</span>    Translates: eqburn.f#EQBURN (09c3b9b)
+<span class="ln">23</span>
+<span class="ln">24</span>    Arguments: hr1..hr12, the reaction-rate arrays from RATES; hs2, the
+<span class="ln">25</span>    shell masses; ht, log T; ibegin, iend, the shell or zone; dcdt, dodt,
+<span class="ln">26</span>    dxdt, dydt, xc12, xo16, x, z (set only, except below tcut[1], where
+<span class="ln">27</span>    xc12, xo16, x, z keep their values).
+<span class="ln">28</span>
+<span class="ln">29</span>    Returns (dcdt, dodt, dxdt, dydt, xc12, xo16, x, z): the rates of change
+<span class="ln">30</span>    of 12C, 16O, H and He (mass fraction per Gyr) and the zone&#x27;s mean
+<span class="ln">31</span>    12C (its CN-equilibrium value if the CN step ran), 16O, X and Z.
+<span class="ln">32</span>    &quot;&quot;&quot;
+<span class="ln">33</span>    tcut = nmlpar_mod.tcut
+<span class="ln">34</span>    hcompp = oldmod_mod.hcompp
+<span class="ln">35</span>    dxdt = 0.0
+<span class="ln">36</span>    dydt = 0.0
+<span class="ln">37</span>    dcdt = 0.0
+<span class="ln">38</span>    dodt = 0.0
+<span class="ln">39</span>    if ht[ibegin] &lt; tcut[1]:
+<span class="ln">40</span>        return dcdt, dodt, dxdt, dydt, xc12, xo16, x, z
+<span class="ln">41</span>
+<span class="ln">42</span>    # Abundances: mass-weighted means over a zone.
+<span class="ln">43</span>    if ibegin != iend:
+<span class="ln">44</span>        wtsum = 0.0
+<span class="ln">45</span>        for j in range(1, 12):  # label 1
+<span class="ln">46</span>            xsum[j] = 0.0
+<span class="ln">47</span>        for i in range(ibegin, iend + 1):  # label 5
+<span class="ln">48</span>            wtsum = wtsum + hs2[i]
+<span class="ln">49</span>            for j in range(1, 12):  # label 3
+<span class="ln">50</span>                xsum[j] = xsum[j] + hcompp[j, i] * hs2[i]
+<span class="ln">51</span>        for j in range(1, 12):  # label 7
+<span class="ln">52</span>            xsum[j] = xsum[j] / wtsum
+<span class="ln">53</span>    else:
+<span class="ln">54</span>        for j in range(1, 12):  # label 9
+<span class="ln">55</span>            xsum[j] = hcompp[j, ibegin]
+<span class="ln">56</span>
+<span class="ln">57</span>    # Rates: likewise.
+<span class="ln">58</span>    if ibegin == iend:
+<span class="ln">59</span>        gr1 = hr1[ibegin]
+<span class="ln">60</span>        gr2 = hr2[ibegin]
+<span class="ln">61</span>        gr3 = hr3[ibegin]
+<span class="ln">62</span>        gr4 = hr4[ibegin]
+<span class="ln">63</span>        gr5 = hr5[ibegin]
+<span class="ln">64</span>        gr6 = hr6[ibegin]
+<span class="ln">65</span>        gr7 = hr7[ibegin]
+<span class="ln">66</span>        gr10 = hr10[ibegin]
+<span class="ln">67</span>        gr12 = hr12[ibegin]
+<span class="ln">68</span>    else:
+<span class="ln">69</span>        gr1 = gr2 = gr3 = gr4 = gr5 = gr6 = gr7 = gr10 = gr12 = 0.0
+<span class="ln">70</span>        for i in range(ibegin, iend + 1):  # label 15
+<span class="ln">71</span>            gr1 = gr1 + hs2[i] * hr1[i]
+<span class="ln">72</span>            gr2 = gr2 + hs2[i] * hr2[i]
+<span class="ln">73</span>            gr3 = gr3 + hs2[i] * hr3[i]
+<span class="ln">74</span>            gr4 = gr4 + hs2[i] * hr4[i]
+<span class="ln">75</span>            gr5 = gr5 + hs2[i] * hr5[i]
+<span class="ln">76</span>            gr6 = gr6 + hs2[i] * hr6[i]
+<span class="ln">77</span>            gr7 = gr7 + hs2[i] * hr7[i]
+<span class="ln">78</span>            gr10 = gr10 + hs2[i] * hr10[i]
+<span class="ln">79</span>            gr12 = gr12 + hs2[i] * hr12[i]
+<span class="ln">80</span>        gr1 = gr1 / wtsum
+<span class="ln">81</span>        gr2 = gr2 / wtsum
+<span class="ln">82</span>        gr3 = gr3 / wtsum
+<span class="ln">83</span>        gr4 = gr4 / wtsum
+<span class="ln">84</span>        gr5 = gr5 / wtsum
+<span class="ln">85</span>        gr6 = gr6 / wtsum
+<span class="ln">86</span>        gr7 = gr7 / wtsum
+<span class="ln">87</span>        gr10 = gr10 / wtsum
+<span class="ln">88</span>        gr12 = gr12 / wtsum
+<span class="ln">89</span>
+<span class="ln">90</span>    x = xsum[1]
+<span class="ln">91</span>    xhe3 = xsum[4]
+<span class="ln">92</span>    y = xsum[2]
+<span class="ln">93</span>    z = xsum[3]
+<span class="ln">94</span>    xc12 = xsum[5]
+<span class="ln">95</span>    xc13 = xsum[6]
+<span class="ln">96</span>    xn14 = xsum[7]
+<span class="ln">97</span>    xo16 = xsum[9]
+<span class="ln">98</span>
+<span class="ln">99</span>    # pp chains, 3He in equilibrium (capped at its actual abundance).
+<span class="ln">100</span>    # Question (see the page): divides by gr2 (and gr4, gr5 below).
+<span class="ln">101</span>    if x &gt; 1.0e-10 and ht[ibegin] &gt; tcut[2]:
+<span class="ln">102</span>        r11 = gr1 * x**2
+<span class="ln">103</span>        r34 = gr3 * y
+<span class="ln">104</span>        xhe3e = 0.25 * (math.sqrt(r34**2 + 8.0 * gr2 * r11) - r34) / gr2
+<span class="ln">105</span>        xhe3 = min(xhe3, xhe3e)
+<span class="ln">106</span>        dxdt = -3.0 * r11 + 2.0 * gr2 * xhe3**2 - r34 * xhe3
+<span class="ln">107</span>        # CN cycle in equilibrium.
+<span class="ln">108</span>        if ht[ibegin] &gt; tcut[3]:
+<span class="ln">109</span>            sumcno = xc12 / 12.0 + xc13 / 13.0 + xn14 / 14.0
+<span class="ln">110</span>            r1214 = gr6 / gr4
+<span class="ln">111</span>            r1314 = gr6 / gr5
+<span class="ln">112</span>            xn14 = sumcno / (r1214 / 12.0 + r1314 / 13.0 + 1.0 / 14.0)
+<span class="ln">113</span>            # Question (see the page): xc12 becomes its equilibrium value,
+<span class="ln">114</span>            # returned and used for 12C + alpha below.
+<span class="ln">115</span>            xc12 = xn14 * r1214
+<span class="ln">116</span>            xc13 = xn14 * r1314
+<span class="ln">117</span>            # Question (see the page): two protons for 16O + p.
+<span class="ln">118</span>            dxdt = (dxdt - gr4 * x * xc12 - gr5 * x * xc13
+<span class="ln">119</span>                    - 2.0 * gr6 * x * xn14 - 2.0 * gr7 * x * xo16)
+<span class="ln">120</span>    else:
+<span class="ln">121</span>        dxdt = 0.0  # GOTO 100: the CN step is skipped
+<span class="ln">122</span>
+<span class="ln">123</span>    # label 100: helium burning.
+<span class="ln">124</span>    if y &gt; 1.0e-10 and ht[ibegin] &gt; tcut[4]:
+<span class="ln">125</span>        r3a = gr12 * y**3
+<span class="ln">126</span>        r412 = gr10 * y * xc12
+<span class="ln">127</span>        dydt = -4.0 * (r412 + 3.0 * r3a)
+<span class="ln">128</span>        dcdt = 12.0 * (r3a - r412)
+<span class="ln">129</span>        dodt = 16.0 * r412
+<span class="ln">130</span>    else:
+<span class="ln">131</span>        dydt = 0.0
+<span class="ln">132</span>        dcdt = 0.0
+<span class="ln">133</span>        dodt = 0.0
+<span class="ln">134</span>
+<span class="ln">135</span>    return dcdt, dodt, dxdt, dydt, xc12, xo16, x, z</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "the reaction-rate arrays <code>HR1</code>…<code>HR12</code> (… computed elsewhere, probably in ENGEB or KEMCOM …)". Both callers compute them by calling <a href="../yrec-map/rates.f.html#def-RATES">RATES</a> just before <code>EQBURN</code> (mix.f line 166, xtime.f line 71). Fix: say so.</li>
+<li><strong>Wrong / question 4 answerable.</strong> The units: KEMCOM's header comment says <code>HR1</code>–<code>HR13</code> are rates "PER GIGAYEAR PER AMU", to be multiplied by the reactants' mass fractions and the product's atomic weight. XTIME's use, <code>CSECYR*1.0D9*ATIME(7)/DXDT</code>, is consistent with <code>DXDT</code> per Gyr. Fix: state the units in the explanation and drop question 4.</li>
+<li><strong>Unclear.</strong> "compared with <code>HT</code>, so probably $\log T$". XTIME passes <code>TL = HT(IEND)</code> to RATES as $\log T$, and PARMIN's defaults for <code>TCUT</code> are 6.5, 6.5, 6.82, 7.7, 7.5. Fix: state that <code>HT</code> is $\log T$ and <code>TCUT</code> are $\log T$ cutoffs, without "probably".</li>
+<li><strong>Missing.</strong> The helium-burning step uses <code>XC12</code>, which step 4 has replaced by its CN-equilibrium value when $T &gt;$ <code>TCUT(3)</code>; when $X \le 10^{-10}$ the code jumps past the CN step and uses the actual abundance. Fix: add to question 1.</li>
+</ol>
+<p>Revised: rates from RATES; step 4 runs only after step 3 (added); units stated, question 4 dropped; <code>HT</code> as $\log T$; question 1 extended.</p></div></details>
+</main></body></html>

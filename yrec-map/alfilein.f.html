@@ -1,0 +1,788 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>alfilein.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ alfilein.f</span></header><main>
+<h1>alfilein.f</h1>
+<p class='muted'>408 lines · 2 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/alfilein.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>alfilein.py</code>, 327 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file reads a table of model atmospheres by France Allard and collaborators (its comments name the 1999 NextGen format and a newer "Allard" format of 2007) and puts it into the arrays that the atmosphere lookup <a href="../yrec-map/alsurfp.f.html#def-ALSURFP">ALSURFP</a> uses. For each $\log T_\mathrm{eff}$ and $\log g$ the table gives $\log P$ at $T = T_\mathrm{eff}$, and, in the new format, $\log P$ and $\log T$ at $\tau = 100$.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Input:</strong> the file named <code>FALLARD</code>, opened on unit <code>IOATMA</code>. Both come from the run's settings: <code>FALLARD</code> is an argument of <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a> and <a href="../yrec-map/setups.f.html#def-SETUPS">SETUPS</a>, <code>IOATMA</code> is in <code>IOUNITS_MOD</code>, and the requested metallicity and $\alpha$-enhancement (<code>ALATM_FeH</code>, <code>ALATM_Alpha</code>) are in <code>NMLPAR_MOD</code>, set by PARMIN.</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/setups.f.html#def-SETUPS">SETUPS</a>, once at start-up, and only when <code>KTTAU = 4</code> (Allard atmospheres, which the comment there says are used instead of Kurucz below 10,000 K).</li>
+<li><strong>What it calls:</strong> <a href="#def-SORT_SHELL">SORT_SHELL</a> (in this file) and <a href="../yrec-map/altabinit.f.html#def-ALTABINIT">ALTABINIT</a>, which checks the table and derives its limits.</li>
+<li><strong>Output:</strong> <code>ALATM01_MOD</code> (the grid <code>TEFFLs</code>, <code>GLs</code>, <code>FeHs</code>, <code>ALPHAs</code> and the tables <code>PLs</code>, <code>P100Ls</code>, <code>T100Ls</code>, with their sizes), read by <a href="../yrec-map/altabinit.f.html#def-ALTABINIT">ALTABINIT</a>, <a href="../yrec-map/alprint.f.html#def-ALPRINT">ALPRINT</a> and <a href="../yrec-map/alsurfp.f.html#def-ALSURFP">ALSURFP</a>.</li>
+<li><strong>Modules:</strong> <code>ALATM01_MOD</code> (ALTABINIT, ALPRINT, ALSURFP), <code>NMLPAR_MOD</code> for the requested [Fe/H] and $\alpha$ (formerly <code>/ALATM03/</code>), <code>IOUNITS_MOD</code> for the units (formerly <code>/LUOUT/</code> and <code>/ALATM03/</code>).</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Fill every table entry with $-999$, the mark of an invalid entry.</li>
+<li>Read the first record to decide the format: <code>3.50</code> in columns 4–7 means the old NextGen format, <code>ALLARD</code> in columns 4–9 the new one. Anything else stops the run.</li>
+<li><strong>Old NextGen:</strong> fixed sizes, 54 temperatures and 5 gravities; reads $\log g$, the temperatures and $\log P$ only. This format has no $\tau = 100$ values.</li>
+<li><strong>New format:</strong> one record per ($T_\mathrm{eff}$, $\log g$, [Fe/H], $\alpha$). The routine reads the file twice. The first pass keeps only the records with the requested [Fe/H] and $\alpha$ and collects the distinct $T_\mathrm{eff}$ and $\log g$ values, which it then sorts. The second pass places each record's three values at its indices, and stores $\log_{10} T_\mathrm{eff}$ in <code>TEFFLs</code>.</li>
+<li>Call <a href="../yrec-map/altabinit.f.html#def-ALTABINIT">ALTABINIT</a>.</li>
+</ol>
+<p>Gaps in the grid (combinations of $T_\mathrm{eff}$ and $\log g$ absent from the file) keep the value $-999$; ALTABINIT then finds each row's valid range.</p>
+<p><strong>Design.</strong> Every error ends the run with <code>STOP 9999</code> after a message to the screen and to <code>ISHORT</code>. Some messages name other routines ("AtTabInit Pass 1 File Error"), and the closing comment says "END OF ALINITTAB", left from earlier names.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (<code>/ALATM01/</code>; <code>/ALATM03/</code> split between <code>NMLPAR_MOD</code> and <code>IOUNITS_MOD</code>; <code>/LUOUT/</code> to <code>IOUNITS_MOD</code>; <code>/ALATM04/</code>, which held only dummies, removed), <code>IMPLICIT NONE</code>; the <code>EXTERNAL sort_shell</code> line, which a misplaced column had made a continuation of the <code>/ALATM04/</code> declaration, is now a statement of its own. The misspelled flag of question 1 is now declared as a local <code>LOGICAL</code>, so the question stands.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A misspelled flag.</strong> The old-format branch tests <code>LATMTPTau100</code>, but the flag in <code>NMLPAR_MOD</code> is <code>LALTPTau100</code>. The misspelled name is a separate local variable, declared <code>LOGICAL*4</code> and never set, so the intended check (stop if $\tau = 100$ values are requested from an old file) probably never fires. Should it test <code>LALTPTau100</code>?</li>
+<li><strong>Loop bounds.</strong> The checks for new [Fe/H] and $\alpha$ values loop <code>do i = 1,nGL</code> instead of <code>1,nFeH</code> and <code>1,nALPHA</code>, and compare with entries of <code>FeHs</code> and <code>ALPHAs</code> that were never initialized. Since only records with the requested [Fe/H] and $\alpha$ get this far, <code>nFeH</code> and <code>nALPHA</code> should stay 1; is anything lost?</li>
+<li><strong>Two tolerances for [Fe/H] and $\alpha$.</strong> The passes skip a record if $|\alpha - \alpha_\mathrm{req}| &gt; 0$ (exact match), but the second pass then checks again with $10^{-6}$. [Fe/H] has two tolerances too: the first pass keeps a record when $|\Delta[\mathrm{Fe/H}]| \le 10^{-5}$, and the second drops it when $|\Delta| \ge 10^{-6}$, so a record in between adds its $T_\mathrm{eff}$ and $\log g$ to the grid but is never stored. Should the passes use one tolerance each?</li>
+<li><strong>Old-format temperatures.</strong> In the old format <code>TEFFLs</code> is read as given, while the new format converts $T_\mathrm{eff}$ to $\log_{10} T_\mathrm{eff}$. Are the old files already in $\log T_\mathrm{eff}$? <a href="../yrec-map/alprint.f.html#def-ALPRINT">ALPRINT</a> prints <code>10**TEFFLs</code> in both cases.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>Subroutine ALFILEIN
+PURPOSE
+To read Allard atmosphere information files into the appropriate input arrays
+and calculate associated auxilliary information. These files contain the
+desired properties of stellar and substellar atmospheres from atmospheric
+tables developed by France Allard, et al. These properties include Log(P)
+at Teff and GL, as well as Log(P) and Log(T) at Tau = 100 for this Teff and
+GL. Currently supported input formats include the old Allard, et al, circa
+1999 NextGen format, to which we are adding the newer 2007 NextGen format.
+As other formats become available, weanticipate being able to handle those also.
+Input files may be in Old NextGen file format or in the new Allard Atmosphere
+file format. This format, is of a conceptually different style from the old.
+The data part of the new file format has one record for each Teff, GL, FE/h,
+Alpha. The rest of that record contains the associated PL @ T=Teff,
+PL @ Tau=100 and TL @ Tau100. In other words the new format has one data record
+for each item in the table. The old format had one record for each GL in the
+table. This new format is more flexible in supporting future needs.
+The contents of these files are put into the arrays and elements used by the
+Allard Atmosphere table lookup routine, ALSURFP. In addition, we fill any vacant
+entries in the table with -999.0. A value of -999. in the table identifies the
+entry as &quot;invalid.&quot; In addition, key auxililiary arrays, as described below, are
+created.</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-ALFILEIN'>ALFILEIN</a> <span class='muted'>subroutine · Subroutine ALFILEIN</span></li>
+<li><a href='#def-SORT_SHELL'>SORT_SHELL</a> <span class='muted'>subroutine · ************* End of ALFilein *************************</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-ALFILEIN'><h3><span class='kind'>subroutine</span>ALFILEIN</h3>
+<p class='muted'>lines 32–366 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/alfilein.f#L32-L366'>GitHub</a></p>
+<pre>SUBROUTINE ALFILEIN(FALLARD)</pre>
+<div class='notes'><p>Reads the Allard atmosphere file, old or new format, keeps the records with the requested [Fe/H] and $\alpha$, fills <code>ALATM01_MOD</code> and calls <a href="../yrec-map/altabinit.f.html#def-ALTABINIT">ALTABINIT</a>. Stops the run on any error.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>Subroutine ALFILEIN
+PURPOSE
+To read Allard atmosphere information files into the appropriate input arrays
+and calculate associated auxilliary information. These files contain the
+desired properties of stellar and substellar atmospheres from atmospheric
+tables developed by France Allard, et al. These properties include Log(P)
+at Teff and GL, as well as Log(P) and Log(T) at Tau = 100 for this Teff and
+GL. Currently supported input formats include the old Allard, et al, circa
+1999 NextGen format, to which we are adding the newer 2007 NextGen format.
+As other formats become available, weanticipate being able to handle those also.
+Input files may be in Old NextGen file format or in the new Allard Atmosphere
+file format. This format, is of a conceptually different style from the old.
+The data part of the new file format has one record for each Teff, GL, FE/h,
+Alpha. The rest of that record contains the associated PL @ T=Teff,
+PL @ Tau=100 and TL @ Tau100. In other words the new format has one data record
+for each item in the table. The old format had one record for each GL in the
+table. This new format is more flexible in supporting future needs.
+The contents of these files are put into the arrays and elements used by the
+Allard Atmosphere table lookup routine, ALSURFP. In addition, we fill any vacant
+entries in the table with -999.0. A value of -999. in the table identifies the
+entry as &quot;invalid.&quot; In addition, key auxililiary arrays, as described below, are
+created.</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/alatm01_mod.f.html#def-ALATM01_MOD'>ALATM01_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='#def-SORT_SHELL'>SORT_SHELL</a> ×4</li>
+<li><a href='../yrec-map/altabinit.f.html#def-ALTABINIT'>ALTABINIT</a> <span class='muted'>(altabinit.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/setups.f.html#def-SETUPS'>SETUPS</a> <span class='muted'>(setups.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">32</span>       SUBROUTINE ALFILEIN(FALLARD)
+<span class="ln">33</span>C 10/14/26 MHP via Claude
+<span class="ln">34</span>C code changed to convert COMMON/ALATM01/ into ALATM01_MOD.
+<span class="ln">35</span>      USE ALATM01_MOD
+<span class="ln">36</span>C 10/14/26 MHP via Claude
+<span class="ln">37</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">38</span>      USE NMLPAR_MOD
+<span class="ln">39</span>C 10/14/26 MHP via Claude
+<span class="ln">40</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">41</span>      USE IOUNITS_MOD
+<span class="ln">42</span>C 10/20/26 MHP via Claude
+<span class="ln">43</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">44</span>C explicit declarations.
+<span class="ln">45</span>      IMPLICIT NONE
+<span class="ln">46</span>      REAL*8 ALPHA,FEH,GL,P100L,PL,T100,TEFF,TEFFS
+<span class="ln">47</span>      INTEGER I,I1,IRECNO,J,J1,NGA,NHDR,NTA
+<span class="ln">48</span>      LOGICAL*4 LATMTPTAU100
+<span class="ln">49</span>C
+<span class="ln">50</span>C Parameters NTA and NGA are respectively the maximum expected numbers
+<span class="ln">51</span>C of Teff&#x27;s and GL&#x27;s we expect to encounter, even in future tables
+<span class="ln">52</span>C The maximum nuber of Teff&#x27;s in the current table is nTeff, and the
+<span class="ln">53</span>C associated max number of GL&#x27;s is nGL.
+<span class="ln">54</span>
+<span class="ln">55</span>      PARAMETER(NTA=250,NGA=25)
+<span class="ln">56</span>      CHARACTER*256 FALLARD
+<span class="ln">57</span>      CHARACTER*35 inrec
+<span class="ln">58</span>      CHARACTER*256 inrec2
+<span class="ln">59</span>      DIMENSION TEFFs(NTA)
+<span class="ln">60</span>C 10/14/26 MHP via Claude
+<span class="ln">61</span>C code changed to drop the redundant LOGICAL*4 LALTPTau100 declaration.
+<span class="ln">62</span>C LALTPTau100 is a COMMON/NMLPAR/ member, and explicitly typing a COMMON
+<span class="ln">63</span>C member is legal while doing the same to a USE-associated name is
+<span class="ln">64</span>C rejected, so it has to go before NMLPAR becomes a module.  Removing it
+<span class="ln">65</span>C changes nothing: IMPLICIT LOGICAL*4(L) already gives that type.
+<span class="ln">66</span>C 9/25/26 MHP via Claude
+<span class="ln">67</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">68</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">69</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">70</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">71</span>C COMMON/IOUNITS/
+<span class="ln">72</span>
+<span class="ln">73</span>C 10/12/26 MHP via Claude
+<span class="ln">74</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">75</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">76</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">77</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">78</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">79</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">80</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">81</span>C
+<span class="ln">82</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">83</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">84</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">85</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">86</span>C 10/13/26 MHP via Claude
+<span class="ln">87</span>C code changed to remove COMMON/ALATM04/: its four members DUMMY1..DUMMY4
+<span class="ln">88</span>C are placeholders that no file references in executable code.  Removing
+<span class="ln">89</span>C it also retires the hazard behind the earlier alfilein.f fix, where a
+<span class="ln">90</span>C mis-indented EXTERNAL was absorbed into this declaration and renamed
+<span class="ln">91</span>C DUMMY4.
+<span class="ln">92</span>
+<span class="ln">93</span>C 10/11/26 MHP via Claude
+<span class="ln">94</span>C code changed to re-indent EXTERNAL to column 7.  It had only 5 leading
+<span class="ln">95</span>C blanks, putting the &quot;E&quot; in column 6, which in fixed form marks a
+<span class="ln">96</span>C CONTINUATION line.  The compiler therefore read the previous statement
+<span class="ln">97</span>C as
+<span class="ln">98</span>C      COMMON /ALATM04/ DUMMY1,DUMMY2,DUMMY3,DUMMY4EXTERNALSORT_SHELL
+<span class="ln">99</span>C a legal 24-character name, so it compiled silently: the EXTERNAL
+<span class="ln">100</span>C declaration was discarded and the 4th block member was renamed.
+<span class="ln">101</span>C Behavior-neutral today -- sort_shell is only reached via CALL (and is
+<span class="ln">102</span>C defined in this file), and DUMMY4EXTERNALSORT_SHELL was one implicit
+<span class="ln">103</span>C REAL*8 at the same position as DUMMY4 in the other five files that
+<span class="ln">104</span>C declare ALATM04 -- but it would break the moment a 5th member were
+<span class="ln">105</span>C added, sort_shell were passed as an actual argument, or this file were
+<span class="ln">106</span>C converted to free form.
+<span class="ln">107</span>      EXTERNAL sort_shell
+<span class="ln">108</span>
+<span class="ln">109</span>      SAVE
+<span class="ln">110</span>
+<span class="ln">111</span>C set output arrays to invalid values
+<span class="ln">112</span>      do i = 1,NTA
+<span class="ln">113</span>         TEFFLs(i) = -999.D0
+<span class="ln">114</span>         do j = 1,NGA
+<span class="ln">115</span>            GLs(j) = -999.D0
+<span class="ln">116</span>            PLs(i,j) = -999.D0
+<span class="ln">117</span>            P100Ls(i,j) = -999.D0
+<span class="ln">118</span>            T100Ls(i,j) = -999.D0
+<span class="ln">119</span>         enddo
+<span class="ln">120</span>      enddo
+<span class="ln">121</span>C the input file name is in FALLARD and its unit number is IOATMA
+<span class="ln">122</span>      OPEN(IOATMA,FILE=FALLARD,STATUS=&#x27;OLD&#x27;,ERR= 899)
+<span class="ln">123</span>      goto 900
+<span class="ln">124</span>
+<span class="ln">125</span> 899      continue
+<span class="ln">126</span>       write(*,*)
+<span class="ln">127</span>       write(*,*) &#x27;ALFILEIN: Allard File OPEN Failure&#x27;
+<span class="ln">128</span>       write(*,*) &#x27;     Unit-Number, FIle-Name are: &#x27;,
+<span class="ln">129</span>     x     ioatma,fallard
+<span class="ln">130</span>       goto 9999      ! Error exit
+<span class="ln">131</span>
+<span class="ln">132</span> 900      continue
+<span class="ln">133</span>C Decide what kind of input file
+<span class="ln">134</span>      read(ioatma,901) inrec
+<span class="ln">135</span> 901  format(a)
+<span class="ln">136</span>      rewind(ioatma)
+<span class="ln">137</span>      if(inrec(4:7) .eq. &#x27;3.50&#x27;) goto 100  ! Old NextGen file type
+<span class="ln">138</span>      if (inrec(4:9) .eq. &#x27;ALLARD&#x27;) goto 200  ! Allard file type
+<span class="ln">139</span>C If we get here, the input file is invalid
+<span class="ln">140</span>      write(ISHORT,*)&#x27;*** Invalid Allard Atmosphere input file ***&#x27;
+<span class="ln">141</span>      Write(ISHORT,*) &quot;First record was &#x27;&quot;,inrec,&quot;&#x27;&quot;
+<span class="ln">142</span>      write(*,*)&#x27;*** Invalid Allard Atmosphere input file ***&#x27;
+<span class="ln">143</span>      Write(*,*) &quot;First record was &#x27;&quot;,inrec,&quot;&#x27;&quot;
+<span class="ln">144</span>      goto 9999   ! The error exit
+<span class="ln">145</span>
+<span class="ln">146</span>C Process old-stype nextgen input file.
+<span class="ln">147</span> 100      CONTINUE
+<span class="ln">148</span>       LOldNextGen = .TRUE.
+<span class="ln">149</span>       write(ishort,*) &#x27;ALFileIn: File Description: 1999 NEXTGEN&#x27;,
+<span class="ln">150</span>     x     &#x27; (Old NEXTGEN)&#x27;
+<span class="ln">151</span>
+<span class="ln">152</span>C Ensure that we are not requesting PL,TL at Tau-100. These are not
+<span class="ln">153</span>C present in the old Nextgen 1 files. If requested, fail
+<span class="ln">154</span>      If(LATMTPTau100) then
+<span class="ln">155</span>         write(*,*)
+<span class="ln">156</span>         write(*,*) &#x27;ALFileIN: Invalid old Allard input file &#x27;,
+<span class="ln">157</span>     x         &#x27;for requested PT,TL at Tau=100&#x27;
+<span class="ln">158</span>         write(ISHORT,*)
+<span class="ln">159</span>         write(ISHORT,*) &#x27;ALFileIN: Invalid old Allard input file &#x27;,
+<span class="ln">160</span>     x         &#x27;for requested PT,TL at Tau=100&#x27;
+<span class="ln">161</span>         goto 9999  ! The ERROR EXIT
+<span class="ln">162</span>      endif
+<span class="ln">163</span>C READ RANGE OF GRAVITIES
+<span class="ln">164</span>      nTeff = 54
+<span class="ln">165</span>      nGL = 5
+<span class="ln">166</span>      READ(IOATMA,905)(GLs(I),I=1,nGL)
+<span class="ln">167</span> 905  FORMAT(5F7.2/)
+<span class="ln">168</span>c       read(ioatma,*)
+<span class="ln">169</span>
+<span class="ln">170</span>C READ RANGE OF TEMPERATURES
+<span class="ln">171</span>      READ(IOATMA,907)(TEFFLs(I),I=1,nTeff)
+<span class="ln">172</span> 907  FORMAT(10(1P5E16.8,/),1P4E16.8,/)
+<span class="ln">173</span>c       read(ioatma,*)
+<span class="ln">174</span>      READ(IOATMA,909)((PLs(J,I),I=1,nGL),J=1,nTeff)
+<span class="ln">175</span> 909  FORMAT(1P5E16.8)
+<span class="ln">176</span>      CLOSE(IOATMA)
+<span class="ln">177</span>      Goto 500      ! NORMAL EXIT
+<span class="ln">178</span>C Old Nextgen input file has been read an put into the proper arrays
+<span class="ln">179</span>
+<span class="ln">180</span>C Process new-style Allard Atmosphere file
+<span class="ln">181</span> 200      CONTINUE
+<span class="ln">182</span>       LOldNextGen = .FALSE.
+<span class="ln">183</span>      read(ioatma,911) nhdr, inrec2  ! nhdr is number of header recoreds to skip over
+<span class="ln">184</span> 911      format(i2,X,a)
+<span class="ln">185</span>       write(ishort,912) &#x27;ALFilein: New Allard Atm: File Description: &#x27;,inrec2(1:47)
+<span class="ln">186</span> 912  format(2a)
+<span class="ln">187</span>C Skip over rest of header, if any
+<span class="ln">188</span>      if(nhdr .gt. 1) then
+<span class="ln">189</span>        do i = 2, nhdr
+<span class="ln">190</span>          read(ioatma,*)
+<span class="ln">191</span>        enddo
+<span class="ln">192</span>      endif
+<span class="ln">193</span>      nGL = 0
+<span class="ln">194</span>      nTeff = 0
+<span class="ln">195</span>      nFeH = 0
+<span class="ln">196</span>      nALPHA = 0
+<span class="ln">197</span>      irecno = 0
+<span class="ln">198</span>
+<span class="ln">199</span>C First we read the file to count the # of Teff,GL,Fe/H and Alpha&#x27;s
+<span class="ln">200</span>
+<span class="ln">201</span> 299      read(IOATMA,915,end=400,err=399) Teff,GL,FeH,Alpha ! Process first record(s)
+<span class="ln">202</span> 915      format(F6.0,3F6.2)
+<span class="ln">203</span>      irecno=irecno+1
+<span class="ln">204</span>
+<span class="ln">205</span>C If the record does not have the correct FeH and Alpha, we skip it
+<span class="ln">206</span>      if((DABS(FeH-ALATM_FeH).gt.1D-5) .or.
+<span class="ln">207</span>     x       (DABS(Alpha-ALATM_Alpha).gt.0D0)) then
+<span class="ln">208</span>         goto 299  ! On to next record. Stay in this part until we get an acceptable record
+<span class="ln">209</span>      endif
+<span class="ln">210</span>      nTeff = 1    ! Initialize counters and variables after reading first record
+<span class="ln">211</span>      nGL = 1
+<span class="ln">212</span>      nFeH = 1
+<span class="ln">213</span>      nALPHA = 1
+<span class="ln">214</span>      Teffs(nTeff) = Teff
+<span class="ln">215</span>      GLs(nGL) = GL
+<span class="ln">216</span>      FeHs(nFeH) = FeH
+<span class="ln">217</span>      ALPHAs(nAlpha) = Alpha
+<span class="ln">218</span>
+<span class="ln">219</span> 300      read(IOATMA,915,end=400,err=399) Teff,GL,FeH,Alpha
+<span class="ln">220</span>      irecno=irecno+1
+<span class="ln">221</span>
+<span class="ln">222</span>C If the record does not have the correct FeH and Alpha, we skip it
+<span class="ln">223</span>      if((DABS(FeH-ALATM_FeH).gt.1D-5) .or.
+<span class="ln">224</span>     x       (DABS(Alpha-ALATM_Alpha).gt.0D0)) then
+<span class="ln">225</span>         goto 316  ! On to next record
+<span class="ln">226</span>      endif
+<span class="ln">227</span>
+<span class="ln">228</span>C  Now check Teffs, increase counter if needed
+<span class="ln">229</span>       do i = 1,nTeff  ! Skip out if any old Teff is a match
+<span class="ln">230</span>        if (DABS(Teff-Teffs(i)) .lt.1D-6) goto 310
+<span class="ln">231</span>      enddo
+<span class="ln">232</span>        nTeff = nTeff+1      ! count the nextTeff&#x27;s
+<span class="ln">233</span>        Teffs(nTeff) = Teff  ! save the new Teff in array Teffs
+<span class="ln">234</span> 310  CONTINUE
+<span class="ln">235</span>
+<span class="ln">236</span>c Now check GLs, increase counter if needed
+<span class="ln">237</span>      do i = 1,nGL  ! Skip out if any old GL is a match
+<span class="ln">238</span>        if (DABS(GL-GLs(i)) .lt.1D-6) goto 312
+<span class="ln">239</span>      enddo
+<span class="ln">240</span>        nGL = nGL+1      ! count the next GL
+<span class="ln">241</span>        GLs(nGL) = GL  ! save the new GL in array GLs
+<span class="ln">242</span> 312  CONTINUE
+<span class="ln">243</span>
+<span class="ln">244</span>
+<span class="ln">245</span>c Now check FeHs, increase counter if needed
+<span class="ln">246</span>      do i = 1,nGL  ! Skip out if any old FeH is a match
+<span class="ln">247</span>        if (DABS(FeH-FeHs(i)) .lt.1D-6) goto 314
+<span class="ln">248</span>      enddo
+<span class="ln">249</span>        nFeH = nFeH+1      ! count the next FeH
+<span class="ln">250</span>        FeHs(nFeH) = FeH  ! save the new FeH in array FeHs
+<span class="ln">251</span> 314  CONTINUE
+<span class="ln">252</span>
+<span class="ln">253</span>c Now check ALPHAs, increase counter if needed
+<span class="ln">254</span>      do i = 1,nGL  ! Skip out if any old ALPHA is a match
+<span class="ln">255</span>        if (DABS(ALPHA-ALPHAs(i)) .lt.1D-6) goto 316
+<span class="ln">256</span>      enddo
+<span class="ln">257</span>        nALPHA = nALPHA+1      ! count the next ALPHA
+<span class="ln">258</span>        ALPHAs(nALPHA) = ALPHA  ! save the new ALPHA in array ALPHAs
+<span class="ln">259</span> 316  CONTINUE
+<span class="ln">260</span>
+<span class="ln">261</span>      goto 300 ! go on to next record
+<span class="ln">262</span>
+<span class="ln">263</span>C File Read error exit
+<span class="ln">264</span> 399      continue
+<span class="ln">265</span>       write(*,*)
+<span class="ln">266</span>       write(*,*)&#x27;AtTabInit Pass 1 File Error &#x27;
+<span class="ln">267</span>       write(*,*)
+<span class="ln">268</span>       goto 9999
+<span class="ln">269</span>
+<span class="ln">270</span> 400      continue
+<span class="ln">271</span>c       write(*,*) &#x27;nTeff,nGL,nFeH,nALPHA: &#x27;,nTeff,nGL,nFeH,nALPHA
+<span class="ln">272</span>
+<span class="ln">273</span>C  Now we have unsorted Teff,GL,Fe/H and Alpha&#x27;s.
+<span class="ln">274</span>C The next step is to sort them
+<span class="ln">275</span>      call <a href="#def-SORT_SHELL" title="SORT_SHELL in alfilein.f">sort_shell</a>(nTeff,Teffs)
+<span class="ln">276</span>      call <a href="#def-SORT_SHELL" title="SORT_SHELL in alfilein.f">sort_shell</a>(nGL,GLs)
+<span class="ln">277</span>      call <a href="#def-SORT_SHELL" title="SORT_SHELL in alfilein.f">sort_shell</a>(nFeH,FeHs)
+<span class="ln">278</span>      call <a href="#def-SORT_SHELL" title="SORT_SHELL in alfilein.f">sort_shell</a>(nALPHA,ALPHAs)
+<span class="ln">279</span>
+<span class="ln">280</span>C Now we can rewind the input file and start over for real
+<span class="ln">281</span>      rewind(ioatma)  ! go back to the beginning of the file
+<span class="ln">282</span>
+<span class="ln">283</span>C  Skip over header
+<span class="ln">284</span>      do i = 1,nhdr
+<span class="ln">285</span>         read(ioatma,*)
+<span class="ln">286</span>      enddo
+<span class="ln">287</span>
+<span class="ln">288</span> 410       read(IOATMA,920,END=500,ERR=499) Teff,GL,FeH,Alpha,PL,
+<span class="ln">289</span>     x       P100L,T100
+<span class="ln">290</span> 920      format(F6.0,3F6.2,1P4D16.8)
+<span class="ln">291</span>
+<span class="ln">292</span>C If the record does not have the correct FeH and Alpha, we skip it
+<span class="ln">293</span>      if((DABS(FeH-ALATM_FeH).gt.1D-5) .or.
+<span class="ln">294</span>     x       (DABS(Alpha-ALATM_Alpha).gt.0D0)) then
+<span class="ln">295</span>         goto 440  ! On to next record
+<span class="ln">296</span>      endif
+<span class="ln">297</span>
+<span class="ln">298</span>      do i = 1,nTeff  ! Skip out when we find the matching Teff
+<span class="ln">299</span>        if (DABS(Teff-Teffs(i)) .lt.1D-6) then
+<span class="ln">300</span>           I1 = i
+<span class="ln">301</span>           goto 420
+<span class="ln">302</span>        endif
+<span class="ln">303</span>      enddo
+<span class="ln">304</span>      write(*,*) &#x27;ALFilein: Impossible failure #1&#x27;
+<span class="ln">305</span>      Write(*,*) &#x27;Teff of &#x27;, Teff, &#x27; not in Teff table.&#x27;
+<span class="ln">306</span>      goto 9999  ! The error exit
+<span class="ln">307</span>
+<span class="ln">308</span> 420  CONTINUE
+<span class="ln">309</span>      do j = 1,nGL  ! Skip out when we find the a matching GL
+<span class="ln">310</span>        if (DABS(GL-GLs(j)) .lt.1D-6) then
+<span class="ln">311</span>           j1 = j
+<span class="ln">312</span>           goto 430
+<span class="ln">313</span>        endif
+<span class="ln">314</span>      enddo
+<span class="ln">315</span>      write(*,*) &#x27;ALFilein: Impossible failure #2&#x27;
+<span class="ln">316</span>      Write(*,*) &#x27;GL of &#x27;, GL, &#x27; not in GL table.&#x27;
+<span class="ln">317</span>      goto 9999  ! The error exit
+<span class="ln">318</span>
+<span class="ln">319</span> 430      CONTINUE
+<span class="ln">320</span>
+<span class="ln">321</span>C we now verify that we have the correct FeH and Alpha
+<span class="ln">322</span>
+<span class="ln">323</span>      if (DABS(FeH -ALATM_FeH) .ge. 1D-6)  goto 440     ! Wrong FeH, bypass item
+<span class="ln">324</span>      if (DABS(Alpha -ALATM_Alpha) .ge. 1D-6)  goto 440 ! Wrong Alpha, bypass item
+<span class="ln">325</span>
+<span class="ln">326</span>
+<span class="ln">327</span>C We now have the correct indices for our tables, i1 for the Teff-direction
+<span class="ln">328</span>C and j1 for the GL direction
+<span class="ln">329</span>
+<span class="ln">330</span>       TEFFLs(I1) = LOG10(Teff)  ! We need log(teff), but up to now we&#x27;ve been using Teff
+<span class="ln">331</span>       GLs(j1) = GL
+<span class="ln">332</span>       PLs(i1,j1) = PL
+<span class="ln">333</span>       P100Ls(i1,j1) = P100L
+<span class="ln">334</span>       T100Ls(i1,j1) = T100
+<span class="ln">335</span>
+<span class="ln">336</span> 440  continue
+<span class="ln">337</span>       goto 410   ! Back to process the next record
+<span class="ln">338</span>
+<span class="ln">339</span> 499      continue
+<span class="ln">340</span>       write(*,*)
+<span class="ln">341</span>       write(*,*)&#x27;AtTabInit File Read error&#x27;
+<span class="ln">342</span>       write(*,*)
+<span class="ln">343</span>       goto 9999
+<span class="ln">344</span>
+<span class="ln">345</span> 500      continue  ! We heve finished with the input file and entered all inputs
+<span class="ln">346</span>
+<span class="ln">347</span>      CALL <a href="../yrec-map/altabinit.f.html#def-ALTABINIT" title="ALTABINIT in altabinit.f">ALTABINIT</a>   ! Initialize Allard tables
+<span class="ln">348</span>
+<span class="ln">349</span>       return
+<span class="ln">350</span>
+<span class="ln">351</span> 9999      continue    ! THE ERROR EXIT
+<span class="ln">352</span>       write(*,*)
+<span class="ln">353</span>       write(*,*)
+<span class="ln">354</span>       write(*,*) &#x27;**************** PROGRAM ALFilein TERMINATED &#x27;,
+<span class="ln">355</span>     x       &#x27;@ 9999 **************&#x27;
+<span class="ln">356</span>       write(*,*)
+<span class="ln">357</span>       write(*,*)
+<span class="ln">358</span>       write(*,*)
+<span class="ln">359</span>       write(ISHORT,*)
+<span class="ln">360</span>       write(ISHORT,*) &#x27;**************** PROGRAM ALFilein TERMINATED &#x27;,
+<span class="ln">361</span>     x      &#x27;@ 9999 *************&#x27;
+<span class="ln">362</span>       write(ISHORT,*)
+<span class="ln">363</span>       write(ISHORT,*)
+<span class="ln">364</span>      STOP 9999
+<span class="ln">365</span>
+<span class="ln">366</span>      end      ! END OF ALINITTAB</pre></details>
+<details class='py' id='py-alfilein'><summary>Python version: alfilein</summary><pre class='doc'>Read the Allard atmosphere file FALLARD (old or new format) on unit
+IOATMA, keep the records with the requested [Fe/H] and alpha
+(NMLPAR_MOD), fill ALATM01_MOD and call ALTABINIT. Entries absent from
+the file keep -999. Stops the run on any error.
+
+Translates: alfilein.f#ALFILEIN (09c3b9b)
+
+Argument: the file name fallard. Nothing is returned.</pre><pre class='src'><span class="ln">213</span>def alfilein(fallard):
+<span class="ln">214</span>    &quot;&quot;&quot;Read the Allard atmosphere file FALLARD (old or new format) on unit
+<span class="ln">215</span>    IOATMA, keep the records with the requested [Fe/H] and alpha
+<span class="ln">216</span>    (NMLPAR_MOD), fill ALATM01_MOD and call ALTABINIT. Entries absent from
+<span class="ln">217</span>    the file keep -999. Stops the run on any error.
+<span class="ln">218</span>
+<span class="ln">219</span>    Translates: alfilein.f#ALFILEIN (09c3b9b)
+<span class="ln">220</span>
+<span class="ln">221</span>    Argument: the file name fallard. Nothing is returned.
+<span class="ln">222</span>    &quot;&quot;&quot;
+<span class="ln">223</span>    a = alatm01_mod
+<span class="ln">224</span>    ioatma = iounits_mod.ioatma
+<span class="ln">225</span>    ishort = iounits_mod.ishort
+<span class="ln">226</span>
+<span class="ln">227</span>    # Every entry starts invalid (-999).
+<span class="ln">228</span>    for i in range(1, NTA + 1):
+<span class="ln">229</span>        a.teffls[i] = -999.0
+<span class="ln">230</span>        for j in range(1, NGA + 1):
+<span class="ln">231</span>            a.gls[j] = -999.0
+<span class="ln">232</span>            a.pls[i, j] = -999.0
+<span class="ln">233</span>            a.p100ls[i, j] = -999.0
+<span class="ln">234</span>            a.t100ls[i, j] = -999.0
+<span class="ln">235</span>
+<span class="ln">236</span>    try:
+<span class="ln">237</span>        iounits_mod.open(ioatma, fallard, status=&#x27;OLD&#x27;)
+<span class="ln">238</span>    except OSError:
+<span class="ln">239</span>        # label 899
+<span class="ln">240</span>        print(&quot;&quot;)
+<span class="ln">241</span>        print(&quot; ALFILEIN: Allard File OPEN Failure&quot;)
+<span class="ln">242</span>        print(f&quot;      Unit-Number, FIle-Name are:  {ioatma} {fallard}&quot;)
+<span class="ln">243</span>        _error_exit()
+<span class="ln">244</span>
+<span class="ln">245</span>    # label 900: the first record decides the format (FORMAT 901, (a),
+<span class="ln">246</span>    # into a CHARACTER*35).
+<span class="ln">247</span>    inrec = (_read(ioatma) or &#x27;&#x27;)[:35].ljust(35)
+<span class="ln">248</span>    iounits_mod.rewind(ioatma)
+<span class="ln">249</span>    if inrec[3:7] == &#x27;3.50&#x27;:
+<span class="ln">250</span>        _read_old(ioatma)  # old NextGen file type
+<span class="ln">251</span>    elif inrec[3:9] == &#x27;ALLARD&#x27;:
+<span class="ln">252</span>        # label 200: the new Allard file type.
+<span class="ln">253</span>        a.loldnextgen = False
+<span class="ln">254</span>        # FORMAT 911, (i2,X,a): the number of header records to skip.
+<span class="ln">255</span>        rec = _read(ioatma)
+<span class="ln">256</span>        nhdr = int(rec[0:2])
+<span class="ln">257</span>        inrec2 = rec[3:259].ljust(256)
+<span class="ln">258</span>        iounits_mod.write(ishort, &quot;ALFilein: New Allard Atm: File Description: &quot;
+<span class="ln">259</span>                          + inrec2[0:47])  # 912
+<span class="ln">260</span>        if nhdr &gt; 1:
+<span class="ln">261</span>            for _ in range(2, nhdr + 1):
+<span class="ln">262</span>                _read(ioatma)
+<span class="ln">263</span>        a.ngl = 0
+<span class="ln">264</span>        a.nteff = 0
+<span class="ln">265</span>        a.nfeh = 0
+<span class="ln">266</span>        a.nalpha = 0
+<span class="ln">267</span>        try:
+<span class="ln">268</span>            _first_pass(ioatma)
+<span class="ln">269</span>        except _ReadError:
+<span class="ln">270</span>            # label 399
+<span class="ln">271</span>            print(&quot;&quot;)
+<span class="ln">272</span>            print(&quot; AtTabInit Pass 1 File Error &quot;)
+<span class="ln">273</span>            print(&quot;&quot;)
+<span class="ln">274</span>            _error_exit()
+<span class="ln">275</span>        # label 400: sort the values found.
+<span class="ln">276</span>        <a href="#def-SORT_SHELL" title="SORT_SHELL in alfilein.f">sort_shell</a>(a.nteff, teffs)
+<span class="ln">277</span>        <a href="#def-SORT_SHELL" title="SORT_SHELL in alfilein.f">sort_shell</a>(a.ngl, a.gls)
+<span class="ln">278</span>        <a href="#def-SORT_SHELL" title="SORT_SHELL in alfilein.f">sort_shell</a>(a.nfeh, a.fehs)
+<span class="ln">279</span>        <a href="#def-SORT_SHELL" title="SORT_SHELL in alfilein.f">sort_shell</a>(a.nalpha, a.alphas)
+<span class="ln">280</span>        try:
+<span class="ln">281</span>            _second_pass(ioatma, nhdr)
+<span class="ln">282</span>        except _ReadError:
+<span class="ln">283</span>            # label 499
+<span class="ln">284</span>            print(&quot;&quot;)
+<span class="ln">285</span>            print(&quot; AtTabInit File Read error&quot;)
+<span class="ln">286</span>            print(&quot;&quot;)
+<span class="ln">287</span>            _error_exit()
+<span class="ln">288</span>    else:
+<span class="ln">289</span>        for show in (lambda t: iounits_mod.write(ishort, t), print):
+<span class="ln">290</span>            show(&quot; *** Invalid Allard Atmosphere input file ***&quot;)
+<span class="ln">291</span>            show(f&quot; First record was &#x27;{inrec}&#x27;&quot;)
+<span class="ln">292</span>        _error_exit()
+<span class="ln">293</span>
+<span class="ln">294</span>    # label 500
+<span class="ln">295</span>    altabinit()</pre></details>
+</section>
+<section class='def' id='def-SORT_SHELL'><h3><span class='kind'>subroutine</span>SORT_SHELL</h3>
+<p class='muted'>lines 373–404 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/alfilein.f#L373-L404'>GitHub</a></p>
+<pre>SUBROUTINE sort_shell(nn,A)</pre>
+<div class='notes'><p>Shell's sort from Numerical Recipes, ascending, in place, with the increments $1, 4, 13, 40, \dots$ ($h \to 3h + 1$).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>************* End of ALFilein *************************
+Numerical Recipes Shell sort</pre></details>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='#def-ALFILEIN'>ALFILEIN</a> ×4</li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">373</span>      SUBROUTINE sort_shell(nn,A)
+<span class="ln">374</span>C 10/20/26 MHP via Claude
+<span class="ln">375</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">376</span>C explicit declarations.
+<span class="ln">377</span>      IMPLICIT NONE
+<span class="ln">378</span>      REAL*8 A,V
+<span class="ln">379</span>      DIMENSION A(nn)
+<span class="ln">380</span>      INTEGER*4 nn,n,inc,i,j
+<span class="ln">381</span>C Sorts an array A(1:nn) into ascending numerical order by Shell&#x27;s method (diminishing
+<span class="ln">382</span>C incremental sort) nn is input. A is replaced on output by its sorted arrangement
+<span class="ln">383</span>
+<span class="ln">384</span>      if (nn .eq. 1) return                  ! Exit if only one element
+<span class="ln">385</span>      n=nn
+<span class="ln">386</span>      inc=1
+<span class="ln">387</span>    1 inc=3*inc+1                         ! Determin starting increment
+<span class="ln">388</span>      if (inc .le. n) goto 1
+<span class="ln">389</span>    2      continue
+<span class="ln">390</span>         inc=inc/3                        ! Loop over the partial sorts
+<span class="ln">391</span>         do i=inc+1,n
+<span class="ln">392</span>            v=A(i)                        ! Outer loop of straight insertion
+<span class="ln">393</span>            j=i
+<span class="ln">394</span>    3        if (A(j-inc) .gt. v) then      ! Inner loop of straight insertion
+<span class="ln">395</span>               A(j)=A(j-inc)
+<span class="ln">396</span>               j=j-inc
+<span class="ln">397</span>               if (j .le. inc) goto 4
+<span class="ln">398</span>            goto 3
+<span class="ln">399</span>            endif
+<span class="ln">400</span>    4       A(j)=v
+<span class="ln">401</span>         enddo
+<span class="ln">402</span>      if (inc .gt. 1) goto 2
+<span class="ln">403</span>      return
+<span class="ln">404</span>      END</pre></details>
+<details class='py' id='py-sort_shell'><summary>Python version: sort_shell</summary><pre class='doc'>Shell&#x27;s sort (Numerical Recipes), ascending, in place, on a[1..nn],
+with the increments 1, 4, 13, 40, ...
+
+Translates: alfilein.f#SORT_SHELL (09c3b9b)
+
+Arguments: the count nn and the array a (changed in place). Nothing is
+returned.</pre><pre class='src'><span class="ln">298</span>def sort_shell(nn, a):
+<span class="ln">299</span>    &quot;&quot;&quot;Shell&#x27;s sort (Numerical Recipes), ascending, in place, on a[1..nn],
+<span class="ln">300</span>    with the increments 1, 4, 13, 40, ...
+<span class="ln">301</span>
+<span class="ln">302</span>    Translates: alfilein.f#SORT_SHELL (09c3b9b)
+<span class="ln">303</span>
+<span class="ln">304</span>    Arguments: the count nn and the array a (changed in place). Nothing is
+<span class="ln">305</span>    returned.
+<span class="ln">306</span>    &quot;&quot;&quot;
+<span class="ln">307</span>    if nn == 1:
+<span class="ln">308</span>        return
+<span class="ln">309</span>    n = nn
+<span class="ln">310</span>    inc = 1
+<span class="ln">311</span>    while True:  # label 1: the starting increment
+<span class="ln">312</span>        inc = 3 * inc + 1
+<span class="ln">313</span>        if inc &gt; n:
+<span class="ln">314</span>            break
+<span class="ln">315</span>    while True:  # label 2: loop over the partial sorts
+<span class="ln">316</span>        inc = inc // 3
+<span class="ln">317</span>        for i in range(inc + 1, n + 1):
+<span class="ln">318</span>            v = a[i]  # straight insertion
+<span class="ln">319</span>            j = i
+<span class="ln">320</span>            while a[j - inc] &gt; v:  # label 3
+<span class="ln">321</span>                a[j] = a[j - inc]
+<span class="ln">322</span>                j = j - inc
+<span class="ln">323</span>                if j &lt;= inc:
+<span class="ln">324</span>                    break
+<span class="ln">325</span>            a[j] = v  # label 4
+<span class="ln">326</span>        if inc &lt;= 1:
+<span class="ln">327</span>            break</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_ReadError'><summary>Python version: _ReadError</summary><pre class='doc'>A Fortran READ that would take its ERR= branch.</pre><pre class='src'><span class="ln">22</span>class _ReadError(Exception):
+<span class="ln">23</span>    &quot;&quot;&quot;A Fortran READ that would take its ERR= branch.&quot;&quot;&quot;</pre></details>
+<details class='py' id='py-_fields'><summary>Python version: _fields</summary><pre class='doc'>Read a fixed-format record: specs is a list of (width, decimals).
+A blank field reads as 0; a field without a decimal point or exponent
+gets the format&#x27;s implied decimals, as in Fortran; D exponents read as
+E. A field that cannot be read raises _ReadError.</pre><pre class='src'><span class="ln">26</span>def _fields(line, specs):
+<span class="ln">27</span>    &quot;&quot;&quot;Read a fixed-format record: specs is a list of (width, decimals).
+<span class="ln">28</span>    A blank field reads as 0; a field without a decimal point or exponent
+<span class="ln">29</span>    gets the format&#x27;s implied decimals, as in Fortran; D exponents read as
+<span class="ln">30</span>    E. A field that cannot be read raises _ReadError.&quot;&quot;&quot;
+<span class="ln">31</span>    out, pos = [], 0
+<span class="ln">32</span>    for width, decimals in specs:
+<span class="ln">33</span>        text = line[pos:pos + width].strip().upper().replace(&#x27;D&#x27;, &#x27;E&#x27;)
+<span class="ln">34</span>        pos += width
+<span class="ln">35</span>        if not text:
+<span class="ln">36</span>            out.append(0.0)
+<span class="ln">37</span>            continue
+<span class="ln">38</span>        try:
+<span class="ln">39</span>            value = float(text)
+<span class="ln">40</span>        except ValueError:
+<span class="ln">41</span>            raise _ReadError(text) from None
+<span class="ln">42</span>        if &#x27;.&#x27; not in text and &#x27;E&#x27; not in text:
+<span class="ln">43</span>            value /= 10.0 ** decimals
+<span class="ln">44</span>        out.append(value)
+<span class="ln">45</span>    return out</pre></details>
+<details class='py' id='py-_read'><summary>Python version: _read</summary><pre class='doc'>One record; None at end of file (END=).</pre><pre class='src'><span class="ln">48</span>def _read(unit):
+<span class="ln">49</span>    &quot;&quot;&quot;One record; None at end of file (END=).&quot;&quot;&quot;
+<span class="ln">50</span>    return iounits_mod.read(unit)</pre></details>
+<details class='py' id='py-_error_exit'><summary>Python version: _error_exit</summary><pre class='doc'>label 9999: the error exit.</pre><pre class='src'><span class="ln">53</span>def _error_exit():
+<span class="ln">54</span>    &quot;&quot;&quot;label 9999: the error exit.&quot;&quot;&quot;
+<span class="ln">55</span>    msg = &quot; **************** PROGRAM ALFilein TERMINATED @ 9999 &quot;
+<span class="ln">56</span>    print(&quot;&quot;)
+<span class="ln">57</span>    print(&quot;&quot;)
+<span class="ln">58</span>    print(msg + &quot;**************&quot;)
+<span class="ln">59</span>    print(&quot;&quot;)
+<span class="ln">60</span>    print(&quot;&quot;)
+<span class="ln">61</span>    print(&quot;&quot;)
+<span class="ln">62</span>    w = iounits_mod.write
+<span class="ln">63</span>    w(iounits_mod.ishort, &quot;&quot;)
+<span class="ln">64</span>    w(iounits_mod.ishort, msg + &quot;*************&quot;)
+<span class="ln">65</span>    w(iounits_mod.ishort, &quot;&quot;)
+<span class="ln">66</span>    w(iounits_mod.ishort, &quot;&quot;)
+<span class="ln">67</span>    raise SystemExit(9999)</pre></details>
+<details class='py' id='py-_differs'><summary>Python version: _differs</summary><pre class='doc'>The passes&#x27; test for a record to skip: [Fe/H] off by more than 1e-5,
+or alpha off at all.</pre><pre class='src'><span class="ln">70</span>def _differs(feh, alpha):
+<span class="ln">71</span>    &quot;&quot;&quot;The passes&#x27; test for a record to skip: [Fe/H] off by more than 1e-5,
+<span class="ln">72</span>    or alpha off at all.&quot;&quot;&quot;
+<span class="ln">73</span>    n = nmlpar_mod
+<span class="ln">74</span>    # Question (see the page): two tolerances for [Fe/H] and alpha.
+<span class="ln">75</span>    return abs(feh - n.alatm_feh) &gt; 1e-5 or abs(alpha - n.alatm_alpha) &gt; 0.0</pre></details>
+<details class='py' id='py-_read_old'><summary>Python version: _read_old</summary><pre class='doc'>The old 1999 NextGen format (label 100): fixed sizes, log P only.</pre><pre class='src'><span class="ln">78</span>def _read_old(ioatma):
+<span class="ln">79</span>    &quot;&quot;&quot;The old 1999 NextGen format (label 100): fixed sizes, log P only.&quot;&quot;&quot;
+<span class="ln">80</span>    a = alatm01_mod
+<span class="ln">81</span>    ishort = iounits_mod.ishort
+<span class="ln">82</span>    a.loldnextgen = True
+<span class="ln">83</span>    iounits_mod.write(ishort, &quot; ALFileIn: File Description: 1999 NEXTGEN&quot;
+<span class="ln">84</span>                              &quot; (Old NEXTGEN)&quot;)
+<span class="ln">85</span>    # Ensure that PL, TL at tau = 100 are not requested: they are not in
+<span class="ln">86</span>    # the old NextGen files.
+<span class="ln">87</span>    if latmtptau100:  # Question (see the page): the misspelled flag.
+<span class="ln">88</span>        text = (&quot; ALFileIN: Invalid old Allard input file for requested&quot;
+<span class="ln">89</span>                &quot; PT,TL at Tau=100&quot;)
+<span class="ln">90</span>        print(&quot;&quot;)
+<span class="ln">91</span>        print(text)
+<span class="ln">92</span>        iounits_mod.write(ishort, &quot;&quot;)
+<span class="ln">93</span>        iounits_mod.write(ishort, text)
+<span class="ln">94</span>        _error_exit()
+<span class="ln">95</span>    a.nteff = 54
+<span class="ln">96</span>    a.ngl = 5
+<span class="ln">97</span>    # FORMAT 905, (5F7.2/): the gravities, then one record skipped.
+<span class="ln">98</span>    a.gls[1:a.ngl + 1] = _fields(_read(ioatma), [(7, 2)] * 5)
+<span class="ln">99</span>    _read(ioatma)
+<span class="ln">100</span>    # FORMAT 907, (10(1P5E16.8,/),1P4E16.8,/): the 54 temperatures, as
+<span class="ln">101</span>    # given (Question (see the page): log Teff or Teff?).
+<span class="ln">102</span>    values = []
+<span class="ln">103</span>    for _ in range(10):
+<span class="ln">104</span>        values += _fields(_read(ioatma), [(16, 8)] * 5)
+<span class="ln">105</span>    values += _fields(_read(ioatma), [(16, 8)] * 4)
+<span class="ln">106</span>    a.teffls[1:a.nteff + 1] = values
+<span class="ln">107</span>    _read(ioatma)
+<span class="ln">108</span>    # FORMAT 909, (1P5E16.8): one record of nGL values per Teff.
+<span class="ln">109</span>    for j in range(1, a.nteff + 1):
+<span class="ln">110</span>        a.pls[j, 1:a.ngl + 1] = _fields(_read(ioatma), [(16, 8)] * a.ngl)
+<span class="ln">111</span>    iounits_mod.close(ioatma)</pre></details>
+<details class='py' id='py-_first_pass'><summary>Python version: _first_pass</summary><pre class='doc'>Pass 1 of the new format (labels 299 to 316): collect the distinct
+Teff, log g, [Fe/H] and alpha of the records with the requested [Fe/H]
+and alpha, up to the end of the file. Raises _ReadError on a bad
+record.</pre><pre class='src'><span class="ln">114</span>def _first_pass(ioatma):
+<span class="ln">115</span>    &quot;&quot;&quot;Pass 1 of the new format (labels 299 to 316): collect the distinct
+<span class="ln">116</span>    Teff, log g, [Fe/H] and alpha of the records with the requested [Fe/H]
+<span class="ln">117</span>    and alpha, up to the end of the file. Raises _ReadError on a bad
+<span class="ln">118</span>    record.&quot;&quot;&quot;
+<span class="ln">119</span>    a = alatm01_mod
+<span class="ln">120</span>    spec915 = [(6, 0), (6, 2), (6, 2), (6, 2)]  # FORMAT 915, (F6.0,3F6.2)
+<span class="ln">121</span>    # label 299: up to the first acceptable record.
+<span class="ln">122</span>    while True:
+<span class="ln">123</span>        rec = _read(ioatma)
+<span class="ln">124</span>        if rec is None:
+<span class="ln">125</span>            return
+<span class="ln">126</span>        teff, gl, feh, alpha = _fields(rec, spec915)
+<span class="ln">127</span>        if not _differs(feh, alpha):
+<span class="ln">128</span>            break
+<span class="ln">129</span>    a.nteff = 1
+<span class="ln">130</span>    a.ngl = 1
+<span class="ln">131</span>    a.nfeh = 1
+<span class="ln">132</span>    a.nalpha = 1
+<span class="ln">133</span>    teffs[a.nteff] = teff
+<span class="ln">134</span>    a.gls[a.ngl] = gl
+<span class="ln">135</span>    a.fehs[a.nfeh] = feh
+<span class="ln">136</span>    a.alphas[a.nalpha] = alpha
+<span class="ln">137</span>    # label 300: the rest of the file.
+<span class="ln">138</span>    while True:
+<span class="ln">139</span>        rec = _read(ioatma)
+<span class="ln">140</span>        if rec is None:
+<span class="ln">141</span>            return
+<span class="ln">142</span>        teff, gl, feh, alpha = _fields(rec, spec915)
+<span class="ln">143</span>        if _differs(feh, alpha):
+<span class="ln">144</span>            continue  # label 316
+<span class="ln">145</span>        if not any(abs(teff - teffs[i]) &lt; 1e-6
+<span class="ln">146</span>                   for i in range(1, a.nteff + 1)):
+<span class="ln">147</span>            a.nteff += 1
+<span class="ln">148</span>            teffs[a.nteff] = teff
+<span class="ln">149</span>        # label 310
+<span class="ln">150</span>        if not any(abs(gl - a.gls[i]) &lt; 1e-6 for i in range(1, a.ngl + 1)):
+<span class="ln">151</span>            a.ngl += 1
+<span class="ln">152</span>            a.gls[a.ngl] = gl
+<span class="ln">153</span>        # label 312. Question (see the page): the loop runs to nGL, not nFeH.
+<span class="ln">154</span>        if not any(abs(feh - a.fehs[i]) &lt; 1e-6 for i in range(1, a.ngl + 1)):
+<span class="ln">155</span>            a.nfeh += 1
+<span class="ln">156</span>            a.fehs[a.nfeh] = feh
+<span class="ln">157</span>        # label 314. Question (see the page): to nGL, not nALPHA.
+<span class="ln">158</span>        if not any(abs(alpha - a.alphas[i]) &lt; 1e-6
+<span class="ln">159</span>                   for i in range(1, a.ngl + 1)):
+<span class="ln">160</span>            a.nalpha += 1
+<span class="ln">161</span>            a.alphas[a.nalpha] = alpha</pre></details>
+<details class='py' id='py-_second_pass'><summary>Python version: _second_pass</summary><pre class='doc'>Pass 2 of the new format (labels 410 to 440): place each accepted
+record&#x27;s log P at Teff, log P and log T at tau = 100 at its indices.
+Raises _ReadError on a bad record.</pre><pre class='src'><span class="ln">165</span>def _second_pass(ioatma, nhdr):
+<span class="ln">166</span>    &quot;&quot;&quot;Pass 2 of the new format (labels 410 to 440): place each accepted
+<span class="ln">167</span>    record&#x27;s log P at Teff, log P and log T at tau = 100 at its indices.
+<span class="ln">168</span>    Raises _ReadError on a bad record.&quot;&quot;&quot;
+<span class="ln">169</span>    a = alatm01_mod
+<span class="ln">170</span>    n = nmlpar_mod
+<span class="ln">171</span>    iounits_mod.rewind(ioatma)
+<span class="ln">172</span>    for _ in range(nhdr):
+<span class="ln">173</span>        _read(ioatma)
+<span class="ln">174</span>    # FORMAT 920, (F6.0,3F6.2,1P4D16.8).
+<span class="ln">175</span>    spec920 = [(6, 0), (6, 2), (6, 2), (6, 2), (16, 8), (16, 8), (16, 8)]
+<span class="ln">176</span>    while True:  # label 410
+<span class="ln">177</span>        rec = _read(ioatma)
+<span class="ln">178</span>        if rec is None:
+<span class="ln">179</span>            return
+<span class="ln">180</span>        teff, gl, feh, alpha, pl, p100l, t100 = _fields(rec, spec920)
+<span class="ln">181</span>        if _differs(feh, alpha):
+<span class="ln">182</span>            continue  # label 440
+<span class="ln">183</span>        for i in range(1, a.nteff + 1):
+<span class="ln">184</span>            if abs(teff - teffs[i]) &lt; 1e-6:
+<span class="ln">185</span>                i1 = i
+<span class="ln">186</span>                break
+<span class="ln">187</span>        else:
+<span class="ln">188</span>            print(&quot; ALFilein: Impossible failure #1&quot;)
+<span class="ln">189</span>            print(f&quot; Teff of  {teff} not in Teff table.&quot;)
+<span class="ln">190</span>            _error_exit()
+<span class="ln">191</span>        # label 420
+<span class="ln">192</span>        for j in range(1, a.ngl + 1):
+<span class="ln">193</span>            if abs(gl - a.gls[j]) &lt; 1e-6:
+<span class="ln">194</span>                j1 = j
+<span class="ln">195</span>                break
+<span class="ln">196</span>        else:
+<span class="ln">197</span>            print(&quot; ALFilein: Impossible failure #2&quot;)
+<span class="ln">198</span>            print(f&quot; GL of  {gl} not in GL table.&quot;)
+<span class="ln">199</span>            _error_exit()
+<span class="ln">200</span>        # label 430: wrong [Fe/H] or alpha, bypass the record.
+<span class="ln">201</span>        if abs(feh - n.alatm_feh) &gt;= 1e-6:
+<span class="ln">202</span>            continue
+<span class="ln">203</span>        if abs(alpha - n.alatm_alpha) &gt;= 1e-6:
+<span class="ln">204</span>            continue
+<span class="ln">205</span>        a.teffls[i1] = math.log10(teff)  # log Teff from here on
+<span class="ln">206</span>        a.gls[j1] = gl
+<span class="ln">207</span>        a.pls[i1, j1] = pl
+<span class="ln">208</span>        a.p100ls[i1, j1] = p100l
+<span class="ln">209</span>        a.t100ls[i1, j1] = t100</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Missing. SETUPS calls ALFILEIN only when <code>KTTAU = 4</code> (Allard atmospheres; the comment there says they are used instead of Kurucz below 10,000 K). Fix: add to "Who calls it".</li>
+<li>Wrong (incomplete). Question 3 speaks only of $\alpha$; [Fe/H] also has two tolerances: records are kept when $|\Delta[\mathrm{Fe/H}]| \le 10^{-5}$, then the second pass drops those with $|\Delta| \ge 10^{-6}$, so a record between the two is counted in pass 1 (its $T_\mathrm{eff}$, $\log g$ enter the grid) but never stored. Fix: widen the question.</li>
+</ol>
+<p>Revised: the call under <code>KTTAU = 4</code> added; question 3 widened to [Fe/H].</p></div></details>
+</main></body></html>

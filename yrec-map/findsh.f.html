@@ -1,0 +1,255 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>findsh.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ findsh.f</span></header><main>
+<h1>findsh.f</h1>
+<p class='muted'>126 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/findsh.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>findsh.py</code>, 78 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>FINDSH</code> locates, in a model, the outer edge of a central convection zone, the inner edge of a surface convection zone, and, once the core's hydrogen falls below a threshold, the beginning, middle and end of the hydrogen-burning shell. Its comment lists a planned addition ("TO BE ADDED"): finding the exact edges of the convection zones and adding points there.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> the main program (<a href="../yrec-map/main.f.html#def-_file_level_">main.f</a>) and <a href="../yrec-map/rscale.f.html#def-RSCALE">RSCALE</a>.</li>
+<li><strong>Inputs:</strong> <code>HCOMP</code> (abundances; row 1 is $X$), <code>HL</code> (luminosity in solar units), <code>LC</code> (convective flags), <code>M</code> (number of points).</li>
+<li><strong>Outputs:</strong> <code>JCORE</code> (outermost point of the convective core; 1 if none), <code>JENV</code> (innermost point of the surface convection zone; <code>M</code> if none), <code>LSHELL</code> (a hydrogen shell exists), and <code>JXBEG</code>, <code>JXMID</code>, <code>JXEND</code> (the shell's start, middle and end).</li>
+<li><strong>Modules:</strong> <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a>, for <code>ATIME(1)</code> (formerly in <code>/CTLIM/</code>), the central $X$ below which the star has a shell rather than a core (set in <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a>).</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Shell</strong> (if $X_\mathrm{c} \le$ <code>ATIME(1)</code>): going outward, <code>JXBEG</code> counts the points with $X \le$ <code>ATIME(1)</code>, <code>JXMID</code> also those with $X \le X_\mathrm{surf}/2$; the shell ends (<code>JXEND</code>) at the first point where $L_i - L_{i-1} &lt; 10^{-5}L_\mathrm{surf}$ or $X_\mathrm{surf} - X_i &lt; 10^{-5}$.</li>
+<li><strong>Core:</strong> <code>JCORE</code> is the last point of the run of convective points from the centre.</li>
+<li><strong>Envelope:</strong> <code>JENV</code> is the first point of the run of convective points from the surface.</li>
+<li>For a fully convective star (<code>JENV</code> = 1), <code>JCORE</code> is set to 1, "because JCORE is used in computing the nuclear timestep, and putting it at the surface does strange things".</li>
+</ol>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The shell's middle and end.</strong> <code>JXMID</code> counts points rather than recording an index; it equals the first point with $X &gt; X_\mathrm{surf}/2$ only if the composition increases monotonically outward. Is that guaranteed?</li>
+<li><strong><code>HL(I-1)</code> at the centre.</strong> If <code>HCOMP(1,1)</code> exceeds both <code>ATIME(1)</code> and <code>XMID</code>, which cannot happen when <code>LSHELL</code> is set, the loop would read <code>HL(0)</code>. Safe as written, but fragile.</li>
+<li><strong>A comment's variable.</strong> The comments speak of <code>ENDSHL</code>; the code uses <code>DLMIN</code> and <code>XLEND</code>.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+FINDSH
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-FINDSH'>FINDSH</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-FINDSH'><h3><span class='kind'>subroutine</span>FINDSH</h3>
+<p class='muted'>lines 6–126 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/findsh.f#L6-L126'>GitHub</a></p>
+<pre>SUBROUTINE FINDSH(HCOMP,HL,LC,M,JCORE,JENV,JXBEG,JXEND,JXMID,</pre>
+<div class='notes'><p>Finds the convective core's edge, the surface convection zone's base, and the hydrogen shell's start, middle and end (method above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+FINDSH
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span> ×2</li>
+<li><a href='../yrec-map/rscale.f.html#def-RSCALE'>RSCALE</a> <span class='muted'>(rscale.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE FINDSH(HCOMP,HL,LC,M,JCORE,JENV,JXBEG,JXEND,JXMID,
+<span class="ln">7</span>     *                  LSHELL)
+<span class="ln">8</span>C 10/15/26 MHP via Claude
+<span class="ln">9</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">10</span>C PARAMETER(JSON=5000) here.
+<span class="ln">11</span>      USE DIMENSIONS_MOD
+<span class="ln">12</span>C 10/14/26 MHP via Claude
+<span class="ln">13</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">14</span>      USE NMLPAR_MOD
+<span class="ln">15</span>C 10/20/26 MHP via Claude
+<span class="ln">16</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">17</span>C explicit declarations.
+<span class="ln">18</span>      IMPLICIT NONE
+<span class="ln">19</span>      REAL*8 DLMIN,DXMIN,HCOMP,HL,XLEND,XMID
+<span class="ln">20</span>      INTEGER I,JCORE,JENV,JXBEG,JXEND,JXMID,M
+<span class="ln">21</span>      LOGICAL*4 LC,LSHELL
+<span class="ln">22</span>C 10/12/26 MHP via Claude
+<span class="ln">23</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">24</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">25</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">26</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">27</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">28</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">29</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">30</span>C
+<span class="ln">31</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">32</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">33</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">34</span>C 10/13/26 MHP via Claude
+<span class="ln">35</span>C code changed to drop COMMON/CTLIM/, declared here but never used.
+<span class="ln">36</span>      DIMENSION HCOMP(15,JSON),HL(JSON),LC(JSON)
+<span class="ln">37</span>      DATA DLMIN,DXMIN/1.0D-5,1.0D-5/
+<span class="ln">38</span>      SAVE
+<span class="ln">39</span>C   SR FINDSH LOCATES THE OUTER EDGE OF A CENTRAL CONVECTION ZONE AND THE INNER
+<span class="ln">40</span>C   EDGE OF A SURFACE C.Z.  IT ALSO LOCATES THE BEGINNING,CENTER,AND END OF
+<span class="ln">41</span>C   A HYDROGEN-BURNING SHELL IF APPLICABLE.
+<span class="ln">42</span>C ** TO BE ADDED **
+<span class="ln">43</span>C   LOCATING THE EXACT EDGES OF CENTRAL AND SURFACE C.Z.&#x27;S AND ADDING
+<span class="ln">44</span>C   POINTS AT THE EDGES.
+<span class="ln">45</span>C
+<span class="ln">46</span>C INPUT VARIABLES:
+<span class="ln">47</span>C DECLARED:
+<span class="ln">48</span>C   HCOMP : RUN OF MASS FRACTION OF THE VARIOUS CHEMICAL SPECIES.
+<span class="ln">49</span>C   HL : RUN OF LUMINOSITY AS A FUNCTION OF MASS (SOLAR UNITS).
+<span class="ln">50</span>C   LC : FLAG SET T IF A SHELL IS CONVECTIVE.
+<span class="ln">51</span>C   M : NUMBER OF POINTS IN THE MODEL.
+<span class="ln">52</span>C IN COMMON BLOCKS :
+<span class="ln">53</span>C   ATIME(1) : USER PARAMETER; IF X &lt; ATIME(1) THEN THE PROGRAM CONSIDERS
+<span class="ln">54</span>C        THE STAR TO HAVE A HYDROGEN-BURNING SHELL RATHER THAN A HYDROGEN-
+<span class="ln">55</span>C        BURNING CORE.
+<span class="ln">56</span>C LOCAL VARIABLES :
+<span class="ln">57</span>C   DLMIN : THE OUTER EDGE OF THE H-BURNING SHELL IS DEFINED AS THE POINT
+<span class="ln">58</span>C        WHERE THE CHANGE IN LUMINOSITY FROM ONE SHELL TO THE NEXT
+<span class="ln">59</span>C        IS LESS THAN ENDSHL.
+<span class="ln">60</span>C   DXMIN : THE OUTER EDGE OF THE H-BURNING SHELL IS REACHED WHEN X DIFFERS
+<span class="ln">61</span>C        FROM THE SURFACE VALUE BY LESS THAN DXMIN REGARDLESS OF THE
+<span class="ln">62</span>C        LUMINOSITY TEST.
+<span class="ln">63</span>C
+<span class="ln">64</span>C OUTPUT VARIABLES :
+<span class="ln">65</span>C   JCORE : OUTERMOST POINT IN THE CONVECTIVE CORE (1=NO CONVECTIVE CORE)
+<span class="ln">66</span>C   JENV : INNERMOST POINT IN THE SURFACE C.Z. (M=NO SURFACE C.Z.)
+<span class="ln">67</span>C   LSHELL : FLAG SET T IF THE PROGRAM CONSIDERS THE MODEL TO HAVE A
+<span class="ln">68</span>C        HYDROGEN-BURNING SHELL.
+<span class="ln">69</span>C   IF LSHELL=T THEN THE FOLLOWING ARE COMPUTED :
+<span class="ln">70</span>C   JXBEG : FIRST SHELL WITH X &gt; ATIME(1).
+<span class="ln">71</span>C   JXMID : FIRST SHELL WHERE X EXCEEDS 1/2 THE SURFACE VALUE.
+<span class="ln">72</span>C   JXEND : LAST SHELL WHERE L(I)-L(I-1) &gt; ENDSHL OR X IS WITHIN 1.0E-5
+<span class="ln">73</span>C        OF THE SURFACE VALUE.
+<span class="ln">74</span>CCC H-SHELL VALUES
+<span class="ln">75</span>      JXBEG = 1
+<span class="ln">76</span>      JXMID = 1
+<span class="ln">77</span>      JXEND = 1
+<span class="ln">78</span>      LSHELL = .FALSE.
+<span class="ln">79</span>C  IF CENTRAL X BELOW THRESHOLD THEN CALCULATE H SHELL VALUES
+<span class="ln">80</span>      IF(HCOMP(1,1).LE.ATIME(1)) THEN
+<span class="ln">81</span>       LSHELL = .TRUE.
+<span class="ln">82</span>       XMID = 0.50D0*HCOMP(1,M)
+<span class="ln">83</span>       XLEND = DLMIN*HL(M)
+<span class="ln">84</span>C  FIND BEGINNING(JXBEG), MIDDLE(JXMID) AND END(JXEND) OF H SHELL
+<span class="ln">85</span>       DO 10 I = 1,M
+<span class="ln">86</span>c          IF(HCOMP(1,I).LE.1.0D-10) THEN  ! Changed after discussion with Marc
+<span class="ln">87</span>          IF(HCOMP(1,I).LE.ATIME(1)) THEN ! to force consistency with above LLP 9/24/08
+<span class="ln">88</span>             JXBEG = JXBEG+1
+<span class="ln">89</span>             JXMID = JXMID+1
+<span class="ln">90</span>          ELSE IF(HCOMP(1,I).LE.XMID) THEN
+<span class="ln">91</span>             JXMID = JXMID+1
+<span class="ln">92</span>          ELSE IF(HL(I) - HL(I-1).LT.XLEND) THEN
+<span class="ln">93</span>c               write(*,*)&#x27;luminosity criteria&#x27;
+<span class="ln">94</span>             GOTO 20
+<span class="ln">95</span>          ELSE IF(HCOMP(1,M) - HCOMP(1,I).LT.DXMIN) THEN
+<span class="ln">96</span>c               write(*,*)&#x27;composition criteria&#x27;
+<span class="ln">97</span>             GOTO 20
+<span class="ln">98</span>          ENDIF
+<span class="ln">99</span>   10    CONTINUE
+<span class="ln">100</span>       I = M
+<span class="ln">101</span>   20    JXEND = I
+<span class="ln">102</span>      ENDIF
+<span class="ln">103</span>CCC FIND BOUNDARY OF CENTRAL CONVECTION ZONE.
+<span class="ln">104</span>      DO 30 I = 1,M
+<span class="ln">105</span>       IF(.NOT.LC(I)) GOTO 40
+<span class="ln">106</span>   30 CONTINUE
+<span class="ln">107</span>   40 IF(I.GT.1) THEN
+<span class="ln">108</span>       JCORE = I-1
+<span class="ln">109</span>      ELSE
+<span class="ln">110</span>       JCORE = 1
+<span class="ln">111</span>      ENDIF
+<span class="ln">112</span>CCC FIND BOUNDARY OF SURFACE C.Z.
+<span class="ln">113</span>      DO 50 I = M,1,-1
+<span class="ln">114</span>       IF(.NOT.LC(I)) GOTO 60
+<span class="ln">115</span>   50 CONTINUE
+<span class="ln">116</span>   60 IF(I.LT.M) THEN
+<span class="ln">117</span>       JENV = I+1
+<span class="ln">118</span>      ELSE
+<span class="ln">119</span>       JENV = M
+<span class="ln">120</span>      ENDIF
+<span class="ln">121</span>C  FOR A FULLY CONVECTIVE STAR (JENV=1),TURN THE CONVECTIVE CORE OFF(JCORE=1).
+<span class="ln">122</span>C  THIS IS DONE BECAUSE JCORE IS USED IN COMPUTING THE NUCLEAR TIMESTEP,
+<span class="ln">123</span>C  AND PUTTING IT AT THE SURFACE DOES STRANGE THINGS.
+<span class="ln">124</span>      IF(JENV.EQ.1) JCORE = 1
+<span class="ln">125</span>      RETURN
+<span class="ln">126</span>      END</pre></details>
+<details class='py' id='py-findsh'><summary>Python version: findsh</summary><pre class='doc'>Find the outermost point of the convective core, the innermost
+point of the surface convection zone and, once the central X is at
+most nmlpar_mod.atime[1], the start, middle and end of the hydrogen
+shell.
+
+Translates: findsh.f#FINDSH (09c3b9b)
+
+Arguments: hcomp (abundances, row 1 is X), hl (luminosities), lc
+(convective flags), m (number of points); jcore, jenv, jxbeg, jxend,
+jxmid, lshell are only set.
+
+Returns (jcore, jenv, jxbeg, jxend, jxmid, lshell).</pre><pre class='src'><span class="ln">12</span>def findsh(hcomp, hl, lc, m, jcore, jenv, jxbeg, jxend, jxmid, lshell):
+<span class="ln">13</span>    &quot;&quot;&quot;Find the outermost point of the convective core, the innermost
+<span class="ln">14</span>    point of the surface convection zone and, once the central X is at
+<span class="ln">15</span>    most nmlpar_mod.atime[1], the start, middle and end of the hydrogen
+<span class="ln">16</span>    shell.
+<span class="ln">17</span>
+<span class="ln">18</span>    Translates: findsh.f#FINDSH (09c3b9b)
+<span class="ln">19</span>
+<span class="ln">20</span>    Arguments: hcomp (abundances, row 1 is X), hl (luminosities), lc
+<span class="ln">21</span>    (convective flags), m (number of points); jcore, jenv, jxbeg, jxend,
+<span class="ln">22</span>    jxmid, lshell are only set.
+<span class="ln">23</span>
+<span class="ln">24</span>    Returns (jcore, jenv, jxbeg, jxend, jxmid, lshell).
+<span class="ln">25</span>    &quot;&quot;&quot;
+<span class="ln">26</span>    jxbeg = 1
+<span class="ln">27</span>    jxmid = 1
+<span class="ln">28</span>    jxend = 1
+<span class="ln">29</span>    lshell = False
+<span class="ln">30</span>
+<span class="ln">31</span>    if hcomp[1, 1] &lt;= nmlpar_mod.atime[1]:
+<span class="ln">32</span>        lshell = True
+<span class="ln">33</span>        xmid = 0.50 * hcomp[1, m]
+<span class="ln">34</span>        xlend = dlmin * hl[m]
+<span class="ln">35</span>        # Question (see the page): jxmid counts points rather than
+<span class="ln">36</span>        # recording an index.
+<span class="ln">37</span>        i = m  # if no end is found
+<span class="ln">38</span>        for ii in range(1, m + 1):  # label 10
+<span class="ln">39</span>            if hcomp[1, ii] &lt;= nmlpar_mod.atime[1]:
+<span class="ln">40</span>                jxbeg = jxbeg + 1
+<span class="ln">41</span>                jxmid = jxmid + 1
+<span class="ln">42</span>            elif hcomp[1, ii] &lt;= xmid:
+<span class="ln">43</span>                jxmid = jxmid + 1
+<span class="ln">44</span>            elif hl[ii] - hl[ii - 1] &lt; xlend:
+<span class="ln">45</span>                i = ii
+<span class="ln">46</span>                break  # GOTO 20
+<span class="ln">47</span>            elif hcomp[1, m] - hcomp[1, ii] &lt; dxmin:
+<span class="ln">48</span>                i = ii
+<span class="ln">49</span>                break  # GOTO 20
+<span class="ln">50</span>        jxend = i  # label 20
+<span class="ln">51</span>
+<span class="ln">52</span>    # The core: the last point of the convective run from the centre.
+<span class="ln">53</span>    i = m + 1  # Fortran&#x27;s index after a loop that runs out
+<span class="ln">54</span>    for ii in range(1, m + 1):  # label 30
+<span class="ln">55</span>        if not lc[ii]:
+<span class="ln">56</span>            i = ii
+<span class="ln">57</span>            break  # GOTO 40
+<span class="ln">58</span>    if i &gt; 1:  # label 40
+<span class="ln">59</span>        jcore = i - 1
+<span class="ln">60</span>    else:
+<span class="ln">61</span>        jcore = 1
+<span class="ln">62</span>
+<span class="ln">63</span>    # The envelope: the first point of the convective run from the surface.
+<span class="ln">64</span>    i = 0
+<span class="ln">65</span>    for ii in range(m, 0, -1):  # label 50
+<span class="ln">66</span>        if not lc[ii]:
+<span class="ln">67</span>            i = ii
+<span class="ln">68</span>            break  # GOTO 60
+<span class="ln">69</span>    if i &lt; m:  # label 60
+<span class="ln">70</span>        jenv = i + 1
+<span class="ln">71</span>    else:
+<span class="ln">72</span>        jenv = m
+<span class="ln">73</span>
+<span class="ln">74</span>    # Fully convective: JCORE is used in the nuclear time step, and
+<span class="ln">75</span>    # putting it at the surface does strange things.
+<span class="ln">76</span>    if jenv == 1:
+<span class="ln">77</span>        jcore = 1
+<span class="ln">78</span>    return jcore, jenv, jxbeg, jxend, jxmid, lshell</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked against the code: the shell counts, the end tests, the core and envelope searches and the fully convective case are right; the three questions are real (question 2 says itself that the case is safe as written). Nothing to fix.</p>
+<p>No change.</p></div></details>
+</main></body></html>

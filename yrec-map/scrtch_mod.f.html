@@ -1,0 +1,115 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>scrtch_mod.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ scrtch_mod.f</span></header><main>
+<h1>scrtch_mod.f</h1>
+<p class='muted'>39 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/scrtch_mod.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>scrtch_mod.py</code>, 26 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>SCRTCH_MOD</code> holds the local physics of the interior at each shell, as computed in the last pass of the structure equations: energy generation, opacity, temperature gradients, ionization, convective velocity. Many routines read it later in the step (mixing, burning, regridding, output). Shared by 16 routines. It replaces <code>COMMON/SCRTCH/</code> (MHP via Claude, 10/14/26); <code>JSON</code> comes from <code>DIMENSIONS_MOD</code>.</p>
+<p><strong>What its variables hold, who sets them, who reads them.</strong> <a href="../yrec-map/coefft.f.html#def-COEFFT"><code>COEFFT</code></a> stores all of them at each shell <code>IM</code>; <a href="../yrec-map/physic.f.html#def-PHYSIC"><code>PHYSIC</code></a> stores <code>SO</code>, <code>SDEL</code> and <code>SVEL</code> again when it recomputes the physics.</p>
+<ul>
+<li><code>SESUM(JSON)</code>: the sum of the nuclear energy generation's five terms <code>EG(1)</code>…<code>EG(5)</code> (0 below the cutoff temperature <code>TCUT(1)</code>); <code>SEG(7,JSON)</code>: those five as fractions of <code>SESUM</code>, then the neutrino term <code>EG(6)</code> and the gravitational term <code>HHC</code> (<code>EGRAV</code>) (<code>SEG(6)</code>, <code>SEG(7)</code>). Read by <a href="../yrec-map/hpoint.f.html#def-HPOINT"><code>HPOINT</code></a> (which interpolates them, through <a href="../yrec-map/osplin.f.html#def-OSPLIN"><code>OSPLIN</code></a>, to the grid at the start of the step), <a href="../yrec-map/midmod.f.html#def-MIDMOD"><code>MIDMOD</code></a>, <a href="../yrec-map/wrtmil.f.html#def-WRTMIL"><code>WRTMIL</code></a>, the setup of rotation (<code>FRACNUC</code> in <code>ROTDER_MOD</code>) and the output (<a href="../yrec-map/putstore.f.html#def-PUTSTORE"><code>PUTSTORE</code></a>, <a href="../yrec-map/stitch.f.html#def-STITCH"><code>STITCH</code></a>, <a href="../yrec-map/wrtmod.f.html#def-WRTMOD"><code>WRTMOD</code></a>).</li>
+<li><code>SO(JSON)</code>: the opacity. Read by <code>HPOINT</code>, <code>MIDMOD</code>, <a href="../yrec-map/viscos.f.html#def-VISCOS"><code>VISCOS</code></a> and the output (<code>PUTSTORE</code>, <code>STITCH</code>, <code>WRTMOD</code>, <a href="../yrec-map/wrtout.f.html#def-WRTOUT"><code>WRTOUT</code></a>).</li>
+<li><code>SDEL(3,JSON)</code>: $\nabla_\mathrm{rad}$, $\nabla$, $\nabla_\mathrm{ad}$. <a href="../yrec-map/rotmix.f.html#def-ROTMIX"><code>ROTMIX</code></a> replaces <code>SDEL(2,·)</code> for a while and restores it. Read by the burning and mixing routines (<a href="../yrec-map/liburn.f.html#def-LIBURN"><code>LIBURN</code></a>, <a href="../yrec-map/liburn2.f.html#def-LIBURN2"><code>LIBURN2</code></a>, <a href="../yrec-map/microdiff_mte.f.html#def-MICRODIFF_MTE"><code>MICRODIFF_MTE</code></a>, <a href="../yrec-map/setup_grsett.f.html#def-SETUP_GRSETT"><code>SETUP_GRSETT</code></a>, <code>ROTMIX</code>), <a href="../yrec-map/gettau.f.html#def-GETTAU"><code>GETTAU</code></a>, <code>HPOINT</code>, <code>MIDMOD</code>, <code>PHYSIC</code> and the output.</li>
+<li><code>SVEL(JSON)</code>: the convective velocity (cm/s); read by <code>GETTAU</code>, <code>HPOINT</code>, <code>MIDMOD</code> and the output.</li>
+<li><code>SBETA(JSON)</code>, <code>SETA(JSON)</code>, <code>SFXION(3,JSON)</code>, <code>SCP(JSON)</code>: $\beta$ (gas over total pressure), the degeneracy parameter $\eta$, the three ionization fractions and $c_P$, for the stored model (<code>PUTSTORE</code>, <code>STITCH</code>).</li>
+<li><code>LOCONS(JSON)</code>: whether conduction dominates the opacity (<code>LOCOND</code>); set by <code>COEFFT</code> and read by no routine.</li>
+</ul>
+<p><strong>Design.</strong> A blanket <code>USE SCRTCH_MOD</code> in each routine.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> New file: <code>COMMON/SCRTCH/</code> as a module.</p></div>
+<h2>Questions for the experts</h2>
+<p class='placeholder'>None yet.</p>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+SCRTCH_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/14/26 MHP via Claude
+code changed to convert COMMON/SCRTCH/ into this module.
+
+Imported with a blanket USE, the convention for the conversion.
+All 16 files declared this block identically, so the USE
+imports exactly the names the declaration already made global in
+each scoping unit and cannot change meaning.
+
+The types restate what the implicit rules supplied: L is
+LOGICAL*4, I/J/K/M/N are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while ifort
+Classic predates it.  That matches COMMON&#x27;s semantics.</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-SCRTCH_MOD'>SCRTCH_MOD</a> <span class='muted'>module · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-SCRTCH_MOD'><h3><span class='kind'>module</span>SCRTCH_MOD</h3>
+<p class='muted'>lines 19–39 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/scrtch_mod.f#L19-L39'>GitHub</a></p>
+<pre>MODULE SCRTCH_MOD</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+SCRTCH_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/14/26 MHP via Claude
+code changed to convert COMMON/SCRTCH/ into this module.
+
+Imported with a blanket USE, the convention for the conversion.
+All 16 files declared this block identically, so the USE
+imports exactly the names the declaration already made global in
+each scoping unit and cannot change meaning.
+
+The types restate what the implicit rules supplied: L is
+LOGICAL*4, I/J/K/M/N are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while ifort
+Classic predates it.  That matches COMMON&#x27;s semantics.</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a></p>
+<details><summary>Used by (16 units)</summary><p><a href='../yrec-map/coefft.f.html#def-COEFFT'>COEFFT</a>, <a href='../yrec-map/gettau.f.html#def-GETTAU'>GETTAU</a>, <a href='../yrec-map/hpoint.f.html#def-HPOINT'>HPOINT</a>, <a href='../yrec-map/liburn.f.html#def-LIBURN'>LIBURN</a>, <a href='../yrec-map/liburn2.f.html#def-LIBURN2'>LIBURN2</a>, <a href='../yrec-map/microdiff_mte.f.html#def-MICRODIFF_MTE'>MICRODIFF_MTE</a>, <a href='../yrec-map/midmod.f.html#def-MIDMOD'>MIDMOD</a>, <a href='../yrec-map/physic.f.html#def-PHYSIC'>PHYSIC</a>, <a href='../yrec-map/putstore.f.html#def-PUTSTORE'>PUTSTORE</a>, <a href='../yrec-map/rotmix.f.html#def-ROTMIX'>ROTMIX</a>, <a href='../yrec-map/setup_grsett.f.html#def-SETUP_GRSETT'>SETUP_GRSETT</a>, <a href='../yrec-map/stitch.f.html#def-STITCH'>STITCH</a>, <a href='../yrec-map/viscos.f.html#def-VISCOS'>VISCOS</a>, <a href='../yrec-map/wrtmil.f.html#def-WRTMIL'>WRTMIL</a>, <a href='../yrec-map/wrtmod.f.html#def-WRTMOD'>WRTMOD</a>, <a href='../yrec-map/wrtout.f.html#def-WRTOUT'>WRTOUT</a></p></details>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">19</span>      MODULE SCRTCH_MOD
+<span class="ln">20</span>C 10/20/26 MHP via Claude
+<span class="ln">21</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">22</span>C a PRIVATE copy here.
+<span class="ln">23</span>      USE DIMENSIONS_MOD
+<span class="ln">24</span>
+<span class="ln">25</span>      IMPLICIT NONE
+<span class="ln">26</span>      SAVE
+<span class="ln">27</span>
+<span class="ln">28</span>      REAL*8    :: SESUM(JSON)
+<span class="ln">29</span>      REAL*8    :: SEG(7,JSON)
+<span class="ln">30</span>      REAL*8    :: SBETA(JSON)
+<span class="ln">31</span>      REAL*8    :: SETA(JSON)
+<span class="ln">32</span>      LOGICAL*4 :: LOCONS(JSON)
+<span class="ln">33</span>      REAL*8    :: SO(JSON)
+<span class="ln">34</span>      REAL*8    :: SDEL(3,JSON)
+<span class="ln">35</span>      REAL*8    :: SFXION(3,JSON)
+<span class="ln">36</span>      REAL*8    :: SVEL(JSON)
+<span class="ln">37</span>      REAL*8    :: SCP(JSON)
+<span class="ln">38</span>
+<span class="ln">39</span>      END MODULE SCRTCH_MOD</pre></details>
+<details class='py' id='py-_module_level_'><summary>Python version: scrtch_mod.py</summary><pre class='src'><span class="ln">1</span>&quot;&quot;&quot;Python version of scrtch_mod.f (YREC 09c3b9b): the interior&#x27;s local physics at each shell, formerly COMMON/SCRTCH/.
+<span class="ln">2</span>
+<span class="ln">3</span>Translates: scrtch_mod.f#SCRTCH_MOD (09c3b9b)
+<span class="ln">4</span>
+<span class="ln">5</span>Module-level names, as in the Fortran module, in lower case. Routines that
+<span class="ln">6</span>USE SCRTCH_MOD import this module and write ``scrtch_mod.&lt;name&gt;``.
+<span class="ln">7</span>Set by coefft at each shell (so, sdel, svel also by physic). Index 0 unused
+<span class="ln">8</span>in every dimension.
+<span class="ln">9</span>&quot;&quot;&quot;
+<span class="ln">10</span>
+<span class="ln">11</span>import numpy as np
+<span class="ln">12</span>
+<span class="ln">13</span>from pyrec import dimensions_mod
+<span class="ln">14</span>
+<span class="ln">15</span>_JSON = dimensions_mod.json
+<span class="ln">16</span>
+<span class="ln">17</span>sesum = np.zeros(_JSON + 1)          # nuclear energy generation, EG(1)..EG(5)
+<span class="ln">18</span>seg = np.zeros((8, _JSON + 1))       # 1-5: fractions of sesum; 6: neutrinos; 7: gravitational
+<span class="ln">19</span>sbeta = np.zeros(_JSON + 1)          # beta, gas over total pressure
+<span class="ln">20</span>seta = np.zeros(_JSON + 1)           # degeneracy parameter eta
+<span class="ln">21</span>locons = np.zeros(_JSON + 1, dtype=bool)   # conduction dominates (read nowhere)
+<span class="ln">22</span>so = np.zeros(_JSON + 1)             # opacity
+<span class="ln">23</span>sdel = np.zeros((4, _JSON + 1))      # 1: nabla_rad, 2: nabla, 3: nabla_ad
+<span class="ln">24</span>sfxion = np.zeros((4, _JSON + 1))    # ionization fractions
+<span class="ln">25</span>svel = np.zeros(_JSON + 1)           # convective velocity, cm/s
+<span class="ln">26</span>scp = np.zeros(_JSON + 1)            # c_P</pre></details>
+</section>
+</main></body></html>

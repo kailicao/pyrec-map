@@ -1,0 +1,317 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>altabinit.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ altabinit.f</span></header><main>
+<h1>altabinit.f</h1>
+<p class='muted'>152 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/altabinit.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>altabinit.py</code>, 104 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file checks the Allard atmosphere table that <a href="../yrec-map/alfilein.f.html#def-ALFILEIN">ALFILEIN</a> has just read and derives the limits that the lookup <a href="../yrec-map/alsurfp.f.html#def-ALSURFP">ALSURFP</a> needs: the range of $\log T_\mathrm{eff}$, and for each $T_\mathrm{eff}$ row the valid columns in $\log g$ and the allowed range of $\log g$, extrapolation included.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/alfilein.f.html#def-ALFILEIN">ALFILEIN</a>, at the end of reading.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/alprint.f.html#def-ALPRINT">ALPRINT</a>, to print the table when it is bad.</li>
+<li><strong>Inputs:</strong> <code>ALATM01_MOD</code> (the table).</li>
+<li><strong>Outputs:</strong> <code>ALATM02_MOD</code> (<code>GLmin</code>, <code>GLmax</code>, <code>IGLmin</code>, <code>IGLmax</code>, <code>TEFFLmin</code>, <code>TEFFLmax</code>, <code>GLXmin</code>, <code>GLXmax</code>), read by ALSURFP and ALPRINT; <code>ALATM05_MOD</code> (<code>AL_TEFFLmin</code>, <code>AL_TEFFLmax</code>, the table's own first and last $\log T_\mathrm{eff}$), read by <a href="../yrec-map/surfbc.f.html#def-SURFBC">SURFBC</a> to decide when to switch away from Allard atmospheres.</li>
+</ul>
+<p><strong>The method.</strong> With $t_i$ the table's $\log T_\mathrm{eff}$ and $g_j$ its $\log g$ values:</p>
+<ol>
+<li>$t_\mathrm{min} = t_1 - (t_2 - t_1)$ and $t_\mathrm{max} = t_n + (t_n - t_{n-1})$: one row's width beyond each end.</li>
+<li>For each row $i$, the first and last valid columns $j_1(i)$, $j_2(i)$ (entries above $-998$).</li>
+<li>
+<p>The allowed range of $\log g$ in each row:
+$$g_\mathrm{min}(i) = g_{j_1} - 4\,(g_{j_1+1} - g_{j_1}), \qquad g_\mathrm{max}(i) = g_{j_2} + (g_{j_2} - g_{j_2-1}),$$
+and the extremes over all rows, <code>GLXmin</code> and <code>GLXmax</code>.</p>
+</li>
+<li>
+<p>Validate: no invalid entry between $j_1$ and $j_2$ in any row, at least 4 rows, and at least 4 valid entries per row (4-point Lagrange interpolation needs them). Otherwise print the table and stop.</p>
+</li>
+</ol>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (<code>/ALATM01/</code>, <code>/ALATM02/</code>, <code>/ALATM05/</code>, <code>/LUOUT/</code> to <code>IOUNITS_MOD</code>; the unused <code>/ALATM03/</code> and <code>/ALATM04/</code> dropped, though a stray declaration of <code>LALTPTau100</code> remains), <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Four columns below.</strong> The comments (here and in ALSURFP) say the allowed range extends one column's width beyond the table, but <code>GLmin</code> extends four widths below the lowest valid $\log g$ (<code>4D0*</code> in step 3). Which is meant? Extrapolating a 4-point Lagrange polynomial four steps out can be far off.</li>
+<li><strong>A format mismatch.</strong> The "less than 4 rows" message writes two strings and an integer with format <code>910</code>, <code>(A,I3)</code>, which has only one <code>A</code>. Most compilers would stop with a run-time format error at that point.</li>
+<li><strong>Only $\log P$ is checked.</strong> Validity is judged from <code>PLs</code> alone; <code>P100Ls</code> and <code>T100Ls</code> (used when the $\tau = 100$ option is on) are not checked for $-999$ entries.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>Subroutine ALTABINIT
+PURPOSE
+To analyze the internal Allard-format tables provided by ALFILEIN, verifying them
+and creating needed additoinal tables and elements.
+Several steps are taken:
+1. Find the minimum (TEFFLmin) and maximum (TEFFLmax) permissable values of TEFFL. These are
+one row&#x27;s width below the bottom and above the top of the table. Because the first level
+of interpolation is in GL, only a single minimum and maximum value of TEFFL are needed.
+2. For each row in GL, find the index of the smallest element (iGLmin) and the index of the
+largest element (iGLmax). There is one pair of these for each TEFFL.
+3. For each row in GL, find the the minimum (GLmin) and maximum (GLmax) permissable value of
+GL. These are one column&#x27;s width less than the row minimum in GL and one column&#x27;s width
+greater than the column maximum. There is one pair of these for each TEFFL.
+4. Validate the table. (a) Ensure that there are no invalid elements inside the table, i.e.,
+no invalid element between the row&#x27;s iGLmin and iGLmax. This check is made for every TEFFL.
+(b) Ensure that every row has at least 4 valid entries and that there are at least 4 columns.</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-ALTABINIT'>ALTABINIT</a> <span class='muted'>subroutine · Subroutine ALTABINIT</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-ALTABINIT'><h3><span class='kind'>subroutine</span>ALTABINIT</h3>
+<p class='muted'>lines 21–151 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/altabinit.f#L21-L151'>GitHub</a></p>
+<pre>SUBROUTINE ALTABINIT</pre>
+<div class='notes'><p>Derives each row's valid range in $\log g$ and the table's range in $\log T_\mathrm{eff}$ (<code>ALATM02_MOD</code>, <code>ALATM05_MOD</code>), checks the table, and stops the run (after <a href="../yrec-map/alprint.f.html#def-ALPRINT">ALPRINT</a>) if it is bad.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>Subroutine ALTABINIT
+PURPOSE
+To analyze the internal Allard-format tables provided by ALFILEIN, verifying them
+and creating needed additoinal tables and elements.
+Several steps are taken:
+1. Find the minimum (TEFFLmin) and maximum (TEFFLmax) permissable values of TEFFL. These are
+one row&#x27;s width below the bottom and above the top of the table. Because the first level
+of interpolation is in GL, only a single minimum and maximum value of TEFFL are needed.
+2. For each row in GL, find the index of the smallest element (iGLmin) and the index of the
+largest element (iGLmax). There is one pair of these for each TEFFL.
+3. For each row in GL, find the the minimum (GLmin) and maximum (GLmax) permissable value of
+GL. These are one column&#x27;s width less than the row minimum in GL and one column&#x27;s width
+greater than the column maximum. There is one pair of these for each TEFFL.
+4. Validate the table. (a) Ensure that there are no invalid elements inside the table, i.e.,
+no invalid element between the row&#x27;s iGLmin and iGLmax. This check is made for every TEFFL.
+(b) Ensure that every row has at least 4 valid entries and that there are at least 4 columns.</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/alatm01_mod.f.html#def-ALATM01_MOD'>ALATM01_MOD</a>, <a href='../yrec-map/alatm02_mod.f.html#def-ALATM02_MOD'>ALATM02_MOD</a>, <a href='../yrec-map/alatm05_mod.f.html#def-ALATM05_MOD'>ALATM05_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/alprint.f.html#def-ALPRINT'>ALPRINT</a> <span class='muted'>(alprint.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/alfilein.f.html#def-ALFILEIN'>ALFILEIN</a> <span class='muted'>(alfilein.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">21</span>      SUBROUTINE ALTABINIT
+<span class="ln">22</span>C 10/14/26 MHP via Claude
+<span class="ln">23</span>C code changed to convert COMMON/ALATM05/ into ALATM05_MOD.
+<span class="ln">24</span>      USE ALATM05_MOD
+<span class="ln">25</span>C 10/14/26 MHP via Claude
+<span class="ln">26</span>C code changed to convert COMMON/ALATM02/ into ALATM02_MOD.
+<span class="ln">27</span>      USE ALATM02_MOD
+<span class="ln">28</span>C 10/14/26 MHP via Claude
+<span class="ln">29</span>C code changed to convert COMMON/ALATM01/ into ALATM01_MOD.
+<span class="ln">30</span>      USE ALATM01_MOD
+<span class="ln">31</span>C 10/14/26 MHP via Claude
+<span class="ln">32</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">33</span>      USE IOUNITS_MOD
+<span class="ln">34</span>C 10/20/26 MHP via Claude
+<span class="ln">35</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">36</span>C explicit declarations.
+<span class="ln">37</span>      IMPLICIT NONE
+<span class="ln">38</span>      INTEGER I,J,J1,J2
+<span class="ln">39</span>      LOGICAL*4 LBADTABLE
+<span class="ln">40</span>
+<span class="ln">41</span>      LOGICAL*4 LALTPTau100
+<span class="ln">42</span>C 9/25/26 MHP via Claude
+<span class="ln">43</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">44</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">45</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">46</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">47</span>C COMMON/IOUNITS/
+<span class="ln">48</span>C 10/13/26 MHP via Claude: removed the unused COMMON/NMLPAR/ declaration
+<span class="ln">49</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">50</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">51</span>C 10/13/26 MHP via Claude
+<span class="ln">52</span>C code changed to remove COMMON/ALATM04/: its four members DUMMY1..DUMMY4
+<span class="ln">53</span>C are placeholders that no file references in executable code.  Removing
+<span class="ln">54</span>C it also retires the hazard behind the earlier alfilein.f fix, where a
+<span class="ln">55</span>C mis-indented EXTERNAL was absorbed into this declaration and renamed
+<span class="ln">56</span>C DUMMY4.
+<span class="ln">57</span>
+<span class="ln">58</span>C 1. Find the minimum (TEFFLmin) and maximum (TEFFLmax) permissable values of TEFFL. These are
+<span class="ln">59</span>C    one row&#x27;s width below the bottom and above the top of the table. Because the first level
+<span class="ln">60</span>C    of interpolation is in GL, only a single minimum and maximum value of TEFFL are needed.
+<span class="ln">61</span>      AL_TEFFLmin = TEFFLs(1)
+<span class="ln">62</span>      AL_TEFFLmax = TEFFLs(nTEFF)
+<span class="ln">63</span>      TEFFLmin = TEFFLs(1) - (TEFFLs(2)-TEFFLs(1))
+<span class="ln">64</span>      TEFFLmax = TEFFLs(nTeff) + (TEFFLs(nTeff)-TEFFLs(nTeff-1))
+<span class="ln">65</span>
+<span class="ln">66</span>C 2. For each row in GL, find the index of the smallest element (iGLmin) and the index of the
+<span class="ln">67</span>C    largest element (iGLmax). There is one pair of these for each TEFFL.
+<span class="ln">68</span>      do i = 1, nTeff
+<span class="ln">69</span>         do j = 1, nGL
+<span class="ln">70</span>            if(PLs(i,j) .gt. -998D0) then
+<span class="ln">71</span>               iGLmin(i) = j
+<span class="ln">72</span>               goto 100
+<span class="ln">73</span>            endif
+<span class="ln">74</span>         enddo
+<span class="ln">75</span>  100    continue
+<span class="ln">76</span>         do j = nGL, 1, -1
+<span class="ln">77</span>            if(PLs(i,j) .gt. -998D0) then
+<span class="ln">78</span>               iGLmax(i) = j
+<span class="ln">79</span>               goto 110
+<span class="ln">80</span>            endif
+<span class="ln">81</span>         enddo
+<span class="ln">82</span>  110    continue
+<span class="ln">83</span>
+<span class="ln">84</span>      enddo
+<span class="ln">85</span>
+<span class="ln">86</span>C 3. For each row in GL, find the the minimum (GLmin) and maximum (GLmax) permissable value of
+<span class="ln">87</span>C    GL. These are one column&#x27;s width less than the row minimum in GL and one column&#x27;s width
+<span class="ln">88</span>C    greater than the column maximum. There is one pair of these for each TEFFL.
+<span class="ln">89</span>
+<span class="ln">90</span>      GLXmin = 999D0
+<span class="ln">91</span>      GLXmax = -999D0
+<span class="ln">92</span>      do i = 1, nTeff
+<span class="ln">93</span>         j1 = iGLmin(i)
+<span class="ln">94</span>         j2 = iGLmax(i)
+<span class="ln">95</span>         GLmin(i) = GLs(j1) - 4D0*(GLs(j1+1) - GLs(j1))
+<span class="ln">96</span>         if(GLmin(i) .lt. GLXmin) GLXmin = GLmin(i)
+<span class="ln">97</span>         GLmax(i) = GLs(j2) + (GLs(j2) - GLs(j2-1))
+<span class="ln">98</span>         if(GLmax(i) .gt. GLXmax) GLXmax = GLmax(i)
+<span class="ln">99</span>      enddo
+<span class="ln">100</span>
+<span class="ln">101</span>C 4. Validate the table. (a) Ensure that there are no invalid elements inside the table, i.e.,
+<span class="ln">102</span>C    no invalid element between the row&#x27;s iGLmin and iGLmax. This check is made for every TEFFL.
+<span class="ln">103</span>
+<span class="ln">104</span>      LBadTable = .false.
+<span class="ln">105</span>      do i = 1, nTeff
+<span class="ln">106</span>         j1 = iGLmin(i)
+<span class="ln">107</span>         j2 = iGLmax(i)
+<span class="ln">108</span>         do j = j1, j2
+<span class="ln">109</span>            if(PLs(i,j) .lt. -998D0) then
+<span class="ln">110</span>              LBadTable = .true.
+<span class="ln">111</span>              write(ISHORT,900) &#x27;ALTABINIT: Bad input Allard Table: &#x27;,
+<span class="ln">112</span>     x           &#x27;TEFF, GL: &#x27;, 10D0**TEFFLs(i), GLs(j)
+<span class="ln">113</span> 900              format(2A,F5.0,F7.2)
+<span class="ln">114</span>            endif
+<span class="ln">115</span>         enddo
+<span class="ln">116</span>      enddo
+<span class="ln">117</span>
+<span class="ln">118</span>C    (b) Ensure that every row has at least 4 valid entries and that there are at least 4 columns.
+<span class="ln">119</span>      if(nTeff .lt. 4) then
+<span class="ln">120</span>         LBadTable = .true.
+<span class="ln">121</span>         write(ISHORT,910) &#x27;ALTABINIT: Bad input Allard Table: &#x27;,
+<span class="ln">122</span>     x      &#x27;Less than 4 rows: nTeff = &#x27;,nTeff
+<span class="ln">123</span> 910         format(A,I3)
+<span class="ln">124</span>      endif
+<span class="ln">125</span>      do i = 1, nTeff
+<span class="ln">126</span>         j1 = iGLmin(i)
+<span class="ln">127</span>         j2 = iGLmax(i)
+<span class="ln">128</span>         if ((j2 - j1 + 1) .lt. 4) then
+<span class="ln">129</span>            LBadTable = .true.
+<span class="ln">130</span>            write(ISHORT,920) &#x27;ALTABINIT: Bad input Allard Table: &#x27;,
+<span class="ln">131</span>     x        &#x27;Row with less that 4 elements: i,#,Teff,GLMin,GLmax: &#x27;,
+<span class="ln">132</span>     x         i,j2-j1+1,10D0**TEFFLs(i),GLmin(i),GLmax(i)
+<span class="ln">133</span> 920            format(2A,2I4,2X,3F7.2)
+<span class="ln">134</span>         endif
+<span class="ln">135</span>      enddo
+<span class="ln">136</span>
+<span class="ln">137</span>      if (LBadTable) goto 9999            ! If bad table, go to error exit
+<span class="ln">138</span>
+<span class="ln">139</span>      return                  ! If good table, return
+<span class="ln">140</span>
+<span class="ln">141</span> 9999      continue
+<span class="ln">142</span>       write(*,*)
+<span class="ln">143</span>       write(*,*)&#x27;******** ALTABINIT: Program Terminated ********&#x27;
+<span class="ln">144</span>       write(*,*)
+<span class="ln">145</span>       write(ISHORT,*)
+<span class="ln">146</span>       write(ISHORT,*)&#x27;******** ALTABINIT: Program Terminated ********&#x27;
+<span class="ln">147</span>       write(ISHORT,*)
+<span class="ln">148</span>       CALL <a href="../yrec-map/alprint.f.html#def-ALPRINT" title="ALPRINT in alprint.f">ALPRINT</a>
+<span class="ln">149</span>       STOP
+<span class="ln">150</span>
+<span class="ln">151</span>       END</pre></details>
+<details class='py' id='py-altabinit'><summary>Python version: altabinit</summary><pre class='doc'>Set the table&#x27;s range in log Teff (ALATM05_MOD: its own ends;
+ALATM02_MOD: one row&#x27;s width beyond them), each row&#x27;s first and last
+valid column in log g and its allowed range of log g, and the extremes
+GLXmin, GLXmax; then check the table, and stop the run (after ALPRINT)
+if it is bad.
+
+Translates: altabinit.f#ALTABINIT (09c3b9b)
+
+No arguments; nothing is returned.</pre><pre class='src'><span class="ln">12</span>def altabinit():
+<span class="ln">13</span>    &quot;&quot;&quot;Set the table&#x27;s range in log Teff (ALATM05_MOD: its own ends;
+<span class="ln">14</span>    ALATM02_MOD: one row&#x27;s width beyond them), each row&#x27;s first and last
+<span class="ln">15</span>    valid column in log g and its allowed range of log g, and the extremes
+<span class="ln">16</span>    GLXmin, GLXmax; then check the table, and stop the run (after ALPRINT)
+<span class="ln">17</span>    if it is bad.
+<span class="ln">18</span>
+<span class="ln">19</span>    Translates: altabinit.f#ALTABINIT (09c3b9b)
+<span class="ln">20</span>
+<span class="ln">21</span>    No arguments; nothing is returned.
+<span class="ln">22</span>    &quot;&quot;&quot;
+<span class="ln">23</span>    a1 = alatm01_mod
+<span class="ln">24</span>    a2 = alatm02_mod
+<span class="ln">25</span>    a5 = alatm05_mod
+<span class="ln">26</span>    ishort = iounits_mod.ishort
+<span class="ln">27</span>    w = iounits_mod.write
+<span class="ln">28</span>    nteff = a1.nteff
+<span class="ln">29</span>    ngl = a1.ngl
+<span class="ln">30</span>
+<span class="ln">31</span>    a5.al_tefflmin = a1.teffls[1]
+<span class="ln">32</span>    a5.al_tefflmax = a1.teffls[nteff]
+<span class="ln">33</span>    a2.tefflmin = a1.teffls[1] - (a1.teffls[2] - a1.teffls[1])
+<span class="ln">34</span>    a2.tefflmax = a1.teffls[nteff] + (a1.teffls[nteff] - a1.teffls[nteff - 1])
+<span class="ln">35</span>
+<span class="ln">36</span>    # The first and last valid entries (above -998) of each row. Possible
+<span class="ln">37</span>    # bug (update-findings.md, batch 14): a row with none keeps its earlier
+<span class="ln">38</span>    # values (0 at first), and the loop below then reads GLs out of bounds
+<span class="ln">39</span>    # (here gls[0] and, through index -1, the array&#x27;s last element).
+<span class="ln">40</span>    for i in range(1, nteff + 1):
+<span class="ln">41</span>        for j in range(1, ngl + 1):
+<span class="ln">42</span>            if a1.pls[i, j] &gt; -998.0:
+<span class="ln">43</span>                a2.iglmin[i] = j
+<span class="ln">44</span>                break
+<span class="ln">45</span>        # label 100
+<span class="ln">46</span>        for j in range(ngl, 0, -1):
+<span class="ln">47</span>            if a1.pls[i, j] &gt; -998.0:
+<span class="ln">48</span>                a2.iglmax[i] = j
+<span class="ln">49</span>                break
+<span class="ln">50</span>        # label 110
+<span class="ln">51</span>
+<span class="ln">52</span>    # The allowed range of log g in each row, and over all rows.
+<span class="ln">53</span>    a2.glxmin = 999.0
+<span class="ln">54</span>    a2.glxmax = -999.0
+<span class="ln">55</span>    for i in range(1, nteff + 1):
+<span class="ln">56</span>        j1 = a2.iglmin[i]
+<span class="ln">57</span>        j2 = a2.iglmax[i]
+<span class="ln">58</span>        # Question (see the page): four column widths below, one above.
+<span class="ln">59</span>        a2.glmin[i] = a1.gls[j1] - 4.0 * (a1.gls[j1 + 1] - a1.gls[j1])
+<span class="ln">60</span>        if a2.glmin[i] &lt; a2.glxmin:
+<span class="ln">61</span>            a2.glxmin = a2.glmin[i]
+<span class="ln">62</span>        a2.glmax[i] = a1.gls[j2] + (a1.gls[j2] - a1.gls[j2 - 1])
+<span class="ln">63</span>        if a2.glmax[i] &gt; a2.glxmax:
+<span class="ln">64</span>            a2.glxmax = a2.glmax[i]
+<span class="ln">65</span>
+<span class="ln">66</span>    # Question (see the page): only PLs is checked, not P100Ls or T100Ls.
+<span class="ln">67</span>    lbadtable = False
+<span class="ln">68</span>    for i in range(1, nteff + 1):
+<span class="ln">69</span>        j1 = a2.iglmin[i]
+<span class="ln">70</span>        j2 = a2.iglmax[i]
+<span class="ln">71</span>        for j in range(j1, j2 + 1):
+<span class="ln">72</span>            if a1.pls[i, j] &lt; -998.0:
+<span class="ln">73</span>                lbadtable = True
+<span class="ln">74</span>                w(ishort, &quot;ALTABINIT: Bad input Allard Table: TEFF, GL: &quot;
+<span class="ln">75</span>                          f&quot;{10.0 ** a1.teffls[i]:5.0f}{a1.gls[j]:7.2f}&quot;)  # 900
+<span class="ln">76</span>
+<span class="ln">77</span>    if nteff &lt; 4:
+<span class="ln">78</span>        lbadtable = True
+<span class="ln">79</span>        # Question (see the page): FORMAT 910, (A,I3), has one A for two
+<span class="ln">80</span>        # strings; the Fortran would stop here with a run-time format error.
+<span class="ln">81</span>        w(ishort, &quot;ALTABINIT: Bad input Allard Table: &quot;)
+<span class="ln">82</span>        raise SystemExit(&quot;Fortran run-time error: FORMAT 910 expects an &quot;
+<span class="ln">83</span>                         &quot;integer, got a string&quot;)
+<span class="ln">84</span>    for i in range(1, nteff + 1):
+<span class="ln">85</span>        j1 = a2.iglmin[i]
+<span class="ln">86</span>        j2 = a2.iglmax[i]
+<span class="ln">87</span>        if (j2 - j1 + 1) &lt; 4:
+<span class="ln">88</span>            lbadtable = True
+<span class="ln">89</span>            w(ishort, &quot;ALTABINIT: Bad input Allard Table: &quot;
+<span class="ln">90</span>                      &quot;Row with less that 4 elements: i,#,Teff,GLMin,GLmax: &quot;
+<span class="ln">91</span>                      f&quot;{i:4d}{j2 - j1 + 1:4d}  &quot;
+<span class="ln">92</span>                      f&quot;{10.0 ** a1.teffls[i]:7.2f}{a2.glmin[i]:7.2f}&quot;
+<span class="ln">93</span>                      f&quot;{a2.glmax[i]:7.2f}&quot;)  # 920
+<span class="ln">94</span>
+<span class="ln">95</span>    if not lbadtable:
+<span class="ln">96</span>        return
+<span class="ln">97</span>
+<span class="ln">98</span>    # label 9999: error exit.
+<span class="ln">99</span>    for unit_write in (print, lambda text: w(ishort, text)):
+<span class="ln">100</span>        unit_write(&quot;&quot;)
+<span class="ln">101</span>        unit_write(&quot; ******** ALTABINIT: Program Terminated ********&quot;)
+<span class="ln">102</span>        unit_write(&quot;&quot;)
+<span class="ln">103</span>    alprint()
+<span class="ln">104</span>    raise SystemExit</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No change: correct (the format error of question 2 and the four widths of question 1 checked).</p></div></details>
+</main></body></html>

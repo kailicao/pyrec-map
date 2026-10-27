@@ -1,0 +1,394 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>physic.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ physic.f</span></header><main>
+<h1>physic.f</h1>
+<p class='muted'>191 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/physic.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>physic.py</code>, 149 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Recomputes the auxiliary physics at every shell of a model: equation of state, opacity, temperature gradients and convection, mean molecular weight, then the thermal diffusivity and viscosity, and the largest angular velocity gradient that is stable against the shear instability. Its comment: "find actual and adiabatic temperature gradients, opacity, and mean molecular weight for all radiative shells" (the loop in fact covers all shells).</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the model (<code>HCOMP</code>, <code>HD</code>, <code>HG</code> (gravity), <code>HL</code>, <code>HP</code>, <code>HR</code>, <code>HS</code>, <code>HT</code>, all logarithmic except <code>HL</code>, <code>HG</code> and <code>HCOMP</code>), the rotational distortion factors <code>FP</code>, <code>FT</code>, <code>M</code>, <code>TEFFL</code> and the mixing length <code>CMIXL</code> (a new argument, formerly in <code>/CONST3/</code>), passed on to <code>TPGRAD</code>; the envelope composition from <code>COMP_MOD</code> and <code>COMP2_MOD</code>; the switch <code>LDH</code> (<code>NMLPAR_MOD</code>), with the Debye–Hückel abundances it sets in <code>DEBHU_MOD</code>; <code>CLN</code> from <code>CONSTANTS_MOD</code>.</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/getw.f.html#def-GETW">GETW</a>, <a href="../yrec-map/hpoint.f.html#def-HPOINT">HPOINT</a> and <a href="../yrec-map/starin.f.html#def-STARIN">STARIN</a>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/eqstat.f.html#def-EQSTAT">EQSTAT</a> (the general equation of state), <a href="../yrec-map/getopac.f.html#def-GETOPAC">GETOPAC</a>, <a href="../yrec-map/tpgrad.f.html#def-TPGRAD">TPGRAD</a> (gradients and convective velocity), <a href="../yrec-map/viscos.f.html#def-VISCOS">VISCOS</a>, and <a href="../yrec-map/intrp2.f.html#def-INTRP2">INTRP2</a>.</li>
+<li><strong>Outputs (all through modules, except <code>LC</code>):</strong></li>
+<li><code>LC</code>, the convection flags (argument);</li>
+<li><code>SCRTCH_MOD</code>: <code>SDEL(1..3,·)</code> $= \nabla_\mathrm{rad}, \nabla, \nabla_\mathrm{ad}$, the opacity <code>SO</code>, the convective velocity <code>SVEL</code>;</li>
+<li><code>TEMP_MOD</code>: <code>CP</code>, <code>HAMU</code> (the mean molecular weight), <code>SQDT</code> ($(\partial\ln\rho/\partial\ln T)_P$), and through <code>VISCOS</code> <code>THDIF</code> and <code>VISC</code>;</li>
+<li><code>DWMAX_MOD</code>: <code>QWRMAX</code>, the critical $d\Omega/d\ln r$;</li>
+<li><code>DPMIX_MOD</code>: <code>IOVIM</code>, the current shell, for <code>TPGRAD</code>.
+  These feed the rotational mixing and transport routines (<a href="../yrec-map/midmod.f.html#def-MIDMOD">MIDMOD</a> interpolates them in time), and <a href="../yrec-map/microdiff_mte.f.html#def-MICRODIFF_MTE">MICRODIFF_MTE</a> (for microscopic diffusion) reads <code>SDEL(2,·)</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Per shell:</strong> the equation of state, always <code>EQSTAT</code> (with Debye–Hückel abundances set first when <code>LDH</code>), the opacity, and <code>TPGRAD</code>, without derivatives (<code>LDERIV = .FALSE.</code>).</li>
+<li>
+<p><strong>Mean molecular weight</strong> of a fully ionized gas. With $A$ = 1.007825, 4.002603, 12 and 3.01603 for H, ⁴He, the metals (as carbon) and ³He,
+$$\frac{1}{\mu_\mathrm{ion}} = \frac{1}{\mu_\mathrm{ion,env}} + \sum_k \frac{X_k - X_{k,\mathrm{env}}}{A_k},\qquad \frac{1}{\mu_e} = \frac{X}{A_\mathrm{H}} + 2\left(\frac{X_{^3\mathrm{He}}}{A_{^3\mathrm{He}}} + \frac{Y}{A_{^4\mathrm{He}}}\right) + \frac{Z}{2},\qquad \mu = \frac{\mu_\mathrm{ion}\,\mu_e}{\mu_\mathrm{ion}+\mu_e}.$$</p>
+</li>
+<li>
+<p><strong>Shear stability</strong> (Endal &amp; Sofia 1978, ApJ 220, 279, as cited). At each interface between shells, with $\rho$, $P$, $\nabla$, $\nabla_\mathrm{ad}$ and $g$ interpolated to the midpoint in $\log m$ (four-point Lagrange),
+$$\left(\frac{d\Omega}{d\ln r}\right)_\mathrm{max} = 2\sqrt{\frac{\rho}{P}\,g^2\,(\nabla_\mathrm{ad} - \nabla)}$$
+where the root is real, and 0 otherwise. <code>QWRMAX(IM)</code> belongs to the interface between shells <code>IM-1</code> and <code>IM</code>; it is 0 where both shells are convective, and <code>QWRMAX(1)</code> is never set. $\rho$ and $P$ are interpolated in their logarithms (<code>HD</code>, <code>HP</code>), $g$ (<code>HG</code>, not logarithmic) and the gradients directly.</p>
+</li>
+</ol>
+<p><strong>Changed since <code>rp_1</code>.</strong> The MHD equation of state is removed (<code>LMHD</code> and the call to <code>MEQOS</code>, removed since <code>rp_1</code>), so every shell uses <code>EQSTAT</code>; the mixing length <code>CMIXL</code> is a new argument, passed to <code>TPGRAD</code>; the write-only <code>/OPTAB/</code> settings (<code>IDT = 15</code>, <code>IDD = 5</code>) are gone; COMMON blocks to modules, <code>IMPLICIT NONE</code>. No question is settled.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused argument <code>LCZ</code> removed, and unused arguments removed from the calls to <code>MEQOS</code> and <code>VISCOS</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>LC</code> overwritten.</strong> <code>PHYSIC</code> resets the caller's convection flags <code>LC</code> from <code>TPGRAD</code>. Do all three callers expect this?</li>
+<li><strong>Unused or unset.</strong> <code>DWMAX_MOD</code>'s <code>QWRMX0</code> and the flag <code>LOCOND</code> are not used here; <code>KSAHA</code>, which EQSTAT updates (a counter of Saha-equation calls), is never initialized here.</li>
+<li><strong>The comment's "radiative shells".</strong> The loop covers all shells, convective ones included. Update the comment?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+SUBROUTINE PHYSIC(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,LCZ,M,TEFFL)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-PHYSIC'>PHYSIC</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-PHYSIC'><h3><span class='kind'>subroutine</span>PHYSIC</h3>
+<p class='muted'>lines 3–191 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/physic.f#L3-L191'>GitHub</a></p>
+<pre>SUBROUTINE PHYSIC(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,M,TEFFL,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+SUBROUTINE PHYSIC(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,LCZ,M,TEFFL)  ! KC 2025-05-31</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/comp2_mod.f.html#def-COMP2_MOD'>COMP2_MOD</a>, <a href='../yrec-map/comp_mod.f.html#def-COMP_MOD'>COMP_MOD</a>, <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/debhu_mod.f.html#def-DEBHU_MOD'>DEBHU_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/dpmix_mod.f.html#def-DPMIX_MOD'>DPMIX_MOD</a>, <a href='../yrec-map/dwmax_mod.f.html#def-DWMAX_MOD'>DWMAX_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/scrtch_mod.f.html#def-SCRTCH_MOD'>SCRTCH_MOD</a>, <a href='../yrec-map/temp_mod.f.html#def-TEMP_MOD'>TEMP_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/eqstat.f.html#def-EQSTAT'>EQSTAT</a> <span class='muted'>(eqstat.f)</span></li>
+<li><a href='../yrec-map/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span></li>
+<li><a href='../yrec-map/intrp2.f.html#def-INTRP2'>INTRP2</a> <span class='muted'>(intrp2.f)</span></li>
+<li><a href='../yrec-map/tpgrad.f.html#def-TPGRAD'>TPGRAD</a> <span class='muted'>(tpgrad.f)</span></li>
+<li><a href='../yrec-map/viscos.f.html#def-VISCOS'>VISCOS</a> <span class='muted'>(viscos.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/getw.f.html#def-GETW'>GETW</a> <span class='muted'>(getw.f)</span></li>
+<li><a href='../yrec-map/hpoint.f.html#def-HPOINT'>HPOINT</a> <span class='muted'>(hpoint.f)</span></li>
+<li><a href='../yrec-map/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE PHYSIC(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,M,TEFFL,
+<span class="ln">4</span>     *                  CMIXL)
+<span class="ln">5</span>C 10/15/26 MHP via Claude
+<span class="ln">6</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">7</span>C PARAMETER(JSON=5000) here.
+<span class="ln">8</span>      USE DIMENSIONS_MOD
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/TEMP/ into TEMP_MOD.
+<span class="ln">11</span>      USE TEMP_MOD
+<span class="ln">12</span>C 10/14/26 MHP via Claude
+<span class="ln">13</span>C code changed to convert COMMON/SCRTCH/ into SCRTCH_MOD.
+<span class="ln">14</span>      USE SCRTCH_MOD
+<span class="ln">15</span>C 10/14/26 MHP via Claude
+<span class="ln">16</span>C code changed to convert COMMON/DWMAX/ into DWMAX_MOD.
+<span class="ln">17</span>      USE DWMAX_MOD
+<span class="ln">18</span>C 10/14/26 MHP via Claude
+<span class="ln">19</span>C code changed to convert COMMON/DPMIX/ into DPMIX_MOD.
+<span class="ln">20</span>      USE DPMIX_MOD
+<span class="ln">21</span>C 10/14/26 MHP via Claude
+<span class="ln">22</span>C code changed to convert COMMON/DEBHU/ into DEBHU_MOD.
+<span class="ln">23</span>      USE DEBHU_MOD
+<span class="ln">24</span>C 10/14/26 MHP via Claude
+<span class="ln">25</span>C code changed to convert COMMON/COMP2/ into COMP2_MOD.
+<span class="ln">26</span>      USE COMP2_MOD
+<span class="ln">27</span>C 10/14/26 MHP via Claude
+<span class="ln">28</span>C code changed to convert COMMON/COMP/ into COMP_MOD.
+<span class="ln">29</span>      USE COMP_MOD
+<span class="ln">30</span>C 10/14/26 MHP via Claude
+<span class="ln">31</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">32</span>      USE NMLPAR_MOD
+<span class="ln">33</span>C 10/14/26 MHP via Claude
+<span class="ln">34</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">35</span>      USE CONSTANTS_MOD
+<span class="ln">36</span>C 10/20/26 MHP via Claude
+<span class="ln">37</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">38</span>C explicit declarations.
+<span class="ln">39</span>      IMPLICIT NONE
+<span class="ln">40</span>      REAL*8 AMU,AMU2,ATOMWT,B,BETA,BETA14,BETAI,CMIXL,D,DEL,DELA,
+<span class="ln">41</span>     *       DELAMD,DELMID,DELR,DFX1,DFX2,DFX3,DFX4,DL,DMID,EMU,EMU2,
+<span class="ln">42</span>     *       ETA,FP,FPL,FT,FTL,FXION,GMID,HCOMP,HD,HF,HG,HL,HOLD,HP,HR,
+<span class="ln">43</span>     *       HS,HSMID,HT,O,OL,P,PL,PMID,QACP,QACR,QACT,QAP,QAT,QCP,QCPP,
+<span class="ln">44</span>     *       QCPT,QDP,QDT,QDTP,QDTT,QOD,QOT,RL,RMU,SL,T,TEFFL,TEMP,TL,
+<span class="ln">45</span>     *       VEL,X,Z
+<span class="ln">46</span>      INTEGER I,IM,K,KSAHA,M
+<span class="ln">47</span>      LOGICAL*4 LATMO,LC,LCONV,LDERIV,LOCOND
+<span class="ln">48</span>
+<span class="ln">49</span>
+<span class="ln">50</span>C 9/25/26 MHP via Claude
+<span class="ln">51</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">52</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">53</span>C 10/12/26 MHP via Claude
+<span class="ln">54</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">55</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">56</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">57</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">58</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">59</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">60</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">61</span>C
+<span class="ln">62</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">63</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">64</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">65</span>C 10/12/26 MHP via Claude
+<span class="ln">66</span>C code changed to remove COMMON/OPTAB/ entirely.  Once OPTOL moved to the
+<span class="ln">67</span>C consolidated namelist block, every remaining member was write-only:
+<span class="ln">68</span>C ZSI appeared only in a DATA statement in parmin.f, and IDT and IDD were
+<span class="ln">69</span>C assigned the constants 15 and 5 in coefft.f, envint.f, physic.f and
+<span class="ln">70</span>C starin.f and read nowhere in the code.  They are leftovers from the
+<span class="ln">71</span>C removed opacity-table interpolation schemes.
+<span class="ln">72</span>C DBG 7/92 COMMON BLOCK ADDED TO COMPUTE DEBYE-HUCKEL CORRECTION.
+<span class="ln">73</span>      DIMENSION HCOMP(15,JSON),HD(JSON),HL(JSON),HG(JSON),
+<span class="ln">74</span>     *     HP(JSON),HR(JSON),HS(JSON),HT(JSON),LC(JSON),
+<span class="ln">75</span>C      *     FXION(3),FP(JSON),FT(JSON),ATOMWT(4),LCZ(JSON),  ! KC 2025-05-31
+<span class="ln">76</span>     *     FXION(3),FP(JSON),FT(JSON),ATOMWT(4),
+<span class="ln">77</span>     *     HF(4),HOLD(4)
+<span class="ln">78</span>      DATA ATOMWT/1.007825D0,4.002603D0,12.0D0,3.01603D0/
+<span class="ln">79</span>      SAVE
+<span class="ln">80</span>
+<span class="ln">81</span>C  FIND ACTUAL AND ADIABATIC TEMPERATURE GRADIENTS,OPACITY,AND
+<span class="ln">82</span>C  MEAN MOLECULAR WEIGHT FOR ALL RADIATIVE SHELLS.
+<span class="ln">83</span>      LDERIV = .FALSE.
+<span class="ln">84</span>      LOCOND = .FALSE.
+<span class="ln">85</span>      LATMO = .FALSE.
+<span class="ln">86</span>      DO 30 IM = 1,M
+<span class="ln">87</span>         SL = HS(IM)
+<span class="ln">88</span>         TL = HT(IM)
+<span class="ln">89</span>         PL = HP(IM)
+<span class="ln">90</span>         RL = HR(IM)
+<span class="ln">91</span>         B = HL(IM)
+<span class="ln">92</span>         X = HCOMP(1,IM)
+<span class="ln">93</span>         Z = HCOMP(3,IM)
+<span class="ln">94</span>         DL = HD(IM)
+<span class="ln">95</span>         FPL = FP(IM)
+<span class="ln">96</span>         FTL = FT(IM)
+<span class="ln">97</span>
+<span class="ln">98</span>C 9/22/26 MHP via Claude
+<span class="ln">99</span>C code changed to remove the MHD equation of state
+<span class="ln">100</span>         IF (LDH) THEN
+<span class="ln">101</span>            XXDH = HCOMP(1,IM)
+<span class="ln">102</span>            YYDH = HCOMP(2,IM)+HCOMP(4,IM)
+<span class="ln">103</span>            ZZDH = HCOMP(3,IM)
+<span class="ln">104</span>            ZDH(1) = HCOMP(5,IM)+HCOMP(6,IM)
+<span class="ln">105</span>            ZDH(2) = HCOMP(7,IM)+HCOMP(8,IM)
+<span class="ln">106</span>            ZDH(3) = HCOMP(9,IM)+HCOMP(10,IM)+HCOMP(11,IM)
+<span class="ln">107</span>         END IF
+<span class="ln">108</span>         CALL <a href="../yrec-map/eqstat.f.html#def-EQSTAT" title="EQSTAT in eqstat.f">EQSTAT</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">109</span>     *        AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,
+<span class="ln">110</span>     *        QCPP,LDERIV,LATMO,KSAHA)
+<span class="ln">111</span>         CALL <a href="../yrec-map/getopac.f.html#def-GETOPAC" title="GETOPAC in getopac.f">GETOPAC</a> (DL,TL,X,Z,O,OL,QOD,QOT,FXION)
+<span class="ln">112</span>         IOVIM=IM
+<span class="ln">113</span>         CALL <a href="../yrec-map/tpgrad.f.html#def-TPGRAD" title="TPGRAD in tpgrad.f">TPGRAD</a>(TL,T,PL,P,D,RL,SL,B,O,QDT,QDP,QOT,QOD,QCP,DEL,
+<span class="ln">114</span>     *        DELR,DELA,QDTT,QDTP,QAT,QAP,QACT,QACP,QACR,QCPT,QCPP,
+<span class="ln">115</span>     *        VEL,LDERIV,LCONV,FPL,FTL,TEFFL,CMIXL)
+<span class="ln">116</span>         LC(IM) = LCONV
+<span class="ln">117</span>         SDEL(1,IM) = DELR
+<span class="ln">118</span>         SDEL(2,IM) = DEL
+<span class="ln">119</span>         SDEL(3,IM) = DELA
+<span class="ln">120</span>C  FIND NEW RUN OF MEAN MOLECULAR WEIGHT ASSUMING FULLY IONIZED GAS.
+<span class="ln">121</span>C  AMUENV IS(1/MEAN MOLECULAR WEIGHT PER ION OF THE SURFACE MIXTURE.)
+<span class="ln">122</span>         DFX1 = HCOMP(1,IM) - XENV
+<span class="ln">123</span>         DFX2 = HCOMP(2,IM) - YENV
+<span class="ln">124</span>         DFX3 = HCOMP(3,IM) - ZENV
+<span class="ln">125</span>         DFX4 = HCOMP(4,IM) - Y3ENV
+<span class="ln">126</span>         TEMP = AMUENV + DFX1/ATOMWT(1) + DFX2/ATOMWT(2) +
+<span class="ln">127</span>     *        DFX3/ATOMWT(3) + DFX4/ATOMWT(4)
+<span class="ln">128</span>         AMU2 = 1.0D0/TEMP
+<span class="ln">129</span>         TEMP = HCOMP(1,IM)/ATOMWT(1) + 2.0D0*(HCOMP(4,IM)/ATOMWT(4)
+<span class="ln">130</span>     *        + HCOMP(2,IM)/ATOMWT(2)) + 0.5D0*HCOMP(3,IM)
+<span class="ln">131</span>         EMU2 = 1.0D0/TEMP
+<span class="ln">132</span>         HAMU(IM) = AMU2*EMU2/(AMU2+EMU2)
+<span class="ln">133</span>         SO(IM) = O
+<span class="ln">134</span>         CP(IM) = QCP
+<span class="ln">135</span>         SQDT(IM) = QDT
+<span class="ln">136</span>C JVS 10/13 Always want SVEL
+<span class="ln">137</span>         SVEL(IM) = VEL
+<span class="ln">138</span>C         IF(LC(IM))THEN
+<span class="ln">139</span>C            SVEL(IM) = VEL
+<span class="ln">140</span>C         ELSE
+<span class="ln">141</span>C            SVEL(IM) = 0.0D0
+<span class="ln">142</span>C         ENDIF
+<span class="ln">143</span> 30   CONTINUE
+<span class="ln">144</span>C  FIND THE THERMOMETRIC DIFFUSIVITY AND KINEMATIC VISCOSITY.
+<span class="ln">145</span>C       CALL VISCOS(HCOMP,HD,HT,LC,M)  ! KC 2025-05-31
+<span class="ln">146</span>      CALL <a href="../yrec-map/viscos.f.html#def-VISCOS" title="VISCOS in viscos.f">VISCOS</a>(HCOMP,HD,HT,M)
+<span class="ln">147</span>C  FIND THE RUN OF MAXIMUM ALLOWABLE D OMEGA/D LNR AND THE RUN OF ACTUAL
+<span class="ln">148</span>C  D OMEGA/D LN R FOR ALL RADIATIVE ZONES.
+<span class="ln">149</span>C  IF THE GRADIENT OF OMEGA EXCEEDS THE CRITICAL VALUE FOR THE SHEAR
+<span class="ln">150</span>C  INSTABILITY, A SHORT TIMESCALE INSTABILITY OCCURS.  MIX ALL ADJACENT
+<span class="ln">151</span>C  UNSTABLE ZONES TO A MARGINALLY STABLE STATE.
+<span class="ln">152</span>      DO 100 IM = 2,M
+<span class="ln">153</span>C  SKIP CONVECTIVE REGIONS
+<span class="ln">154</span>         IF(LC(IM).AND.LC(IM-1))THEN
+<span class="ln">155</span>            QWRMAX(IM) = 0.0D0
+<span class="ln">156</span>            GOTO 100
+<span class="ln">157</span>         ENDIF
+<span class="ln">158</span>C  NOW CHECK FOR SHEAR INSTABILITY -REF.ENDAL&amp;SOFIA APJ 220:279(1978)
+<span class="ln">159</span>C  THERMODYNAMIC QUANTITIES ARE CALCULATED AT THE SHELL MIDPOINT BY
+<span class="ln">160</span>C  4-POINT LAGRANGIAN INTERPOLATION.
+<span class="ln">161</span>         IF(IM.LE.2) THEN
+<span class="ln">162</span>            K = 1
+<span class="ln">163</span>         ELSE IF(IM.EQ.M) THEN
+<span class="ln">164</span>            K = M - 3
+<span class="ln">165</span>         ELSE
+<span class="ln">166</span>            K = IM - 2
+<span class="ln">167</span>         ENDIF
+<span class="ln">168</span>         DO 90 I = 1, 4
+<span class="ln">169</span>            HOLD(I) = HS(I+K-1)
+<span class="ln">170</span> 90      CONTINUE
+<span class="ln">171</span>C  USE 4-POINT LAGRANGIAN INTERPOLATION TO FIND PHYSICAL VARIABLES
+<span class="ln">172</span>C  AT THE INTERFACE BEING TESTED.
+<span class="ln">173</span>         HSMID = 0.5D0*(HS(IM) + HS(IM-1))
+<span class="ln">174</span>         CALL <a href="../yrec-map/intrp2.f.html#def-INTRP2" title="INTRP2 in intrp2.f">INTRP2</a>(HOLD,HF,HSMID)
+<span class="ln">175</span>         PMID=HP(K)*HF(1) + HP(K+1)*HF(2) + HP(K+2)*HF(3) +HP(K+3)*HF(4)
+<span class="ln">176</span>         DMID=HD(K)*HF(1) + HD(K+1)*HF(2) + HD(K+2)*HF(3) +HD(K+3)*HF(4)
+<span class="ln">177</span>         DELMID=SDEL(2,K)*HF(1) + SDEL(2,K+1)*HF(2) + SDEL(2,K+2)*HF(3)
+<span class="ln">178</span>     *        + SDEL(2,K+3)*HF(4)
+<span class="ln">179</span>         DELAMD=SDEL(3,K)*HF(1) + SDEL(3,K+1)*HF(2) + SDEL(3,K+2)*HF(3)
+<span class="ln">180</span>     *        + SDEL(3,K+3)*HF(4)
+<span class="ln">181</span>         GMID=HG(K)*HF(1) + HG(K+1)*HF(2) + HG(K+2)*HF(3) +HG(K+3)*HF(4)
+<span class="ln">182</span>         TEMP = DEXP(CLN*(DMID - PMID))*(DELAMD - DELMID)*GMID**2
+<span class="ln">183</span>         IF(TEMP.GT.0.0D0) THEN
+<span class="ln">184</span>            QWRMAX(IM) = 2.0D0*DSQRT(TEMP)
+<span class="ln">185</span>         ELSE
+<span class="ln">186</span>            QWRMAX(IM) = 0.0D0
+<span class="ln">187</span>         ENDIF
+<span class="ln">188</span> 100  CONTINUE
+<span class="ln">189</span>
+<span class="ln">190</span>      RETURN
+<span class="ln">191</span>      END</pre></details>
+<details class='py' id='py-physic'><summary>Python version: physic</summary><pre class='doc'>Recompute, at every shell, the equation of state, opacity,
+temperature gradients and convective velocity, and the mean molecular
+weight; then the thermal diffusivity and viscosity (VISCOS), and the
+largest dOmega/dln r stable against the shear instability.
+
+Translates: physic.f#PHYSIC (09c3b9b)
+
+Arguments: fp, ft, the rotational distortion factors; the model hcomp
+[species, shell], hd, hg, hl, hp, hr, hs, ht (arrays, index 0 unused);
+lc, the convection flags (changed in place); m, the number of shells;
+teffl, log Teff; cmixl, the mixing length.
+
+Returns nothing; sets lc and, in the modules, SDEL, SO, SVEL
+(scrtch_mod), CP, HAMU, SQDT (temp_mod; THDIF and VISC through VISCOS),
+QWRMAX (dwmax_mod) and IOVIM (dpmix_mod).</pre><pre class='src'><span class="ln">34</span>def physic(fp, ft, hcomp, hd, hg, hl, hp, hr, hs, ht, lc, m, teffl, cmixl):
+<span class="ln">35</span>    &quot;&quot;&quot;Recompute, at every shell, the equation of state, opacity,
+<span class="ln">36</span>    temperature gradients and convective velocity, and the mean molecular
+<span class="ln">37</span>    weight; then the thermal diffusivity and viscosity (VISCOS), and the
+<span class="ln">38</span>    largest dOmega/dln r stable against the shear instability.
+<span class="ln">39</span>
+<span class="ln">40</span>    Translates: physic.f#PHYSIC (09c3b9b)
+<span class="ln">41</span>
+<span class="ln">42</span>    Arguments: fp, ft, the rotational distortion factors; the model hcomp
+<span class="ln">43</span>    [species, shell], hd, hg, hl, hp, hr, hs, ht (arrays, index 0 unused);
+<span class="ln">44</span>    lc, the convection flags (changed in place); m, the number of shells;
+<span class="ln">45</span>    teffl, log Teff; cmixl, the mixing length.
+<span class="ln">46</span>
+<span class="ln">47</span>    Returns nothing; sets lc and, in the modules, SDEL, SO, SVEL
+<span class="ln">48</span>    (scrtch_mod), CP, HAMU, SQDT (temp_mod; THDIF and VISC through VISCOS),
+<span class="ln">49</span>    QWRMAX (dwmax_mod) and IOVIM (dpmix_mod).
+<span class="ln">50</span>    &quot;&quot;&quot;
+<span class="ln">51</span>    global ksaha
+<span class="ln">52</span>    c = constants_mod
+<span class="ln">53</span>    sdel = scrtch_mod.sdel
+<span class="ln">54</span>    # Actual and adiabatic temperature gradients, opacity and mean
+<span class="ln">55</span>    # molecular weight for all shells (the Fortran comment says &quot;radiative
+<span class="ln">56</span>    # shells&quot;: Question, see the page).
+<span class="ln">57</span>    lderiv = False
+<span class="ln">58</span>    locond = False  # Question (see the page): unused.
+<span class="ln">59</span>    latmo = False
+<span class="ln">60</span>    for im in range(1, m + 1):
+<span class="ln">61</span>        sl = hs[im]
+<span class="ln">62</span>        tl = ht[im]
+<span class="ln">63</span>        pl = hp[im]
+<span class="ln">64</span>        rl = hr[im]
+<span class="ln">65</span>        b = hl[im]
+<span class="ln">66</span>        x = hcomp[1, im]
+<span class="ln">67</span>        z = hcomp[3, im]
+<span class="ln">68</span>        dl = hd[im]
+<span class="ln">69</span>        fpl = fp[im]
+<span class="ln">70</span>        ftl = ft[im]
+<span class="ln">71</span>        # 9/22/26 MHP: the MHD equation of state is removed.
+<span class="ln">72</span>        if nmlpar_mod.ldh:
+<span class="ln">73</span>            debhu_mod.xxdh = hcomp[1, im]
+<span class="ln">74</span>            debhu_mod.yydh = hcomp[2, im] + hcomp[4, im]
+<span class="ln">75</span>            debhu_mod.zzdh = hcomp[3, im]
+<span class="ln">76</span>            debhu_mod.zdh[1] = hcomp[5, im] + hcomp[6, im]
+<span class="ln">77</span>            debhu_mod.zdh[2] = hcomp[7, im] + hcomp[8, im]
+<span class="ln">78</span>            debhu_mod.zdh[3] = hcomp[9, im] + hcomp[10, im] + hcomp[11, im]
+<span class="ln">79</span>        (t, p, dl, d, beta, betai, beta14, rmu, amu, emu, eta, qdt, qdp,
+<span class="ln">80</span>         qcp, dela, qdtt, qdtp, qat, qap, qcpt, qcpp, ksaha) = eqstat(
+<span class="ln">81</span>            tl, 0.0, pl, 0.0, dl, 0.0, x, z, 0.0, 0.0, 0.0, fxion, 0.0, 0.0,
+<span class="ln">82</span>            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+<span class="ln">83</span>            lderiv, latmo, ksaha)
+<span class="ln">84</span>        o, ol, qod, qot = getopac(dl, tl, x, z, 0.0, 0.0, 0.0, 0.0, fxion)
+<span class="ln">85</span>        dpmix_mod.iovim = im
+<span class="ln">86</span>        (dele, delr, qact, qacp, qacr, vel, lconv) = tpgrad(
+<span class="ln">87</span>            tl, t, pl, p, d, rl, sl, b, o, qdt, qdp, qot, qod, qcp, 0.0,
+<span class="ln">88</span>            0.0, dela, qdtt, qdtp, qat, qap, 0.0, 0.0, 0.0, qcpt, qcpp,
+<span class="ln">89</span>            0.0, lderiv, False, fpl, ftl, teffl, cmixl)
+<span class="ln">90</span>        # Question (see the page): the caller&#x27;s LC is overwritten.
+<span class="ln">91</span>        lc[im] = lconv
+<span class="ln">92</span>        sdel[1, im] = delr
+<span class="ln">93</span>        sdel[2, im] = dele
+<span class="ln">94</span>        sdel[3, im] = dela
+<span class="ln">95</span>        # Mean molecular weight of a fully ionized gas. AMUENV is 1/(mean
+<span class="ln">96</span>        # molecular weight per ion) of the surface mixture.
+<span class="ln">97</span>        dfx1 = hcomp[1, im] - comp_mod.xenv
+<span class="ln">98</span>        dfx2 = hcomp[2, im] - comp2_mod.yenv
+<span class="ln">99</span>        dfx3 = hcomp[3, im] - comp_mod.zenv
+<span class="ln">100</span>        dfx4 = hcomp[4, im] - comp2_mod.y3env
+<span class="ln">101</span>        temp = (comp_mod.amuenv + dfx1 / atomwt[1] + dfx2 / atomwt[2]
+<span class="ln">102</span>                + dfx3 / atomwt[3] + dfx4 / atomwt[4])
+<span class="ln">103</span>        amu2 = 1.0 / temp
+<span class="ln">104</span>        temp = (hcomp[1, im] / atomwt[1]
+<span class="ln">105</span>                + 2.0 * (hcomp[4, im] / atomwt[4] + hcomp[2, im] / atomwt[2])
+<span class="ln">106</span>                + 0.5 * hcomp[3, im])
+<span class="ln">107</span>        emu2 = 1.0 / temp
+<span class="ln">108</span>        temp_mod.hamu[im] = amu2 * emu2 / (amu2 + emu2)
+<span class="ln">109</span>        scrtch_mod.so[im] = o
+<span class="ln">110</span>        temp_mod.cp[im] = qcp
+<span class="ln">111</span>        temp_mod.sqdt[im] = qdt
+<span class="ln">112</span>        # JVS 10/13: always want SVEL.
+<span class="ln">113</span>        scrtch_mod.svel[im] = vel
+<span class="ln">114</span>    # label 30
+<span class="ln">115</span>    # Thermometric diffusivity and kinematic viscosity.
+<span class="ln">116</span>    viscos(hcomp, hd, ht, m)
+<span class="ln">117</span>    # The largest stable dOmega/dln r at each interface (Endal &amp; Sofia
+<span class="ln">118</span>    # 1978), from quantities interpolated to the midpoint in HS.
+<span class="ln">119</span>    qwrmax = dwmax_mod.qwrmax
+<span class="ln">120</span>    for im in range(2, m + 1):
+<span class="ln">121</span>        # Skip convective regions.
+<span class="ln">122</span>        if lc[im] and lc[im - 1]:
+<span class="ln">123</span>            qwrmax[im] = 0.0
+<span class="ln">124</span>            continue  # label 100
+<span class="ln">125</span>        if im &lt;= 2:
+<span class="ln">126</span>            k = 1
+<span class="ln">127</span>        elif im == m:
+<span class="ln">128</span>            k = m - 3
+<span class="ln">129</span>        else:
+<span class="ln">130</span>            k = im - 2
+<span class="ln">131</span>        for i in range(1, 5):
+<span class="ln">132</span>            hold[i] = hs[i + k - 1]
+<span class="ln">133</span>        hsmid = 0.5 * (hs[im] + hs[im - 1])
+<span class="ln">134</span>        intrp2(hold, hf, hsmid)
+<span class="ln">135</span>        pmid = (hp[k] * hf[1] + hp[k + 1] * hf[2] + hp[k + 2] * hf[3]
+<span class="ln">136</span>                + hp[k + 3] * hf[4])
+<span class="ln">137</span>        dmid = (hd[k] * hf[1] + hd[k + 1] * hf[2] + hd[k + 2] * hf[3]
+<span class="ln">138</span>                + hd[k + 3] * hf[4])
+<span class="ln">139</span>        delmid = (sdel[2, k] * hf[1] + sdel[2, k + 1] * hf[2]
+<span class="ln">140</span>                  + sdel[2, k + 2] * hf[3] + sdel[2, k + 3] * hf[4])
+<span class="ln">141</span>        delamd = (sdel[3, k] * hf[1] + sdel[3, k + 1] * hf[2]
+<span class="ln">142</span>                  + sdel[3, k + 2] * hf[3] + sdel[3, k + 3] * hf[4])
+<span class="ln">143</span>        gmid = (hg[k] * hf[1] + hg[k + 1] * hf[2] + hg[k + 2] * hf[3]
+<span class="ln">144</span>                + hg[k + 3] * hf[4])
+<span class="ln">145</span>        temp = math.exp(c.cln * (dmid - pmid)) * (delamd - delmid) * gmid**2
+<span class="ln">146</span>        if temp &gt; 0.0:
+<span class="ln">147</span>            qwrmax[im] = 2.0 * math.sqrt(temp)
+<span class="ln">148</span>        else:
+<span class="ln">149</span>            qwrmax[im] = 0.0</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked: the $\mu$ formulas, the shear criterion (<code>DEXP(CLN*(DMID-PMID))*(DELAMD-DELMID)*GMID**2</code>), the stencil <code>K</code>, the COMMON outputs, the callers.</p>
+<ol>
+<li><strong>Wrong (small).</strong> "<a href="../yrec-map/microdiff.f.html">microdiff.f</a> uses <code>SDEL(2,·)</code>": the reader is MICRODIFF_MTE (round 1, microdiff.f finding 1). Fix: link MICRODIFF_MTE.</li>
+<li><strong>Unclear.</strong> "0 otherwise (and in convective regions)": <code>QWRMAX(IM)</code> belongs to the interface <code>IM-1</code>/<code>IM</code>, is 0 only where both shells are convective, and <code>QWRMAX(1)</code> is never set; $\rho$, $P$ are interpolated in logs, $g$ and the gradients directly. Fix: say so.</li>
+<li><strong>Missing (question 2).</strong> <code>KSAHA</code>, an in/out counter of EQSTAT, is never initialized here. Fix: add to question 2.</li>
+</ol>
+<p>Revised: all three applied.</p></div></details>
+</main></body></html>

@@ -1,0 +1,241 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>getfc.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ getfc.f</span></header><main>
+<h1>getfc.f</h1>
+<p class='muted'>119 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/getfc.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>getfc.py</code>, 77 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>GETFC</code> computes, shell by shell, the factor $f_c$ that relates the diffusion coefficient for chemical mixing to that for angular momentum transport by meridional circulation, "using the prescription of Zahn (1992)" (its comment).</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/seculr.f.html#def-SECULR">SECULR</a>, when <code>LVFC</code> is set, for the shells <code>IMIN..IMAX</code>.</li>
+<li><strong>Inputs:</strong> <code>HD</code> ($\log\rho$ at zone centres), <code>HRU</code> (radii at zone centres), <code>HV</code> (circulation velocities $U$ at zone edges), <code>OMEGA</code>; and from <code>INTVAR_MOD</code>, <code>RM</code> (radii at zone edges, the means of neighbouring centre radii) and <code>DM</code> (density at zone edges, interpolated in $\log\rho$), both set by <a href="../yrec-map/setupv.f.html#def-SETUPV">SETUPV</a>.</li>
+<li><strong>Output:</strong> the argument <code>VFC</code>, an array that <code>SECULR</code> owns (it clears it, and passes it on to <a href="../yrec-map/codiff.f.html#def-CODIFF">CODIFF</a>, which reads it).</li>
+<li><strong>Modules:</strong> <code>NMLPAR_MOD</code> gives <code>FC</code> and <code>LVFC</code> (namelist parameters, read in <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a>); <code>INTVAR_MOD</code> (the edge quantities), shared with <code>CODIFF</code>, <code>SECULR</code>, <code>SETUPV</code>, <code>VCIRC</code>; <code>CONSTANTS_MOD</code> (<code>CLN</code>, <code>CC13</code>); <code>DIMENSIONS_MOD</code> (<code>JSON</code>).</li>
+</ul>
+<p><strong>The method.</strong> The comment gives
+$$f_c = \min\left(1,\ \frac{C}{30}\,\frac{U}{2V - \alpha U}\right),\qquad \alpha = \frac12\frac{d\ln(r^2\Omega)}{d\ln r},\qquad V = \frac{1}{6\rho r}\frac{d}{dr}(\rho r^2 U).$$
+The code computes:</p>
+<ol>
+<li><code>ALPHA</code> $= \dfrac{1}{\Omega_m r_m}\dfrac{\Delta(\Omega r^2)}{\Delta r}$ between neighbouring zone centres, with $\Omega_m$ the mean of the two and $r_m$ = <code>RM</code> the edge between them, which is $d\ln(r^2\Omega)/d\ln r$, without the factor ½. It uses shell <code>IMIN-1</code>, which exists: MIDMOD sets <code>IMIN</code> ≥ 2.</li>
+<li><code>V</code> $= \dfrac{1}{3\rho r}\dfrac{d}{dr}(\rho r^2 U)$, which is $2V$; at the first and last shells, by the product rule with $dU/dr$ from the neighbour.</li>
+<li><code>VFC</code> $= \dfrac{f_c^{\mathrm{in}}}{\max\left(|{\tt V} - {\tt ALPHA}\,U|/U,\ f_c^{\mathrm{in}}\right)} = \min\left(1,\ \dfrac{f_c^{\mathrm{in}}\,U}{|2V - {\tt ALPHA}\,U|}\right)$, with $f_c^{\mathrm{in}}$ = <code>FC</code>; zero where $U \le 0$, and everywhere if <code>FC</code> ≤ 0. The absolute value is the code's; the comment's formula has none.</li>
+</ol>
+<p><strong>Changed since <code>rp_1</code>.</strong> <code>VFC</code> is a new argument (it was in <code>/VARFC/</code>, now removed; <code>SECULR</code> owns the array); COMMON blocks to modules (<code>FC</code> from <code>NMLPAR_MOD</code>, <code>/VMULT/</code> gone), <code>IMPLICIT NONE</code>. No question is settled.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The factor ½ in $\alpha$.</strong> The comment defines $\alpha$ with a factor ½; the code has none. Which is right?</li>
+<li><strong><code>FC</code> and $C/30$.</strong> The input <code>FC</code> plays the part of $C/30$ in the comment. Is that the intended meaning of the parameter?</li>
+<li><strong>Negative velocities.</strong> Where $U \le 0$, $f_c = 0$: no chemical mixing where the circulation flows inward. Intended, or should $|U|$ be used?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+$$$$$$GETFC
+</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-GETFC'>GETFC</a> <span class='muted'>subroutine · $$$$$$GETFC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-GETFC'><h3><span class='kind'>subroutine</span>GETFC</h3>
+<p class='muted'>lines 4–119 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/getfc.f#L4-L119'>GitHub</a></p>
+<pre>SUBROUTINE GETFC(HD,HRU,HV,IMIN,IMAX,OMEGA,VFC)</pre>
+<div class='notes'><p>Zahn (1992) ratio $f_c$ of the chemical to the angular-momentum diffusion coefficient, per shell, capped at 1 (equations above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+$$$$$$GETFC
+</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/intvar_mod.f.html#def-INTVAR_MOD'>INTVAR_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span> ×2</li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE GETFC(HD,HRU,HV,IMIN,IMAX,OMEGA,VFC)
+<span class="ln">5</span>C 10/15/26 MHP via Claude
+<span class="ln">6</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">7</span>C PARAMETER(JSON=5000) here.
+<span class="ln">8</span>      USE DIMENSIONS_MOD
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/INTVAR/ into INTVAR_MOD.
+<span class="ln">11</span>      USE INTVAR_MOD
+<span class="ln">12</span>C 10/14/26 MHP via Claude
+<span class="ln">13</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">14</span>      USE NMLPAR_MOD
+<span class="ln">15</span>C 10/14/26 MHP via Claude
+<span class="ln">16</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">17</span>      USE CONSTANTS_MOD
+<span class="ln">18</span>C 10/20/26 MHP via Claude
+<span class="ln">19</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">20</span>C explicit declarations.
+<span class="ln">21</span>      IMPLICIT NONE
+<span class="ln">22</span>      REAL*8 ALPHA,DR2VM,DR2VP,DRHOR2,DUDR,FTEST,FX,HD,HRU,HV,OMEGA,
+<span class="ln">23</span>     *       RHOR,V,VFC,VM,VP,WM
+<span class="ln">24</span>      INTEGER I,IMAX,IMIN
+<span class="ln">25</span>
+<span class="ln">26</span>C 10/13/26 MHP via Claude
+<span class="ln">27</span>C VFC is now a dummy argument, formerly COMMON/VARFC/.
+<span class="ln">28</span>      DIMENSION VFC(JSON)
+<span class="ln">29</span>C 9/25/26 MHP via Claude
+<span class="ln">30</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">31</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">32</span>C 10/12/26 MHP via Claude
+<span class="ln">33</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">34</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">35</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">36</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">37</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">38</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">39</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">40</span>C
+<span class="ln">41</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">42</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">43</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">44</span>C 10/13/26 MHP via Claude
+<span class="ln">45</span>C code changed to replace COMMON/VARFC/ with an explicit argument: seculr.f
+<span class="ln">46</span>C clears VFC, GETFC fills it and CODIFF reads it, all inside seculr.f&#x27;s
+<span class="ln">47</span>C call tree, so seculr.f now owns the storage.
+<span class="ln">48</span>      DIMENSION HD(JSON),HRU(JSON),HV(JSON),
+<span class="ln">49</span>     *          OMEGA(JSON),ALPHA(JSON),V(JSON)
+<span class="ln">50</span>      SAVE
+<span class="ln">51</span>C INPUT VARIABLES :
+<span class="ln">52</span>C HD - LOG10 OF DENSITY(GM/CM**3) AT ZONE CENTERS.
+<span class="ln">53</span>C RM - UNLOGGED RUN OF RADII AT ZONE EDGES.
+<span class="ln">54</span>C HRU - UNLOGGED RUN OF RADII AT ZONE CENTERS.
+<span class="ln">55</span>C HV - UNLOGGED RUN OF DIFFUSION VELOCITIES AT ZONE EDGES.
+<span class="ln">56</span>C IMIN,IMAX - STARTING AND ENDING SHELLS.
+<span class="ln">57</span>C OMEGA - RUN OF ANGULAR VELOCITIES AT ZONE CENTERS.
+<span class="ln">58</span>C OUTPUT VARIABLE :
+<span class="ln">59</span>C VFC - RATIO OF DIFFUSION COEFFICIENT FOR MIXING TO THAT FOR
+<span class="ln">60</span>C       ANGULAR MOMENTUM TRANSPORT.
+<span class="ln">61</span>C THIS SUBROUTINE SOLVES FOR THE VARIABLE FC USING THE
+<span class="ln">62</span>C PRESCRIPTION OF ZAHN (1992).
+<span class="ln">63</span>C FC = MIN (1, C/30*U/(2V-ALPHA*U), WHERE ALPHA=1/2 D(LN J/M)/D LN R
+<span class="ln">64</span>C AND V = 1/(6*RHO*R) *D/DR(RHO* R**2 * U) (U = DIFFUSION VELOCITY).
+<span class="ln">65</span>C
+<span class="ln">66</span>C IF FC = 0, SKIP CALCULATION (NO MIXING).
+<span class="ln">67</span>
+<span class="ln">68</span>      IF(FC.LE.0.0D0)THEN
+<span class="ln">69</span>         DO I = IMIN,IMAX
+<span class="ln">70</span>            VFC(I) = 0.0D0
+<span class="ln">71</span>         END DO
+<span class="ln">72</span>         GOTO 9999
+<span class="ln">73</span>      ENDIF
+<span class="ln">74</span>C DETERMINE ALPHA.
+<span class="ln">75</span>      DO I = IMIN,IMAX
+<span class="ln">76</span>         WM = 0.5D0*(OMEGA(I)+OMEGA(I-1))
+<span class="ln">77</span>         ALPHA(I) = (OMEGA(I)*HRU(I)**2-OMEGA(I-1)*HRU(I-1)**2)/
+<span class="ln">78</span>     *              (HRU(I)-HRU(I-1))/(WM*RM(I))
+<span class="ln">79</span>      END DO
+<span class="ln">80</span>C DETERMINE 2V.
+<span class="ln">81</span>      FX = (HRU(IMIN)-RM(IMIN))/(RM(IMIN+1)-RM(IMIN))
+<span class="ln">82</span>      VM = HV(IMIN)+FX*(HV(IMIN+1)-HV(IMIN))
+<span class="ln">83</span>      DR2VM = EXP(CLN*HD(IMIN))*HRU(IMIN)**2*VM
+<span class="ln">84</span>      DO I = IMIN + 1, IMAX - 1
+<span class="ln">85</span>         FX = (HRU(I)-RM(I))/(RM(I+1)-RM(I))
+<span class="ln">86</span>         VP = HV(I)+FX*(HV(I+1)-HV(I))
+<span class="ln">87</span>         DR2VP = EXP(CLN*HD(I))*HRU(I)**2*VP
+<span class="ln">88</span>         RHOR = DM(I)*RM(I)
+<span class="ln">89</span>         V(I) = CC13*(DR2VP-DR2VM)/RHOR/(HRU(I)-HRU(I-1))
+<span class="ln">90</span>         DR2VM = DR2VP
+<span class="ln">91</span>      END DO
+<span class="ln">92</span>C FOR FIRST AND LAST SHELLS, CALCULATE U*D/DR(RHO*R**2) AND ASSUME
+<span class="ln">93</span>C DU/DR = VALUE DERIVED FROM THE LAST NEIGHBOR SHELL WITH NONZERO V.
+<span class="ln">94</span>      RHOR = DM(IMIN)*RM(IMIN)
+<span class="ln">95</span>      DRHOR2 = (EXP(CLN*HD(IMIN))*HRU(IMIN)**2 -
+<span class="ln">96</span>     *         EXP(CLN*HD(IMIN-1))*HRU(IMIN-1)**2)/
+<span class="ln">97</span>     *         (HRU(IMIN) - HRU(IMIN-1))
+<span class="ln">98</span>      DUDR = (HV(IMIN+1)-HV(IMIN))/(RM(IMIN+1)-RM(IMIN))
+<span class="ln">99</span>      V(IMIN) = CC13*(HV(IMIN)*DRHOR2/RHOR + RM(IMIN)*DUDR)
+<span class="ln">100</span>      RHOR = DM(IMAX)*RM(IMAX)
+<span class="ln">101</span>      DRHOR2 = (EXP(CLN*HD(IMAX))*HRU(IMAX)**2 -
+<span class="ln">102</span>     *         EXP(CLN*HD(IMAX-1))*HRU(IMAX-1)**2)/
+<span class="ln">103</span>     *         (HRU(IMAX) - HRU(IMAX-1))
+<span class="ln">104</span>      DUDR = (HV(IMAX)-HV(IMAX-1))/(RM(IMAX)-RM(IMAX-1))
+<span class="ln">105</span>      V(IMAX) = CC13*(HV(IMAX)*DRHOR2/RHOR + RM(IMAX)*DUDR)
+<span class="ln">106</span>C NOW COMPUTE RUN OF FC; THIS ASSUMES THAT FC = SAME FOR ALL
+<span class="ln">107</span>C MECHANISMS AND IS LIMITED TO A MAXIMUM OF 1.
+<span class="ln">108</span>      DO I = IMIN,IMAX
+<span class="ln">109</span>         IF(HV(I).LE.0.0D0)THEN
+<span class="ln">110</span>            VFC(I) = 0.0D0
+<span class="ln">111</span>         ELSE
+<span class="ln">112</span>            FTEST = MAX(ABS(V(I)-ALPHA(I)*HV(I))/HV(I),FC)
+<span class="ln">113</span>            VFC(I) = FC/FTEST
+<span class="ln">114</span>         ENDIF
+<span class="ln">115</span>      END DO
+<span class="ln">116</span> 9999 CONTINUE
+<span class="ln">117</span>
+<span class="ln">118</span>      RETURN
+<span class="ln">119</span>      END</pre></details>
+<details class='py' id='py-getfc'><summary>Python version: getfc</summary><pre class='doc'>Compute, for the shells imin..imax, Zahn&#x27;s (1992) ratio f_c of the
+chemical to the angular-momentum diffusion coefficient, capped at 1
+(equations on the page); zero where the circulation velocity is &lt;= 0,
+and everywhere if FC &lt;= 0.
+
+Translates: getfc.f#GETFC (09c3b9b)
+
+Arguments: hd (log rho at zone centres), hru (radii at zone centres),
+hv (circulation velocities U at zone edges), imin, imax, omega. Array
+changed in place: vfc (owned by seculr, read by codiff). Nothing is
+returned.</pre><pre class='src'><span class="ln">19</span>def getfc(hd, hru, hv, imin, imax, omega, vfc):
+<span class="ln">20</span>    &quot;&quot;&quot;Compute, for the shells imin..imax, Zahn&#x27;s (1992) ratio f_c of the
+<span class="ln">21</span>    chemical to the angular-momentum diffusion coefficient, capped at 1
+<span class="ln">22</span>    (equations on the page); zero where the circulation velocity is &lt;= 0,
+<span class="ln">23</span>    and everywhere if FC &lt;= 0.
+<span class="ln">24</span>
+<span class="ln">25</span>    Translates: getfc.f#GETFC (09c3b9b)
+<span class="ln">26</span>
+<span class="ln">27</span>    Arguments: hd (log rho at zone centres), hru (radii at zone centres),
+<span class="ln">28</span>    hv (circulation velocities U at zone edges), imin, imax, omega. Array
+<span class="ln">29</span>    changed in place: vfc (owned by seculr, read by codiff). Nothing is
+<span class="ln">30</span>    returned.
+<span class="ln">31</span>    &quot;&quot;&quot;
+<span class="ln">32</span>    c = constants_mod
+<span class="ln">33</span>    iv = intvar_mod
+<span class="ln">34</span>    fc = nmlpar_mod.fc
+<span class="ln">35</span>    if fc &lt;= 0.0:
+<span class="ln">36</span>        for i in range(imin, imax + 1):
+<span class="ln">37</span>            vfc[i] = 0.0
+<span class="ln">38</span>        return                                     # go to 9999
+<span class="ln">39</span>    # alpha = d ln(r^2 Omega) / d ln r between neighbouring centres.
+<span class="ln">40</span>    # Question (see the page): no factor 1/2.
+<span class="ln">41</span>    for i in range(imin, imax + 1):
+<span class="ln">42</span>        wm = 0.5 * (omega[i] + omega[i - 1])
+<span class="ln">43</span>        alpha[i] = ((omega[i] * hru[i]**2 - omega[i - 1] * hru[i - 1]**2)
+<span class="ln">44</span>                    / (hru[i] - hru[i - 1]) / (wm * iv.rm[i]))
+<span class="ln">45</span>    # v = (1/(3 rho r)) d(rho r^2 U)/dr, i.e. 2V; U interpolated to the
+<span class="ln">46</span>    # zone centres.
+<span class="ln">47</span>    fx = (hru[imin] - iv.rm[imin]) / (iv.rm[imin + 1] - iv.rm[imin])
+<span class="ln">48</span>    vm = hv[imin] + fx * (hv[imin + 1] - hv[imin])
+<span class="ln">49</span>    dr2vm = math.exp(c.cln * hd[imin]) * hru[imin]**2 * vm
+<span class="ln">50</span>    for i in range(imin + 1, imax):
+<span class="ln">51</span>        fx = (hru[i] - iv.rm[i]) / (iv.rm[i + 1] - iv.rm[i])
+<span class="ln">52</span>        vp = hv[i] + fx * (hv[i + 1] - hv[i])
+<span class="ln">53</span>        dr2vp = math.exp(c.cln * hd[i]) * hru[i]**2 * vp
+<span class="ln">54</span>        rhor = iv.dm[i] * iv.rm[i]
+<span class="ln">55</span>        v[i] = c.cc13 * (dr2vp - dr2vm) / rhor / (hru[i] - hru[i - 1])
+<span class="ln">56</span>        dr2vm = dr2vp
+<span class="ln">57</span>    # The first and last shells, by the product rule.
+<span class="ln">58</span>    rhor = iv.dm[imin] * iv.rm[imin]
+<span class="ln">59</span>    drhor2 = ((math.exp(c.cln * hd[imin]) * hru[imin]**2
+<span class="ln">60</span>               - math.exp(c.cln * hd[imin - 1]) * hru[imin - 1]**2)
+<span class="ln">61</span>              / (hru[imin] - hru[imin - 1]))
+<span class="ln">62</span>    dudr = (hv[imin + 1] - hv[imin]) / (iv.rm[imin + 1] - iv.rm[imin])
+<span class="ln">63</span>    v[imin] = c.cc13 * (hv[imin] * drhor2 / rhor + iv.rm[imin] * dudr)
+<span class="ln">64</span>    rhor = iv.dm[imax] * iv.rm[imax]
+<span class="ln">65</span>    drhor2 = ((math.exp(c.cln * hd[imax]) * hru[imax]**2
+<span class="ln">66</span>               - math.exp(c.cln * hd[imax - 1]) * hru[imax - 1]**2)
+<span class="ln">67</span>              / (hru[imax] - hru[imax - 1]))
+<span class="ln">68</span>    dudr = (hv[imax] - hv[imax - 1]) / (iv.rm[imax] - iv.rm[imax - 1])
+<span class="ln">69</span>    v[imax] = c.cc13 * (hv[imax] * drhor2 / rhor + iv.rm[imax] * dudr)
+<span class="ln">70</span>    # f_c = FC / max(|v - alpha U| / U, FC).
+<span class="ln">71</span>    for i in range(imin, imax + 1):
+<span class="ln">72</span>        if hv[i] &lt;= 0.0:
+<span class="ln">73</span>            # Question (see the page): no mixing where U &lt;= 0.
+<span class="ln">74</span>            vfc[i] = 0.0
+<span class="ln">75</span>        else:
+<span class="ln">76</span>            ftest = max(abs(v[i] - alpha[i] * hv[i]) / hv[i], fc)
+<span class="ln">77</span>            vfc[i] = fc / ftest</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Question 4 answerable.</strong> "is <code>IMIN</code> ≥ 2 always?" MIDMOD sets <code>IMIN = MAX(2,I-1)</code> or <code>IMIN = 2</code> (midmod.f lines 329, 331), so <code>IMIN-1</code> is at least 1. Fix: state it and drop the question.</li>
+<li><strong>Unclear.</strong> "<code>DM</code> (density at zone edges, probably)". SETUPV sets <code>DM(I)</code> by four-point interpolation of $\log\rho$ to the zone edges (setupv.f line 207) and <code>RM(I)</code> as the mean of the neighbouring centre radii (line 68). Fix: drop "probably", name SETUPV.</li>
+<li><strong>Unclear.</strong> Step 3 writes $\alpha U$, but $\alpha$ was defined with the comment's ½, while the code uses <code>ALPHA</code> (no ½); the code also takes the absolute value, which the comment's formula does not. Fix: write <code>ALPHA</code> in step 3 and mention the absolute value.</li>
+</ol>
+<p>Revised: question 4 answered in "The method" and dropped; <code>DM</code>, <code>RM</code> sourced to SETUPV; step 3 written with <code>ALPHA</code> and the absolute value noted.</p></div></details>
+</main></body></html>

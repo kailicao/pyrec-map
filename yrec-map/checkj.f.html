@@ -1,0 +1,709 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>checkj.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ checkj.f</span></header><main>
+<h1>checkj.f</h1>
+<p class='muted'>385 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/checkj.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>checkj.py</code>, 273 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file checks each iteration of angular-momentum transport. Its header lists five tasks: catch negative specific angular momentum $j = J/M$; test convergence of the iteration on the diffusion coefficients; compute $\Omega$ (and the moment of inertia) from the new $j$; remove reversals of the $\Omega$ gradient by imposing solid-body rotation locally; and print details.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments, the model (<code>HD</code>, <code>HR</code>, <code>HS</code>, <code>HS2</code>, <code>LCZ</code>), <code>HJM</code> ($j$ after this iteration), <code>HJMP</code> ($j$ after the previous iteration), <code>HJMSAV</code> ($j$ at the start of the step), <code>IT</code>, <code>LOKAD</code>; <code>DJOK</code>, <code>ITDIF2</code> from <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a>; <code>WOLD</code> ($\Omega$ of the previous model) from <a href="../yrec-map/oldrot_mod.f.html#def-OLDROT_MOD"><code>OLDROT_MOD</code></a>; <code>TOLERI</code> (<a href="../yrec-map/errmom_mod.f.html#def-ERRMOM_MOD"><code>ERRMOM_MOD</code></a>) and <code>ACFPFT</code> (<code>NMLPAR_MOD</code>), the tolerances of the moment-of-inertia iteration.</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/seculr.f.html#def-SECULR">SECULR</a>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/getrot.f.html#def-GETROT">GETROT</a> ($\Omega$, moment of inertia $I$ and $\partial I/\partial\Omega$ from $j$) and <a href="../yrec-map/solid.f.html#def-SOLID">SOLID</a> (solid-body rotation over a range of shells).</li>
+<li><strong>Outputs:</strong> <code>OMEGA</code>, <code>HI</code>, <code>QIW</code>, <code>ETA2</code>, <code>R0</code>, <code>HJMP</code> (set to <code>HJM</code>), <code>LOK</code>, <code>LREDO</code>, <code>DT</code>, <code>IREDO</code>.</li>
+<li><strong>Modules:</strong> <code>TEMP2_MOD</code>, <code>QUADD_MOD</code>, <code>EGRID_MOD</code>, <code>DIFAD_MOD</code>, <code>DIFAD2_MOD</code>, and from <code>NMLPAR_MOD</code> <code>NPRTPT</code> and <code>LDIFAD</code>, are used only in the detailed print, which is now switched off (see Design).</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>If $j \le 0$ anywhere, stop (see question 1).</li>
+<li><strong>Convergence:</strong> $\delta_\mathrm{it} = \max_i |j_i - j_i^\mathrm{prev}|/j_i^\mathrm{prev}$; converged (<code>LOK</code>) if $\delta_\mathrm{it} \le$ <code>DJOK</code>. If <code>LOKAD</code> is set on entry, <code>LOK</code> starts true.</li>
+<li><strong>$\Omega$ from $j$:</strong> call GETROT. Before the last iteration and while not converged, the tolerances <code>TOLERI</code> and <code>ACFPFT</code> are relaxed to $\max(10^{-2}\,\mathrm{DJOK}, \text{tolerance})$, "because the error in the diffusion is of order DJOK", and restored after.</li>
+<li><strong>Gradient reversals:</strong> from the surface inward, where $\Omega_i - \Omega_{i-1}$ is positive (by more than 1, see question 2) but was not positive in the previous model (<code>WOLD</code>), mix the two shells (and any adjacent convection zone) to solid-body rotation with SOLID; then widen the range while the boundaries show new reversals.</li>
+<li><strong>Print</strong> at the last iteration or on convergence: the largest $\Delta j/j$ over the step, and $\delta$ of each iteration.</li>
+</ol>
+<p><strong>Design.</strong> The detailed output to <code>IMODPT</code> is switched off by <code>IF(.TRUE.)GOTO 240</code> (G. Somers 11/14: "this can be trivially extracted from the extended .STORE file"), so more than 60 lines below it never run.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused argument <code>LPRT</code> removed.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>No time-step cut.</strong> The test <code>IF(IREDO.GT.0)</code> (replacing the commented-out <code>IREDO.GT.3</code>) stops the run at the first negative $j$, so the branch that halves the time step never runs, while the message still says "3 attempts at cutting timestep failed". Which is intended?</li>
+<li><strong>The threshold of the reversal test.</strong> The first test is <code>OMEGA(I)-OMEGA(I-1).GT.1.0d0</code>, an increase of 1 rad s$^{-1}$, which is far larger than any stellar $\Omega$; the later tests use $10^{-15}$. With 1.0 the reversal correction practically never fires. Is <code>1.0D-15</code> meant?</li>
+<li><strong>Array bounds.</strong> <code>DELJI(16)</code> and <code>IMAXI(16)</code> are indexed by the iteration <code>IT</code>; if <code>ITDIF2</code> exceeds 16, they overflow.</li>
+<li><strong>Dead output.</strong> Can the switched-off print (and the modules it alone needs) be removed in the overhaul?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+MHP 10/02 ECOD, ECOD2 NO LONGER USED; OMITTED FROM CALL</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-CHECKJ'>CHECKJ</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-CHECKJ'><h3><span class='kind'>subroutine</span>CHECKJ</h3>
+<p class='muted'>lines 3–385 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/checkj.f#L3-L385'>GitHub</a></p>
+<pre>SUBROUTINE CHECKJ(HD,HJMP,HJMSAV,HR,HS,HS2,HV,IMIN,IMAX,IT,LCZ,</pre>
+<div class='notes'><p>Checks one iteration of angular-momentum diffusion: stops on $j \le 0$, tests convergence against <code>DJOK</code>, gets $\Omega$ from $j$ (<a href="../yrec-map/getrot.f.html#def-GETROT">GETROT</a>), and removes $\Omega$-gradient reversals with <a href="../yrec-map/solid.f.html#def-SOLID">SOLID</a>.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+MHP 10/02 ECOD, ECOD2 NO LONGER USED; OMITTED FROM CALL</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/difad2_mod.f.html#def-DIFAD2_MOD'>DIFAD2_MOD</a>, <a href='../yrec-map/difad_mod.f.html#def-DIFAD_MOD'>DIFAD_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/egrid_mod.f.html#def-EGRID_MOD'>EGRID_MOD</a>, <a href='../yrec-map/errmom_mod.f.html#def-ERRMOM_MOD'>ERRMOM_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/oldrot_mod.f.html#def-OLDROT_MOD'>OLDROT_MOD</a>, <a href='../yrec-map/quadd_mod.f.html#def-QUADD_MOD'>QUADD_MOD</a>, <a href='../yrec-map/temp2_mod.f.html#def-TEMP2_MOD'>TEMP2_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/getrot.f.html#def-GETROT'>GETROT</a> <span class='muted'>(getrot.f)</span></li>
+<li><a href='../yrec-map/solid.f.html#def-SOLID'>SOLID</a> <span class='muted'>(solid.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE CHECKJ(HD,HJMP,HJMSAV,HR,HS,HS2,HV,IMIN,IMAX,IT,LCZ,
+<span class="ln">4</span>C      *                  LPRT,M,DT,ETA2,HI,HJM,IREDO,LOK,LREDO,OMEGA,  ! KC 2025-05-31
+<span class="ln">5</span>     *                  M,DT,ETA2,HI,HJM,IREDO,LOK,LREDO,OMEGA,
+<span class="ln">6</span>     *                  QIW,R0,WSAV,ID,IDM,LOKAD)
+<span class="ln">7</span>C 10/15/26 MHP via Claude
+<span class="ln">8</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">9</span>C PARAMETER(JSON=5000) here.
+<span class="ln">10</span>      USE DIMENSIONS_MOD
+<span class="ln">11</span>C 10/14/26 MHP via Claude
+<span class="ln">12</span>C code changed to convert COMMON/TEMP2/ into TEMP2_MOD.
+<span class="ln">13</span>      USE TEMP2_MOD
+<span class="ln">14</span>C 10/14/26 MHP via Claude
+<span class="ln">15</span>C code changed to convert COMMON/QUADD/ into QUADD_MOD.
+<span class="ln">16</span>      USE QUADD_MOD
+<span class="ln">17</span>C 10/14/26 MHP via Claude
+<span class="ln">18</span>C code changed to convert COMMON/OLDROT/ into OLDROT_MOD.
+<span class="ln">19</span>      USE OLDROT_MOD
+<span class="ln">20</span>C 10/14/26 MHP via Claude
+<span class="ln">21</span>C code changed to convert COMMON/ERRMOM/ into ERRMOM_MOD.
+<span class="ln">22</span>      USE ERRMOM_MOD
+<span class="ln">23</span>C 10/14/26 MHP via Claude
+<span class="ln">24</span>C code changed to convert COMMON/EGRID/ into EGRID_MOD.
+<span class="ln">25</span>      USE EGRID_MOD
+<span class="ln">26</span>C 10/14/26 MHP via Claude
+<span class="ln">27</span>C code changed to convert COMMON/DIFAD2/ into DIFAD2_MOD.
+<span class="ln">28</span>      USE DIFAD2_MOD
+<span class="ln">29</span>C 10/14/26 MHP via Claude
+<span class="ln">30</span>C code changed to convert COMMON/DIFAD/ into DIFAD_MOD.
+<span class="ln">31</span>      USE DIFAD_MOD
+<span class="ln">32</span>C 10/14/26 MHP via Claude
+<span class="ln">33</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">34</span>      USE NMLPAR_MOD
+<span class="ln">35</span>C 10/14/26 MHP via Claude
+<span class="ln">36</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">37</span>      USE IOUNITS_MOD
+<span class="ln">38</span>C 10/20/26 MHP via Claude
+<span class="ln">39</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">40</span>C explicit declarations.
+<span class="ln">41</span>      IMPLICIT NONE
+<span class="ln">42</span>      REAL*8 ACC,DELJ,DELJI,DJ,DT,ETA2,HD,HI,HJM,HJMP,HJMSAV,HR,HS,HS2,
+<span class="ln">43</span>     *       HV,OMEGA,QIW,R0,TOLER0,WSAV
+<span class="ln">44</span>      INTEGER I,IBEG,IBOT,ID,IDM,IEND,II,IJMAX,IMAX,IMAXI,IMIN,IREDO,IT,
+<span class="ln">45</span>     *       ITOP,J,M
+<span class="ln">46</span>      LOGICAL*4 LCZ,LOK,LOKAD,LREDO
+<span class="ln">47</span>C     *                  QIW,R0,WSAV,ID,IDM,ECOD,ECOD2,LOKAD)
+<span class="ln">48</span>C 10/12/26 MHP via Claude
+<span class="ln">49</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">50</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">51</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">52</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">53</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">54</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">55</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">56</span>C
+<span class="ln">57</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">58</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">59</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">60</span>C 9/25/26 MHP via Claude
+<span class="ln">61</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">62</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">63</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">64</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">65</span>C COMMON/IOUNITS/
+<span class="ln">66</span>C MHP 7/93
+<span class="ln">67</span>C 10/13/26 MHP via Claude
+<span class="ln">68</span>C code changed to drop COMMON/VARFC/, declared here but never used.
+<span class="ln">69</span>C MHP 3/93
+<span class="ln">70</span>C MHP 11/94
+<span class="ln">71</span>      DIMENSION HD(JSON),HJM(JSON),HJMP(JSON),HR(JSON),HS(JSON),
+<span class="ln">72</span>     *   HS2(JSON),LCZ(JSON),ETA2(JSON),HI(JSON),OMEGA(JSON),
+<span class="ln">73</span>     *   QIW(JSON),R0(JSON),HJMSAV(JSON),DELJI(16),IMAXI(16),
+<span class="ln">74</span>     *   ID(JSON),HV(JSON),WSAV(JSON)
+<span class="ln">75</span>C     *   ECOD(JSON),ECOD2(JSON)
+<span class="ln">76</span>      SAVE
+<span class="ln">77</span>
+<span class="ln">78</span>C  SR CHECKJ PERFORMS SEVERAL FUNCTIONS.
+<span class="ln">79</span>C  FIRST, IT CHECKS FOR NEGATIVE SPECIFIC ANGULAR MOMENTA.
+<span class="ln">80</span>C  IF THEY ARE ENCOUNTERED, THE TIMESTEP IS CUT.
+<span class="ln">81</span>C  SECOND, IT GUARDS AGAINST REVERSAL OF ANGULAR VELOCITY GRADIENTS.
+<span class="ln">82</span>C  THIRD, IT COMPARES THE RUN OF OMEGA TO THAT FOR THE PREVIOUS ITERATION.
+<span class="ln">83</span>C  IF THE RUN HAS CHANGED BY LITTLE ENOUGH THEN THE DIFFUSION EQUATIONS
+<span class="ln">84</span>C  ARE CONSIDERED CONVERGED.  LOK=T IF THE RUN HAS CONVERGED.
+<span class="ln">85</span>C  FOURTH, IT CORRECTS THE MOMENT OF INERTIA FOR CHANGES IN OMEGA.
+<span class="ln">86</span>C  INPUT VARIABLES:
+<span class="ln">87</span>C  FIFTH, IT WRITES OUT DETAILS OF THE DIFFUSION IF REQUESTED.
+<span class="ln">88</span>C
+<span class="ln">89</span>C  HD : RUN OF LOG DENSITY.
+<span class="ln">90</span>C  HJM : RUN OF SPECIFIC ANGULAR MOMENTUM AFTER THE CURRENT ITERATION.
+<span class="ln">91</span>C  HJMP : RUN OF SPECIFIC ANGULAR MOMENTUM AFTER THE LAST ITERATION
+<span class="ln">92</span>C     FOR THE DIFFUSION COEFFICIENTS.
+<span class="ln">93</span>C  HJMSAV : RUN OF SPECIFIC ANGULAR MOMENTUM AT THE BEGINNING OF THE
+<span class="ln">94</span>C     TIMESTEP.
+<span class="ln">95</span>C  HR : RUN OF LOG RADIUS.
+<span class="ln">96</span>C  HS : RUN OF LOG MASS.
+<span class="ln">97</span>C  HS2 : MASS (UNLOGGED) CONTAINED IN EACH OF THE MODEL POINTS.
+<span class="ln">98</span>C  HV : RUN OF CHARACTERISTIC DIFFUSION VELOCITIES.  IF HV(I)&gt;0 THEN ZONE
+<span class="ln">99</span>C     I IS UNSTABLE WITH RESPECT TO ZONE I-1.
+<span class="ln">100</span>C  IMIN,IMAX : THE FIRST AND LAST ZONES AT WHICH HV IS COMPUTED.
+<span class="ln">101</span>C   *NOTE: IMIN = 2 AND IMAX = NUMBER OF MODEL POINTS UNLESS A SURFACE
+<span class="ln">102</span>C     OR CENTRAL CONVECTION ZONE EXISTS.
+<span class="ln">103</span>C  IT : ITERATION NUMBER.
+<span class="ln">104</span>C  ITDIF2 : MAXIMUM NUMBER OF ITERATIONS ALLOWED IN A GIVEN DIFFUSION
+<span class="ln">105</span>C     TIMESTEP.
+<span class="ln">106</span>C  LCZ : ARRAY SET T IF A ZONE IS CONVECTIVE FOR ANGULAR MOMENTUM
+<span class="ln">107</span>C     REDISTRIBUTION PURPOSES (I.E. INCLUDES OVERSHOOT REGION.)
+<span class="ln">108</span>C  LPRT : FLAG SET T IF MODEL I/O DESIRED.
+<span class="ln">109</span>C  M : NUMBER OF MODEL POINTS.
+<span class="ln">110</span>C
+<span class="ln">111</span>C  OUTPUT VARIABLES:
+<span class="ln">112</span>C
+<span class="ln">113</span>C  DT : DIFFUSION TIMESTEP, WHICH CAN BE CUT IF ERRORS IN THE DIFFUSION
+<span class="ln">114</span>C     ARE DETECTED.
+<span class="ln">115</span>C  ETA2,R0 : AUXILLARY QUANTITIES USED TO FIND OMEGA GIVEN J/M.
+<span class="ln">116</span>C  HI,QIW : RUN OF MOMENTS OF INERTIA AND THEIR DERIVATIVES WITH RESPECT
+<span class="ln">117</span>C  TO OMEGA.
+<span class="ln">118</span>C  HJMP : ARRAY HJMP IS SET EQUAL TO HJM AFTER CONVERGENCE IS CHECKED.
+<span class="ln">119</span>C  IREDO : NUMBER OF TIMES DIFFUSION TIMESTEP HAS BEEN CUT.
+<span class="ln">120</span>C  LOK : FLAG SET T IF DIFFUSION CEOFFICIENTS HAVE CONVERGED.
+<span class="ln">121</span>C  LREDO : FLAG SET T IF A PROBLEM REQUIRES CUTTING THE DIFFUSION TIMESTEP.
+<span class="ln">122</span>C  OMEGA : RUN OF ANGULAR VELOCITY.
+<span class="ln">123</span>C
+<span class="ln">124</span>C  CHECK FOR NEGATIVE J/M.
+<span class="ln">125</span>      LOK = .FALSE.
+<span class="ln">126</span>      LREDO = .FALSE.
+<span class="ln">127</span>      IF(LOKAD)THEN
+<span class="ln">128</span>         LOK = .TRUE.
+<span class="ln">129</span>         LREDO = .FALSE.
+<span class="ln">130</span>      ENDIF
+<span class="ln">131</span>      DO 10 I = 1,M
+<span class="ln">132</span>         IF(HJM(I).LE.0.0D0) THEN
+<span class="ln">133</span>            IREDO = IREDO + 1
+<span class="ln">134</span>C  STOP IF TIMESTEP CUT MORE THAN 3 TIMES.
+<span class="ln">135</span>C            IF(IREDO.GT.3)THEN
+<span class="ln">136</span>            IF(IREDO.GT.0)THEN
+<span class="ln">137</span>               WRITE(6,1000) I
+<span class="ln">138</span>               WRITE(ISHORT,1000) I
+<span class="ln">139</span> 1000          FORMAT(1X,39(&#x27;&gt;&#x27;),39(&#x27;&lt;&#x27;)/5X,&#x27;ERROR IN SR CHECKJ&#x27;/
+<span class="ln">140</span>     *                5X,&#x27;NEGATIVE J/M ENCOUNTERED IN ZONE&#x27;,I5,
+<span class="ln">141</span>     *                &#x27; AND 3 ATTEMPTS AT CUTTING TIMESTEP FAILED&#x27;/
+<span class="ln">142</span>     *                &#x27;RUN STOPPED&#x27;)
+<span class="ln">143</span>               STOP
+<span class="ln">144</span>            ELSE
+<span class="ln">145</span>               LREDO = .TRUE.
+<span class="ln">146</span>               DT = 0.5D0*DT
+<span class="ln">147</span>               WRITE(6,1005)IREDO,I
+<span class="ln">148</span>               WRITE(ISHORT,1005)IREDO,I
+<span class="ln">149</span> 1005          FORMAT(5X,&#x27;ERROR IN SR CHECKJ&#x27;/5X,&#x27;TIMESTEP CUT,&#x27;,1X,
+<span class="ln">150</span>     *                &#x27;NUMBER&#x27;,I5,&#x27; DUE TO NEGATIVE J/M IN ZONE&#x27;,I5)
+<span class="ln">151</span>               GOTO 240
+<span class="ln">152</span>            ENDIF
+<span class="ln">153</span>         ENDIF
+<span class="ln">154</span>   10 CONTINUE
+<span class="ln">155</span>C  CHECK IF THE FRACTIONAL CHANGE IN OMEGA RELATIVE TO THE PREVIOUS
+<span class="ln">156</span>C  ITERATION IS SMALL ENOUGH TO BE CONSIDERED CONVERGED.
+<span class="ln">157</span>C  ALSO LOCATE THE ZONE WHERE THE MAXIMUM CHANGE OCCURS FOR I/O.
+<span class="ln">158</span>      DELJI(IT) = (HJM(1)-HJMP(1))/HJMP(1)
+<span class="ln">159</span>      HJMP(1) = HJM(1)
+<span class="ln">160</span>      IMAXI(IT) = 1
+<span class="ln">161</span>      DO 140 I = 2,M
+<span class="ln">162</span>         DJ = (HJM(I)-HJMP(I))/HJMP(I)
+<span class="ln">163</span>         IF(ABS(DJ).GT.ABS(DELJI(IT))) THEN
+<span class="ln">164</span>            DELJI(IT) = DJ
+<span class="ln">165</span>            IMAXI(IT) = I
+<span class="ln">166</span>         ENDIF
+<span class="ln">167</span>         HJMP(I) = HJM(I)
+<span class="ln">168</span>  140 CONTINUE
+<span class="ln">169</span>      IF(ABS(DELJI(IT)).LE.DJOK) THEN
+<span class="ln">170</span>C         LOK = .FALSE.
+<span class="ln">171</span>C      ELSE
+<span class="ln">172</span>         LOK = .TRUE.
+<span class="ln">173</span>      ENDIF
+<span class="ln">174</span>C  FIND THE RUN OF OMEGA THAT CORRESPONDS TO THE NEW RUN OF J/M.
+<span class="ln">175</span>C  THE MOMENT OF INERTIA IS A FUNCTION OF OMEGA WHICH IS SOLVED
+<span class="ln">176</span>C  ITERATIVELY.  BECAUSE THE ERROR IN THE DIFFUSION IS OF ORDER DJOK,
+<span class="ln">177</span>C  RELAX TOLERANCE FOR MOMENT OF INERTIA ITERATION EXCEPT FOR THE
+<span class="ln">178</span>C  FINAL STEP.
+<span class="ln">179</span>      TOLER0 = TOLERI
+<span class="ln">180</span>      ACC = ACFPFT
+<span class="ln">181</span>      IF(IT.LT.ITDIF2.AND..NOT.LOK)THEN
+<span class="ln">182</span>         TOLERI = MAX(DJOK*1.0D-2,TOLER0)
+<span class="ln">183</span>         ACFPFT = MAX(DJOK*1.0D-2,ACC)
+<span class="ln">184</span>      ENDIF
+<span class="ln">185</span>      CALL <a href="../yrec-map/getrot.f.html#def-GETROT" title="GETROT in getrot.f">GETROT</a>(HD,HJM,HR,HS,HS2,LCZ,M,ETA2,HI,OMEGA,QIW,R0)
+<span class="ln">186</span>      TOLERI = TOLER0
+<span class="ln">187</span>      ACFPFT = ACC
+<span class="ln">188</span>C  SEARCH FOR REVERSAL OF OMEGA GRADIENTS.  IF ONE EXISTS, ENFORCE
+<span class="ln">189</span>C  SOLID-BODY ROTATION IN THE OFFENDING PAIR OF ZONES.
+<span class="ln">190</span>      I = M
+<span class="ln">191</span>      IBOT = M
+<span class="ln">192</span>   20 CONTINUE
+<span class="ln">193</span>C  POSITIVE OMEGA GRADIENT ENCOUNTERED.
+<span class="ln">194</span>      IF(OMEGA(I)-OMEGA(I-1).GT.1.0d0)THEN
+<span class="ln">195</span>C  IF PREVIOUS GRADIENT WAS POSITIVE, LEAVE ALONE.
+<span class="ln">196</span>         IF(WOLD(I)-WOLD(I-1).GT.1.0D-15)THEN
+<span class="ln">197</span>            I = IBOT-1
+<span class="ln">198</span>            IBOT = I
+<span class="ln">199</span>            IF(I.GT.1)THEN
+<span class="ln">200</span>               GOTO 20
+<span class="ln">201</span>            ELSE
+<span class="ln">202</span>               GOTO 130
+<span class="ln">203</span>            ENDIF
+<span class="ln">204</span>         ENDIF
+<span class="ln">205</span>C  SIGN OF D OMEGA/DR HAS CHANGED,INDICATING AN ERROR IN DIFFUSION.
+<span class="ln">206</span>C  MIX THE OFFENDING ZONES TO SOLID BODY ROTATION.
+<span class="ln">207</span>C  ITOP IS THE UPPERMOST UNSTABLE SHELL.
+<span class="ln">208</span>         ITOP = I
+<span class="ln">209</span>C  IF ADJACENT TO A CONVECTION ZONE, MIX THE CONVECTION ZONE AS WELL.
+<span class="ln">210</span>         IF(LCZ(ITOP) .AND. ITOP.LT.M) THEN
+<span class="ln">211</span>            DO 30 J = ITOP + 1,M
+<span class="ln">212</span>               IF(.NOT.LCZ(J)) GOTO 40
+<span class="ln">213</span>   30       CONTINUE
+<span class="ln">214</span>   40       ITOP = J - 1
+<span class="ln">215</span>         ENDIF
+<span class="ln">216</span>C  IBOT IS THE BOTTOM UNSTABLE ZONE. CHECK FOR ADJACENT CZ AS ABOVE.
+<span class="ln">217</span>         IBOT = I - 1
+<span class="ln">218</span>         IF(LCZ(IBOT) .AND. IBOT.GT.1) THEN
+<span class="ln">219</span>            DO 50 J = IBOT - 1,1,-1
+<span class="ln">220</span>               IF(.NOT.LCZ(J)) GOTO 60
+<span class="ln">221</span>   50       CONTINUE
+<span class="ln">222</span>   60       IBOT = J + 1
+<span class="ln">223</span>         ENDIF
+<span class="ln">224</span>C  ENFORCE A SOLID BODY ROTATION CURVE FROM IBOT TO ITOP.
+<span class="ln">225</span>         CALL <a href="../yrec-map/solid.f.html#def-SOLID" title="SOLID in solid.f">SOLID</a>(HD,HJM,HR,HS,HS2,IBOT,ITOP,ETA2,HI,
+<span class="ln">226</span>     *              OMEGA,QIW,R0,M)
+<span class="ln">227</span>C  NOW CHECK TO SEE IF THE REDISTRIBUTION HAS GENERATED ANY NEW REVERSALS.
+<span class="ln">228</span>   70    CONTINUE
+<span class="ln">229</span>         LREDO = .FALSE.
+<span class="ln">230</span>C  CHECK FOR GRADIENT REVERSALS BELOW ZONE IBOT.
+<span class="ln">231</span>         IF(IBOT.GT.1) THEN
+<span class="ln">232</span>            IF(OMEGA(IBOT)-OMEGA(IBOT-1).GT.1.0D-15)THEN
+<span class="ln">233</span>               IF(WOLD(IBOT)-WOLD(IBOT-1).LT.1.0D-15)THEN
+<span class="ln">234</span>                  LREDO = .TRUE.
+<span class="ln">235</span>                  IBOT = IBOT - 1
+<span class="ln">236</span>                  IF(LCZ(IBOT) .AND. IBOT.GT.1) THEN
+<span class="ln">237</span>                     DO 80 J = IBOT - 1,1,-1
+<span class="ln">238</span>                        IF(.NOT.LCZ(J)) GOTO 90
+<span class="ln">239</span>   80                CONTINUE
+<span class="ln">240</span>   90                IBOT = J + 1
+<span class="ln">241</span>                  ENDIF
+<span class="ln">242</span>               ENDIF
+<span class="ln">243</span>            ENDIF
+<span class="ln">244</span>         ENDIF
+<span class="ln">245</span>C  CHECK FOR GRADIENT REVERSALS ABOVE ZONE ITOP.
+<span class="ln">246</span>         IF(ITOP.LT.M) THEN
+<span class="ln">247</span>            IF(OMEGA(ITOP+1)-OMEGA(ITOP).GT.1.0D-15)THEN
+<span class="ln">248</span>               IF(WOLD(ITOP+1)-WOLD(ITOP).LT.1.0D-15)THEN
+<span class="ln">249</span>                  LREDO = .TRUE.
+<span class="ln">250</span>                  ITOP = ITOP+1
+<span class="ln">251</span>                  IF(LCZ(ITOP) .AND. ITOP.LT.M) THEN
+<span class="ln">252</span>                     DO 100 J = ITOP+1,M
+<span class="ln">253</span>                        IF(.NOT.LCZ(J)) GOTO 110
+<span class="ln">254</span>  100                CONTINUE
+<span class="ln">255</span>  110                ITOP = J - 1
+<span class="ln">256</span>                  ENDIF
+<span class="ln">257</span>               ENDIF
+<span class="ln">258</span>            ENDIF
+<span class="ln">259</span>         ENDIF
+<span class="ln">260</span>C  IF LREDO=T THEN THE REDISTRIBUTION OF ANGULAR MOMENTUM IN A REVERSED
+<span class="ln">261</span>C  REGION HAS EFFECTED A CHANGE IN OMEGA AT ONE OF BOTH OF THE BOUNDARIES
+<span class="ln">262</span>C  THAT HAS CAUSED A NEW GRADIENT REVERSAL AT THE BOUNDARY.
+<span class="ln">263</span>         IF(LREDO) THEN
+<span class="ln">264</span>            CALL <a href="../yrec-map/solid.f.html#def-SOLID" title="SOLID in solid.f">SOLID</a>(HD,HJM,HR,HS,HS2,IBOT,ITOP,ETA2,HI,
+<span class="ln">265</span>     *                 OMEGA,QIW,R0,M)
+<span class="ln">266</span>            GOTO 70
+<span class="ln">267</span>         ENDIF
+<span class="ln">268</span>         IF(IT.EQ.ITDIF2.OR.LOK)WRITE(*,120)IBOT,ITOP,IT
+<span class="ln">269</span>  120    FORMAT(5X,&#x27;OMEGA GRADIENT REVERSAL BETWEEN ZONES &#x27;,
+<span class="ln">270</span>     *          I5,&#x27; AND &#x27;,I5,&#x27; ITERATION &#x27;,I5)
+<span class="ln">271</span>      ENDIF
+<span class="ln">272</span>  130 CONTINUE
+<span class="ln">273</span>C  RETURN FOR NEXT ZONE.
+<span class="ln">274</span>      I = IBOT - 1
+<span class="ln">275</span>      IBOT = I
+<span class="ln">276</span>      IF(I.GT.1) GOTO 20
+<span class="ln">277</span>C  I/O FOR END OF DIFFUSION STEP.
+<span class="ln">278</span>      IF(IT.EQ.ITDIF2.OR.LOK)THEN
+<span class="ln">279</span>C  FIND MAXIMUM FRACTIONAL CHANGE IN J/M OVER TIMESTEP.
+<span class="ln">280</span>         DELJ = 0.0D0
+<span class="ln">281</span>         IJMAX = 0
+<span class="ln">282</span>C MHP 10/02 ICRIT REMOVED
+<span class="ln">283</span>C         IF(ICRIT.EQ.0)THEN
+<span class="ln">284</span>           II = 1
+<span class="ln">285</span>C         ELSE
+<span class="ln">286</span>C           II = ICRIT
+<span class="ln">287</span>C         ENDIF
+<span class="ln">288</span>         DO 150 I = II,M
+<span class="ln">289</span>            DJ = (HJM(I)-HJMSAV(I))/HJMSAV(I)
+<span class="ln">290</span>            IF(ABS(DJ).GT.ABS(DELJ)) THEN
+<span class="ln">291</span>               DELJ = DJ
+<span class="ln">292</span>               IJMAX = I
+<span class="ln">293</span>            ENDIF
+<span class="ln">294</span>  150    CONTINUE
+<span class="ln">295</span>         IF(.NOT.LOKAD)THEN
+<span class="ln">296</span>            WRITE(*,160)DELJ,IJMAX,(DELJI(J),IMAXI(J),J=1,IT)
+<span class="ln">297</span>  160       FORMAT(&#x27; MAX D(J/M)/(J/M)&#x27;,1PE12.3,&#x27; AT PT.&#x27;,I5,
+<span class="ln">298</span>     *      &#x27; BY ITERATION&#x27;/5(1X,E11.3,I4))
+<span class="ln">299</span>         ENDIF
+<span class="ln">300</span>C
+<span class="ln">301</span>C G Somers 11/14, I AM TURNING OFF THE OUTPUT TO THE .FULL FILE.
+<span class="ln">302</span>C THE AM CHANGES WILL NOT BE RECORDED, BUT THIS CAN BE TRIVIALLY
+<span class="ln">303</span>C EXTRACTED FROM THE EXTENDED .STORE FILE.
+<span class="ln">304</span>C
+<span class="ln">305</span>C SKIP OUTPUT IF NOT DESIRED.
+<span class="ln">306</span>C         IF(.NOT.LPRT)GOTO 240
+<span class="ln">307</span>         IF(.TRUE.)GOTO 240
+<span class="ln">308</span>C G Somers END
+<span class="ln">309</span>C
+<span class="ln">310</span>C  IF NPRTPT IS SET TO A LARGE NUMBER, SKIP DETAILED OUTPUT.
+<span class="ln">311</span>         IF(NPRTPT.GT.M)GOTO 240
+<span class="ln">312</span>         WRITE(IMODPT,170)
+<span class="ln">313</span>  170 FORMAT(&#x27; SHELL&#x27;,3X,&#x27;OMEGA&#x27;,5X,&#x27;DEL OMEGA&#x27;,6X,&#x27;J/M&#x27;,7X,&#x27;DEL J/M&#x27;)
+<span class="ln">314</span>C  DETERMINE WHICH SHELLS TO PRINT.
+<span class="ln">315</span>C  FIRST POINT ALWAYS PRINTED OUT.
+<span class="ln">316</span>         ID(1) = 1
+<span class="ln">317</span>         IDM = 2
+<span class="ln">318</span>         IBEG = MAX(IMIN,NPRTPT)
+<span class="ln">319</span>         IEND = MIN(IMAX,INT(IMAX/NPRTPT)*NPRTPT)
+<span class="ln">320</span>C PRINT OUT EVERY NPRTPT POINTS. WHEN V=0, SKIP POINTS.
+<span class="ln">321</span>         DO 180 J = IBEG,IEND,NPRTPT
+<span class="ln">322</span>C            IF(HV(J).EQ.0.0D0)GOTO 180
+<span class="ln">323</span>            ID(IDM) = J
+<span class="ln">324</span>            IDM = IDM + 1
+<span class="ln">325</span>  180    CONTINUE
+<span class="ln">326</span>C OUTERMOST MODEL POINT (OR POINT AT BASE OF SURFACE C.Z.)ALWAYS PRINTED.
+<span class="ln">327</span>         IF(ID(IDM-1).NE.IMAX)THEN
+<span class="ln">328</span>            ID(IDM) = IMAX
+<span class="ln">329</span>         ELSE
+<span class="ln">330</span>            IDM = IDM-1
+<span class="ln">331</span>         ENDIF
+<span class="ln">332</span>C  I/O CONCERNING ANGULAR MOMENTUM TRANSPORT.
+<span class="ln">333</span>         DO 200 I=1,IDM
+<span class="ln">334</span>            WRITE(IMODPT,190)ID(I),OMEGA(ID(I)),OMEGA(ID(I))-
+<span class="ln">335</span>     *      WSAV(ID(I)),HJM(ID(I)),HJM(ID(I))-HJMSAV(ID(I))
+<span class="ln">336</span>  190 FORMAT(1X,I5,1P4E12.3)
+<span class="ln">337</span>  200    CONTINUE
+<span class="ln">338</span>C  I/O CONCERNING DIFFUSION VELOCITIES AND SCALE LENGTHS.
+<span class="ln">339</span>         WRITE(IMODPT,210)
+<span class="ln">340</span>  210 FORMAT(1X,&#x27;SHELL&#x27;,4X,&#x27;VES0&#x27;,9X,&#x27;VES&#x27;,7X,&#x27;VGSF0&#x27;,8X,&#x27;VGSF&#x27;,9X,
+<span class="ln">341</span>     *       &#x27;VSS&#x27;,9X,&#x27;RAT&#x27;,8X,&#x27;VTOT&#x27;,7X,&#x27;LENGTH&#x27;,8X,&#x27;VMU&#x27;)
+<span class="ln">342</span>         DO 230 I = 1,IDM
+<span class="ln">343</span>            WRITE(IMODPT,220)ID(I),VES0(ID(I)),VES(ID(I)),VGSF0(ID(I)),
+<span class="ln">344</span>     *      VGSF(ID(I)),VSS(ID(I)),RAT(ID(I)),HV(ID(I)),HLE(ID(I)),
+<span class="ln">345</span>     *      VMU(ID(I))
+<span class="ln">346</span>  220 FORMAT(1X,I5,1P10E12.3)
+<span class="ln">347</span>  230    CONTINUE
+<span class="ln">348</span>         IF(LDIFAD)THEN
+<span class="ln">349</span>C            DO I = 1,IDM
+<span class="ln">350</span>C               WRITE(IMODPT,221)ID(I),VES(ID(I)),VESA(ID(I)),
+<span class="ln">351</span>C     *         VESD(ID(I)),
+<span class="ln">352</span>C     *         ECOD(ID(I)),ECOD2(ID(I)),ECOD3(ID(I)),ECOD4(ID(I))
+<span class="ln">353</span>C 221           FORMAT(1X,I5,1P7E12.3)
+<span class="ln">354</span>C            END DO
+<span class="ln">355</span>            IF(IDM.EQ.NTOT)THEN
+<span class="ln">356</span>            DO I = 1,IDM
+<span class="ln">357</span>               WRITE(IMODPT,221)I,CHI(I),VES(I),VESA(I),
+<span class="ln">358</span>     *         VESD(I),ECHI(I),ECOD3(I),ECOD4(I)
+<span class="ln">359</span> 221           FORMAT(1X,I5,1P7E12.3)
+<span class="ln">360</span>            END DO
+<span class="ln">361</span>            ELSE IF(IDM.LT.NTOT)THEN
+<span class="ln">362</span>            DO I = 1,IDM
+<span class="ln">363</span>               WRITE(IMODPT,221)I,CHI(I),VES(I),VESA(I),
+<span class="ln">364</span>     *         VESD(I),ECHI(I),ECOD3(I),ECOD4(I)
+<span class="ln">365</span>            END DO
+<span class="ln">366</span>            DO I = IDM+1,NTOT
+<span class="ln">367</span>               WRITE(IMODPT,222)I,ECHI(I),ECOD3(I),ECOD4(I)
+<span class="ln">368</span> 222           FORMAT(1X,I5,48X,1P3E12.3)
+<span class="ln">369</span>            END DO
+<span class="ln">370</span>            ELSE
+<span class="ln">371</span>            DO I = 1,NTOT
+<span class="ln">372</span>               WRITE(IMODPT,221)I,CHI(I),VES(I),VESA(I),
+<span class="ln">373</span>     *         VESD(I),ECHI(I),ECOD3(I),ECOD4(I)
+<span class="ln">374</span>            END DO
+<span class="ln">375</span>            DO I = NTOT+1,IDM
+<span class="ln">376</span>               WRITE(IMODPT,223)I,CHI(I),VES(I),VESA(I),
+<span class="ln">377</span>     *         VESD(I)
+<span class="ln">378</span> 223           FORMAT(1X,I5,1P4E12.3)
+<span class="ln">379</span>            END DO
+<span class="ln">380</span>            ENDIF
+<span class="ln">381</span>         ENDIF
+<span class="ln">382</span>      ENDIF
+<span class="ln">383</span>  240 CONTINUE
+<span class="ln">384</span>      RETURN
+<span class="ln">385</span>      END</pre></details>
+<details class='py' id='py-checkj'><summary>Python version: checkj</summary><pre class='doc'>Check one iteration of angular-momentum diffusion: stop on j &lt;= 0,
+test convergence against nmlpar_mod.djok, get Omega (and the moment
+of inertia) from j with getrot, and remove reversals of the Omega
+gradient by local solid-body rotation (solid).
+
+Translates: checkj.f#CHECKJ (09c3b9b)
+
+Arguments: the model hd, hr, hs, hs2 (logs, and the shell masses), hv
+(the diffusion velocities), lcz (convective for angular momentum);
+hjmp, j after the previous iteration (set to hjm here); hjmsav, j at
+the start of the step; imin, imax, the range of hv; it, the iteration;
+m, the number of points; dt, the diffusion step; the arrays eta2, hi,
+omega, qiw, r0 (set by getrot and solid); hjm, j after this iteration
+(changed by solid); iredo; wsav, Omega at the start of the step (for
+the print); id_, the printed shells (ID); idm; lokad, convergence
+assumed on entry.
+
+Returns (dt, iredo, lok, lredo, idm): the step (halved in a branch
+that never runs), the count of cuts, converged or not, a cut needed,
+and the number of printed shells (set only in the switched-off print).</pre><pre class='src'><span class="ln">25</span>def checkj(hd, hjmp, hjmsav, hr, hs, hs2, hv, imin, imax, it, lcz, m, dt,
+<span class="ln">26</span>           eta2, hi, hjm, iredo, lok, lredo, omega, qiw, r0, wsav, id_,
+<span class="ln">27</span>           idm, lokad):
+<span class="ln">28</span>    &quot;&quot;&quot;Check one iteration of angular-momentum diffusion: stop on j &lt;= 0,
+<span class="ln">29</span>    test convergence against nmlpar_mod.djok, get Omega (and the moment
+<span class="ln">30</span>    of inertia) from j with getrot, and remove reversals of the Omega
+<span class="ln">31</span>    gradient by local solid-body rotation (solid).
+<span class="ln">32</span>
+<span class="ln">33</span>    Translates: checkj.f#CHECKJ (09c3b9b)
+<span class="ln">34</span>
+<span class="ln">35</span>    Arguments: the model hd, hr, hs, hs2 (logs, and the shell masses), hv
+<span class="ln">36</span>    (the diffusion velocities), lcz (convective for angular momentum);
+<span class="ln">37</span>    hjmp, j after the previous iteration (set to hjm here); hjmsav, j at
+<span class="ln">38</span>    the start of the step; imin, imax, the range of hv; it, the iteration;
+<span class="ln">39</span>    m, the number of points; dt, the diffusion step; the arrays eta2, hi,
+<span class="ln">40</span>    omega, qiw, r0 (set by getrot and solid); hjm, j after this iteration
+<span class="ln">41</span>    (changed by solid); iredo; wsav, Omega at the start of the step (for
+<span class="ln">42</span>    the print); id_, the printed shells (ID); idm; lokad, convergence
+<span class="ln">43</span>    assumed on entry.
+<span class="ln">44</span>
+<span class="ln">45</span>    Returns (dt, iredo, lok, lredo, idm): the step (halved in a branch
+<span class="ln">46</span>    that never runs), the count of cuts, converged or not, a cut needed,
+<span class="ln">47</span>    and the number of printed shells (set only in the switched-off print).
+<span class="ln">48</span>    &quot;&quot;&quot;
+<span class="ln">49</span>    n = nmlpar_mod
+<span class="ln">50</span>
+<span class="ln">51</span>    # Check for negative j.
+<span class="ln">52</span>    lok = False
+<span class="ln">53</span>    lredo = False
+<span class="ln">54</span>    if lokad:
+<span class="ln">55</span>        lok = True
+<span class="ln">56</span>        lredo = False
+<span class="ln">57</span>    for i in range(1, m + 1):
+<span class="ln">58</span>        if hjm[i] &lt;= 0.0:
+<span class="ln">59</span>            iredo = iredo + 1
+<span class="ln">60</span>            # Question (see the page): IREDO.GT.0, not .GT.3, so the
+<span class="ln">61</span>            # time-step cut below never runs.
+<span class="ln">62</span>            if iredo &gt; 0:
+<span class="ln">63</span>                msg = (&quot; &quot; + &quot;&gt;&quot; * 39 + &quot;&lt;&quot; * 39 + &quot;\n&quot;
+<span class="ln">64</span>                       + &quot;     ERROR IN SR CHECKJ\n&quot;
+<span class="ln">65</span>                       + f&quot;     NEGATIVE J/M ENCOUNTERED IN ZONE{i:5d}&quot;
+<span class="ln">66</span>                       + &quot; AND 3 ATTEMPTS AT CUTTING TIMESTEP FAILED\n&quot;
+<span class="ln">67</span>                       + &quot;RUN STOPPED&quot;)
+<span class="ln">68</span>                print(msg)
+<span class="ln">69</span>                iounits_mod.write(iounits_mod.ishort, msg)
+<span class="ln">70</span>                raise SystemExit(msg)
+<span class="ln">71</span>            else:
+<span class="ln">72</span>                lredo = True
+<span class="ln">73</span>                dt = 0.5 * dt
+<span class="ln">74</span>                msg = (&quot;     ERROR IN SR CHECKJ\n&quot;
+<span class="ln">75</span>                       + f&quot;     TIMESTEP CUT, NUMBER{iredo:5d}&quot;
+<span class="ln">76</span>                       + f&quot; DUE TO NEGATIVE J/M IN ZONE{i:5d}&quot;)
+<span class="ln">77</span>                print(msg)
+<span class="ln">78</span>                iounits_mod.write(iounits_mod.ishort, msg)
+<span class="ln">79</span>                return dt, iredo, lok, lredo, idm  # GOTO 240
+<span class="ln">80</span>
+<span class="ln">81</span>    # Convergence: the largest fractional change of j over the iteration,
+<span class="ln">82</span>    # and where it occurs; hjmp becomes hjm.
+<span class="ln">83</span>    delji[it] = (hjm[1] - hjmp[1]) / hjmp[1]
+<span class="ln">84</span>    hjmp[1] = hjm[1]
+<span class="ln">85</span>    imaxi[it] = 1
+<span class="ln">86</span>    for i in range(2, m + 1):
+<span class="ln">87</span>        dj = (hjm[i] - hjmp[i]) / hjmp[i]
+<span class="ln">88</span>        if abs(dj) &gt; abs(delji[it]):
+<span class="ln">89</span>            delji[it] = dj
+<span class="ln">90</span>            imaxi[it] = i
+<span class="ln">91</span>        hjmp[i] = hjm[i]
+<span class="ln">92</span>    if abs(delji[it]) &lt;= n.djok:
+<span class="ln">93</span>        lok = True
+<span class="ln">94</span>
+<span class="ln">95</span>    # Omega from the new j. The error in the diffusion is of order DJOK,
+<span class="ln">96</span>    # so the tolerances of the moment-of-inertia iteration are relaxed
+<span class="ln">97</span>    # except at the last iteration, and restored after.
+<span class="ln">98</span>    toler0 = errmom_mod.toleri
+<span class="ln">99</span>    acc = n.acfpft
+<span class="ln">100</span>    if it &lt; n.itdif2 and not lok:
+<span class="ln">101</span>        errmom_mod.toleri = max(n.djok * 1.0e-2, toler0)
+<span class="ln">102</span>        n.acfpft = max(n.djok * 1.0e-2, acc)
+<span class="ln">103</span>    getrot(hd, hjm, hr, hs, hs2, lcz, m, eta2, hi, omega, qiw, r0)
+<span class="ln">104</span>    errmom_mod.toleri = toler0
+<span class="ln">105</span>    n.acfpft = acc
+<span class="ln">106</span>
+<span class="ln">107</span>    # Reversals of the Omega gradient, from the surface inward: enforce
+<span class="ln">108</span>    # solid-body rotation in the offending pair of shells.
+<span class="ln">109</span>    wold = oldrot_mod.wold
+<span class="ln">110</span>    i = m
+<span class="ln">111</span>    ibot = m
+<span class="ln">112</span>    while True:  # label 20
+<span class="ln">113</span>        # Question (see the page): a threshold of 1.0, not 1.0d-15.
+<span class="ln">114</span>        if omega[i] - omega[i - 1] &gt; 1.0:
+<span class="ln">115</span>            if wold[i] - wold[i - 1] &gt; 1.0e-15:
+<span class="ln">116</span>                # The previous gradient was positive too: leave it.
+<span class="ln">117</span>                i = ibot - 1
+<span class="ln">118</span>                ibot = i
+<span class="ln">119</span>                if i &gt; 1:
+<span class="ln">120</span>                    continue  # GOTO 20
+<span class="ln">121</span>                # else GOTO 130
+<span class="ln">122</span>            else:
+<span class="ln">123</span>                # ITOP, the uppermost unstable shell, and IBOT, the
+<span class="ln">124</span>                # lowest, each widened over an adjacent convection zone.
+<span class="ln">125</span>                itop = i
+<span class="ln">126</span>                if lcz[itop] and itop &lt; m:
+<span class="ln">127</span>                    j = itop + 1
+<span class="ln">128</span>                    while j &lt;= m and lcz[j]:
+<span class="ln">129</span>                        j += 1
+<span class="ln">130</span>                    itop = j - 1  # label 40
+<span class="ln">131</span>                ibot = i - 1
+<span class="ln">132</span>                if lcz[ibot] and ibot &gt; 1:
+<span class="ln">133</span>                    j = ibot - 1
+<span class="ln">134</span>                    while j &gt;= 1 and lcz[j]:
+<span class="ln">135</span>                        j -= 1
+<span class="ln">136</span>                    ibot = j + 1  # label 60
+<span class="ln">137</span>                solid(hd, hjm, hr, hs, hs2, ibot, itop, eta2, hi, omega,
+<span class="ln">138</span>                      qiw, r0, m)
+<span class="ln">139</span>                # Widen the range while its boundaries show new reversals.
+<span class="ln">140</span>                while True:  # label 70
+<span class="ln">141</span>                    lredo = False
+<span class="ln">142</span>                    if ibot &gt; 1:
+<span class="ln">143</span>                        if omega[ibot] - omega[ibot - 1] &gt; 1.0e-15:
+<span class="ln">144</span>                            if wold[ibot] - wold[ibot - 1] &lt; 1.0e-15:
+<span class="ln">145</span>                                lredo = True
+<span class="ln">146</span>                                ibot = ibot - 1
+<span class="ln">147</span>                                if lcz[ibot] and ibot &gt; 1:
+<span class="ln">148</span>                                    j = ibot - 1
+<span class="ln">149</span>                                    while j &gt;= 1 and lcz[j]:
+<span class="ln">150</span>                                        j -= 1
+<span class="ln">151</span>                                    ibot = j + 1  # label 90
+<span class="ln">152</span>                    if itop &lt; m:
+<span class="ln">153</span>                        if omega[itop + 1] - omega[itop] &gt; 1.0e-15:
+<span class="ln">154</span>                            if wold[itop + 1] - wold[itop] &lt; 1.0e-15:
+<span class="ln">155</span>                                lredo = True
+<span class="ln">156</span>                                itop = itop + 1
+<span class="ln">157</span>                                if lcz[itop] and itop &lt; m:
+<span class="ln">158</span>                                    j = itop + 1
+<span class="ln">159</span>                                    while j &lt;= m and lcz[j]:
+<span class="ln">160</span>                                        j += 1
+<span class="ln">161</span>                                    itop = j - 1  # label 110
+<span class="ln">162</span>                    if lredo:
+<span class="ln">163</span>                        solid(hd, hjm, hr, hs, hs2, ibot, itop, eta2, hi,
+<span class="ln">164</span>                              omega, qiw, r0, m)
+<span class="ln">165</span>                        continue  # GOTO 70
+<span class="ln">166</span>                    break
+<span class="ln">167</span>                if it == n.itdif2 or lok:
+<span class="ln">168</span>                    print(f&quot;     OMEGA GRADIENT REVERSAL BETWEEN ZONES &quot;
+<span class="ln">169</span>                          f&quot;{ibot:5d} AND {itop:5d} ITERATION {it:5d}&quot;)
+<span class="ln">170</span>        # label 130: the next shell.
+<span class="ln">171</span>        i = ibot - 1
+<span class="ln">172</span>        ibot = i
+<span class="ln">173</span>        if i &lt;= 1:
+<span class="ln">174</span>            break
+<span class="ln">175</span>
+<span class="ln">176</span>    # Output at the end of the diffusion step.
+<span class="ln">177</span>    if it == n.itdif2 or lok:
+<span class="ln">178</span>        # The largest fractional change of j over the time step.
+<span class="ln">179</span>        delj = 0.0
+<span class="ln">180</span>        ijmax = 0
+<span class="ln">181</span>        ii = 1
+<span class="ln">182</span>        for i in range(ii, m + 1):
+<span class="ln">183</span>            dj = (hjm[i] - hjmsav[i]) / hjmsav[i]
+<span class="ln">184</span>            if abs(dj) &gt; abs(delj):
+<span class="ln">185</span>                delj = dj
+<span class="ln">186</span>                ijmax = i
+<span class="ln">187</span>        if not lokad:
+<span class="ln">188</span>            line = f&quot; MAX D(J/M)/(J/M){delj:12.3E} AT PT.{ijmax:5d} BY ITERATION&quot;
+<span class="ln">189</span>            for j in range(1, it + 1):
+<span class="ln">190</span>                if (j - 1) % 5 == 0:
+<span class="ln">191</span>                    line += &quot;\n&quot;
+<span class="ln">192</span>                line += f&quot; {delji[j]:11.3E}{imaxi[j]:4d}&quot;
+<span class="ln">193</span>            print(line)
+<span class="ln">194</span>        # The detailed output to IMODPT is switched off (IF(.TRUE.)GOTO
+<span class="ln">195</span>        # 240, G. Somers 11/14); kept here as in the Fortran.
+<span class="ln">196</span>        # Question (see the page): can it be removed?
+<span class="ln">197</span>        if False:
+<span class="ln">198</span>            idm = _detailed_print(hjm, hjmsav, hv, imin, imax, m, omega,
+<span class="ln">199</span>                                  wsav, id_, idm)
+<span class="ln">200</span>    # label 240
+<span class="ln">201</span>    return dt, iredo, lok, lredo, idm</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_detailed_print'><summary>Python version: _detailed_print</summary><pre class='doc'>The switched-off detailed print of CHECKJ (after IF(.TRUE.)GOTO
+240): Omega, j and the diffusion velocities at every NPRTPT-th shell.
+Returns idm.</pre><pre class='src'><span class="ln">204</span>def _detailed_print(hjm, hjmsav, hv, imin, imax, m, omega, wsav, id_,
+<span class="ln">205</span>                    idm):
+<span class="ln">206</span>    &quot;&quot;&quot;The switched-off detailed print of CHECKJ (after IF(.TRUE.)GOTO
+<span class="ln">207</span>    240): Omega, j and the diffusion velocities at every NPRTPT-th shell.
+<span class="ln">208</span>    Returns idm.&quot;&quot;&quot;
+<span class="ln">209</span>    n = nmlpar_mod
+<span class="ln">210</span>    t2 = temp2_mod
+<span class="ln">211</span>    imodpt = iounits_mod.imodpt
+<span class="ln">212</span>    nprtpt = n.nprtpt
+<span class="ln">213</span>    if nprtpt &gt; m:
+<span class="ln">214</span>        return idm
+<span class="ln">215</span>    iounits_mod.write(imodpt, &quot; SHELL   OMEGA     DEL OMEGA      J/M&quot;
+<span class="ln">216</span>                              &quot;       DEL J/M&quot;)
+<span class="ln">217</span>    # The first point is always printed.
+<span class="ln">218</span>    id_[1] = 1
+<span class="ln">219</span>    idm = 2
+<span class="ln">220</span>    ibeg = max(imin, nprtpt)
+<span class="ln">221</span>    iend = min(imax, int(imax / nprtpt) * nprtpt)
+<span class="ln">222</span>    for j in range(ibeg, iend + 1, nprtpt):
+<span class="ln">223</span>        id_[idm] = j
+<span class="ln">224</span>        idm = idm + 1
+<span class="ln">225</span>    # The outermost point (or the base of a surface CZ) is always printed.
+<span class="ln">226</span>    if id_[idm - 1] != imax:
+<span class="ln">227</span>        id_[idm] = imax
+<span class="ln">228</span>    else:
+<span class="ln">229</span>        idm = idm - 1
+<span class="ln">230</span>    for i in range(1, idm + 1):
+<span class="ln">231</span>        k = id_[i]
+<span class="ln">232</span>        iounits_mod.write(imodpt, f&quot; {k:5d}{omega[k]:12.3E}&quot;
+<span class="ln">233</span>                          f&quot;{omega[k] - wsav[k]:12.3E}{hjm[k]:12.3E}&quot;
+<span class="ln">234</span>                          f&quot;{hjm[k] - hjmsav[k]:12.3E}&quot;)
+<span class="ln">235</span>    iounits_mod.write(imodpt, &quot; SHELL    VES0         VES       VGSF0&quot;
+<span class="ln">236</span>                              &quot;        VGSF         VSS         RAT&quot;
+<span class="ln">237</span>                              &quot;        VTOT       LENGTH        VMU&quot;)
+<span class="ln">238</span>    for i in range(1, idm + 1):
+<span class="ln">239</span>        k = id_[i]
+<span class="ln">240</span>        vals = (t2.ves0[k], t2.ves[k], t2.vgsf0[k], t2.vgsf[k], t2.vss[k],
+<span class="ln">241</span>                quadd_mod.rat[k], hv[k], t2.hle[k], t2.vmu[k])
+<span class="ln">242</span>        iounits_mod.write(imodpt, f&quot; {k:5d}&quot;
+<span class="ln">243</span>                          + &quot;&quot;.join(f&quot;{v:12.3E}&quot; for v in vals))
+<span class="ln">244</span>    if n.ldifad:
+<span class="ln">245</span>        eg = egrid_mod
+<span class="ln">246</span>        ntot = eg.ntot
+<span class="ln">247</span>
+<span class="ln">248</span>        def row7(i):
+<span class="ln">249</span>            vals = (eg.chi[i], t2.ves[i], difad2_mod.vesa[i],
+<span class="ln">250</span>                    difad2_mod.vesd[i], eg.echi[i], difad_mod.ecod3[i],
+<span class="ln">251</span>                    difad_mod.ecod4[i])
+<span class="ln">252</span>            return f&quot; {i:5d}&quot; + &quot;&quot;.join(f&quot;{v:12.3E}&quot; for v in vals)
+<span class="ln">253</span>
+<span class="ln">254</span>        if idm == ntot:
+<span class="ln">255</span>            for i in range(1, idm + 1):
+<span class="ln">256</span>                iounits_mod.write(imodpt, row7(i))
+<span class="ln">257</span>        elif idm &lt; ntot:
+<span class="ln">258</span>            for i in range(1, idm + 1):
+<span class="ln">259</span>                iounits_mod.write(imodpt, row7(i))
+<span class="ln">260</span>            for i in range(idm + 1, ntot + 1):
+<span class="ln">261</span>                iounits_mod.write(imodpt, f&quot; {i:5d}&quot; + &quot; &quot; * 48
+<span class="ln">262</span>                                  + f&quot;{eg.echi[i]:12.3E}&quot;
+<span class="ln">263</span>                                  f&quot;{difad_mod.ecod3[i]:12.3E}&quot;
+<span class="ln">264</span>                                  f&quot;{difad_mod.ecod4[i]:12.3E}&quot;)
+<span class="ln">265</span>        else:
+<span class="ln">266</span>            for i in range(1, ntot + 1):
+<span class="ln">267</span>                iounits_mod.write(imodpt, row7(i))
+<span class="ln">268</span>            for i in range(ntot + 1, idm + 1):
+<span class="ln">269</span>                vals = (eg.chi[i], t2.ves[i], difad2_mod.vesa[i],
+<span class="ln">270</span>                        difad2_mod.vesd[i])
+<span class="ln">271</span>                iounits_mod.write(imodpt, f&quot; {i:5d}&quot;
+<span class="ln">272</span>                                  + &quot;&quot;.join(f&quot;{v:12.3E}&quot; for v in vals))
+<span class="ln">273</span>    return idm</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No change: correct (the five tasks, the tolerances and the questions checked).</p></div></details>
+</main></body></html>

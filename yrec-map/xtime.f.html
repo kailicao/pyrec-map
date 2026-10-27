@@ -1,0 +1,237 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>xtime.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ xtime.f</span></header><main>
+<h1>xtime.f</h1>
+<p class='muted'>110 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/xtime.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>xtime.py</code>, 65 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>XTIME</code> gives the time step allowed by hydrogen burning (its comment). While the central hydrogen abundance is at least <code>ATIME(1)</code>, the step is the time to burn a given amount of the core's hydrogen; afterwards, in shell burning, the smaller of the time to burn a fraction of the star's hydrogen and the time to deplete a given amount of $X$ at the shell's midpoint.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the model (arguments: $\rho$, <code>HCOMP</code>, $L$, $m$, shell masses, $T$), the hydrogen-burning luminosity <code>HYDLUM</code>, the convective core's edge <code>JCORE</code>, the shell's midpoint <code>JXMID</code>; through modules the limits <code>ATIME</code> (<code>NMLPAR_MOD</code>), the constants (<code>CONSTANTS_MOD</code>).</li>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/htimer.f.html#def-HTIMER">HTIMER</a>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/rates.f.html#def-RATES">RATES</a> and <a href="../yrec-map/eqburn.f.html#def-EQBURN">EQBURN</a>, for $dX/dt$ at the shell's midpoint.</li>
+<li><strong>Output:</strong> <code>DELTSH</code>, in seconds (by its use in <code>HTIMER</code>).</li>
+<li><strong>Modules:</strong> <code>NMLPAR_MOD</code> (formerly <code>COMMON/CTLIM/</code>), <code>CONSTANTS_MOD</code>, <code>DIMENSIONS_MOD</code>.</li>
+</ul>
+<p><strong>The method.</strong> With $q = 6.0\times10^{18}$ erg released per gram of hydrogen burned (the code's constant):</p>
+<ul>
+<li><strong>Core burning</strong> ($X_c \ge$ <code>ATIME(1)</code>): $\Delta X = \min(\texttt{ATIME(2)},\ \texttt{ATIME(3)}\,X_\mathrm{core})$ and
+  $$\Delta t = \frac{q}{L_\odot}\,\frac{m_\mathrm{core}}{L(m_\mathrm{core})/L_\odot}\,\Delta X,$$
+  with $m$ and $L$ at <code>JCORE</code>, so that a convective core counts as a whole (the comment).</li>
+<li><strong>Shell burning:</strong> $\Delta t = q\,\texttt{ATIME(6)}\,X_s M_\odot/L_\odot\,/\,L_H$, with $X_s$ the surface $X$ and $L_H$ = <code>HYDLUM</code>; and, if $dX/dt &lt; 0$ at the shell's midpoint and <code>ATIME(7)</code> &gt; 0,
+  $$\Delta t = \min\!\left(\Delta t,\ \left|\frac{\texttt{ATIME(7)}}{dX/dt}\right|\,\mathrm{CSECYR}\times10^9\right).$$</li>
+</ul>
+<p><strong>KC's changes.</strong> Removed the unused argument <code>JXBEG</code>, and shortened the calls to <code>RATES</code> and <code>EQBURN</code> to their new argument lists (2025-05-31).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: <code>/CTLIM/</code> to <code>NMLPAR_MOD</code>, the constants to <code>CONSTANTS_MOD</code>; the unused <code>/CT3/</code> and <code>/FLAG/</code> dropped; <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The star's mass or the Sun's?</strong> In shell burning, the hydrogen mass is <code>ATIME(6)*HCOMP(1,M)*CMSUN</code>, one solar mass, whatever the star's mass. The comment says "the mass fraction ATIME(6) of X in the entire star". Should it use the star's mass?</li>
+<li><strong>Units of $dX/dt$.</strong> The second limit multiplies by <code>CSECYR*1.0D9</code>, as if <code>EQBURN</code> returned $dX/dt$ per Gyr. Is that its unit?</li>
+<li><strong>The core's hydrogen.</strong> The comment says the core criterion burns "the fraction ATIME(3) of the central X"; the code uses $X$ at <code>JCORE</code> (the core's edge), which equals the centre's only for a mixed core.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+XTIME
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-XTIME'>XTIME</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-XTIME'><h3><span class='kind'>subroutine</span>XTIME</h3>
+<p class='muted'>lines 6–110 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/xtime.f#L6-L110'>GitHub</a></p>
+<pre>SUBROUTINE XTIME(HD,HCOMP,HL,HS1,HS2,HT,HYDLUM,JCORE,JXMID,M,</pre>
+<div class='notes'><p>The hydrogen-burning time step: a fraction of the core's hydrogen while $X_c \ge$ <code>ATIME(1)</code>, then the smaller of a shell criterion and the depletion time at the shell's midpoint.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+XTIME
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/eqburn.f.html#def-EQBURN'>EQBURN</a> <span class='muted'>(eqburn.f)</span></li>
+<li><a href='../yrec-map/rates.f.html#def-RATES'>RATES</a> <span class='muted'>(rates.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/htimer.f.html#def-HTIMER'>HTIMER</a> <span class='muted'>(htimer.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE XTIME(HD,HCOMP,HL,HS1,HS2,HT,HYDLUM,JCORE,JXMID,M,
+<span class="ln">7</span>     *   DELTSH,HR1,HR2,HR3,HR4,HR5,HR6,HR7,HR8,HR9,HR10,HR11,HR12,
+<span class="ln">8</span>C      *   HR13,HF1,HF2,JXBEG)  ! KC 2025-05-31
+<span class="ln">9</span>     *   HR13,HF1,HF2)
+<span class="ln">10</span>C 10/15/26 MHP via Claude
+<span class="ln">11</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">12</span>C PARAMETER(JSON=5000) here.
+<span class="ln">13</span>      USE DIMENSIONS_MOD
+<span class="ln">14</span>C 10/14/26 MHP via Claude
+<span class="ln">15</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">16</span>      USE NMLPAR_MOD
+<span class="ln">17</span>C 10/14/26 MHP via Claude
+<span class="ln">18</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">19</span>      USE CONSTANTS_MOD
+<span class="ln">20</span>C 10/20/26 MHP via Claude
+<span class="ln">21</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">22</span>C explicit declarations.
+<span class="ln">23</span>      IMPLICIT NONE
+<span class="ln">24</span>      REAL*8 DCDT,DELTSH,DELTSH2,DL,DODT,DX,DXDT,DYDT,HCOMP,HD,HF1,HF2,
+<span class="ln">25</span>     *       HL,HR1,HR10,HR11,HR12,HR13,HR2,HR3,HR4,HR5,HR6,HR7,HR8,HR9,
+<span class="ln">26</span>     *       HS1,HS2,HT,HYDLUM,TL,X,XBE9,XC12,XC13,XH2,XHE3,XLI6,XLI7,
+<span class="ln">27</span>     *       XN14,XN15,XO16,XO17,XO18,Y,Z
+<span class="ln">28</span>      INTEGER IBEGIN,IEND,JCORE,JXMID,M
+<span class="ln">29</span>C 10/12/26 MHP via Claude
+<span class="ln">30</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">31</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">32</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">33</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">34</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">35</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">36</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">37</span>C
+<span class="ln">38</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">39</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">40</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">41</span>C 10/13/26 MHP via Claude
+<span class="ln">42</span>C code changed to drop COMMON/CTLIM/, declared here but never used.
+<span class="ln">43</span>C 9/25/26 MHP via Claude
+<span class="ln">44</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">45</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">46</span>C MHP 10/02 ADDED MISSING DIMENSION STATEMENTS!
+<span class="ln">47</span>      DIMENSION HCOMP(15,JSON),HL(JSON),HS1(JSON),HT(JSON),HS2(JSON),
+<span class="ln">48</span>     * HR1(JSON),HR2(JSON),HR3(JSON),HR4(JSON),HR5(JSON),HR6(JSON),
+<span class="ln">49</span>     * HR7(JSON),HR8(JSON),HR9(JSON),HR10(JSON),HR11(JSON),HR12(JSON),
+<span class="ln">50</span>     * HR13(JSON),HF1(JSON),HF2(JSON),HD(JSON)
+<span class="ln">51</span>      SAVE
+<span class="ln">52</span>C  THIS SR FINDS THE TIMESTEP BASED ON HYDROGEN BURNING.
+<span class="ln">53</span>C  FOR STARS WITH CENTRAL X &gt; ATIME(1) THE TIMESTEP
+<span class="ln">54</span>C       IS THE TIME NEEDED TO BURN THE MINIMUM OF ATIME(2) OF
+<span class="ln">55</span>C       X AT THE CENTER OR THE FRACTION ATIME(3) OF THE CENTRAL X.
+<span class="ln">56</span>C  STARS WITH CENTRAL X &lt; ATIME(1) ARE CONSIDERED BY THE PROGRAM
+<span class="ln">57</span>C       TO HAVE A HYDROGEN SHELL BURNING SOURCE.  THE TIMESTEP IS THE
+<span class="ln">58</span>C       MINIMUM OF THE TIME REQUIRED TO BURN ATIME(7) OF X AT THE SHELL
+<span class="ln">59</span>C       MIDPOINT OR TO BURN THE MASS FRACTION ATIME(6) OF X IN THE
+<span class="ln">60</span>C       ENTIRE STAR.
+<span class="ln">61</span>C H-CORE BURNING TIME CRITERION
+<span class="ln">62</span>C **NOTE THAT FOR A CONVECTIVE CORE, THE TIMESTEP IS BASED ON THE TIME
+<span class="ln">63</span>C   NEEDED TO BURN THE GIVEN FRACTION OF HYDROGEN IN THE CORE AND NOT
+<span class="ln">64</span>C   JUST IN THE CENTRAL SHELL.
+<span class="ln">65</span>      IF(HCOMP(1,1).GE.ATIME(1)) THEN
+<span class="ln">66</span>       DX = MIN(ATIME(2),ATIME(3)*HCOMP(1,JCORE))
+<span class="ln">67</span>       DELTSH =(6.00D18/CLSUN)*(HS1(JCORE)/HL(JCORE))*DX
+<span class="ln">68</span>       RETURN
+<span class="ln">69</span>      ENDIF
+<span class="ln">70</span>C H-SHELL BURNING CRITERION
+<span class="ln">71</span>C LIMIT TOTAL MASS OF HYDROGEN BURNED.
+<span class="ln">72</span>C      DX = ATIME(6)*HCOMP(1,M)*(CMSUN/CLSUN)
+<span class="ln">73</span>      DX = ATIME(6)*HCOMP(1,M)*(CMSUN/CLSUN)
+<span class="ln">74</span>      DELTSH = 6.00D18*DX/HYDLUM
+<span class="ln">75</span>C LIMIT X-DEPLETION AT SHELL MID-POINT.
+<span class="ln">76</span>C CALL NUCLEAR REACTION SR&#x27;S TO FIND DXDT AT THE SHELL MIDPOINT.
+<span class="ln">77</span>      IBEGIN=JXMID
+<span class="ln">78</span>      IEND=JXMID
+<span class="ln">79</span>         DL = HD(IEND)
+<span class="ln">80</span>         TL = HT(IEND)
+<span class="ln">81</span>         X = HCOMP(1,IEND)
+<span class="ln">82</span>         Y = HCOMP(2,IEND)
+<span class="ln">83</span>         Z = HCOMP(3,IEND)
+<span class="ln">84</span>         XHE3 = HCOMP(4,IEND)
+<span class="ln">85</span>         XC12 = HCOMP(5,IEND)
+<span class="ln">86</span>         XC13 = HCOMP(6,IEND)
+<span class="ln">87</span>         XN14 = HCOMP(7,IEND)
+<span class="ln">88</span>         XN15 = HCOMP(8,IEND)
+<span class="ln">89</span>         XO16 = HCOMP(9,IEND)
+<span class="ln">90</span>         XO17 = HCOMP(10,IEND)
+<span class="ln">91</span>         XO18 = HCOMP(11,IEND)
+<span class="ln">92</span>         XH2 = HCOMP(12,IEND)
+<span class="ln">93</span>         XLI6 = HCOMP(13,IEND)
+<span class="ln">94</span>         XLI7 = HCOMP(14,IEND)
+<span class="ln">95</span>        XBE9 = HCOMP(15,IEND)
+<span class="ln">96</span>C SETUP NUCLEAR ENERGY TERMS
+<span class="ln">97</span>C       CALL RATES(DL,TL,X,Y,Z,XHE3,XC12,XC13,XN14,XN15,
+<span class="ln">98</span>C      *     XO16,XO17,XO18,XH2,XLI6,XLI7,XBE9,IEND,HR1,HR2,HR3,HR4,  ! KC 2025-05-31
+<span class="ln">99</span>      CALL <a href="../yrec-map/rates.f.html#def-RATES" title="RATES in rates.f">RATES</a>(DL,TL,X,Y,XHE3,XC12,XC13,XN14,
+<span class="ln">100</span>     *     XO16,XO18,IEND,HR1,HR2,HR3,HR4,
+<span class="ln">101</span>     *     HR5,HR6,HR7,HR8,HR9,HR10,HR11,HR12,HR13,HF1,HF2)
+<span class="ln">102</span>C       CALL EQBURN(HF1,HR1,HR2,HR3,HR4,HR5,HR6,HR7,HR8,HR9,HR10,HR11,  ! KC 2025-05-31
+<span class="ln">103</span>      CALL <a href="../yrec-map/eqburn.f.html#def-EQBURN" title="EQBURN in eqburn.f">EQBURN</a>(HR1,HR2,HR3,HR4,HR5,HR6,HR7,HR10,
+<span class="ln">104</span>     *     HR12,HS2,HT,IBEGIN,IEND,DCDT,DODT,DXDT,DYDT,XC12,XO16,X,Z)
+<span class="ln">105</span>      IF(DXDT.LT.0.0D0 .AND. ATIME(7).GT.0.0D0) THEN
+<span class="ln">106</span>         DELTSH2 = ABS(CSECYR*1.0D9*ATIME(7)/DXDT)
+<span class="ln">107</span>         DELTSH = MIN(DELTSH,DELTSH2)
+<span class="ln">108</span>      ENDIF
+<span class="ln">109</span>      RETURN
+<span class="ln">110</span>      END</pre></details>
+<details class='py' id='py-xtime'><summary>Python version: xtime</summary><pre class='doc'>The hydrogen-burning time step: while the central X is at least
+atime(1), the time to burn a given amount of the core&#x27;s hydrogen;
+afterwards the time to burn a fraction atime(6) of the hydrogen, and,
+if X falls at the shell&#x27;s midpoint jxmid, at most the time to deplete
+atime(7) of X there.
+
+Translates: xtime.f#XTIME (09c3b9b)
+
+Arguments: the model hd, hcomp[species, shell], hl, hs1, hs2, ht
+(index 0 unused); the hydrogen-burning luminosity hydlum; jcore, the
+convective core&#x27;s edge; jxmid, the shell&#x27;s midpoint; m, the number of
+shells; deltsh is passed in with any value; hr1..hr13, hf1, hf2, the
+rate arrays that rates fills (at element jxmid).
+
+Returns deltsh (s).</pre><pre class='src'><span class="ln">10</span>def xtime(hd, hcomp, hl, hs1, hs2, ht, hydlum, jcore, jxmid, m,
+<span class="ln">11</span>          deltsh, hr1, hr2, hr3, hr4, hr5, hr6, hr7, hr8, hr9, hr10, hr11,
+<span class="ln">12</span>          hr12, hr13, hf1, hf2):
+<span class="ln">13</span>    &quot;&quot;&quot;The hydrogen-burning time step: while the central X is at least
+<span class="ln">14</span>    atime(1), the time to burn a given amount of the core&#x27;s hydrogen;
+<span class="ln">15</span>    afterwards the time to burn a fraction atime(6) of the hydrogen, and,
+<span class="ln">16</span>    if X falls at the shell&#x27;s midpoint jxmid, at most the time to deplete
+<span class="ln">17</span>    atime(7) of X there.
+<span class="ln">18</span>
+<span class="ln">19</span>    Translates: xtime.f#XTIME (09c3b9b)
+<span class="ln">20</span>
+<span class="ln">21</span>    Arguments: the model hd, hcomp[species, shell], hl, hs1, hs2, ht
+<span class="ln">22</span>    (index 0 unused); the hydrogen-burning luminosity hydlum; jcore, the
+<span class="ln">23</span>    convective core&#x27;s edge; jxmid, the shell&#x27;s midpoint; m, the number of
+<span class="ln">24</span>    shells; deltsh is passed in with any value; hr1..hr13, hf1, hf2, the
+<span class="ln">25</span>    rate arrays that rates fills (at element jxmid).
+<span class="ln">26</span>
+<span class="ln">27</span>    Returns deltsh (s).
+<span class="ln">28</span>    &quot;&quot;&quot;
+<span class="ln">29</span>    atime = nmlpar_mod.atime
+<span class="ln">30</span>    c = constants_mod
+<span class="ln">31</span>    if hcomp[1, 1] &gt;= atime[1]:
+<span class="ln">32</span>        # Question (see the page): X at jcore, not at the centre.
+<span class="ln">33</span>        dx = min(atime[2], atime[3] * hcomp[1, jcore])
+<span class="ln">34</span>        deltsh = (6.00e18 / c.clsun) * (hs1[jcore] / hl[jcore]) * dx
+<span class="ln">35</span>        return deltsh
+<span class="ln">36</span>    # Question (see the page): one solar mass, not the star&#x27;s.
+<span class="ln">37</span>    dx = atime[6] * hcomp[1, m] * (c.cmsun / c.clsun)
+<span class="ln">38</span>    deltsh = 6.00e18 * dx / hydlum
+<span class="ln">39</span>    ibegin = jxmid
+<span class="ln">40</span>    iend = jxmid
+<span class="ln">41</span>    dl = hd[iend]
+<span class="ln">42</span>    tl = ht[iend]
+<span class="ln">43</span>    x = hcomp[1, iend]
+<span class="ln">44</span>    y = hcomp[2, iend]
+<span class="ln">45</span>    z = hcomp[3, iend]
+<span class="ln">46</span>    xhe3 = hcomp[4, iend]
+<span class="ln">47</span>    xc12 = hcomp[5, iend]
+<span class="ln">48</span>    xc13 = hcomp[6, iend]
+<span class="ln">49</span>    xn14 = hcomp[7, iend]
+<span class="ln">50</span>    xo16 = hcomp[9, iend]
+<span class="ln">51</span>    xo18 = hcomp[11, iend]
+<span class="ln">52</span>    # (HCOMP 8, 10, 12-15 are read into XN15, XO17, XH2, XLI6, XLI7, XBE9
+<span class="ln">53</span>    # in the Fortran, but not used.)
+<span class="ln">54</span>    rates(dl, tl, x, y, xhe3, xc12, xc13, xn14, xo16, xo18, iend,
+<span class="ln">55</span>          hr1, hr2, hr3, hr4, hr5, hr6, hr7, hr8, hr9, hr10, hr11, hr12,
+<span class="ln">56</span>          hr13, hf1, hf2)
+<span class="ln">57</span>    dcdt = dodt = dxdt = dydt = 0.0
+<span class="ln">58</span>    dcdt, dodt, dxdt, dydt, xc12, xo16, x, z = eqburn(
+<span class="ln">59</span>        hr1, hr2, hr3, hr4, hr5, hr6, hr7, hr10, hr12, hs2, ht, ibegin,
+<span class="ln">60</span>        iend, dcdt, dodt, dxdt, dydt, xc12, xo16, x, z)
+<span class="ln">61</span>    if dxdt &lt; 0.0 and atime[7] &gt; 0.0:
+<span class="ln">62</span>        # Question (see the page): dX/dt taken as per Gyr.
+<span class="ln">63</span>        deltsh2 = abs(c.csecyr * 1.0e9 * atime[7] / dxdt)
+<span class="ln">64</span>        deltsh = min(deltsh, deltsh2)
+<span class="ln">65</span>    return deltsh</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings.</p>
+<p>No change.</p></div></details>
+</main></body></html>

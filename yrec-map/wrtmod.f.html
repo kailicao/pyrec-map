@@ -1,0 +1,602 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>wrtmod.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ wrtmod.f</span></header><main>
+<h1>wrtmod.f</h1>
+<p class='muted'>310 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/wrtmod.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>wrtmod.py</code>, 254 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>WRTMOD</code> writes extra profiles of one model: with <code>LSOUND</code>, a sound-speed and structure table (to the units <code>IMODPT</code> and <code>ISOUND</code>, the file <code>Csound.dat</code>); with <code>LSTATM</code>, <code>LSTENV</code> or <code>LPULSE</code>, an envelope integrated again for printing; and with <code>LPULSE</code>, a model for pulsation codes on <code>IOPMOD</code>, in one of three versions (<code>IPVER</code>).</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the model (arguments: <code>M</code>, <code>JENV</code>, <code>HCOMP</code>, <code>HS1</code>, $\log\rho$, $L$, $\log P$, $\log r$, $\log T$, <code>MODEL</code>, $\log L$, $\log T_\mathrm{eff}$, <code>FP</code>, <code>FT</code>, $\log m$ <code>HS</code>, the age, the mixing length <code>CMIXL</code> and the star's mass <code>XMSOL</code>, a snapshot of <code>SMASS</code> taken by the main program), and through modules the per-shell physics: $\Gamma_1$ and the switch <code>LSOUND</code> (<code>SOUND_MOD</code>), the pulsation derivatives <code>PQDP</code>, <code>PQDT</code>, … (<code>PULSE1_MOD</code>), energy rates, opacity and gradients (<code>SCRTCH_MOD</code>), the MLT quantities (<code>PUALPHA_MOD</code>, which <a href="../yrec-map/tpgrad.f.html">tpgrad.f</a> sets to zero), <code>STOTAL</code> (<code>COMP_MOD</code>), and the namelist switches and integration steps (<code>LSTORE</code>, <code>LSTATM</code>, <code>LSTENV</code>, <code>LPULSE</code>, <code>IPVER</code>, <code>SPOTF</code>, <code>SPOTX</code>, <code>ATMSTP</code>, <code>ENVSTP</code>, … in <code>NMLPAR_MOD</code>; formerly <code>CCOUT</code>, <code>PULSE</code>, <code>SPOTS</code>, <code>ENVGEN</code>, <code>INTATM</code>, <code>INTENV</code>).</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/putstore.f.html#def-PUTSTORE">PUTSTORE</a> (when the atmosphere or envelope is stored) and <a href="../yrec-map/wrtout.f.html#def-WRTOUT">WRTOUT</a> (for pulsation output between stored models).</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a>, which itself prints the envelope and atmosphere (and the pulsation envelope with <code>LPULPT</code>).</li>
+<li><strong>Outputs:</strong> <code>IMODPT</code>, <code>ISOUND</code> (the file <code>FSOUND</code>, <code>Csound.dat</code> by default, opened once by <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a>), <code>IOPMOD</code>, and the envelope printed by <code>ENVINT</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Sound speed</strong> (<code>LSOUND</code>). For each shell, with $V = G m \rho/(P r)$ and $U = 4\pi\rho r^3/m$: $r/R_\odot$, $m/M_\odot$, $m/r^3$ (solar units), $V/\Gamma_1$, $\Gamma_1$,
+   $$A = -V/\Gamma_1 + V\left(\frac{\partial\ln\rho}{\partial\ln P} + \nabla\,\frac{\partial\ln\rho}{\partial\ln T}\right)$$
+   (the code's <code>XX4</code>; probably the buoyancy term, by its form), $U$, and $c_s = \sqrt{\Gamma_1 P/\rho}$ in km/s. Between shells it also writes $dP/dr$-like and $d\rho/dr$-like terms (<code>QPR</code>, <code>QDR</code>) and their differences scaled by $\Gamma_1 P\,\Delta r$ and $\rho\,\Delta r$.</li>
+<li><strong>Envelope.</strong> The integration steps are set to the output steps, <code>ENVINT</code> integrates from the surface to the last shell's pressure (for a spotted star at the ambient temperature, as in <a href="../yrec-map/starin.f.html">starin.f</a>), and the steps are restored afterwards.</li>
+<li><strong>Pulsation model</strong> (<code>LPULSE</code>). A header (<code>LPULSE</code> alone), then, only when both <code>LPULSE</code> and <code>LSTORE</code> are set, for each shell in the list <code>ID(1..IDM)</code>: $\log r$, $m/M$, $L$, $\log T$, $\log\rho$, $\log P$, $\varepsilon$, $\kappa$ and the derivatives, in format 1, 2 or 3 (version 3 adds the MLT quantities).</li>
+</ol>
+<p><strong>KC's changes.</strong> Removed the unused arguments <code>LSHELL</code>, <code>JXBEG</code>, <code>JXEND</code>, <code>JCORE</code>, <code>LC</code>, <code>OMEGA</code>, <code>ETA2</code>, <code>R0</code>, <code>HJM</code> and <code>HI</code> (2025-05-31); removed <code>DATA IHEADR/4H****/</code>, which drew compiler warnings (2025-05-30).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> <code>CMIXL</code> and <code>XMSOL</code> are now arguments (<code>CMIXL</code> is passed on to <code>ENVINT</code>); the sound-speed file is written to the unit <code>ISOUND</code>, opened once by <code>PARMIN</code>, instead of being opened on unit 500 at each call, which settles part of question 4; declarations: COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The pulsation model's shell list is never set.</strong> <code>IDM</code> and <code>ID(J)</code> are local and never assigned (the "long block" removed by G. Somers 11/14, or the arguments <code>LSHELL</code>, <code>JXBEG</code>, <code>JXEND</code>, may have set them). The header prints <code>IDM</code>, and the loop <code>DO 220 J = 1,IDM</code> uses undefined values. Is the pulsation output (<code>LPULSE</code>) still in use, and what should choose its shells?</li>
+<li><strong>A typo in $d\rho/dr$.</strong> <code>QDR2</code> multiplies by <code>QPR1</code> instead of <code>QPR2</code>.</li>
+<li><strong>Debugging prints.</strong> <code>print*,'wrtmod LSOUND 1: '</code> (and <code>2</code>) write to the screen at every call.</li>
+<li><strong><code>Csound.dat</code>'s header.</strong> The header line is written again at every call, so a run that writes several models repeats it between their tables.</li>
+<li><strong><code>LPRT</code> may be unset.</strong> <code>LPRT</code> is set to true only if <code>LSTORE</code>; otherwise <code>ENVINT</code> gets its <code>SAVE</code>d or undefined value.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+WRTMOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+SUBROUTINE WRTMOD(M,LSHELL,JXBEG,JXEND,JCORE,JENV,HCOMP,HS1,HD,
+*HL,HP,HR,HT,LC,MODEL,BL,TEFFL,OMEGA,FP,FT,ETA2,R0,HJM,HI,HS,
+* DAGE)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-WRTMOD'>WRTMOD</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-WRTMOD'><h3><span class='kind'>subroutine</span>WRTMOD</h3>
+<p class='muted'>lines 9–310 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/wrtmod.f#L9-L310'>GitHub</a></p>
+<pre>SUBROUTINE WRTMOD(M,JENV,HCOMP,HS1,HD,</pre>
+<div class='notes'><p>Extra profiles of one model: sound-speed table, a reprinted envelope, and the pulsation model (whose shell list is currently undefined).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+WRTMOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+SUBROUTINE WRTMOD(M,LSHELL,JXBEG,JXEND,JCORE,JENV,HCOMP,HS1,HD,
+*HL,HP,HR,HT,LC,MODEL,BL,TEFFL,OMEGA,FP,FT,ETA2,R0,HJM,HI,HS,
+* DAGE)  ! KC 2025-05-31</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/comp_mod.f.html#def-COMP_MOD'>COMP_MOD</a>, <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/debhu_mod.f.html#def-DEBHU_MOD'>DEBHU_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/label_mod.f.html#def-LABEL_MOD'>LABEL_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/pualpha_mod.f.html#def-PUALPHA_MOD'>PUALPHA_MOD</a>, <a href='../yrec-map/pulse1_mod.f.html#def-PULSE1_MOD'>PULSE1_MOD</a>, <a href='../yrec-map/scrtch_mod.f.html#def-SCRTCH_MOD'>SCRTCH_MOD</a>, <a href='../yrec-map/sound_mod.f.html#def-SOUND_MOD'>SOUND_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/putstore.f.html#def-PUTSTORE'>PUTSTORE</a> <span class='muted'>(putstore.f)</span></li>
+<li><a href='../yrec-map/wrtout.f.html#def-WRTOUT'>WRTOUT</a> <span class='muted'>(wrtout.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">9</span>      SUBROUTINE WRTMOD(M,JENV,HCOMP,HS1,HD,
+<span class="ln">10</span>     *HL,HP,HR,HT,MODEL,BL,TEFFL,FP,FT,HS,DAGE,CMIXL,XMSOL)
+<span class="ln">11</span>C 10/15/26 MHP via Claude
+<span class="ln">12</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">13</span>C PARAMETER(JSON=5000) here.
+<span class="ln">14</span>      USE DIMENSIONS_MOD
+<span class="ln">15</span>C 10/14/26 MHP via Claude
+<span class="ln">16</span>C code changed to convert COMMON/LABEL/ into LABEL_MOD.
+<span class="ln">17</span>      USE LABEL_MOD
+<span class="ln">18</span>C 10/14/26 MHP via Claude
+<span class="ln">19</span>C code changed to convert COMMON/SOUND/ into SOUND_MOD.
+<span class="ln">20</span>      USE SOUND_MOD
+<span class="ln">21</span>C 10/14/26 MHP via Claude
+<span class="ln">22</span>C code changed to convert COMMON/SCRTCH/ into SCRTCH_MOD.
+<span class="ln">23</span>      USE SCRTCH_MOD
+<span class="ln">24</span>C 10/14/26 MHP via Claude
+<span class="ln">25</span>C code changed to convert COMMON/PULSE1/ into PULSE1_MOD.
+<span class="ln">26</span>      USE PULSE1_MOD
+<span class="ln">27</span>C 10/14/26 MHP via Claude
+<span class="ln">28</span>C code changed to convert COMMON/PUALPHA/ into PUALPHA_MOD.
+<span class="ln">29</span>      USE PUALPHA_MOD
+<span class="ln">30</span>C 10/14/26 MHP via Claude
+<span class="ln">31</span>C code changed to convert COMMON/DEBHU/ into DEBHU_MOD.
+<span class="ln">32</span>      USE DEBHU_MOD
+<span class="ln">33</span>C 10/14/26 MHP via Claude
+<span class="ln">34</span>C code changed to convert COMMON/COMP/ into COMP_MOD.
+<span class="ln">35</span>      USE COMP_MOD
+<span class="ln">36</span>C 10/14/26 MHP via Claude
+<span class="ln">37</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">38</span>      USE NMLPAR_MOD
+<span class="ln">39</span>C 10/14/26 MHP via Claude
+<span class="ln">40</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">41</span>      USE CONSTANTS_MOD
+<span class="ln">42</span>C 10/14/26 MHP via Claude
+<span class="ln">43</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">44</span>      USE IOUNITS_MOD
+<span class="ln">45</span>C 10/20/26 MHP via Claude
+<span class="ln">46</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">47</span>C explicit declarations.
+<span class="ln">48</span>      IMPLICIT NONE
+<span class="ln">49</span>      REAL*8 ABEG0,AMAX0,AMIN0,ATEFFL,B,BL,CMIXL,DAGE,DIVP,DIVR,DR,DUM1,
+<span class="ln">50</span>     *       DUM2,DUM3,DUM4,EBEG0,EMAX0,EMIN0,FM,FP,FPL,FR,FS,FSI,FT,
+<span class="ln">51</span>     *       FTL,GL,HCOMP,HD,HL,HP,HR,HS,HS1,HSTOT,HT,PELPF,PLIM,QDR1,
+<span class="ln">52</span>     *       QDR2,QPR1,QPR2,QQDR,QQPR,QSMASS,RL,RMID,RSURFL,SV,TEFFL,
+<span class="ln">53</span>     *       TEMPR,X,XMSOL,XX1,XX2,XX3,XX4,XX5,XXX,Z
+<span class="ln">54</span>      INTEGER I,ID,IDM,IDUM,IXX,J,JENV,KATM,KENV,KSAHA,M,MODEL
+<span class="ln">55</span>      LOGICAL*4 LPRT,LPULPT,LSBC0
+<span class="ln">56</span>
+<span class="ln">57</span>C 9/25/26 MHP via Claude
+<span class="ln">58</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">59</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">60</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">61</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">62</span>C COMMON/IOUNITS/
+<span class="ln">63</span>C 9/25/26 MHP via Claude
+<span class="ln">64</span>C code changed to add ISOUND (Csound.dat unit) to COMMON/IOUNITS/
+<span class="ln">65</span>C 9/24/26 MHP via Claude
+<span class="ln">66</span>C code changed to remove dead ILLDAT, IKUR from COMMON/LUNUM/
+<span class="ln">67</span>C 9/24/26 MHP via Claude
+<span class="ln">68</span>C code changed to remove dead IDYN from COMMON/LUNUM/
+<span class="ln">69</span>C 9/25/26 MHP via Claude
+<span class="ln">70</span>C code changed to remove dead COMMON/LUNUM/ISCOMP (declared,
+<span class="ln">71</span>C assigned a unit number, but never opened or read anywhere)
+<span class="ln">72</span>C 10/11/26 MHP via Claude
+<span class="ln">73</span>C code changed to remove LSCRIB from COMMON/CCOUT/: it was declared
+<span class="ln">74</span>C positionally in all 17 files sharing this block but never read or
+<span class="ln">75</span>C written in executable code anywhere, and no namelist file sets it.
+<span class="ln">76</span>C 10/12/26 MHP via Claude
+<span class="ln">77</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">78</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">79</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">80</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">81</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">82</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">83</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">84</span>C
+<span class="ln">85</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">86</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">87</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">88</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CCOUT/ declaration
+<span class="ln">89</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">90</span>C 9/25/26 MHP via Claude
+<span class="ln">91</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">92</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">93</span>C 9/24/26 MHP via Claude
+<span class="ln">94</span>C code changed to pass CMIXL as an explicit argument instead of via
+<span class="ln">95</span>C common block, to reduce implicit global state ahead of the F90
+<span class="ln">96</span>C module conversion
+<span class="ln">97</span>C DBG PULSE
+<span class="ln">98</span>C 10/13/26 MHP via Claude
+<span class="ln">99</span>C code changed to replace COMMON/PULSE/ with an explicit argument.  main.f
+<span class="ln">100</span>C snapshots XMSOL=SMASS and wrtmod.f is the only reader; it is a snapshot,
+<span class="ln">101</span>C not the running SMASS, so it cannot be replaced by the mass already in
+<span class="ln">102</span>C scope there.
+<span class="ln">103</span>C 10/13/26 MHP via Claude: removed the unused COMMON/PULSE2/ declaration
+<span class="ln">104</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">105</span>C MHP 7/96 COMMON BLOCK INSERTED FOR SOUND SPEED
+<span class="ln">106</span>C DBG
+<span class="ln">107</span>C DBG 7/92 COMMON BLOCK ADDED TO COMPUTE DEBYE-HUCKEL CORRECTION.
+<span class="ln">108</span>C DBG 7/95 To store variables for pulse output
+<span class="ln">109</span>C 10/13/26 MHP via Claude: removed the unused COMMON/ROTEN/ declaration
+<span class="ln">110</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">111</span>      DIMENSION HCOMP(15,JSON),DUM1(4),DUM2(3),DUM3(3),DUM4(3)
+<span class="ln">112</span>C      *HS1(JSON),HD(JSON),HL(JSON),HP(JSON),HR(JSON),HT(JSON),LC(JSON)
+<span class="ln">113</span>C       DIMENSION OMEGA(JSON),FP(JSON),FT(JSON),ETA2(JSON),ID(JSON)
+<span class="ln">114</span>C       DIMENSION R0(JSON),HJM(JSON),HI(JSON),HS(JSON)  ! KC 2025-05-31
+<span class="ln">115</span>      DIMENSION HS(JSON),HS1(JSON),HD(JSON),HL(JSON),HP(JSON),HR(JSON),
+<span class="ln">116</span>     *          HT(JSON)
+<span class="ln">117</span>      DIMENSION FP(JSON),FT(JSON),ID(JSON)
+<span class="ln">118</span>C KC 2025-05-30 addressed warning messages from Makefile.legacy
+<span class="ln">119</span>C      DATA IHEADR/4H****/
+<span class="ln">120</span>
+<span class="ln">121</span>C G Somers 10/14, Add spot common block, and store common block.
+<span class="ln">122</span>C 10/13/26 MHP via Claude: removed the unused COMMON/TEMP2/ declaration
+<span class="ln">123</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">124</span>C 10/13/26 MHP via Claude: removed the unused COMMON/QUADD/ declaration
+<span class="ln">125</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">126</span>C G Somers END
+<span class="ln">127</span>
+<span class="ln">128</span>      SAVE
+<span class="ln">129</span>
+<span class="ln">130</span>         print*,&#x27;wrtmod LSOUND 1: &#x27;,LSOUND
+<span class="ln">131</span>
+<span class="ln">132</span>      IF(LSOUND)THEN
+<span class="ln">133</span>
+<span class="ln">134</span>         print*,&#x27;wrtmod LSOUND 2: &#x27;,LSOUND
+<span class="ln">135</span>
+<span class="ln">136</span>CFD 10/09 Add an extra output to plot the sound speed profile easyly
+<span class="ln">137</span>C 9/25/26 MHP via Claude
+<span class="ln">138</span>C code changed to use the managed ISOUND unit (opened once in PARMIN
+<span class="ln">139</span>C against the user-configurable FSOUND filename) instead of a
+<span class="ln">140</span>C hardcoded unit 500/&#x27;Csound.dat&#x27;
+<span class="ln">141</span>         WRITE(ISOUND,9124)
+<span class="ln">142</span> 9123    FORMAT(1X,I6,1X,2F12.8,1P,3E16.8)
+<span class="ln">143</span> 9124    FORMAT(1X,&#x27;Shell#&#x27;,5x,&#x27;R/Rsun&#x27;,7x,&#x27;M/Msun&#x27;,7x,&#x27;Cs&#x27;,15x,&#x27;Rho&#x27;)
+<span class="ln">144</span>CFD end
+<span class="ln">145</span>         DO I = 1,M
+<span class="ln">146</span>            FR = EXP(CLN*HR(I))/CRSUN
+<span class="ln">147</span>            FM = EXP(CLN*HS(I))/CMSUN
+<span class="ln">148</span>            XX1 = FM/FR**3
+<span class="ln">149</span>            XXX = -EXP(CLN*(CGL+HS(I)+HD(I)-HP(I)-HR(I)))
+<span class="ln">150</span>            XX2 = -XXX/GAM1(I)
+<span class="ln">151</span>            XX3 = GAM1(I)
+<span class="ln">152</span>            XX4 = -XX2-XXX*(PQDP(I)+SDEL(2,I)*PQDT(I))
+<span class="ln">153</span>            XX5 = EXP(CLN*(C4PIL+HD(I)+3.0D0*HR(I)-HS(I)))
+<span class="ln">154</span>            SV = 1.0D-5*SQRT(GAM1(I)*EXP(CLN*(HP(I)-HD(I))))
+<span class="ln">155</span>            WRITE(IMODPT,123)FR,FM,XX1,XX2,XX3,XX4,XX5,SV
+<span class="ln">156</span> 123        FORMAT(1X,2F12.8,1P6E16.8)
+<span class="ln">157</span>CFD 10/09 Add an extra output to plot the sound speed profile easyly
+<span class="ln">158</span>            WRITE(ISOUND,9123)I,FR,FM,SV,HD(I),HT(I)
+<span class="ln">159</span>CFD end
+<span class="ln">160</span>
+<span class="ln">161</span>C  DERIVATIVES OF DP/DR, DRHO/DR
+<span class="ln">162</span>            IF(I.LT.M) THEN
+<span class="ln">163</span>              RMID = 0.5D0*(EXP(CLN*HR(I))+EXP(CLN*HR(I+1)))
+<span class="ln">164</span>              DR = EXP(CLN*HR(I+1)) - EXP(CLN*HR(I))
+<span class="ln">165</span>              DIVP = 0.5D0*(GAM1(I)*EXP(CLN*HP(I))+
+<span class="ln">166</span>     *              GAM1(I+1)*EXP(CLN*HP(I+1)))*DR
+<span class="ln">167</span>              DIVR = 0.5D0*(EXP(CLN*HD(I))+EXP(CLN*HD(I+1)))*DR
+<span class="ln">168</span>              QPR1 = EXP(CLN*(CGL+HS(I)+HD(I)-2.0D0*HR(I)))
+<span class="ln">169</span>              QDR1 = EXP(CLN*(HD(I)-HP(I)))*PQDP(I)*QPR1
+<span class="ln">170</span>              QPR2 = EXP(CLN*(CGL+HS(I+1)+HD(I+1)-2.0D0*HR(I+1)))
+<span class="ln">171</span>              QDR2 = EXP(CLN*(HD(I+1)-HP(I+1)))*PQDP(I+1)*QPR1
+<span class="ln">172</span>              QQPR = (QPR1-QPR2)/DIVP
+<span class="ln">173</span>              QQDR = (QDR1-QDR2)/DIVR
+<span class="ln">174</span>              WRITE(IMODPT,124)RMID/CRSUN,QPR1,QDR1,QQPR,QQDR
+<span class="ln">175</span> 124          FORMAT(1X,F11.7,1P4E16.8)
+<span class="ln">176</span>            ENDIF
+<span class="ln">177</span>         END DO
+<span class="ln">178</span>      ENDIF
+<span class="ln">179</span>C
+<span class="ln">180</span>C G Somers 11/14 LCHEMO BLOCK REMOVED, AS THIS INFO IS ALREADY IN .STORE.
+<span class="ln">181</span>C
+<span class="ln">182</span>C DBG PULSE: PRINT OUT PULSATION ENV AND ATM IN ENVINT
+<span class="ln">183</span>C G Somers 11/14 CHANGE TO NEW I/O FLAGS.
+<span class="ln">184</span>      IF(LSTATM .OR. LSTENV .OR. LPULSE) THEN
+<span class="ln">185</span>C  INTEGRATE AN ENVELOPE FROM THE SURFACE TO THE CONVERGED MODEL,
+<span class="ln">186</span>C  PRINTING OUT THE RESULTS.
+<span class="ln">187</span>C  SET UP FLAGS AND COUNTERS.
+<span class="ln">188</span>       LSBC0 = .FALSE.
+<span class="ln">189</span>       IF(LSTORE)LPRT = .TRUE.
+<span class="ln">190</span>       KATM = 0
+<span class="ln">191</span>       KENV = 0
+<span class="ln">192</span>       KSAHA = 0
+<span class="ln">193</span>C  SAVE THE INTEGRATION STEP PARAMETERS AND ENFORCE THE SPACING
+<span class="ln">194</span>C  REQUESTED FOR PRINTOUT PURPOSES.
+<span class="ln">195</span>       ABEG0 = ATMBEG
+<span class="ln">196</span>       AMIN0 = ATMMIN
+<span class="ln">197</span>       AMAX0 = ATMMAX
+<span class="ln">198</span>       EBEG0 = ENVBEG
+<span class="ln">199</span>       EMIN0 = ENVMIN
+<span class="ln">200</span>       EMAX0 = ENVMAX
+<span class="ln">201</span>       ATMBEG = ATMSTP
+<span class="ln">202</span>       ATMMIN = ATMSTP
+<span class="ln">203</span>       ATMMAX = ATMSTP
+<span class="ln">204</span>       ENVBEG = ENVSTP
+<span class="ln">205</span>       ENVMIN = ENVSTP
+<span class="ln">206</span>       ENVMAX = ENVSTP
+<span class="ln">207</span>       B = DEXP(CLN*BL)
+<span class="ln">208</span>       RL = 0.5D0*(BL + CLSUNL - 4.0D0*TEFFL - C4PIL - CSIGL)
+<span class="ln">209</span>       GL = CGL + STOTAL - RL - RL
+<span class="ln">210</span>       X = HCOMP(1,M)
+<span class="ln">211</span>       Z = HCOMP(3,M)
+<span class="ln">212</span>       FPL = FP(M)
+<span class="ln">213</span>       FTL = FT(M)
+<span class="ln">214</span>       IXX=0
+<span class="ln">215</span>       HSTOT = STOTAL
+<span class="ln">216</span>       PLIM = HP(M)
+<span class="ln">217</span>C DBG PULSE: ADDED ARGUEMENT TO ENVINT TO TURN ON/OFF PULSE OUTPUT
+<span class="ln">218</span>         LPULPT = LPULSE
+<span class="ln">219</span>            IF (LDH) THEN
+<span class="ln">220</span>               XXDH = HCOMP(1,M)
+<span class="ln">221</span>               YYDH = HCOMP(2,M)+HCOMP(4,M)
+<span class="ln">222</span>               ZZDH = HCOMP(3,M)
+<span class="ln">223</span>               ZDH(1) = HCOMP(5,M)+HCOMP(6,M)
+<span class="ln">224</span>               ZDH(2) = HCOMP(7,M)+HCOMP(8,M)
+<span class="ln">225</span>               ZDH(3) = HCOMP(9,M)+HCOMP(10,M)+HCOMP(11,M)
+<span class="ln">226</span>            END IF
+<span class="ln">227</span>C MHP 10/02  define ISTORE - used in ENVINT
+<span class="ln">228</span>         IDUM = 0
+<span class="ln">229</span>C G Somers 10/14, FOR SPOTTED RUNS, FIND THE
+<span class="ln">230</span>C PRESSURE AT THE AMBIENT TEMPERATURE ATEFFL
+<span class="ln">231</span>        IF(JENV.EQ.M.AND.SPOTF.NE.0.0.AND.SPOTX.NE.1.0)THEN
+<span class="ln">232</span>            ATEFFL = TEFFL - 0.25*LOG10(SPOTF * SPOTX**4.0 + 1.0 - SPOTF)
+<span class="ln">233</span>       ELSE
+<span class="ln">234</span>          ATEFFL = TEFFL
+<span class="ln">235</span>       ENDIF
+<span class="ln">236</span>       CALL <a href="../yrec-map/envint.f.html#def-ENVINT" title="ENVINT in envint.f">ENVINT</a>(B,FPL,FTL,GL,HSTOT,IXX,LPRT,LSBC0,PLIM,RL,
+<span class="ln">237</span>     *               ATEFFL,X,Z,DUM1,IDUM,KATM,KENV,KSAHA,DUM2,
+<span class="ln">238</span>     *               DUM3,DUM4,LPULPT,CMIXL)
+<span class="ln">239</span>C G Somers END
+<span class="ln">240</span>       ATMBEG = ABEG0
+<span class="ln">241</span>       ATMMIN = AMIN0
+<span class="ln">242</span>       ATMMAX = AMAX0
+<span class="ln">243</span>       ENVBEG = EBEG0
+<span class="ln">244</span>       ENVMIN = EMIN0
+<span class="ln">245</span>       ENVMAX = EMAX0
+<span class="ln">246</span>      ENDIF
+<span class="ln">247</span>C
+<span class="ln">248</span>C G Somers 11/14 LCONZO (convection zone info) block deleted.
+<span class="ln">249</span>C
+<span class="ln">250</span>C G Somers 11/14 LJOUT (rotation info) block deleted.
+<span class="ln">251</span>C
+<span class="ln">252</span>      FSI = DEXP(-CLN*STOTAL)
+<span class="ln">253</span>C DBG PULSE: WRITE HEADER INFORMATION FOR PULSE MODEL
+<span class="ln">254</span>      IF(LPULSE) THEN
+<span class="ln">255</span>         RSURFL = 0.5D0*(BL - C4PIL - CSIGL - 4.0D0*TEFFL + CLSUNL)
+<span class="ln">256</span>         TEMPR = RSURFL - CRSUNL
+<span class="ln">257</span>         QSMASS = XMSOL
+<span class="ln">258</span>         WRITE (IOPMOD, 5001) MODEL,IDM,IPVER,QSMASS,
+<span class="ln">259</span>     1         TEFFL,BL,TEMPR, DAGE, CMIXL, XENV0, ZENV0
+<span class="ln">260</span> 5001    FORMAT(&#x27; MODEL#=&#x27;, I5, &#x27;  NUMBER OF SHELLS IN MODEL=&#x27;,I5,
+<span class="ln">261</span>     *          &#x27; VER=&#x27;,I2,/,
+<span class="ln">262</span>     *          &#x27; MASS=&#x27;,F8.5, &#x27;  LOG(TEFF)=&#x27;,F8.5,/, &#x27; LOG(L/LSUN)=&#x27;,
+<span class="ln">263</span>     *          F16.10, &#x27;  LOG(R/RSUN)=&#x27;,F16.10, /,
+<span class="ln">264</span>     *          &#x27; AGE=&#x27;, 1PE12.5,&#x27; GYR&#x27;,/,
+<span class="ln">265</span>     *          &#x27; MIXING LENGTH PARAMETER=&#x27;, 0PF16.10,/,
+<span class="ln">266</span>     *          &#x27; ZAMS (X,Z)=&#x27;, 2F18.10)
+<span class="ln">267</span>      END IF
+<span class="ln">268</span>      DO 220 J = 1,IDM
+<span class="ln">269</span>       I = ID(J)
+<span class="ln">270</span>       FS = FSI*HS1(I)
+<span class="ln">271</span>C
+<span class="ln">272</span>C G Somers 11/14 FINAL LSCRIB BLOCK DELETED
+<span class="ln">273</span>C
+<span class="ln">274</span>C DBG WRITE PULSE MODEL
+<span class="ln">275</span>C       PRINT*, &#x27;LPULSE=&#x27;,LPULSE
+<span class="ln">276</span>         IF (LPULSE.AND.LSTORE) THEN
+<span class="ln">277</span>C MHP 10/02 uncommented pelpf statement, used later in i/o
+<span class="ln">278</span>C         PELPF = CGAS * DEXP(CLN*(HT(I) + HD(I)))* PEMU(I)
+<span class="ln">279</span>C          ADDED X AND Z TO OUTPUT
+<span class="ln">280</span>         IF ((J.EQ.2).AND.(I.EQ.1)) GOTO 5003
+<span class="ln">281</span>         IF(IPVER.EQ.1) THEN
+<span class="ln">282</span>         PELPF = CGAS * DEXP(CLN*(HT(I) + HD(I)))* PEMU(I)
+<span class="ln">283</span>         WRITE(IOPMOD, 5052)HR(I),FS,HL(I),HT(I),HD(I),
+<span class="ln">284</span>     *          HP(I), SESUM(I),SO(I), PQDP(I), PQED(I),
+<span class="ln">285</span>     *          PQET(I), PQOD(I), PQOT(I), SDEL(2,I),SDEL(3,I),
+<span class="ln">286</span>     *          PQCP(I), PRMU(I), PQDT(I), PELPF
+<span class="ln">287</span>         ELSE IF (IPVER.EQ.2) THEN
+<span class="ln">288</span>         WRITE(IOPMOD, 6052)HR(I),FS,HL(I),HT(I),HD(I),
+<span class="ln">289</span>     *      HP(I), SESUM(I),SO(I), PQDP(I), PQED(I),
+<span class="ln">290</span>     *      PQET(I), PQOD(I), PQOT(I), SDEL(2,I),SDEL(3,I),
+<span class="ln">291</span>     *      PQCP(I), PRMU(I), PQDT(I), HCOMP(1,I),HCOMP(3,I)
+<span class="ln">292</span>         ELSE IF (IPVER.EQ.3) THEN
+<span class="ln">293</span>C DBG 7/95 Modifed to include mixing length variables
+<span class="ln">294</span>         WRITE(IOPMOD, 6053)HR(I),FS,HL(I),HT(I),HD(I),VALFMLT(I),
+<span class="ln">295</span>     *      HP(I), SESUM(I),SO(I), PQDP(I), PQED(I),VPHMLT(I),
+<span class="ln">296</span>     *      PQET(I), PQOD(I), PQOT(I), SDEL(2,I),SDEL(3,I),VCMXMLT(I),
+<span class="ln">297</span>     *      PQCP(I), PRMU(I), PQDT(I), HCOMP(1,I),HCOMP(3,I)
+<span class="ln">298</span>         END IF
+<span class="ln">299</span> 5003      CONTINUE
+<span class="ln">300</span> 5052      FORMAT(5E16.9,/,5E16.9,/,5E16.9,/,5E16.9)
+<span class="ln">301</span> 6052      FORMAT(5E23.16,/,5E23.16,/,5E23.16,/,5E23.16)
+<span class="ln">302</span> 6053      FORMAT(6E23.16,/,6E23.16,/,6E23.16,/,5E23.16)
+<span class="ln">303</span>      END IF
+<span class="ln">304</span>C DBG END
+<span class="ln">305</span>  220 CONTINUE
+<span class="ln">306</span>C
+<span class="ln">307</span>C G Somers 11/14 REMOVED LONG BLOCK
+<span class="ln">308</span>C
+<span class="ln">309</span>      RETURN
+<span class="ln">310</span>      END</pre></details>
+<details class='py' id='py-wrtmod'><summary>Python version: wrtmod</summary><pre class='doc'>Write extra profiles of one model: with LSOUND, a sound-speed and
+structure table (units IMODPT and ISOUND); with LSTATM, LSTENV or
+LPULSE, an envelope integrated again by ENVINT for printing; with
+LPULSE, a model for pulsation codes on IOPMOD (version IPVER).
+
+Translates: wrtmod.f#WRTMOD (09c3b9b)
+
+Arguments: the number of shells m, the envelope&#x27;s base jenv, the model
+(hcomp, hs1, hd, hl, hp, hr, ht, fp, ft, hs, all logarithmic as in the
+model arrays), the model number, log L bl, log Teff teffl, the age
+dage, the mixing length cmixl, and xmsol, the star&#x27;s mass in solar
+masses as main.f snapshots it. Nothing is returned.</pre><pre class='src'><span class="ln">66</span>def wrtmod(m, jenv, hcomp, hs1, hd, hl, hp, hr, ht, model, bl, teffl, fp,
+<span class="ln">67</span>           ft, hs, dage, cmixl, xmsol):
+<span class="ln">68</span>    &quot;&quot;&quot;Write extra profiles of one model: with LSOUND, a sound-speed and
+<span class="ln">69</span>    structure table (units IMODPT and ISOUND); with LSTATM, LSTENV or
+<span class="ln">70</span>    LPULSE, an envelope integrated again by ENVINT for printing; with
+<span class="ln">71</span>    LPULSE, a model for pulsation codes on IOPMOD (version IPVER).
+<span class="ln">72</span>
+<span class="ln">73</span>    Translates: wrtmod.f#WRTMOD (09c3b9b)
+<span class="ln">74</span>
+<span class="ln">75</span>    Arguments: the number of shells m, the envelope&#x27;s base jenv, the model
+<span class="ln">76</span>    (hcomp, hs1, hd, hl, hp, hr, ht, fp, ft, hs, all logarithmic as in the
+<span class="ln">77</span>    model arrays), the model number, log L bl, log Teff teffl, the age
+<span class="ln">78</span>    dage, the mixing length cmixl, and xmsol, the star&#x27;s mass in solar
+<span class="ln">79</span>    masses as main.f snapshots it. Nothing is returned.
+<span class="ln">80</span>    &quot;&quot;&quot;
+<span class="ln">81</span>    n = nmlpar_mod
+<span class="ln">82</span>    c = constants_mod
+<span class="ln">83</span>    cln = c.cln
+<span class="ln">84</span>    io = iounits_mod
+<span class="ln">85</span>    gam1 = sound_mod.gam1
+<span class="ln">86</span>    pqdp = pulse1_mod.pqdp
+<span class="ln">87</span>    pqdt = pulse1_mod.pqdt
+<span class="ln">88</span>    sdel = scrtch_mod.sdel
+<span class="ln">89</span>
+<span class="ln">90</span>    # Question (see the page): debugging prints at every call.
+<span class="ln">91</span>    print(&#x27; wrtmod LSOUND 1: &#x27;, _l1(sound_mod.lsound))
+<span class="ln">92</span>
+<span class="ln">93</span>    if sound_mod.lsound:
+<span class="ln">94</span>        print(&#x27; wrtmod LSOUND 2: &#x27;, _l1(sound_mod.lsound))
+<span class="ln">95</span>        # CFD 10/09: the sound-speed profile, on ISOUND (opened in PARMIN).
+<span class="ln">96</span>        # Question (see the page): the header is written at every call.
+<span class="ln">97</span>        io.write(io.isound, &quot; Shell#     R/Rsun       M/Msun       Cs&quot;
+<span class="ln">98</span>                            &quot;               Rho&quot;)  # FORMAT 9124
+<span class="ln">99</span>        for i in range(1, m + 1):
+<span class="ln">100</span>            fr = math.exp(cln * hr[i]) / c.crsun
+<span class="ln">101</span>            fm = math.exp(cln * hs[i]) / c.cmsun
+<span class="ln">102</span>            xx1 = fm / fr**3
+<span class="ln">103</span>            xxx = -math.exp(cln * (c.cgl + hs[i] + hd[i] - hp[i] - hr[i]))
+<span class="ln">104</span>            xx2 = -xxx / gam1[i]
+<span class="ln">105</span>            xx3 = gam1[i]
+<span class="ln">106</span>            xx4 = -xx2 - xxx * (pqdp[i] + sdel[2, i] * pqdt[i])
+<span class="ln">107</span>            xx5 = math.exp(cln * (c.c4pil + hd[i] + 3.0 * hr[i] - hs[i]))
+<span class="ln">108</span>            sv = 1.0e-5 * math.sqrt(gam1[i] * math.exp(cln * (hp[i] - hd[i])))
+<span class="ln">109</span>            io.write(io.imodpt,  # FORMAT 123
+<span class="ln">110</span>                     f&quot; {fr:12.8f}{fm:12.8f}{xx1:16.8E}{xx2:16.8E}&quot;
+<span class="ln">111</span>                     f&quot;{xx3:16.8E}{xx4:16.8E}{xx5:16.8E}{sv:16.8E}&quot;)
+<span class="ln">112</span>            io.write(io.isound,  # FORMAT 9123
+<span class="ln">113</span>                     f&quot; {i:6d} {fr:12.8f}{fm:12.8f}{sv:16.8E}{hd[i]:16.8E}&quot;
+<span class="ln">114</span>                     f&quot;{ht[i]:16.8E}&quot;)
+<span class="ln">115</span>
+<span class="ln">116</span>            # Derivatives of dP/dr, drho/dr.
+<span class="ln">117</span>            if i &lt; m:
+<span class="ln">118</span>                rmid = 0.5 * (math.exp(cln * hr[i]) + math.exp(cln * hr[i + 1]))
+<span class="ln">119</span>                dr = math.exp(cln * hr[i + 1]) - math.exp(cln * hr[i])
+<span class="ln">120</span>                divp = 0.5 * (gam1[i] * math.exp(cln * hp[i])
+<span class="ln">121</span>                              + gam1[i + 1] * math.exp(cln * hp[i + 1])) * dr
+<span class="ln">122</span>                divr = 0.5 * (math.exp(cln * hd[i])
+<span class="ln">123</span>                              + math.exp(cln * hd[i + 1])) * dr
+<span class="ln">124</span>                qpr1 = math.exp(cln * (c.cgl + hs[i] + hd[i] - 2.0 * hr[i]))
+<span class="ln">125</span>                qdr1 = math.exp(cln * (hd[i] - hp[i])) * pqdp[i] * qpr1
+<span class="ln">126</span>                qpr2 = math.exp(cln * (c.cgl + hs[i + 1] + hd[i + 1]
+<span class="ln">127</span>                                       - 2.0 * hr[i + 1]))
+<span class="ln">128</span>                # Question (see the page): QPR1 where QPR2 is expected.
+<span class="ln">129</span>                qdr2 = math.exp(cln * (hd[i + 1] - hp[i + 1])) * pqdp[i + 1] \
+<span class="ln">130</span>                    * qpr1
+<span class="ln">131</span>                qqpr = (qpr1 - qpr2) / divp
+<span class="ln">132</span>                qqdr = (qdr1 - qdr2) / divr
+<span class="ln">133</span>                io.write(io.imodpt,  # FORMAT 124
+<span class="ln">134</span>                         f&quot; {rmid / c.crsun:11.7f}{qpr1:16.8E}{qdr1:16.8E}&quot;
+<span class="ln">135</span>                         f&quot;{qqpr:16.8E}{qqdr:16.8E}&quot;)
+<span class="ln">136</span>
+<span class="ln">137</span>    # Integrate an envelope from the surface to the converged model,
+<span class="ln">138</span>    # printing the results (ENVINT prints them).
+<span class="ln">139</span>    if n.lstatm or n.lstenv or n.lpulse:
+<span class="ln">140</span>        lsbc0 = False
+<span class="ln">141</span>        if n.lstore:
+<span class="ln">142</span>            _saved[&#x27;lprt&#x27;] = True
+<span class="ln">143</span>        lprt = _saved[&#x27;lprt&#x27;]
+<span class="ln">144</span>        katm = 0
+<span class="ln">145</span>        kenv = 0
+<span class="ln">146</span>        ksaha = 0
+<span class="ln">147</span>        # Save the integration step parameters and enforce the spacing
+<span class="ln">148</span>        # requested for printout.
+<span class="ln">149</span>        abeg0 = n.atmbeg
+<span class="ln">150</span>        amin0 = n.atmmin
+<span class="ln">151</span>        amax0 = n.atmmax
+<span class="ln">152</span>        ebeg0 = n.envbeg
+<span class="ln">153</span>        emin0 = n.envmin
+<span class="ln">154</span>        emax0 = n.envmax
+<span class="ln">155</span>        n.atmbeg = n.atmstp
+<span class="ln">156</span>        n.atmmin = n.atmstp
+<span class="ln">157</span>        n.atmmax = n.atmstp
+<span class="ln">158</span>        n.envbeg = n.envstp
+<span class="ln">159</span>        n.envmin = n.envstp
+<span class="ln">160</span>        n.envmax = n.envstp
+<span class="ln">161</span>        b = math.exp(cln * bl)
+<span class="ln">162</span>        rl = 0.5 * (bl + c.clsunl - 4.0 * teffl - c.c4pil - c.csigl)
+<span class="ln">163</span>        gl = c.cgl + comp_mod.stotal - rl - rl
+<span class="ln">164</span>        x = hcomp[1, m]
+<span class="ln">165</span>        z = hcomp[3, m]
+<span class="ln">166</span>        fpl = fp[m]
+<span class="ln">167</span>        ftl = ft[m]
+<span class="ln">168</span>        ixx = 0
+<span class="ln">169</span>        hstot = comp_mod.stotal
+<span class="ln">170</span>        plim = hp[m]
+<span class="ln">171</span>        lpulpt = n.lpulse
+<span class="ln">172</span>        if n.ldh:
+<span class="ln">173</span>            debhu_mod.xxdh = hcomp[1, m]
+<span class="ln">174</span>            debhu_mod.yydh = hcomp[2, m] + hcomp[4, m]
+<span class="ln">175</span>            debhu_mod.zzdh = hcomp[3, m]
+<span class="ln">176</span>            debhu_mod.zdh[1] = hcomp[5, m] + hcomp[6, m]
+<span class="ln">177</span>            debhu_mod.zdh[2] = hcomp[7, m] + hcomp[8, m]
+<span class="ln">178</span>            debhu_mod.zdh[3] = hcomp[9, m] + hcomp[10, m] + hcomp[11, m]
+<span class="ln">179</span>        idum = 0
+<span class="ln">180</span>        # G. Somers 10/14: for a spotted star, the ambient temperature.
+<span class="ln">181</span>        if jenv == m and n.spotf != 0.0 and n.spotx != 1.0:
+<span class="ln">182</span>            ateffl = teffl - 0.25 * math.log10(
+<span class="ln">183</span>                n.spotf * n.spotx**4.0 + 1.0 - n.spotf)
+<span class="ln">184</span>        else:
+<span class="ln">185</span>            ateffl = teffl
+<span class="ln">186</span>        dum1 = np.zeros(5)
+<span class="ln">187</span>        dum2 = np.zeros(4)
+<span class="ln">188</span>        dum3 = np.zeros(4)
+<span class="ln">189</span>        dum4 = np.zeros(4)
+<span class="ln">190</span>        rl, idum, katm, kenv, ksaha = envint(
+<span class="ln">191</span>            b, fpl, ftl, gl, hstot, ixx, lprt, lsbc0, plim, rl, ateffl, x,
+<span class="ln">192</span>            z, dum1, idum, katm, kenv, ksaha, dum2, dum3, dum4, lpulpt,
+<span class="ln">193</span>            cmixl)
+<span class="ln">194</span>        n.atmbeg = abeg0
+<span class="ln">195</span>        n.atmmin = amin0
+<span class="ln">196</span>        n.atmmax = amax0
+<span class="ln">197</span>        n.envbeg = ebeg0
+<span class="ln">198</span>        n.envmin = emin0
+<span class="ln">199</span>        n.envmax = emax0
+<span class="ln">200</span>
+<span class="ln">201</span>    fsi = math.exp(-cln * comp_mod.stotal)
+<span class="ln">202</span>    idm = _saved[&#x27;idm&#x27;]
+<span class="ln">203</span>    # The pulsation model&#x27;s header.
+<span class="ln">204</span>    if n.lpulse:
+<span class="ln">205</span>        rsurfl = 0.5 * (bl - c.c4pil - c.csigl - 4.0 * teffl + c.clsunl)
+<span class="ln">206</span>        tempr = rsurfl - c.crsunl
+<span class="ln">207</span>        qsmass = xmsol
+<span class="ln">208</span>        io.write(io.iopmod,  # FORMAT 5001
+<span class="ln">209</span>                 f&quot; MODEL#={model:5d}  NUMBER OF SHELLS IN MODEL={idm:5d}&quot;
+<span class="ln">210</span>                 f&quot; VER={n.ipver:2d}\n&quot;
+<span class="ln">211</span>                 f&quot; MASS={qsmass:8.5f}  LOG(TEFF)={teffl:8.5f}\n&quot;
+<span class="ln">212</span>                 f&quot; LOG(L/LSUN)={bl:16.10f}  LOG(R/RSUN)={tempr:16.10f}\n&quot;
+<span class="ln">213</span>                 f&quot; AGE={dage:12.5E} GYR\n&quot;
+<span class="ln">214</span>                 f&quot; MIXING LENGTH PARAMETER={cmixl:16.10f}\n&quot;
+<span class="ln">215</span>                 f&quot; ZAMS (X,Z)={label_mod.xenv0:18.10f}&quot;
+<span class="ln">216</span>                 f&quot;{label_mod.zenv0:18.10f}&quot;)
+<span class="ln">217</span>
+<span class="ln">218</span>    # The pulsation model, shell by shell, on the list ID(1..IDM).
+<span class="ln">219</span>    p = pulse1_mod
+<span class="ln">220</span>    s = scrtch_mod
+<span class="ln">221</span>    v = pualpha_mod
+<span class="ln">222</span>    for j in range(1, idm + 1):  # loop 220
+<span class="ln">223</span>        i = id_[j]
+<span class="ln">224</span>        fs = fsi * hs1[i]
+<span class="ln">225</span>        if not (n.lpulse and n.lstore):
+<span class="ln">226</span>            continue
+<span class="ln">227</span>        if j == 2 and i == 1:  # GOTO 5003
+<span class="ln">228</span>            continue
+<span class="ln">229</span>        if n.ipver == 1:
+<span class="ln">230</span>            pelpf = c.cgas * math.exp(cln * (ht[i] + hd[i])) * p.pemu[i]
+<span class="ln">231</span>            vals = [hr[i], fs, hl[i], ht[i], hd[i],
+<span class="ln">232</span>                    hp[i], s.sesum[i], s.so[i], p.pqdp[i], p.pqed[i],
+<span class="ln">233</span>                    p.pqet[i], p.pqod[i], p.pqot[i], s.sdel[2, i],
+<span class="ln">234</span>                    s.sdel[3, i],
+<span class="ln">235</span>                    p.pqcp[i], p.prmu[i], p.pqdt[i], pelpf]
+<span class="ln">236</span>            io.write(io.iopmod, _records(vals, (5, 5, 5, 5), 16, 9))
+<span class="ln">237</span>        elif n.ipver == 2:
+<span class="ln">238</span>            vals = [hr[i], fs, hl[i], ht[i], hd[i],
+<span class="ln">239</span>                    hp[i], s.sesum[i], s.so[i], p.pqdp[i], p.pqed[i],
+<span class="ln">240</span>                    p.pqet[i], p.pqod[i], p.pqot[i], s.sdel[2, i],
+<span class="ln">241</span>                    s.sdel[3, i],
+<span class="ln">242</span>                    p.pqcp[i], p.prmu[i], p.pqdt[i], hcomp[1, i],
+<span class="ln">243</span>                    hcomp[3, i]]
+<span class="ln">244</span>            io.write(io.iopmod, _records(vals, (5, 5, 5, 5), 23, 16))
+<span class="ln">245</span>        elif n.ipver == 3:
+<span class="ln">246</span>            # DBG 7/95: with the mixing-length variables.
+<span class="ln">247</span>            vals = [hr[i], fs, hl[i], ht[i], hd[i], v.valfmlt[i],
+<span class="ln">248</span>                    hp[i], s.sesum[i], s.so[i], p.pqdp[i], p.pqed[i],
+<span class="ln">249</span>                    v.vphmlt[i],
+<span class="ln">250</span>                    p.pqet[i], p.pqod[i], p.pqot[i], s.sdel[2, i],
+<span class="ln">251</span>                    s.sdel[3, i], v.vcmxmlt[i],
+<span class="ln">252</span>                    p.pqcp[i], p.prmu[i], p.pqdt[i], hcomp[1, i],
+<span class="ln">253</span>                    hcomp[3, i]]
+<span class="ln">254</span>            io.write(io.iopmod, _records(vals, (6, 6, 6, 5), 23, 16))</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_l1'><summary>Python version: _l1</summary><pre class='src'><span class="ln">34</span>def _l1(flag):
+<span class="ln">35</span>    return &quot;T&quot; if flag else &quot;F&quot;</pre></details>
+<details class='py' id='py-_e0'><summary>Python version: _e0</summary><pre class='doc'>Fortran&#x27;s 0PEw.d: a mantissa in [0.1, 1), e.g. 0.12345678E+01.</pre><pre class='src'><span class="ln">38</span>def _e0(x, w, d):
+<span class="ln">39</span>    &quot;&quot;&quot;Fortran&#x27;s 0PEw.d: a mantissa in [0.1, 1), e.g. 0.12345678E+01.&quot;&quot;&quot;
+<span class="ln">40</span>    if x == 0.0:
+<span class="ln">41</span>        return f&quot;{&#x27;0.&#x27; + &#x27;0&#x27; * d + &#x27;E+00&#x27;:&gt;{w}}&quot;
+<span class="ln">42</span>    e = math.floor(math.log10(abs(x))) + 1
+<span class="ln">43</span>    m = x / 10.0**e
+<span class="ln">44</span>    if round(abs(m), d) &gt;= 1.0:  # rounding carried into the next decade
+<span class="ln">45</span>        m /= 10.0
+<span class="ln">46</span>        e += 1
+<span class="ln">47</span>    s = f&quot;{abs(m):.{d}f}&quot;[1:]  # drop the leading zero, as Fortran does
+<span class="ln">48</span>    sign = &quot;-&quot; if x &lt; 0 else &quot;&quot;
+<span class="ln">49</span>    return f&quot;{sign + &#x27;0&#x27; + s + f&#x27;E{e:+03d}&#x27;:&gt;{w}}&quot;</pre></details>
+<details class='py' id='py-_records'><summary>Python version: _records</summary><pre class='doc'>Values in 0PEw.d, per_line[k] of them on record k (FORMATs 5052,
+6052, 6053); the last record stops when the values run out.</pre><pre class='src'><span class="ln">52</span>def _records(values, per_line, w, d):
+<span class="ln">53</span>    &quot;&quot;&quot;Values in 0PEw.d, per_line[k] of them on record k (FORMATs 5052,
+<span class="ln">54</span>    6052, 6053); the last record stops when the values run out.&quot;&quot;&quot;
+<span class="ln">55</span>    lines = []
+<span class="ln">56</span>    k = 0
+<span class="ln">57</span>    for count in per_line:
+<span class="ln">58</span>        chunk = values[k:k + count]
+<span class="ln">59</span>        if not chunk:
+<span class="ln">60</span>            break
+<span class="ln">61</span>        lines.append(&quot;&quot;.join(_e0(v, w, d) for v in chunk))
+<span class="ln">62</span>        k += count
+<span class="ln">63</span>    return &quot;\n&quot;.join(lines)</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong (sign).</strong> "$A = V/\Gamma_1 - V(\ldots)$": the code has <code>XXX</code> $= -V$, <code>XX2</code> $= V/\Gamma_1$, <code>XX4 = -XX2 - XXX*(PQDP + SDEL(2)*PQDT)</code> $= -V/\Gamma_1 + V(\ldots)$. <strong>Fix:</strong> reverse the sign.</li>
+<li><strong>Missing.</strong> The pulsation model's shell lines are written only when both <code>LPULSE</code> and <code>LSTORE</code> are set; the header needs <code>LPULSE</code> alone. <strong>Fix:</strong> add to step 3.</li>
+</ol>
+<p>Revised: sign of $A$; <code>LPULSE</code> and <code>LSTORE</code> in step 3.</p></div></details>
+</main></body></html>

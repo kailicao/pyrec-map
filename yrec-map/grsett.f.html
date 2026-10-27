@@ -1,0 +1,480 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>grsett.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ grsett.f</span></header><main>
+<h1>grsett.f</h1>
+<p class='muted'>261 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/grsett.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>grsett.py</code>, 170 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>GRSETT</code> computes the gravitational settling of helium (and, with <code>LDIFZ</code>, of the metals) over one time step, "using the formalism of Bahcall and Loeb 1989" (its comment). The diffusion equation has two terms: one in $d\ln P/dr \cdot dX/dr$ (settling) and one in $d^2X/dr^2$ (diffusion). <code>GRSETT</code> treats the first explicitly with a two-step Lax–Wendroff scheme and the second implicitly, iterating on the coefficients.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/mix.f.html#def-MIX"><code>MIX</code></a> and <a href="../yrec-map/rotmix.f.html#def-ROTMIX"><code>ROTMIX</code></a>, the mixing drivers of the evolution step.</li>
+<li><strong>Inputs:</strong> <code>DT</code> (time step, s), <code>HCOMP</code> (mass fractions; <code>HCOMP(1)</code> = $X$, <code>HCOMP(2)</code> = $Y$, <code>HCOMP(3)</code> = $Z$), <code>HQPR</code> = $d\ln P/dr$, <code>HR</code> = $\log r$, <code>HD</code> = $\log\rho$, <code>HS1</code> = $m$ (g, not logged), <code>HT</code> = $\log T$, <code>LC</code> (convective or not), <code>M</code>, <code>STOT</code>.</li>
+<li><strong>Output:</strong> the new <code>HCOMP(1)</code> and <code>HCOMP(2)</code> (via <a href="../yrec-map/equal_to_model.f.html#def-EQUAL_TO_MODEL"><code>EQUAL_TO_MODEL</code></a>, which uses $X+Y+Z=1$).</li>
+<li><strong>Calls, in order:</strong> <a href="../yrec-map/setup_grsett.f.html#def-SETUP_GRSETT"><code>SETUP_GRSETT</code></a> (the coefficients <code>COD1</code>, <code>COD2</code> and their $X$-derivatives, the convection-zone edges, and whether the model is fully convective), <a href="../yrec-map/model_to_equal.f.html#def-MODEL_TO_EQUAL"><code>MODEL_TO_EQUAL</code></a> (to an equally spaced grid in radius), <a href="../yrec-map/lax_wendrof1.f.html#def-LAX_WENDROF1"><code>LAX_WENDROF1</code></a> and <a href="../yrec-map/lax_wendrof2.f.html#def-LAX_WENDROF2"><code>LAX_WENDROF2</code></a>, then in each iteration <a href="../yrec-map/get_imp_diffco.f.html#def-GET_IMP_DIFFCO"><code>GET_IMP_DIFFCO</code></a> and <a href="../yrec-map/tridiag_gs.f.html#def-TRIDIAG_GS"><code>TRIDIAG_GS</code></a>, and at the end <code>EQUAL_TO_MODEL</code>.</li>
+<li><strong>Modules</strong> (COMMON blocks until <code>rp_1</code>): <code>NMLPAR_MOD</code> for the settings <code>GRTOL</code>, <code>NITER_GS</code> (formerly <code>/GRAVST/</code>, set by <a href="../yrec-map/parmin.f.html#def-PARMIN"><code>PARMIN</code></a>) and <code>LDIFZ</code> (formerly <code>/GRAVS3/</code>); <code>GRAVEZ_MOD</code> (the metals on the equal grid, with the Lax–Wendroff pair and the regridding routines); <code>CONSTANTS_MOD</code>; <code>IOUNITS_MOD</code> (the output units). The metals' coefficients <code>COD1Z</code>, <code>COD2Z</code>, <code>QCOD1Z</code>, <code>QCOD2Z</code> (formerly <code>/GRAVSZ/</code>) are now <code>GRSETT</code>'s own arrays, filled by <code>SETUP_GRSETT</code> and passed to <code>MODEL_TO_EQUAL</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Set up the coefficients; return at once for a fully convective model.</li>
+<li>Move to $N$ (<code>NPT</code>) equally spaced radii $r_i$ (step $\Delta r$), with values at the points (<code>E…</code>) and at the midpoints (<code>E…_H</code>). Keep the starting $X_i^0$ (<code>EX_ORIG</code>).</li>
+<li>
+<p><strong>Explicit term.</strong> <code>LAX_WENDROF1</code> gives the half-step changes $\Delta X_{i+1/2}$; the midpoint coefficients are linearized in them,
+$$F_{i+1/2} \leftarrow F_{i+1/2} + \Delta X_{i+1/2}\,\frac{\partial F}{\partial X}\Big|_{i+1/2},$$
+and <code>LAX_WENDROF2</code> applies the full step, giving $X&#x27;_i$ (<code>EX_PRIME</code>).</p>
+</li>
+<li>
+<p><strong>Implicit term.</strong> With $\alpha_i = 4\pi\Delta t/(\Delta r\,\Delta m_i)$ (<code>ALPHA</code>; $\Delta m_i$ the mass between midpoints, $m_{1/2}$ at the centre and $M - m_{N-1/2}$ at the surface), iterate up to <code>NITER_GS</code> times: take the change at the midpoints $\tfrac12(X_i + X_{i-1} - X^p_i - X^p_{i-1})$ since the previous iterate $X^p$; let <code>GET_IMP_DIFFCO</code> build the tridiagonal coefficients $a_i, b_i, c_i$ from <code>ECOD2_H</code> corrected by that change; solve
+$$a_i X_{i-1} + b_i X_i + c_i X_{i+1} = X&#x27;_i$$
+with <code>TRIDIAG_GS</code>. With $D_{i+1/2}$ = <code>ECOD2_H(I)</code> (the coefficient between points $i$ and $i+1$), the rows are those of an implicit (backward Euler) step:
+$$\bigl(1+\alpha_i(D_{i-1/2}+D_{i+1/2})\bigr)X_i - \alpha_i D_{i-1/2}X_{i-1} - \alpha_i D_{i+1/2}X_{i+1} = X&#x27;_i,$$
+with $D_{1/2} = D_{N+1/2} = 0$ (no flux through the centre or the surface). Stop when $\max_i (X_i - X^p_i) &lt;$ <code>GRTOL</code>; print each iteration's largest change.</p>
+</li>
+<li>
+<p>Return the change $X_i - X_i^0$ (and $Z_i - Z_i^0$), which <code>EQUAL_TO_MODEL</code> interpolates back to the model's points (the change rather than the abundance, "to minimize errors from the interpolation").</p>
+</li>
+</ol>
+<p><strong>Design.</strong> Each iteration writes a line to the short output (<code>ISHORT</code>). The metals get the explicit term only; the implicit iteration is for $X$ alone.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: the call to <code>MODEL_TO_EQUAL</code> no longer passes <code>HQPR</code> and <code>HTU</code>.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> The metals' coefficient arrays (formerly <code>/GRAVSZ/</code>) are local and passed to <code>SETUP_GRSETT</code> and <code>MODEL_TO_EQUAL</code> as new arguments; otherwise declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>. No question settled.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The convergence test ignores negative changes.</strong> <code>DXMAX</code> is the largest signed $X_i - X^p_i$, not its absolute value, so an iteration whose changes are all negative is taken as converged at once. Should it be <code>ABS(DX)</code>?</li>
+<li><strong>Stale comment.</strong> "Settling of metals will be added later": metal settling was added in 3/94 (<code>LDIFZ</code>), for the explicit term only. Should the metals also get the implicit term?</li>
+<li><strong>Unused.</strong> <code>ZZ1</code> and <code>ZZ2</code> (the metals' changes at the two ends) are computed and not used; the argument <code>HD</code> is passed on but <code>GRSETT</code> itself does not use it.</li>
+<li><strong>The coefficient correction is one midpoint off.</strong> In the iteration, <code>EX_H(I)</code> (<code>I</code> = 2..<code>NPT</code>) is the change at the midpoint between points <code>I-1</code> and <code>I</code>, but <a href="../yrec-map/get_imp_diffco.f.html#def-GET_IMP_DIFFCO"><code>GET_IMP_DIFFCO</code></a> adds <code>EQCOD2X_H(I)*EX_H(I)</code> to <code>ECOD2_H(I)</code>, the coefficient between points <code>I</code> and <code>I+1</code> (its matrix uses <code>ECOD2_H(I-1)</code> on the left of point <code>I</code> and <code>ECOD2_H(I)</code> on the right). <code>ECOD2_H(1)</code> also gets the stale <code>EX_H(1)</code> left by <code>LAX_WENDROF1</code>. Should the loop set <code>EX_H(I-1)</code> instead?</li>
+<li><strong>Failure is only reported.</strong> When the iteration does not converge, <code>GRSETT</code> writes a message and carries on with the last iterate.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+GRESETT
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-GRSETT'>GRSETT</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-GRSETT'><h3><span class='kind'>subroutine</span>GRSETT</h3>
+<p class='muted'>lines 4–261 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/grsett.f#L4-L261'>GitHub</a></p>
+<pre>SUBROUTINE GRSETT(DT,HCOMP,HQPR,HR,HD,HS1,HT,LC,M,STOT)</pre>
+<div class='notes'><p>Settling of He (and metals) in one step: regrid to equal radii, explicit Lax–Wendroff for the settling term, implicit iterated tridiagonal solve for the diffusion term, regrid the change back (above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+GRESETT
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/gravez_mod.f.html#def-GRAVEZ_MOD'>GRAVEZ_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/equal_to_model.f.html#def-EQUAL_TO_MODEL'>EQUAL_TO_MODEL</a> <span class='muted'>(equal_to_model.f)</span></li>
+<li><a href='../yrec-map/get_imp_diffco.f.html#def-GET_IMP_DIFFCO'>GET_IMP_DIFFCO</a> <span class='muted'>(get_imp_diffco.f)</span></li>
+<li><a href='../yrec-map/lax_wendrof1.f.html#def-LAX_WENDROF1'>LAX_WENDROF1</a> <span class='muted'>(lax_wendrof1.f)</span></li>
+<li><a href='../yrec-map/lax_wendrof2.f.html#def-LAX_WENDROF2'>LAX_WENDROF2</a> <span class='muted'>(lax_wendrof2.f)</span></li>
+<li><a href='../yrec-map/model_to_equal.f.html#def-MODEL_TO_EQUAL'>MODEL_TO_EQUAL</a> <span class='muted'>(model_to_equal.f)</span></li>
+<li><a href='../yrec-map/setup_grsett.f.html#def-SETUP_GRSETT'>SETUP_GRSETT</a> <span class='muted'>(setup_grsett.f)</span></li>
+<li><a href='../yrec-map/tridiag_gs.f.html#def-TRIDIAG_GS'>TRIDIAG_GS</a> <span class='muted'>(tridiag_gs.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/mix.f.html#def-MIX'>MIX</a> <span class='muted'>(mix.f)</span></li>
+<li><a href='../yrec-map/rotmix.f.html#def-ROTMIX'>ROTMIX</a> <span class='muted'>(rotmix.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE GRSETT(DT,HCOMP,HQPR,HR,HD,HS1,HT,LC,M,STOT)
+<span class="ln">5</span>C 10/15/26 MHP via Claude
+<span class="ln">6</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">7</span>C PARAMETER(JSON=5000) here.
+<span class="ln">8</span>      USE DIMENSIONS_MOD
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/GRAVEZ/ into GRAVEZ_MOD.
+<span class="ln">11</span>      USE GRAVEZ_MOD
+<span class="ln">12</span>C 10/14/26 MHP via Claude
+<span class="ln">13</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">14</span>      USE NMLPAR_MOD
+<span class="ln">15</span>C 10/14/26 MHP via Claude
+<span class="ln">16</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">17</span>      USE CONSTANTS_MOD
+<span class="ln">18</span>C 10/14/26 MHP via Claude
+<span class="ln">19</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">20</span>      USE IOUNITS_MOD
+<span class="ln">21</span>C 10/20/26 MHP via Claude
+<span class="ln">22</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">23</span>C explicit declarations.
+<span class="ln">24</span>      IMPLICIT NONE
+<span class="ln">25</span>      REAL*8 A,ALPHA,B,C,COD1,COD1Z,COD2,COD2Z,DR,DT,DX,DXMAX,ECOD1,
+<span class="ln">26</span>     *       ECOD1_H,ECOD2_H,EM,EM_H,EQCOD1X_H,EQCOD2X_H,ER,EX,EX_H,
+<span class="ln">27</span>     *       EX_ORIG,EX_P,EX_PRIME,EZ_ORIG,EZ_P,FAC,HCOMP,HD,HQPR,HR,
+<span class="ln">28</span>     *       HRU,HS1,HT,HTU,QCOD1X,QCOD1Z,QCOD2X,QCOD2Z,STOT,ZZ1,ZZ2
+<span class="ln">29</span>      INTEGER I,IBEGIN,IEND,IMAX,ITER,M,NPT
+<span class="ln">30</span>      LOGICAL*4 LALLCZ,LC,LDOLI
+<span class="ln">31</span>
+<span class="ln">32</span>C 10/13/26 MHP via Claude
+<span class="ln">33</span>C COD1Z..QCOD2Z were COMMON/GRAVSZ/; grsett.f now owns them and passes
+<span class="ln">34</span>C them to SETUP_GRSETT, which fills them, and MODEL_TO_EQUAL, which reads.
+<span class="ln">35</span>      DIMENSION COD1Z(JSON),COD2Z(JSON),QCOD1Z(JSON),QCOD2Z(JSON)
+<span class="ln">36</span>C 10/12/26 MHP via Claude
+<span class="ln">37</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">38</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">39</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">40</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">41</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">42</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">43</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">44</span>C
+<span class="ln">45</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">46</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">47</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">48</span>C MHP 3/94 ADDED METAL DIFFUSION
+<span class="ln">49</span>C 9/25/26 MHP via Claude
+<span class="ln">50</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">51</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">52</span>C 9/25/26 MHP via Claude
+<span class="ln">53</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">54</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">55</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">56</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">57</span>C COMMON/IOUNITS/
+<span class="ln">58</span>      DIMENSION HCOMP(15,JSON),HQPR(JSON),HR(JSON),HS1(JSON),
+<span class="ln">59</span>     *  HT(JSON),EM(JSON),ER(JSON),A(JSON),B(JSON),C(JSON),
+<span class="ln">60</span>     *  EX(JSON),LC(JSON),HRU(JSON),HTU(JSON),HD(JSON),
+<span class="ln">61</span>     *  EM_H(JSON),EX_P(JSON),EX_ORIG(JSON),ALPHA(JSON),
+<span class="ln">62</span>     *  EX_H(JSON),COD1(JSON),COD2(JSON),QCOD1X(JSON),QCOD2X(JSON),
+<span class="ln">63</span>     *   ECOD1(JSON),ECOD1_H(JSON),EX_PRIME(JSON),
+<span class="ln">64</span>     *   ECOD2_H(JSON),EQCOD1X_H(JSON),EQCOD2X_H(JSON)
+<span class="ln">65</span>      DIMENSION EZ_ORIG(JSON),EZ_P(JSON)
+<span class="ln">66</span>      SAVE
+<span class="ln">67</span>
+<span class="ln">68</span>C  GRSETT SOLVES FOR THE GRAVITATIONAL SETTLING OF HELIUM USING THE
+<span class="ln">69</span>C  FORMULISM OF BAHCALL AND LOEB 1989.  SETTLING OF METALS WILL BE ADDED
+<span class="ln">70</span>C  LATER.
+<span class="ln">71</span>C  GRSETT PERFORMS THE FOLLOWING SERIES OF OPERATIONS :
+<span class="ln">72</span>C  1)  TRANSFORMS TO AN EQUALLY SPACED GRID IN RADIUS (AND MANIPULATES
+<span class="ln">73</span>C  THE MODEL VARIABLES INTO BAHCALL AND LOEB UNITS).
+<span class="ln">74</span>C
+<span class="ln">75</span>C  THE DIFFUSION EQUATION HAS TWO TERMS : ONE THAT DEPENDS ON DLNP/DR*DX/DR
+<span class="ln">76</span>C  AND ONE THAT DEPENDS ON D^2X/DR^2. THE DIFFUSION COEFFICIENTS ARE
+<span class="ln">77</span>C  THEMSELVES FUNCTIONS OF BOTH THE THERMAL STRUCTURE AND X.
+<span class="ln">78</span>C  GRSETT SOLVES THIS DIFFUSION EQUATION IN TWO STEPS :
+<span class="ln">79</span>C  2) THE FIRST TERM IS SOLVED EXPLICITLY USING THE TWO-STEP
+<span class="ln">80</span>C  LAX-WENDROFF SCHEME (NUMERICAL RECIPES, PRESS ET AL. 1986,
+<span class="ln">81</span>C  CAMBRIDGE UNIVERSITY PRESS,P.633)
+<span class="ln">82</span>C  3) THE SECOND TERM IS SOLVED IMPLICITLY, USING THE MODIFIED RUN OF
+<span class="ln">83</span>C  ABUNDANCE FOUND IN STEP 2) AS THE &#x27;INITIAL&#x27; RUN OF ABUNDANCE.
+<span class="ln">84</span>C  THE IMPLICIT SCHEME ITERATES ON THE DIFFUSION COEFFICIENTS UNTIL
+<span class="ln">85</span>C  THE SOLUTION CONVERGES TO WITHIN THE USER-SPECIFIED TOLERANCE GRTOL.
+<span class="ln">86</span>C
+<span class="ln">87</span>C  4) GRSETT THEN UPDATES THE ABUNDANCE ARRAY AND EXITS.
+<span class="ln">88</span>C
+<span class="ln">89</span>C  INPUT VARIABLES :
+<span class="ln">90</span>C
+<span class="ln">91</span>C  DT - TIMESTEP (SEC)
+<span class="ln">92</span>C  HCOMP - RUN OF MASS FRACTIONS OF SPECIES.HCOMP(1,..)=X,HCOMP(2,...)=Y
+<span class="ln">93</span>C          HCOMP(3,...)=Z
+<span class="ln">94</span>C  HQPR - DLNP/DR
+<span class="ln">95</span>C  HR - LOG RADIUS (CM)
+<span class="ln">96</span>C  HS1 - MASS (GM), UNLOGGED
+<span class="ln">97</span>C  HT - LOG TEMPERATURE (K)
+<span class="ln">98</span>C  LC - FLAG T/F FOR CONVECTION
+<span class="ln">99</span>C  M - NUMBER OF MODEL POINTS
+<span class="ln">100</span>C  [COMMON] SDEL(2,...) - DEL (=DLNT/DLNP)
+<span class="ln">101</span>C
+<span class="ln">102</span>C  OUTPUT VARIABLES :
+<span class="ln">103</span>C
+<span class="ln">104</span>C  NEW RUN OF HCOMP(1,...) AND HCOMP(2,...).
+<span class="ln">105</span>C
+<span class="ln">106</span>C  CONVERT MODEL QUANTITIES TO BAHCALL AND LOEB UNITS; LOCATE
+<span class="ln">107</span>C  BOUNDARIES OF CONVECTIVE CORE AND ENVELOPE IF APPLICABLE.
+<span class="ln">108</span>C  COMPUTE THE DIFFUSION COEFFICIENTS (COD1 AND COD2) AND THEIR
+<span class="ln">109</span>C  DERIVATIVES WITH RESPECT TO X (QCOD1X AND QCOD2X).
+<span class="ln">110</span>C
+<span class="ln">111</span>
+<span class="ln">112</span>      CALL <a href="../yrec-map/setup_grsett.f.html#def-SETUP_GRSETT" title="SETUP_GRSETT in setup_grsett.f">SETUP_GRSETT</a>(DT,HQPR,HR,HD,HS1,HT,LC,M,STOT,COD1,COD2,
+<span class="ln">113</span>     *            HCOMP,HRU,HTU,IBEGIN,IEND,LALLCZ,QCOD1X,QCOD2X,COD1Z,COD2Z,QCOD1Z,QCOD2Z)
+<span class="ln">114</span>C
+<span class="ln">115</span>C SKIP SETTLING FOR FULLY CONVECTIVE MODELS.
+<span class="ln">116</span>      IF(LALLCZ) RETURN
+<span class="ln">117</span>C  TRANSFORM TO AN EQUALLY SPACED GRID IN RADIUS.
+<span class="ln">118</span>C  NOTE : PREFIX E ALONE=VARIABLE AT EQUALLY SPACED GRID POINTS.
+<span class="ln">119</span>C         PREFIX E + SUFFIX _H= VARIABLE AT MIDPOINT BETWEEN EQUALLY
+<span class="ln">120</span>C         SPACED GRID POINTS.(BOTH ARE NEEDED FOR THE DIFFUSION TECHNIQUE).
+<span class="ln">121</span>C
+<span class="ln">122</span>C       CALL MODEL_TO_EQUAL(COD1,COD2,HCOMP,HQPR,HRU,HS1,HTU,  ! KC 2025-05-31
+<span class="ln">123</span>      CALL <a href="../yrec-map/model_to_equal.f.html#def-MODEL_TO_EQUAL" title="MODEL_TO_EQUAL in model_to_equal.f">MODEL_TO_EQUAL</a>(COD1,COD2,HCOMP,HRU,HS1,
+<span class="ln">124</span>     *                    IBEGIN,IEND,M,QCOD1X,QCOD2X,DR,
+<span class="ln">125</span>     *                    ECOD1,ECOD1_H,ECOD2_H,EM,EM_H,
+<span class="ln">126</span>     *                    EQCOD1X_H,EQCOD2X_H,ER,EX,EX_H,NPT,COD1Z,COD2Z,QCOD1Z,QCOD2Z)
+<span class="ln">127</span>C
+<span class="ln">128</span>C STORE ORIGINAL RUN OF HYDROGEN MASS FRACTION IN VECTOR EX_ORIG.
+<span class="ln">129</span>C THE CHANGE IN HYDROGEN (EX - EX_ORIG) IS INTERPOLATED BACK TO THE
+<span class="ln">130</span>C ORIGINAL GRID AT THE END OF THE ROUTINE; THE CHANGE IN ABUNDANCE
+<span class="ln">131</span>C (RATHER THAN THE NEW RUN OF ABUNDANCE) IS USED TO MINIMIZE ERRORS
+<span class="ln">132</span>C ARISING FROM THE INTERPOLATION.
+<span class="ln">133</span>      DO 5 I = 1,NPT
+<span class="ln">134</span>         EX_ORIG(I) = EX(I)
+<span class="ln">135</span>    5 CONTINUE
+<span class="ln">136</span>C MHP 3/94 METAL DIFFUSION
+<span class="ln">137</span>      IF(LDIFZ)THEN
+<span class="ln">138</span>         DO I = 1,NPT
+<span class="ln">139</span>            EZ_ORIG(I) = EZ(I)
+<span class="ln">140</span>         END DO
+<span class="ln">141</span>      ENDIF
+<span class="ln">142</span>C  FIRST STEP OF TWO STEP LAX-WENDROFF METHOD.   COMPUTE NEW X&#x27;S AT ZONE
+<span class="ln">143</span>C  MIDPOINTS USING THE LAX SCHEME :
+<span class="ln">144</span>C X(N+1/2,J+1/2)=1/2(X(N,J+1/2)-1/2(DT/DR)(COD1(N,J+1)-COD1(N,J))
+<span class="ln">145</span>C WHERE N IS THE TIME VARIABLE, J IS THE SPATIAL ONE, AND COD1 IS THE
+<span class="ln">146</span>C DIFFUSION COEFFICIENT.
+<span class="ln">147</span>C
+<span class="ln">148</span>C SOLVE FOR NEW ABUNDANCES AT THE ZONE MIDPOINTS USING THE ABOVE D.C.
+<span class="ln">149</span>C WITH LDOLI = FALSE, SIGNIFYING THAT LAX_WENDROF SHOULD DIFFUSE Z.
+<span class="ln">150</span>C
+<span class="ln">151</span>      LDOLI = .FALSE.
+<span class="ln">152</span>      CALL <a href="../yrec-map/lax_wendrof1.f.html#def-LAX_WENDROF1" title="LAX_WENDROF1 in lax_wendrof1.f">LAX_WENDROF1</a>(DT,ECOD1,EM,NPT,STOT,EX_H,LDOLI)
+<span class="ln">153</span>C
+<span class="ln">154</span>C NOW COMPUTE NEW DIFFUSION COEFFICIENTS AT THE ZONE MIDPOINTS USING THE
+<span class="ln">155</span>C PROVISIONAL SOLUTION FOR X AT THE ZONE MIDPOINTS.
+<span class="ln">156</span>C
+<span class="ln">157</span>C GET NEW DIFFUSION COEFFICIENTS.
+<span class="ln">158</span>C ALSO DEFINE VECTOR EX_P, WHICH IS THE HYDROGEN ABUNDANCE AT THE
+<span class="ln">159</span>C END OF THE PREVIOUS ITERATION.
+<span class="ln">160</span>C
+<span class="ln">161</span>      DO 10 I=1,NPT-1
+<span class="ln">162</span>         ECOD1_H(I)=ECOD1_H(I)+EX_H(I)*EQCOD1X_H(I)
+<span class="ln">163</span>         EX_P(I) = EX_ORIG(I)
+<span class="ln">164</span> 10   CONTINUE
+<span class="ln">165</span>      EX_P(NPT) = EX_ORIG(NPT)
+<span class="ln">166</span>C MHP 3/94 METAL DIFFUSION
+<span class="ln">167</span>      IF(LDIFZ)THEN
+<span class="ln">168</span>         DO I=1,NPT-1
+<span class="ln">169</span>            ECOD1Z_H(I)=ECOD1Z_H(I)+EZ_H(I)*EQCOD1Z_H(I)
+<span class="ln">170</span>            EZ_P(I) = EZ_ORIG(I)
+<span class="ln">171</span>         END DO
+<span class="ln">172</span>         EZ_P(NPT) = EZ_ORIG(NPT)
+<span class="ln">173</span>      ENDIF
+<span class="ln">174</span>C
+<span class="ln">175</span>C USING THE NEW COEFFICIENTS, SOLVE FOR THE NEW RUN OF HYDROGEN ABUNDANCES.
+<span class="ln">176</span>C NOTE : THE SR ACTUALLY RETURNS THE *CHANGE* IN THE ABUNDANCE AS A FUNCTION
+<span class="ln">177</span>C OF RADIUS, WHICH IS APPLIED TO THE ORIGINAL RUN OF X, RATHER THAN
+<span class="ln">178</span>C COMPUTING A NEW RUN OF ABUNDANCE AND TRANSFORMING IT BACK.  THIS IS DONE
+<span class="ln">179</span>C TO MINIMIZE ERRORS FROM THE INTERPOLATION.
+<span class="ln">180</span>C
+<span class="ln">181</span>      CALL <a href="../yrec-map/lax_wendrof2.f.html#def-LAX_WENDROF2" title="LAX_WENDROF2 in lax_wendrof2.f">LAX_WENDROF2</a>(DT,ECOD1_H,EM_H,EX,NPT,STOT,LDOLI)
+<span class="ln">182</span>C
+<span class="ln">183</span>C  NOW IMPLICITLY SOLVE FOR THE SECOND TERM (INVOLVING THE SECOND
+<span class="ln">184</span>C  DERIVATIVE OF THE COMPOSITION GRADIENT).
+<span class="ln">185</span>C  EX_PRIME IS THE HYDROGEN ABUNDANCE ONE WOULD HAVE IN THE ABSENCE OF
+<span class="ln">186</span>C  THE SECOND TERM IN THE DIFFUSION EQUATION.
+<span class="ln">187</span>      DO 15 I = 1,NPT
+<span class="ln">188</span>         EX_PRIME(I) = EX(I)
+<span class="ln">189</span> 15   CONTINUE
+<span class="ln">190</span>C  ALPHA IS THE NUMERICAL FACTOR IN FRONT OF THE DIFFUSION COEFFICIENTS.
+<span class="ln">191</span>      FAC = C4PI*DT/DR
+<span class="ln">192</span>      ALPHA(1) = FAC/EM_H(1)
+<span class="ln">193</span>      DO 20 I = 2,NPT-1
+<span class="ln">194</span>         ALPHA(I) = FAC/(EM_H(I)-EM_H(I-1))
+<span class="ln">195</span> 20   CONTINUE
+<span class="ln">196</span>      ALPHA(NPT) = FAC/(STOT-EM_H(NPT-1))
+<span class="ln">197</span>C  START ITERATION LOOP FOR THE NEW RUN OF HYDROGEN.
+<span class="ln">198</span>      DO 100 ITER=1,NITER_GS
+<span class="ln">199</span>C  FIND CHANGE IN X AT THE ZONE MIDPOINTS, GIVEN CHANGE IN X AT
+<span class="ln">200</span>C  THE ZONE CENTERS.
+<span class="ln">201</span>         DO 30 I = 2,NPT
+<span class="ln">202</span>            EX_H(I) = 0.5D0*(EX(I)+EX(I-1)-EX_P(I)-EX_P(I-1))
+<span class="ln">203</span> 30      CONTINUE
+<span class="ln">204</span>C  STORE CURRENT RUN OF HYDROGEN ABUNDANCES IN VECTOR EX_P. THE ITERATION
+<span class="ln">205</span>C  LOOP IS COMPLETED ONCE EX - EX_P IS EVERYWHERE LESS THAN THE TOLERANCE
+<span class="ln">206</span>C  GRTOL.
+<span class="ln">207</span>         DO 40 I = 1,NPT
+<span class="ln">208</span>            EX_P(I) = EX(I)
+<span class="ln">209</span> 40      CONTINUE
+<span class="ln">210</span>C  GET NEW DIFFUSION COEFFICIENTS, TAKING INTO ACCOUNT THE CHANGE IN X
+<span class="ln">211</span>C  FROM THE PREVIOUS ITERATION.
+<span class="ln">212</span>C
+<span class="ln">213</span>         CALL <a href="../yrec-map/get_imp_diffco.f.html#def-GET_IMP_DIFFCO" title="GET_IMP_DIFFCO in get_imp_diffco.f">GET_IMP_DIFFCO</a>(ALPHA,ECOD2_H,EX_H,EQCOD2X_H,A,B,C,NPT)
+<span class="ln">214</span>C
+<span class="ln">215</span>C  SOLVE THE TRIDIAGONAL MATRIX SYSTEM FOR THE NEW RUN OF X.
+<span class="ln">216</span>C
+<span class="ln">217</span>         CALL <a href="../yrec-map/tridiag_gs.f.html#def-TRIDIAG_GS" title="TRIDIAG_GS in tridiag_gs.f">TRIDIAG_GS</a>(A,B,C,EX_PRIME,NPT,EX)
+<span class="ln">218</span>C
+<span class="ln">219</span>C  CHECK TO SEE IF THE CORRECTIONS TO THE HYDROGEN ABUNDANCE ARE SMALL
+<span class="ln">220</span>C  ENOUGH TO EXIT.
+<span class="ln">221</span>         DXMAX = 0.0D0
+<span class="ln">222</span>         IMAX = 0
+<span class="ln">223</span>         DO 50 I = 1,NPT
+<span class="ln">224</span>            DX = EX(I)-EX_P(I)
+<span class="ln">225</span>            IF(DX.GT.DXMAX)THEN
+<span class="ln">226</span>               DXMAX = DX
+<span class="ln">227</span>               IMAX = I
+<span class="ln">228</span>            ENDIF
+<span class="ln">229</span> 50      CONTINUE
+<span class="ln">230</span>c         WRITE(IOWR,90)ITER,DXMAX,IMAX
+<span class="ln">231</span>         WRITE(ISHORT,90)ITER,DXMAX,IMAX
+<span class="ln">232</span> 90      FORMAT(1X,&#x27;ITERATION &#x27;,I3,&#x27; DXMAX &#x27;,1PE10.2,&#x27; IMAX &#x27;,I4)
+<span class="ln">233</span>C  EXIT ITERATION LOOP IF SYSTEM HAS CONVERGED.
+<span class="ln">234</span>         IF(DXMAX.LT.GRTOL)GOTO 120
+<span class="ln">235</span> 100  CONTINUE
+<span class="ln">236</span>      WRITE(IOWR,110)GRTOL,NITER_GS,DXMAX,IMAX
+<span class="ln">237</span>      WRITE(ISHORT,110)GRTOL,NITER_GS,DXMAX,IMAX
+<span class="ln">238</span> 110  FORMAT(1X,&#x27;GRSETT FAILED TO CONVERGE TO WITHIN &#x27;,1PE9.3,&#x27; IN &#x27;,I3,
+<span class="ln">239</span>     *     &#x27;ITERATIONS&#x27;/1X,&#x27;LAST ITERATION CHANGE IN X &#x27;,1PE9.3,
+<span class="ln">240</span>     *     &#x27; IN EQUALLY SPACED SHELL &#x27;,I5)
+<span class="ln">241</span> 120  CONTINUE
+<span class="ln">242</span>C  FIND RUN OF CHANGES IN X.
+<span class="ln">243</span>      DO 130 I = 1,NPT
+<span class="ln">244</span>         EX(I) = EX(I)-EX_ORIG(I)
+<span class="ln">245</span> 130  CONTINUE
+<span class="ln">246</span>C MHP 3/94 ADDED METAL DIFFUSION
+<span class="ln">247</span>      IF(LDIFZ)THEN
+<span class="ln">248</span>         ZZ1=EZ(1)-EZ_ORIG(1)
+<span class="ln">249</span>         ZZ2=EZ(NPT)-EZ_ORIG(NPT)
+<span class="ln">250</span>         DO I = 1,NPT
+<span class="ln">251</span>            EZ(I) = EZ(I) - EZ_ORIG(I)
+<span class="ln">252</span>         END DO
+<span class="ln">253</span>      ENDIF
+<span class="ln">254</span>C TRANSFORM BACK TO ORIGINAL MODEL GRID; UPDATE HELIUM ARRAY USING
+<span class="ln">255</span>C X+Y+Z=1.  PRINT DIAGNOSTIC OUTPUT.
+<span class="ln">256</span>
+<span class="ln">257</span>      CALL <a href="../yrec-map/equal_to_model.f.html#def-EQUAL_TO_MODEL" title="EQUAL_TO_MODEL in equal_to_model.f">EQUAL_TO_MODEL</a>(DT,ER,EX,IBEGIN,IEND,NPT,HCOMP,HQPR,
+<span class="ln">258</span>     *     HRU,HS1,HTU,M,STOT)
+<span class="ln">259</span>
+<span class="ln">260</span>      RETURN
+<span class="ln">261</span>      END</pre></details>
+<details class='py' id='py-grsett'><summary>Python version: grsett</summary><pre class='doc'>Settling of helium (and, with LDIFZ, of the metals) in one step.
+
+Regrids to equally spaced radii, treats the settling term explicitly
+(two-step Lax-Wendroff) and the diffusion term implicitly (an iterated
+tridiagonal solve, for X only), and regrids the change back.
+
+Translates: grsett.f#GRSETT (09c3b9b)
+
+Parameters
+----------
+dt : float
+    Time step (s). SETUP_GRSETT rescales it to the Bahcall-Loeb units
+    and EQUAL_TO_MODEL restores it, so it is passed through both.
+hcomp : array
+    Mass fractions; X and Y updated.
+hqpr, hr, hd, hs1, ht, lc : arrays
+    d ln P / dr, log r, log rho, m (g), log T, convective flags. HQPR
+    and HS1 are rescaled in place by SETUP_GRSETT.
+m : int
+stot : float
+    Total mass; rescaled and restored like ``dt``.
+
+Returns
+-------
+dt, stot</pre><pre class='src'><span class="ln">55</span>def grsett(dt, hcomp, hqpr, hr, hd, hs1, ht, lc, m, stot):
+<span class="ln">56</span>    &quot;&quot;&quot;Settling of helium (and, with LDIFZ, of the metals) in one step.
+<span class="ln">57</span>
+<span class="ln">58</span>    Regrids to equally spaced radii, treats the settling term explicitly
+<span class="ln">59</span>    (two-step Lax-Wendroff) and the diffusion term implicitly (an iterated
+<span class="ln">60</span>    tridiagonal solve, for X only), and regrids the change back.
+<span class="ln">61</span>
+<span class="ln">62</span>    Translates: grsett.f#GRSETT (09c3b9b)
+<span class="ln">63</span>
+<span class="ln">64</span>    Parameters
+<span class="ln">65</span>    ----------
+<span class="ln">66</span>    dt : float
+<span class="ln">67</span>        Time step (s). SETUP_GRSETT rescales it to the Bahcall-Loeb units
+<span class="ln">68</span>        and EQUAL_TO_MODEL restores it, so it is passed through both.
+<span class="ln">69</span>    hcomp : array
+<span class="ln">70</span>        Mass fractions; X and Y updated.
+<span class="ln">71</span>    hqpr, hr, hd, hs1, ht, lc : arrays
+<span class="ln">72</span>        d ln P / dr, log r, log rho, m (g), log T, convective flags. HQPR
+<span class="ln">73</span>        and HS1 are rescaled in place by SETUP_GRSETT.
+<span class="ln">74</span>    m : int
+<span class="ln">75</span>    stot : float
+<span class="ln">76</span>        Total mass; rescaled and restored like ``dt``.
+<span class="ln">77</span>
+<span class="ln">78</span>    Returns
+<span class="ln">79</span>    -------
+<span class="ln">80</span>    dt, stot
+<span class="ln">81</span>    &quot;&quot;&quot;
+<span class="ln">82</span>    gz = gravez_mod
+<span class="ln">83</span>    nml = nmlpar_mod
+<span class="ln">84</span>    # Coefficients, convection-zone edges, and the fully convective case.
+<span class="ln">85</span>    dt, stot, ibegin, iend, lallcz = setup_grsett(
+<span class="ln">86</span>        dt, hqpr, hr, hd, hs1, ht, lc, m, stot, cod1, cod2,
+<span class="ln">87</span>        hcomp, hru, htu, 0, 0, False, qcod1x, qcod2x, cod1z, cod2z,
+<span class="ln">88</span>        qcod1z, qcod2z)
+<span class="ln">89</span>    if lallcz:
+<span class="ln">90</span>        return dt, stot
+<span class="ln">91</span>    # To an equally spaced grid in radius.
+<span class="ln">92</span>    dr, npt = model_to_equal(cod1, cod2, hcomp, hru, hs1,
+<span class="ln">93</span>                             ibegin, iend, m, qcod1x, qcod2x, 0.0,
+<span class="ln">94</span>                             ecod1, ecod1_h, ecod2_h, em, em_h,
+<span class="ln">95</span>                             eqcod1x_h, eqcod2x_h, er, ex, ex_h, 0,
+<span class="ln">96</span>                             cod1z, cod2z, qcod1z, qcod2z)
+<span class="ln">97</span>    for i in range(1, npt + 1):                          # label 5
+<span class="ln">98</span>        ex_orig[i] = ex[i]
+<span class="ln">99</span>    if nml.ldifz:
+<span class="ln">100</span>        for i in range(1, npt + 1):
+<span class="ln">101</span>            ez_orig[i] = gz.ez[i]
+<span class="ln">102</span>
+<span class="ln">103</span>    # Explicit term: half step, coefficients linearized, full step.
+<span class="ln">104</span>    ldoli = False
+<span class="ln">105</span>    lax_wendrof1(dt, ecod1, em, npt, stot, ex_h, ldoli)
+<span class="ln">106</span>    for i in range(1, npt):                              # label 10
+<span class="ln">107</span>        ecod1_h[i] = ecod1_h[i] + ex_h[i] * eqcod1x_h[i]
+<span class="ln">108</span>        ex_p[i] = ex_orig[i]
+<span class="ln">109</span>    ex_p[npt] = ex_orig[npt]
+<span class="ln">110</span>    if nml.ldifz:
+<span class="ln">111</span>        for i in range(1, npt):
+<span class="ln">112</span>            gz.ecod1z_h[i] = gz.ecod1z_h[i] + gz.ez_h[i] * gz.eqcod1z_h[i]
+<span class="ln">113</span>            ez_p[i] = ez_orig[i]
+<span class="ln">114</span>        ez_p[npt] = ez_orig[npt]
+<span class="ln">115</span>    lax_wendrof2(dt, ecod1_h, em_h, ex, npt, stot, ldoli)
+<span class="ln">116</span>    for i in range(1, npt + 1):                          # label 15
+<span class="ln">117</span>        ex_prime[i] = ex[i]
+<span class="ln">118</span>
+<span class="ln">119</span>    # Implicit term.
+<span class="ln">120</span>    fac = constants_mod.c4pi * dt / dr
+<span class="ln">121</span>    alpha[1] = fac / em_h[1]
+<span class="ln">122</span>    for i in range(2, npt):                              # label 20
+<span class="ln">123</span>        alpha[i] = fac / (em_h[i] - em_h[i - 1])
+<span class="ln">124</span>    alpha[npt] = fac / (stot - em_h[npt - 1])
+<span class="ln">125</span>    converged = False
+<span class="ln">126</span>    for iter_ in range(1, nml.niter_gs + 1):             # label 100
+<span class="ln">127</span>        # Question (see the page): EX_H(I) is the change between points
+<span class="ln">128</span>        # I-1 and I, but GET_IMP_DIFFCO applies it to ECOD2_H(I), between
+<span class="ln">129</span>        # I and I+1; EX_H(1) is left from LAX_WENDROF1.
+<span class="ln">130</span>        for i in range(2, npt + 1):                      # label 30
+<span class="ln">131</span>            ex_h[i] = 0.5 * (ex[i] + ex[i - 1] - ex_p[i] - ex_p[i - 1])
+<span class="ln">132</span>        for i in range(1, npt + 1):                      # label 40
+<span class="ln">133</span>            ex_p[i] = ex[i]
+<span class="ln">134</span>        get_imp_diffco(alpha, ecod2_h, ex_h, eqcod2x_h, a, b, c, npt)
+<span class="ln">135</span>        tridiag_gs(a, b, c, ex_prime, npt, ex)
+<span class="ln">136</span>        # Question (see the page): the largest signed change, not ABS(DX).
+<span class="ln">137</span>        dxmax = 0.0
+<span class="ln">138</span>        imax = 0
+<span class="ln">139</span>        for i in range(1, npt + 1):                      # label 50
+<span class="ln">140</span>            dx = ex[i] - ex_p[i]
+<span class="ln">141</span>            if dx &gt; dxmax:
+<span class="ln">142</span>                dxmax = dx
+<span class="ln">143</span>                imax = i
+<span class="ln">144</span>        iounits_mod.write(iounits_mod.ishort,
+<span class="ln">145</span>                          f&quot; ITERATION {iter_:3d} DXMAX {dxmax:10.2E} &quot;
+<span class="ln">146</span>                          f&quot;IMAX {imax:4d}&quot;)             # format 90
+<span class="ln">147</span>        if dxmax &lt; nml.grtol:
+<span class="ln">148</span>            converged = True
+<span class="ln">149</span>            break                                        # GOTO 120
+<span class="ln">150</span>    if not converged:
+<span class="ln">151</span>        # Question (see the page): failure is only reported.
+<span class="ln">152</span>        text = (f&quot; GRSETT FAILED TO CONVERGE TO WITHIN {nml.grtol:9.3E} IN &quot;
+<span class="ln">153</span>                f&quot;{nml.niter_gs:3d}ITERATIONS\n LAST ITERATION CHANGE IN X &quot;
+<span class="ln">154</span>                f&quot;{dxmax:9.3E} IN EQUALLY SPACED SHELL {imax:5d}&quot;)  # format 110
+<span class="ln">155</span>        iounits_mod.write(iounits_mod.iowr, text)
+<span class="ln">156</span>        iounits_mod.write(iounits_mod.ishort, text)
+<span class="ln">157</span>
+<span class="ln">158</span>    # label 120: return the change, not the abundance.
+<span class="ln">159</span>    for i in range(1, npt + 1):                          # label 130
+<span class="ln">160</span>        ex[i] = ex[i] - ex_orig[i]
+<span class="ln">161</span>    if nml.ldifz:
+<span class="ln">162</span>        # Question (see the page): ZZ1 and ZZ2 are not used.
+<span class="ln">163</span>        zz1 = gz.ez[1] - ez_orig[1]
+<span class="ln">164</span>        zz2 = gz.ez[npt] - ez_orig[npt]
+<span class="ln">165</span>        for i in range(1, npt + 1):
+<span class="ln">166</span>            gz.ez[i] = gz.ez[i] - ez_orig[i]
+<span class="ln">167</span>    # Back to the model&#x27;s points (and the units restored).
+<span class="ln">168</span>    dt, stot = equal_to_model(dt, er, ex, ibegin, iend, npt, hcomp, hqpr,
+<span class="ln">169</span>                              hru, hs1, htu, m, stot)
+<span class="ln">170</span>    return dt, stot</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing question (apparent bug).</strong> In the implicit loop, <code>EX_H(I)</code> for <code>I = 2..NPT</code> is the change at the midpoint between points <code>I-1</code> and <code>I</code>, but <a href="../yrec-map/get_imp_diffco.f.html">get_imp_diffco.f</a> adds <code>EQCOD2X_H(I)*EX_H(I)</code> to <code>ECOD2_H(I)</code>, the coefficient at the midpoint between points <code>I</code> and <code>I+1</code> (as its matrix shows: <code>A(I)</code> uses <code>ECOD2_H(I-1)</code>, <code>C(I)</code> uses <code>ECOD2_H(I)</code>). So the correction is applied one midpoint off, and <code>ECOD2_H(1)</code> gets the stale <code>EX_H(1)</code> left by <code>LAX_WENDROF1</code>. Fix: add a question.</li>
+<li><strong>Missing.</strong> The implicit system's coefficients, as an equation. Fix: give $(1+\alpha_i(D_{i-1/2}+D_{i+1/2}))X_i - \alpha_i D_{i-1/2}X_{i-1} - \alpha_i D_{i+1/2}X_{i+1} = X&#x27;_i$ with $D$ = <code>ECOD2_H</code>.</li>
+</ol>
+<p>Revised: question 4 (the correction one midpoint off) and the implicit system as an equation added.</p></div></details>
+</main></body></html>

@@ -1,0 +1,315 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>getalex06.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ getalex06.f</span></header><main>
+<h1>getalex06.f</h1>
+<p class='muted'>132 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/getalex06.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>getalex06.py</code>, 135 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>GETALEX06</code> returns the low-temperature (molecular) opacity from the Ferguson–Alexander 2006 tables ("Alexander low T opacities", per its header, MHP 3/09) for a given $\rho$, $T$, $X$, $Z$, with its logarithmic derivatives.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/getopac.f.html#def-GETOPAC">GETOPAC</a>, when $\log T \le$ <code>TMOLMAX</code> and <code>LALEX06</code> is set.</li>
+<li><strong>Inputs:</strong> <code>DL</code>, <code>TL</code> ($\log\rho$, $\log T$), <code>X</code>, <code>Z</code>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/alex06tab.f.html#def-ALEX06TAB">ALEX06TAB</a>, which builds a table for the current $X$, $Z$ from the full set, and <a href="../yrec-map/interp.f.html#def-INTERP">INTERP</a> (four-point Lagrange weights and derivative weights).</li>
+<li><strong>Outputs:</strong> <code>O</code> ($\kappa$, cm$^2$ g$^{-1}$), `OL` ($\log\kappa$), <code>QOD</code> $=\partial\log\kappa/\partial\log\rho|_T$, <code>QOT</code> $=\partial\log\kappa/\partial\log T|_\rho$.</li>
+<li><strong>Modules:</strong> <a href="../yrec-map/galot06_mod.f.html#def-GALOT06_MOD"><code>GALOT06_MOD</code></a> (the grids <code>TGR06</code>, <code>R0GR06</code>, <code>XXG06</code>, <code>ZZG06</code>) and <a href="../yrec-map/alot06_mod.f.html#def-ALOT06_MOD"><code>ALOT06_MOD</code></a> (the table <code>CAPALEX06</code> at the composition <code>XE</code>, <code>ZE</code>, and the last indices <code>IT</code>, <code>ID</code>), shared with <code>ALEX06TAB</code> and <a href="../yrec-map/readalex06.f.html#def-READALEX06">READALEX06</a>; $\ln 10$ from <a href="../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD"><code>CONSTANTS_MOD</code></a>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>If $X$ or $Z$ differs from the stored <code>XE</code>, <code>ZE</code> by more than $10^{-8}$, rebuild the table with <code>ALEX06TAB</code>.</li>
+<li>The table is in $\log T$ and $\log R$, with $\log R = \log\rho - 3(\log T - 6)$ (that is, $R = \rho/T_6^3$).</li>
+<li>Find the 4×4 stencil from the last indices, get Lagrange weights in $\log T$ and $\log R$, and interpolate $\log\kappa$ and $\partial\log\kappa/\partial\log R$.</li>
+<li>Above the largest $\log R$ of the table, extrapolate $\log\kappa$ linearly from the last two columns.</li>
+<li>Convert the temperature derivative from fixed $R$ to fixed $\rho$:
+$$\left.\frac{\partial\log\kappa}{\partial\log T}\right|_\rho = \left.\frac{\partial\log\kappa}{\partial\log T}\right|_R - 3\left.\frac{\partial\log\kappa}{\partial\log R}\right|_T.$$</li>
+</ol>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Table rebuilt per composition.</strong> Every change of $X$ or $Z$ beyond $10^{-8}$ rebuilds the table. In a model with a composition gradient in the cool envelope, or with settling, this happens at almost every call. Is that cost acceptable, or should the routine interpolate in $X$ and $Z$ directly?</li>
+<li><strong>Extrapolation and derivatives.</strong> Above the largest $\log R$, the value is extrapolated but <code>QOD</code> is not: it stays the derivative at the table edge. Consistent, or should it be the slope of the extrapolation?</li>
+<li><strong>No lower-edge handling.</strong> Below the smallest $\log R$ or outside the $\log T$ range, the Lagrange weights extrapolate silently. Should there be a check?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>MHP 3/09 SUBROUTINE FOR CALCULATING ALEXANDER LOW T OPACITIES</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-GETALEX06'>GETALEX06</a> <span class='muted'>subroutine · MHP 3/09 SUBROUTINE FOR CALCULATING ALEXANDER LOW T OPACITIES</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-GETALEX06'><h3><span class='kind'>subroutine</span>GETALEX06</h3>
+<p class='muted'>lines 2–132 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/getalex06.f#L2-L132'>GitHub</a></p>
+<pre>SUBROUTINE GETALEX06(DL,TL,X,Z,O,OL,QOD,QOT)</pre>
+<div class='notes'><p>Ferguson–Alexander 2006 molecular opacity: four-point Lagrange interpolation in $\log T$ and $\log R$, with the derivative converted to fixed $\rho$ (method above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>MHP 3/09 SUBROUTINE FOR CALCULATING ALEXANDER LOW T OPACITIES</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/alot06_mod.f.html#def-ALOT06_MOD'>ALOT06_MOD</a>, <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/galot06_mod.f.html#def-GALOT06_MOD'>GALOT06_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/alex06tab.f.html#def-ALEX06TAB'>ALEX06TAB</a> <span class='muted'>(alex06tab.f)</span></li>
+<li><a href='../yrec-map/interp.f.html#def-INTERP'>INTERP</a> <span class='muted'>(interp.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE GETALEX06(DL,TL,X,Z,O,OL,QOD,QOT)
+<span class="ln">3</span>C 10/14/26 MHP via Claude
+<span class="ln">4</span>C code changed to convert COMMON/GALOT06/ into GALOT06_MOD.
+<span class="ln">5</span>      USE GALOT06_MOD
+<span class="ln">6</span>C 10/14/26 MHP via Claude
+<span class="ln">7</span>C code changed to convert COMMON/ALOT06/ into ALOT06_MOD.
+<span class="ln">8</span>      USE ALOT06_MOD
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">11</span>      USE CONSTANTS_MOD
+<span class="ln">12</span>C 10/20/26 MHP via Claude
+<span class="ln">13</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">14</span>C explicit declarations.
+<span class="ln">15</span>      IMPLICIT NONE
+<span class="ln">16</span>      REAL*8 DIFX,DIFZ,DL,O,OL,QOD,QOT,R,RR,TL,X,Z
+<span class="ln">17</span>      INTEGER I,II,NUMD,NUMT
+<span class="ln">18</span>      LOGICAL*4 LINEAR
+<span class="ln">19</span>      PARAMETER (NUMT=85)
+<span class="ln">20</span>      PARAMETER (NUMD=19)
+<span class="ln">21</span>C 9/25/26 MHP via Claude
+<span class="ln">22</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">23</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">24</span>      REAL*8  QR(4),FXT(4),FXTD(4),FXR(4),FXRD(4),OP(4),QOPR(4)
+<span class="ln">25</span>      SAVE
+<span class="ln">26</span>      DIFZ = ABS(Z-ZE)
+<span class="ln">27</span>      DIFX = ABS(X-XE)
+<span class="ln">28</span>C  ENSURE THAT OPACITY TABLE HAS THE SAME X,Z VALUE AS THE POINT
+<span class="ln">29</span>      IF(DIFZ.GT.1.0D-8 .OR. DIFX.GT.1.0D-8)THEN
+<span class="ln">30</span>         ZE = Z
+<span class="ln">31</span>         XE = X
+<span class="ln">32</span>         CALL <a href="../yrec-map/alex06tab.f.html#def-ALEX06TAB" title="ALEX06TAB in alex06tab.f">ALEX06TAB</a>
+<span class="ln">33</span>      ENDIF
+<span class="ln">34</span>C  COMPUTE R FOR GRID POINT
+<span class="ln">35</span>      R = DL - 3.0D0*(TL-6.0D0)
+<span class="ln">36</span>C Insure that index IT is within the required array bounds
+<span class="ln">37</span>      IF(IT .LT. 1) IT=1
+<span class="ln">38</span>      IF((IT+2) .GT. NUMT) IT=NUMT-2
+<span class="ln">39</span>C  FIND NEAREST GRID POINTS IN T.
+<span class="ln">40</span>      IF(TL.LT.TGR06(IT+2))THEN
+<span class="ln">41</span>         DO I = IT+1,2,-1
+<span class="ln">42</span>            IF(TL.GT.TGR06(I))THEN
+<span class="ln">43</span>               IT = I - 1
+<span class="ln">44</span>               GOTO 10
+<span class="ln">45</span>            ENDIF
+<span class="ln">46</span>         END DO
+<span class="ln">47</span>         IT = 1
+<span class="ln">48</span> 10      CONTINUE
+<span class="ln">49</span>      ELSE
+<span class="ln">50</span>         DO I = IT+3,NUMT
+<span class="ln">51</span>            IF(TL.LT.TGR06(I))THEN
+<span class="ln">52</span>               IT = I - 2
+<span class="ln">53</span>               IT = MIN(NUMT-3,IT)
+<span class="ln">54</span>               GOTO 20
+<span class="ln">55</span>            ENDIF
+<span class="ln">56</span>         END DO
+<span class="ln">57</span>         IT = NUMT - 3
+<span class="ln">58</span> 20      CONTINUE
+<span class="ln">59</span>      ENDIF
+<span class="ln">60</span>C INTERPOLATION FACTORS IN LOG T
+<span class="ln">61</span>      DO I = 1,4
+<span class="ln">62</span>         QR(I) = TGR06(IT+I-1)
+<span class="ln">63</span>      END DO
+<span class="ln">64</span>      CALL <a href="../yrec-map/interp.f.html#def-INTERP" title="INTERP in interp.f">INTERP</a>(QR,FXT,FXTD,TL)
+<span class="ln">65</span>C Insure that index ID is within the required array bounds
+<span class="ln">66</span>      IF(ID .LT. 1) ID=1
+<span class="ln">67</span>      IF((ID+2) .GT. NUMD) ID=NUMD-2
+<span class="ln">68</span>C  FIND NEAREST GRID POINTS IN R = RHO/T6**3
+<span class="ln">69</span>      IF(R.LT.R0GR06(ID+2))THEN
+<span class="ln">70</span>         DO I = ID+1,2,-1
+<span class="ln">71</span>            IF(R.GT.R0GR06(I))THEN
+<span class="ln">72</span>               ID = I - 1
+<span class="ln">73</span>               GOTO 30
+<span class="ln">74</span>            ENDIF
+<span class="ln">75</span>         END DO
+<span class="ln">76</span>         ID = 1
+<span class="ln">77</span> 30      CONTINUE
+<span class="ln">78</span>      ELSE
+<span class="ln">79</span>         DO I = ID+3,NUMD
+<span class="ln">80</span>            IF(R.LT.R0GR06(I))THEN
+<span class="ln">81</span>               ID = I - 2
+<span class="ln">82</span>               ID = MIN(NUMD-3,ID)
+<span class="ln">83</span>               GOTO 40
+<span class="ln">84</span>            ENDIF
+<span class="ln">85</span>         END DO
+<span class="ln">86</span>         ID = NUMD - 3
+<span class="ln">87</span> 40      CONTINUE
+<span class="ln">88</span>      ENDIF
+<span class="ln">89</span>C  INTERPOLATION FACTORS IN LOG R
+<span class="ln">90</span>      IF(R.GT.R0GR06(NUMD))THEN
+<span class="ln">91</span>         LINEAR = .TRUE.
+<span class="ln">92</span>         RR = R
+<span class="ln">93</span>         R = R0GR06(NUMD)
+<span class="ln">94</span>      ELSE
+<span class="ln">95</span>         LINEAR = .FALSE.
+<span class="ln">96</span>      ENDIF
+<span class="ln">97</span>      DO I = 1,4
+<span class="ln">98</span>         QR(I) = R0GR06(ID+I-1)
+<span class="ln">99</span>      END DO
+<span class="ln">100</span>      CALL <a href="../yrec-map/interp.f.html#def-INTERP" title="INTERP in interp.f">INTERP</a>(QR,FXR,FXRD,R)
+<span class="ln">101</span>C INTERPOLATE IN LOG R AT FIXED T
+<span class="ln">102</span>      DO I = 1,4
+<span class="ln">103</span>         II = IT + I - 1
+<span class="ln">104</span>         OP(I) = FXR(1)*CAPALEX06(II,ID) +
+<span class="ln">105</span>     *           FXR(2)*CAPALEX06(II,ID+1) +
+<span class="ln">106</span>     *           FXR(3)*CAPALEX06(II,ID+2) +
+<span class="ln">107</span>     *           FXR(4)*CAPALEX06(II,ID+3)
+<span class="ln">108</span>         QOPR(I) = FXRD(1)*CAPALEX06(II,ID) +
+<span class="ln">109</span>     *           FXRD(2)*CAPALEX06(II,ID+1) +
+<span class="ln">110</span>     *           FXRD(3)*CAPALEX06(II,ID+2) +
+<span class="ln">111</span>     *           FXRD(4)*CAPALEX06(II,ID+3)
+<span class="ln">112</span>      END DO
+<span class="ln">113</span>      IF(LINEAR)THEN
+<span class="ln">114</span>         DO I = 1,4
+<span class="ln">115</span>            II = IT+I-1
+<span class="ln">116</span>            OP(I) = OP(I)+(RR-R)*(CAPALEX06(II,NUMD)-
+<span class="ln">117</span>     *      CAPALEX06(II,NUMD-1))/(R0GR06(NUMD)-R0GR06(NUMD-1))
+<span class="ln">118</span>         END DO
+<span class="ln">119</span>         R = RR
+<span class="ln">120</span>      ENDIF
+<span class="ln">121</span>C  INTERPOLATE IN T
+<span class="ln">122</span>      OL = FXT(1)*OP(1)+FXT(2)*OP(2)+FXT(3)*OP(3)+FXT(4)*OP(4)
+<span class="ln">123</span>C D LN CAPPA/D LN T AT FIXED R
+<span class="ln">124</span>      QOT = FXTD(1)*OP(1)+FXTD(2)*OP(2)+FXTD(3)*OP(3)+FXTD(4)*OP(4)
+<span class="ln">125</span>C INTERPOLATE IN D LN CAPPA/ D LN R AT FIXED T
+<span class="ln">126</span>      QOD = FXT(1)*QOPR(1) + FXT(2)*QOPR(2) + FXT(3)*QOPR(3) +
+<span class="ln">127</span>     *      FXT(4)*QOPR(4)
+<span class="ln">128</span>C CORRECT FROM DERIVATIVE AT FIXED R TO DERIVATIVE AT FIXED RHO
+<span class="ln">129</span>      QOT = QOT - 3.0D0*QOD
+<span class="ln">130</span>      O = EXP(CLN*OL)
+<span class="ln">131</span>      RETURN
+<span class="ln">132</span>      END</pre></details>
+<details class='py' id='py-getalex06'><summary>Python version: getalex06</summary><pre class='doc'>Interpolate the Ferguson-Alexander 2006 opacity in log T and
+log R = log rho - 3 (log T - 6), with four-point Lagrange weights,
+from the table for the current X, Z (rebuilt by ALEX06TAB when they
+change); extrapolate linearly above the largest log R, and convert
+the temperature derivative to fixed rho.
+
+Translates: getalex06.f#GETALEX06 (09c3b9b)
+
+Arguments: dl, tl (log rho, log T), x, z; o, ol, qod, qot are only
+set.
+
+Returns (o, ol, qod, qot): kappa, log kappa, dlog kappa/dlog rho at
+fixed T, dlog kappa/dlog T at fixed rho.</pre><pre class='src'><span class="ln">18</span>def getalex06(dl, tl, x, z, o, ol, qod, qot):
+<span class="ln">19</span>    &quot;&quot;&quot;Interpolate the Ferguson-Alexander 2006 opacity in log T and
+<span class="ln">20</span>    log R = log rho - 3 (log T - 6), with four-point Lagrange weights,
+<span class="ln">21</span>    from the table for the current X, Z (rebuilt by ALEX06TAB when they
+<span class="ln">22</span>    change); extrapolate linearly above the largest log R, and convert
+<span class="ln">23</span>    the temperature derivative to fixed rho.
+<span class="ln">24</span>
+<span class="ln">25</span>    Translates: getalex06.f#GETALEX06 (09c3b9b)
+<span class="ln">26</span>
+<span class="ln">27</span>    Arguments: dl, tl (log rho, log T), x, z; o, ol, qod, qot are only
+<span class="ln">28</span>    set.
+<span class="ln">29</span>
+<span class="ln">30</span>    Returns (o, ol, qod, qot): kappa, log kappa, dlog kappa/dlog rho at
+<span class="ln">31</span>    fixed T, dlog kappa/dlog T at fixed rho.
+<span class="ln">32</span>    &quot;&quot;&quot;
+<span class="ln">33</span>    a = alot06_mod
+<span class="ln">34</span>    g = galot06_mod
+<span class="ln">35</span>    qr = np.zeros(4 + 1)
+<span class="ln">36</span>    fxt = np.zeros(4 + 1)
+<span class="ln">37</span>    fxtd = np.zeros(4 + 1)
+<span class="ln">38</span>    fxr = np.zeros(4 + 1)
+<span class="ln">39</span>    fxrd = np.zeros(4 + 1)
+<span class="ln">40</span>    op = np.zeros(4 + 1)
+<span class="ln">41</span>    qopr = np.zeros(4 + 1)
+<span class="ln">42</span>
+<span class="ln">43</span>    # Question (see the page): the table is rebuilt at every change of
+<span class="ln">44</span>    # composition.
+<span class="ln">45</span>    difz = abs(z - a.ze)
+<span class="ln">46</span>    difx = abs(x - a.xe)
+<span class="ln">47</span>    if difz &gt; 1.0e-8 or difx &gt; 1.0e-8:
+<span class="ln">48</span>        a.ze = z
+<span class="ln">49</span>        a.xe = x
+<span class="ln">50</span>        alex06tab()
+<span class="ln">51</span>
+<span class="ln">52</span>    r = dl - 3.0 * (tl - 6.0)
+<span class="ln">53</span>
+<span class="ln">54</span>    # The 4-point stencil in log T, searched from the last one.
+<span class="ln">55</span>    if a.it &lt; 1:
+<span class="ln">56</span>        a.it = 1
+<span class="ln">57</span>    if a.it + 2 &gt; numt:
+<span class="ln">58</span>        a.it = numt - 2
+<span class="ln">59</span>    if tl &lt; g.tgr06[a.it + 2]:
+<span class="ln">60</span>        for i in range(a.it + 1, 1, -1):
+<span class="ln">61</span>            if tl &gt; g.tgr06[i]:
+<span class="ln">62</span>                a.it = i - 1
+<span class="ln">63</span>                break  # GOTO 10
+<span class="ln">64</span>        else:
+<span class="ln">65</span>            a.it = 1
+<span class="ln">66</span>    else:
+<span class="ln">67</span>        for i in range(a.it + 3, numt + 1):
+<span class="ln">68</span>            if tl &lt; g.tgr06[i]:
+<span class="ln">69</span>                a.it = i - 2
+<span class="ln">70</span>                a.it = min(numt - 3, a.it)
+<span class="ln">71</span>                break  # GOTO 20
+<span class="ln">72</span>        else:
+<span class="ln">73</span>            a.it = numt - 3
+<span class="ln">74</span>    for i in range(1, 4 + 1):
+<span class="ln">75</span>        qr[i] = g.tgr06[a.it + i - 1]
+<span class="ln">76</span>    interp(qr, fxt, fxtd, tl)
+<span class="ln">77</span>
+<span class="ln">78</span>    # The same in log R.
+<span class="ln">79</span>    if a.id &lt; 1:
+<span class="ln">80</span>        a.id = 1
+<span class="ln">81</span>    if a.id + 2 &gt; numd:
+<span class="ln">82</span>        a.id = numd - 2
+<span class="ln">83</span>    if r &lt; g.r0gr06[a.id + 2]:
+<span class="ln">84</span>        for i in range(a.id + 1, 1, -1):
+<span class="ln">85</span>            if r &gt; g.r0gr06[i]:
+<span class="ln">86</span>                a.id = i - 1
+<span class="ln">87</span>                break  # GOTO 30
+<span class="ln">88</span>        else:
+<span class="ln">89</span>            a.id = 1
+<span class="ln">90</span>    else:
+<span class="ln">91</span>        for i in range(a.id + 3, numd + 1):
+<span class="ln">92</span>            if r &lt; g.r0gr06[i]:
+<span class="ln">93</span>                a.id = i - 2
+<span class="ln">94</span>                a.id = min(numd - 3, a.id)
+<span class="ln">95</span>                break  # GOTO 40
+<span class="ln">96</span>        else:
+<span class="ln">97</span>            a.id = numd - 3
+<span class="ln">98</span>
+<span class="ln">99</span>    # Above the table&#x27;s largest log R: interpolate at the edge, then
+<span class="ln">100</span>    # extrapolate linearly.
+<span class="ln">101</span>    if r &gt; g.r0gr06[numd]:
+<span class="ln">102</span>        linear = True
+<span class="ln">103</span>        rr = r
+<span class="ln">104</span>        r = g.r0gr06[numd]
+<span class="ln">105</span>    else:
+<span class="ln">106</span>        linear = False
+<span class="ln">107</span>    for i in range(1, 4 + 1):
+<span class="ln">108</span>        qr[i] = g.r0gr06[a.id + i - 1]
+<span class="ln">109</span>    interp(qr, fxr, fxrd, r)
+<span class="ln">110</span>
+<span class="ln">111</span>    cap = a.capalex06
+<span class="ln">112</span>    idd = a.id
+<span class="ln">113</span>    for i in range(1, 4 + 1):
+<span class="ln">114</span>        ii = a.it + i - 1
+<span class="ln">115</span>        op[i] = (fxr[1] * cap[ii, idd] + fxr[2] * cap[ii, idd + 1]
+<span class="ln">116</span>                 + fxr[3] * cap[ii, idd + 2] + fxr[4] * cap[ii, idd + 3])
+<span class="ln">117</span>        qopr[i] = (fxrd[1] * cap[ii, idd] + fxrd[2] * cap[ii, idd + 1]
+<span class="ln">118</span>                   + fxrd[3] * cap[ii, idd + 2] + fxrd[4] * cap[ii, idd + 3])
+<span class="ln">119</span>    if linear:
+<span class="ln">120</span>        # Question (see the page): qod is not extrapolated.
+<span class="ln">121</span>        for i in range(1, 4 + 1):
+<span class="ln">122</span>            ii = a.it + i - 1
+<span class="ln">123</span>            op[i] = op[i] + (rr - r) * (cap[ii, numd] - cap[ii, numd - 1]) / (
+<span class="ln">124</span>                g.r0gr06[numd] - g.r0gr06[numd - 1])
+<span class="ln">125</span>        r = rr
+<span class="ln">126</span>
+<span class="ln">127</span>    ol = fxt[1] * op[1] + fxt[2] * op[2] + fxt[3] * op[3] + fxt[4] * op[4]
+<span class="ln">128</span>    # dlog kappa/dlog T at fixed R, then at fixed rho.
+<span class="ln">129</span>    qot = (fxtd[1] * op[1] + fxtd[2] * op[2] + fxtd[3] * op[3]
+<span class="ln">130</span>           + fxtd[4] * op[4])
+<span class="ln">131</span>    qod = (fxt[1] * qopr[1] + fxt[2] * qopr[2] + fxt[3] * qopr[3]
+<span class="ln">132</span>           + fxt[4] * qopr[4])
+<span class="ln">133</span>    qot = qot - 3.0 * qod
+<span class="ln">134</span>    o = math.exp(constants_mod.cln * ol)
+<span class="ln">135</span>    return o, ol, qod, qot</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked against the code: the rebuild test, $\log R = \log\rho - 3(\log T - 6)$, the index searches, the four-point Lagrange weights (INTERP), the linear extrapolation above the largest $\log R$ (<code>QOD</code> kept at the edge, <code>QOT</code> taken from the extrapolated values), the conversion to fixed $\rho$, the caller and the COMMON blocks. The three questions are real. No findings.</p>
+<p>No change</p></div></details>
+</main></body></html>

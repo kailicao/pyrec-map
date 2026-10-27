@@ -1,0 +1,774 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>setupv.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ setupv.f</span></header><main>
+<h1>setupv.f</h1>
+<p class='muted'>467 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/setupv.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>setupv.py</code>, 262 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Prepares, once per call of the rotational-mixing step, the structural factors that the stability criteria and circulation velocities need at each interface between shells. Its comment explains the scheme: stability is computed for the interface $i/i-1$ and stored in element $i$; each criterion is "a combination of variables stored at each shell multiplied by a gradient between the shells", which must stay below a critical number. <code>SETUPV</code> computes the parts that "do not change during a diffusion timestep"; <a href="../yrec-map/vcirc.f.html#def-VCIRC"><code>VCIRC</code></a> multiplies them by the current $\Omega$ gradients.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/seculr.f.html#def-SECULR"><code>SECULR</code></a>, once per time step, before the iterations.</li>
+<li><strong>Inputs:</strong> the model's $\log\rho$, $g$ (<code>HG</code>), $L$ (solar units), $\log P$, $\log r$, enclosed mass (g), $\log T$, and the range <code>IMIN</code>–<code>IMAX</code>; from <code>MDPHY_MOD</code> the shell values of $\mu$ (<code>AMUM</code>), $c_P$ (<code>CPM</code>), $\nabla$, $\nabla_\mathrm{ad}$, $\nabla_\mathrm{rad}$ (<code>DELM</code>, <code>DELAM</code>, <code>DELRM</code>), $\varepsilon$ (<code>ESUMM</code>), $\kappa$ (<code>OM</code>), $\partial\ln\rho/\partial\ln T$ (<code>QDTM</code>); from <code>ROTDER_MOD</code> the derivatives of $\kappa$ and $\varepsilon$ (<code>SQOT</code>, <code>SQET</code>) and the nuclear fraction <code>FRACNUC</code>, set in <a href="../yrec-map/coefft.f.html#def-COEFFT"><code>COEFFT</code></a>; the namelist switch <code>LDIFAD</code> from <code>NMLPAR_MOD</code>.</li>
+<li><strong>Outputs:</strong> <code>HRU</code> (radii), <code>QWRMAX</code> (the largest stable $d\Omega/d\ln r$ for the dynamical shear), the interpolation weights <code>FACI</code> (an argument owned by <code>SECULR</code>, which passes it on to <code>VCIRC</code>), and, through modules, read by <code>VCIRC</code>, <a href="../yrec-map/codiff.f.html#def-CODIFF"><code>CODIFF</code></a>, <a href="../yrec-map/getfc.f.html#def-GETFC"><code>GETFC</code></a> and <a href="../yrec-map/dadcoeft.f.html#def-DADCOEFT"><code>DADCOEFT</code></a>: the interface values in <code>INTVAR_MOD</code> (<code>RM</code>, <code>PM</code>, <code>TM</code>, <code>DM</code>, <code>DELMI</code>, <code>DELAMI</code>, <code>QDTMI</code>, <code>HS3</code>, <code>EPSILM</code>, <code>ALM</code>, <code>HGM</code>), the velocity factors <code>FACT1</code>…<code>FACT5</code>, <code>FACT7</code>, <code>FACT8</code> (<code>VFACT_MOD</code>), <code>FACT6</code>, <code>FES1</code>–<code>FES3</code>, <code>FGSFJ</code>, <code>FGSFK</code> (<code>TAUKH_MOD</code>), <code>DDELM</code>, <code>FESTIME</code>, <code>THM</code> (<code>OLDROT2_MOD</code>), and with <code>LDIFAD</code> the higher-order terms in <code>DIFAD3_MOD</code> and <code>EGRIDDER_MOD</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Interface values.</strong> At the midpoint $r_{m,i} = \tfrac12(r_i + r_{i-1})$, each quantity is found by 4-point Lagrange interpolation in $r$ over shells $i-2 \dots i+1$ (the first and last interfaces use the first or last four shells); $P$, $T$, $\rho$ are interpolated in the log. The actual gradient is $\nabla = \min(\nabla_\mathrm{rad}, \nabla_\mathrm{ad})$.</li>
+<li><strong>Scales.</strong> With $G$, $m$ the mass inside the interface, $H_P = P r^2/(\rho G m)$, $H_T = H_P/\nabla$, $\eta = \tfrac43\,r^3/(G m)$, and $\Delta\nabla = \max(\nabla_\mathrm{ad} - \nabla,\ \nabla_\mathrm{min})$ with a floor of $10^{-3}$ (larger at the ends of the range, including a $\mu$-gradient term).</li>
+<li><strong>Eddington–Sweet circulation</strong> (Endal and Sofia, paper II, as cited): $v_\mathrm{ES} = $ <code>FACT1</code>·<code>FACT2</code>·$\Omega^2$, with
+   $$\texttt{FACT1} = \frac{1}{(\partial\ln\rho/\partial\ln T)\,\max(\nabla_\mathrm{ad}-\nabla,\,10^{-3})},\qquad \texttt{FACT2} = \frac{\nabla_\mathrm{ad}}{g}\,\eta\,\Bigl(\varepsilon - \frac{L}{m}\Bigr).$$</li>
+<li><strong>GSF and $\mu$ currents.</strong> <code>FACT3</code> $= |H_T r|$ for the Goldreich–Schubert–Fricke velocity; <code>FACT4</code> $= \frac{r^2}{G m\rho}\,(P - aT^4/3)/\sqrt g$ for the "fictitious $\mu$ currents" (Kippenhahn, IAU 66).</li>
+<li><strong>Dynamical shear.</strong> Stable when the Richardson number $\frac{\rho}{P}(\nabla_\mathrm{ad}-\nabla)\,g^2/(d\Omega/d\ln r)^2 &gt; \tfrac14$, that is when
+   $$\left|\frac{d\Omega}{d\ln r}\right| &lt; \texttt{QWRMAX} = 2g\sqrt{\frac{\rho}{P}\max(\nabla_\mathrm{ad}-\nabla,\,10^{-3})}.$$</li>
+<li><strong>Secular shear with $\mu$ gradients:</strong> <code>FACT5</code> $= \frac{\rho g^2}{P\,\Delta\ln P}\cdot\frac{p_r - 1}{1 + 3p_r}$, where $p_r = aT^4/(3P)$ is the radiation-pressure fraction ($1 - p_r$ is the comment's "BETA") and the last factor is the comment's $-d\ln T/d\ln\mu$.</li>
+<li><strong>Zahn-type terms</strong> (<code>FES1</code>, <code>FES2</code>, <code>FES3</code>, <code>FV*</code>, and, with <code>LDIFAD</code>, <code>FACT7</code>, <code>FACD2</code>, <code>FACD3</code>, following Zahn and Maeder 1998 as the comments say), built from $F = P/(g\,\Delta\nabla\,c_P\,\rho\,T)$, $L/m$ and $\varepsilon$; and <code>THM</code> $= r^4/(\sqrt{m}\,G)$ for the $d\theta/dt$ term.</li>
+</ol>
+<p><strong>KC's changes.</strong> The unused argument <code>LCZ</code> was removed (KC 2025-05-31). (Also, "JvS 09/25" renamed the local <code>CPM</code> to <code>CPMI</code> to avoid a clash with <code>/MDPHY/</code>, now <code>MDPHY_MOD</code>.)</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> <code>FACI</code>, formerly COMMON <code>/INTFAC/</code>, is a new last argument, owned by <code>SECULR</code>; <code>LDIFAD</code> comes from <code>NMLPAR_MOD</code> (COMMON <code>/VARFC/</code> is gone); otherwise declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>. The statements are unchanged; no question is settled.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Index 0 with <code>LDIFAD</code>.</strong> The <code>LDIFAD</code> block starts with <code>HTM</code> computed at shell <code>IMIN-1</code>; if <code>IMIN</code> can be 1, this reads <code>HP(0)</code>, <code>HR(0)</code>, <code>HS1(0)</code>. Can <code>IMIN</code> be 1 when <code>LDIFAD</code> is true?</li>
+<li><strong>Many computed, unused values.</strong> In the <code>LDIFAD</code> block, <code>V0</code>, <code>QC1R</code>, <code>QQC1RR</code>, <code>QQCHITR</code>, <code>HTP2</code>, <code>QHTR</code> are computed but used only in commented-out alternatives for <code>FACT7</code> and <code>FACT8</code>; <code>FACT8</code> is always 0. Which formulation is the current one, and can the rest go?</li>
+<li><strong>Two floors for $\nabla_\mathrm{ad} - \nabla$.</strong> <code>FACT1</code> and <code>QWRMAX</code> use a floor of $10^{-3}$; <code>FESTIME</code> and <code>FGSFK</code> use <code>DDEL</code> with the end-dependent floor <code>DMIN</code>; <code>DDELM</code> adds the $\mu$ gradient. The comment says 1/(∇ad − ∇) "is set to a maximum of 10^6", but the floor $10^{-3}$ gives a maximum of $10^3$. Which is intended?</li>
+<li><strong>The definition of <code>ETA</code>.</strong> <code>ETA = 2·(2/3)·r³/(G m)</code>. Is the factor 2 part of the physics or a leftover (the comment block gives no formula)?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+SUBROUTINE SETUPV(HD,HG,HL,HP,HR,HS1,HT,IMIN,IMAX,LCZ,M,HRU,  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-SETUPV'>SETUPV</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-SETUPV'><h3><span class='kind'>subroutine</span>SETUPV</h3>
+<p class='muted'>lines 3–467 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/setupv.f#L3-L467'>GitHub</a></p>
+<pre>SUBROUTINE SETUPV(HD,HG,HL,HP,HR,HS1,HT,IMIN,IMAX,M,HRU,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+SUBROUTINE SETUPV(HD,HG,HL,HP,HR,HS1,HT,IMIN,IMAX,LCZ,M,HRU,  ! KC 2025-05-31</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/difad3_mod.f.html#def-DIFAD3_MOD'>DIFAD3_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/egridder_mod.f.html#def-EGRIDDER_MOD'>EGRIDDER_MOD</a>, <a href='../yrec-map/intvar_mod.f.html#def-INTVAR_MOD'>INTVAR_MOD</a>, <a href='../yrec-map/mdphy_mod.f.html#def-MDPHY_MOD'>MDPHY_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/oldrot2_mod.f.html#def-OLDROT2_MOD'>OLDROT2_MOD</a>, <a href='../yrec-map/rotder_mod.f.html#def-ROTDER_MOD'>ROTDER_MOD</a>, <a href='../yrec-map/taukh_mod.f.html#def-TAUKH_MOD'>TAUKH_MOD</a>, <a href='../yrec-map/vfact_mod.f.html#def-VFACT_MOD'>VFACT_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/seculr.f.html#def-SECULR'>SECULR</a> <span class='muted'>(seculr.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE SETUPV(HD,HG,HL,HP,HR,HS1,HT,IMIN,IMAX,M,HRU,
+<span class="ln">4</span>     *                  QWRMAX,FACI)
+<span class="ln">5</span>C 10/15/26 MHP via Claude
+<span class="ln">6</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">7</span>C PARAMETER(JSON=5000) here.
+<span class="ln">8</span>      USE DIMENSIONS_MOD
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/VFACT/ into VFACT_MOD.
+<span class="ln">11</span>      USE VFACT_MOD
+<span class="ln">12</span>C 10/14/26 MHP via Claude
+<span class="ln">13</span>C code changed to convert COMMON/TAUKH/ into TAUKH_MOD.
+<span class="ln">14</span>      USE TAUKH_MOD
+<span class="ln">15</span>C 10/14/26 MHP via Claude
+<span class="ln">16</span>C code changed to convert COMMON/ROTDER/ into ROTDER_MOD.
+<span class="ln">17</span>      USE ROTDER_MOD
+<span class="ln">18</span>C 10/14/26 MHP via Claude
+<span class="ln">19</span>C code changed to convert COMMON/OLDROT2/ into OLDROT2_MOD.
+<span class="ln">20</span>      USE OLDROT2_MOD
+<span class="ln">21</span>C 10/14/26 MHP via Claude
+<span class="ln">22</span>C code changed to convert COMMON/MDPHY/ into MDPHY_MOD.
+<span class="ln">23</span>      USE MDPHY_MOD
+<span class="ln">24</span>C 10/14/26 MHP via Claude
+<span class="ln">25</span>C code changed to convert COMMON/INTVAR/ into INTVAR_MOD.
+<span class="ln">26</span>      USE INTVAR_MOD
+<span class="ln">27</span>C 10/14/26 MHP via Claude
+<span class="ln">28</span>C code changed to convert COMMON/EGRIDDER/ into EGRIDDER_MOD.
+<span class="ln">29</span>      USE EGRIDDER_MOD
+<span class="ln">30</span>C 10/14/26 MHP via Claude
+<span class="ln">31</span>C code changed to convert COMMON/DIFAD3/ into DIFAD3_MOD.
+<span class="ln">32</span>      USE DIFAD3_MOD
+<span class="ln">33</span>C 10/14/26 MHP via Claude
+<span class="ln">34</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">35</span>      USE NMLPAR_MOD
+<span class="ln">36</span>C 10/14/26 MHP via Claude
+<span class="ln">37</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">38</span>      USE CONSTANTS_MOD
+<span class="ln">39</span>C 10/20/26 MHP via Claude
+<span class="ln">40</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">41</span>C explicit declarations.
+<span class="ln">42</span>      IMPLICIT NONE
+<span class="ln">43</span>      REAL*8 A21,A31,A32,A41,A42,A43,C1,CG,CG2,CPIGI,CPMI,D1,D2,D3,D4,
+<span class="ln">44</span>     *       DDEL,DELMU,DMIN,DR,EM,ETA,F1,F2,F3,FAC,FACI,FF,FL,FNU,HD,
+<span class="ln">45</span>     *       HG,HL,HP,HPSC,HR,HRU,HS1,HT,HTM,HTP,HTP2,HTSC,OPM,QC1R,
+<span class="ln">46</span>     *       QCHIT,QDR,QETM,QHTR,QQC1RR,QQCHITR,QWRMAX,V0,XA1,XA2,XA3,
+<span class="ln">47</span>     *       XA4
+<span class="ln">48</span>      INTEGER I,I0,I1,IMAX,IMIN,M
+<span class="ln">49</span>
+<span class="ln">50</span>C 10/13/26 MHP via Claude
+<span class="ln">51</span>C FACI is now a dummy argument, formerly COMMON/INTFAC/.
+<span class="ln">52</span>      DIMENSION FACI(4,JSON)
+<span class="ln">53</span>C 9/25/26 MHP via Claude
+<span class="ln">54</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">55</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">56</span>C MHP 06/02 ADDED FACT7 AND FACT8 FOR DIF/AD TREATMENT
+<span class="ln">57</span>C 10/13/26 MHP via Claude
+<span class="ln">58</span>C code changed to replace COMMON/INTFAC/ with an explicit argument:
+<span class="ln">59</span>C setupv.f fills FACI and vcirc.f reads it, both called only from
+<span class="ln">60</span>C seculr.f, which now owns the storage.
+<span class="ln">61</span>C MHP 3/92 COMMON BLOCK ADDED FOR SHEAR VELOCITY
+<span class="ln">62</span>C MHP 06/02
+<span class="ln">63</span>C Time change of theta
+<span class="ln">64</span>C CAPPA AND EPSILON DERIVATIVES
+<span class="ln">65</span>C 10/13/26 MHP via Claude
+<span class="ln">66</span>C code changed to drop the write-only members SQOD and SQED from
+<span class="ln">67</span>C COMMON/ROTDER/.  coefft.f assigned both and nothing ever read them;
+<span class="ln">68</span>C setupv.f, the block&#x27;s only reader, uses SQOT, SQET and FRACNUC.  That
+<span class="ln">69</span>C frees 10,000 words.  The block itself stays: coefft.f and setupv.f sit
+<span class="ln">70</span>C in different phases -- setupv.f is reached via seculr.f -- so passing
+<span class="ln">71</span>C the rest explicitly would mean threading 15,000-word arrays through
+<span class="ln">72</span>C main.f and GETW.
+<span class="ln">73</span>C DEFINITION TERMS FOR THE SECOND AND THIRD DERIVATIVE
+<span class="ln">74</span>C TERMS IN THE ZAHN FORMULATION
+<span class="ln">75</span>C MHP 06/02
+<span class="ln">76</span>C HIGHER ORDER TERMS IN M.C. VELOCITY
+<span class="ln">77</span>C 10/12/26 MHP via Claude
+<span class="ln">78</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">79</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">80</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">81</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">82</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">83</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">84</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">85</span>C
+<span class="ln">86</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">87</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">88</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">89</span>C 10/13/26 MHP via Claude
+<span class="ln">90</span>C code changed to drop COMMON/VARFC/, declared here but never used.
+<span class="ln">91</span>C JvS 09/25 CHANGED CPM --&gt; CPMI TO AVOID CONFLICT IN MDPHY      
+<span class="ln">92</span>      DIMENSION HD(JSON),HG(JSON),HL(JSON),HP(JSON),HR(JSON),HS1(JSON),
+<span class="ln">93</span>C      *          HT(JSON),LCZ(JSON),HRU(JSON),QWRMAX(JSON),  ! KC 2025-05-31
+<span class="ln">94</span>     *          HT(JSON),HRU(JSON),QWRMAX(JSON),
+<span class="ln">95</span>     *          CPMI(JSON),OPM(JSON)
+<span class="ln">96</span>      SAVE
+<span class="ln">97</span>C   THE PROCEDURE FOR CALCULATING STABILITY AGAINST ROTATIONALLY INDUCED
+<span class="ln">98</span>C   MIXING IS AS FOLLOWS:
+<span class="ln">99</span>C      STABILITY IS CALCULATED FOR THE I/I-1 INTERFACE; QUANTITIES RELATED
+<span class="ln">100</span>C      TO STABILITY AT THIS INTERFACE ARE STORED IN ARRAY ELEMENT(S) I.
+<span class="ln">101</span>C      EACH STABILITY CRITERION IS EXPRESSED AS FOLLOWS:
+<span class="ln">102</span>C         A COMBINATION OF VARIABLES(RHO,P,ETC.)STORED AT EACH SHELL
+<span class="ln">103</span>C         MULTIPLIED BY A GRADIENT BETWEEN THE SHELLS MUST BE LESS THAN
+<span class="ln">104</span>C         SOME CRITICAL NUMBER.
+<span class="ln">105</span>C  SETUPV CALCULATES THE FACTORS WHICH ARE BASED ON
+<span class="ln">106</span>C  QUANTITIES WHICH DO NOT CHANGE DURING A DIFFUSION TIMESTEP.
+<span class="ln">107</span>C
+<span class="ln">108</span>C  FIND UNLOGGED RADII OF THE MODEL POINTS.
+<span class="ln">109</span>      DO 5 I = 1,M
+<span class="ln">110</span>         HRU(I) = EXP(CLN*HR(I))
+<span class="ln">111</span>    5 CONTINUE
+<span class="ln">112</span>C  FIND LOCATION (IN RADIUS) OF THE MIDPOINTS OF THE INTERFACES.
+<span class="ln">113</span>      DO 10 I = 2,M
+<span class="ln">114</span>         RM(I) = 0.5D0*(HRU(I) + HRU(I-1))
+<span class="ln">115</span>   10 CONTINUE
+<span class="ln">116</span>C  FIND 4 POINT LAGRANGIAN INTERPOLATION FACTORS FOR ALL INTERFACES.
+<span class="ln">117</span>C  INTERFACE BETWEEN FIRST AND SECOND POINT USES THE FIRST 4 POINTS FOR
+<span class="ln">118</span>C  INTERPOLATION; BETWEEN LAST AND SECOND TO LAST USES THE LAST FOUR POINTS
+<span class="ln">119</span>C  AND BETWEEN I AND I-1 USES I-2,I-1,I,I+1.
+<span class="ln">120</span>C  TREATMENT OF FIRST INTERFACE.
+<span class="ln">121</span>      IF(IMIN.LT.3)THEN
+<span class="ln">122</span>         A43 = HRU(4) - HRU(3)
+<span class="ln">123</span>         A42 = HRU(4) - HRU(2)
+<span class="ln">124</span>         A41 = HRU(4) - HRU(1)
+<span class="ln">125</span>         A32 = HRU(3) - HRU(2)
+<span class="ln">126</span>         A31 = HRU(3) - HRU(1)
+<span class="ln">127</span>         A21 = HRU(2) - HRU(1)
+<span class="ln">128</span>         D1 = -A21*A31*A41
+<span class="ln">129</span>         D2 = A21*A32*A42
+<span class="ln">130</span>         D3 = -A31*A32*A43
+<span class="ln">131</span>         D4 = A41*A42*A43
+<span class="ln">132</span>         XA1 = RM(2) - HRU(1)
+<span class="ln">133</span>         XA2 = RM(2) - HRU(2)
+<span class="ln">134</span>         XA3 = RM(2) - HRU(3)
+<span class="ln">135</span>         XA4 = RM(2) - HRU(4)
+<span class="ln">136</span>         FACI(1,2) = (XA2*XA3*XA4)/D1
+<span class="ln">137</span>         FACI(2,2) = (XA1*XA3*XA4)/D2
+<span class="ln">138</span>         FACI(3,2) = (XA1*XA2*XA4)/D3
+<span class="ln">139</span>         FACI(4,2) = (XA1*XA2*XA3)/D4
+<span class="ln">140</span>         I0 = 3
+<span class="ln">141</span>         PM(2)=EXP(CLN*(HP(1)*FACI(1,2)+HP(2)*FACI(2,2)
+<span class="ln">142</span>     *         +HP(3)*FACI(3,2)+HP(4)*FACI(4,2)))
+<span class="ln">143</span>         TM(2)=EXP(CLN*(HT(1)*FACI(1,2)+HT(2)*FACI(2,2)
+<span class="ln">144</span>     *         +HT(3)*FACI(3,2)+HT(4)*FACI(4,2)))
+<span class="ln">145</span>         DM(2)=EXP(CLN*(HD(1)*FACI(1,2)+HD(2)*FACI(2,2)
+<span class="ln">146</span>     *         +HD(3)*FACI(3,2)+HD(4)*FACI(4,2)))
+<span class="ln">147</span>         DELMI(2)=DELRM(1)*FACI(1,2)+DELRM(2)*FACI(2,2)+
+<span class="ln">148</span>     *            DELRM(3)*FACI(3,2)+DELRM(4)*FACI(4,2)
+<span class="ln">149</span>         DELAMI(2)=DELAM(1)*FACI(1,2)+DELAM(2)*FACI(2,2)+
+<span class="ln">150</span>     *             DELAM(3)*FACI(3,2)+DELAM(4)*FACI(4,2)
+<span class="ln">151</span>         QDTMI(2)=QDTM(1)*FACI(1,2)+QDTM(2)*FACI(2,2)+
+<span class="ln">152</span>     *           QDTM(3)*FACI(3,2)+QDTM(4)*FACI(4,2)
+<span class="ln">153</span>         HS3(2)=HS1(1)*FACI(1,2)+HS1(2)*FACI(2,2)+
+<span class="ln">154</span>     *          HS1(3)*FACI(3,2)+HS1(4)*FACI(4,2)
+<span class="ln">155</span>         EPSILM(2)=ESUMM(1)*FACI(1,2)+ESUMM(2)*FACI(2,2)+
+<span class="ln">156</span>     *           ESUMM(3)*FACI(3,2)+ESUMM(4)*FACI(4,2)
+<span class="ln">157</span>         ALM(2)=CLSUN*(HL(1)*FACI(1,2)+HL(2)*FACI(2,2)+
+<span class="ln">158</span>     *          HL(3)*FACI(3,2)+HL(4)*FACI(4,2))
+<span class="ln">159</span>         HGM(2)=HG(1)*FACI(1,2)+HG(2)*FACI(2,2)+
+<span class="ln">160</span>     *          HG(3)*FACI(3,2)+HG(4)*FACI(4,2)
+<span class="ln">161</span>C  opacity.
+<span class="ln">162</span>         OPM(2)=OM(1)*FACI(1,2)+OM(2)*FACI(2,2)+
+<span class="ln">163</span>     *          OM(3)*FACI(3,2)+OM(4)*FACI(4,2)
+<span class="ln">164</span>C  specific heat
+<span class="ln">165</span>         CPMI(2)=CPM(1)*FACI(1,2)+CPM(2)*FACI(2,2)+
+<span class="ln">166</span>     *          CPM(3)*FACI(3,2)+CPM(4)*FACI(4,2)
+<span class="ln">167</span>      ELSE
+<span class="ln">168</span>         I0 = IMIN
+<span class="ln">169</span>      ENDIF
+<span class="ln">170</span>C  TREATMENT OF LAST INTERFACE.
+<span class="ln">171</span>      IF(IMAX.EQ.M)THEN
+<span class="ln">172</span>         A43 = HRU(M) - HRU(M-1)
+<span class="ln">173</span>         A42 = HRU(M) - HRU(M-2)
+<span class="ln">174</span>         A41 = HRU(M) - HRU(M-3)
+<span class="ln">175</span>         A32 = HRU(M-1) - HRU(M-2)
+<span class="ln">176</span>         A31 = HRU(M-1) - HRU(M-3)
+<span class="ln">177</span>         A21 = HRU(M-2) - HRU(M-3)
+<span class="ln">178</span>         D1 = -A21*A31*A41
+<span class="ln">179</span>         D2 = A21*A32*A42
+<span class="ln">180</span>         D3 = -A31*A32*A43
+<span class="ln">181</span>         D4 = A41*A42*A43
+<span class="ln">182</span>         XA1 = RM(M) - HRU(M-3)
+<span class="ln">183</span>         XA2 = RM(M) - HRU(M-2)
+<span class="ln">184</span>         XA3 = RM(M) - HRU(M-1)
+<span class="ln">185</span>         XA4 = RM(M) - HRU(M)
+<span class="ln">186</span>         FACI(1,M) = (XA2*XA3*XA4)/D1
+<span class="ln">187</span>         FACI(2,M) = (XA1*XA3*XA4)/D2
+<span class="ln">188</span>         FACI(3,M) = (XA1*XA2*XA4)/D3
+<span class="ln">189</span>         FACI(4,M) = (XA1*XA2*XA3)/D4
+<span class="ln">190</span>         I1 = M-1
+<span class="ln">191</span>         PM(M)=EXP(CLN*(HP(M-3)*FACI(1,M)+HP(M-2)*FACI(2,M)
+<span class="ln">192</span>     *         +HP(M-1)*FACI(3,M)+HP(M)*FACI(4,M)))
+<span class="ln">193</span>         TM(M)=EXP(CLN*(HT(M-3)*FACI(1,M)+HT(M-2)*FACI(2,M)
+<span class="ln">194</span>     *         +HT(M-1)*FACI(3,M)+HT(M)*FACI(4,M)))
+<span class="ln">195</span>         DM(M)=EXP(CLN*(HD(M-3)*FACI(1,M)+HD(M-2)*FACI(2,M)
+<span class="ln">196</span>     *         +HD(M-1)*FACI(3,M)+HD(M)*FACI(4,M)))
+<span class="ln">197</span>         DELMI(M)=DELRM(M-3)*FACI(1,M)+DELRM(M-2)*FACI(2,M)+
+<span class="ln">198</span>     *            DELRM(M-1)*FACI(3,M)+DELRM(M)*FACI(4,M)
+<span class="ln">199</span>         DELAMI(M)=DELAM(M-3)*FACI(1,M)+DELAM(M-2)*FACI(2,M)+
+<span class="ln">200</span>     *             DELAM(M-1)*FACI(3,M)+DELAM(M)*FACI(4,M)
+<span class="ln">201</span>         QDTMI(M)=QDTM(M-3)*FACI(1,M)+QDTM(M-2)*FACI(2,M)+
+<span class="ln">202</span>     *           QDTM(M-1)*FACI(3,M)+QDTM(M)*FACI(4,M)
+<span class="ln">203</span>         HS3(M)=HS1(M-3)*FACI(1,M)+HS1(M-2)*FACI(2,M)+
+<span class="ln">204</span>     *          HS1(M-1)*FACI(3,M)+HS1(M)*FACI(4,M)
+<span class="ln">205</span>         EPSILM(M)=ESUMM(M-3)*FACI(1,M)+ESUMM(M-2)*FACI(2,M)+
+<span class="ln">206</span>     *           ESUMM(M-1)*FACI(3,M)+ESUMM(M)*FACI(4,M)
+<span class="ln">207</span>         ALM(M)=CLSUN*(HL(M-3)*FACI(1,M)+HL(M-2)*FACI(2,M)+
+<span class="ln">208</span>     *          HL(M-1)*FACI(3,M)+HL(M)*FACI(4,M))
+<span class="ln">209</span>         HGM(M)=HG(M-3)*FACI(1,M)+HG(M-2)*FACI(2,M)+
+<span class="ln">210</span>     *          HG(M-1)*FACI(3,M)+HG(M)*FACI(4,M)
+<span class="ln">211</span>C  opacity.
+<span class="ln">212</span>         OPM(M)=OM(M-3)*FACI(1,M)+OM(M-2)*FACI(2,M)+
+<span class="ln">213</span>     *          OM(M-1)*FACI(3,M)+OM(M)*FACI(4,M)
+<span class="ln">214</span>C  specific heat
+<span class="ln">215</span>         CPMI(M)=CPM(M-3)*FACI(1,M)+CPM(M-2)*FACI(2,M)+
+<span class="ln">216</span>     *          CPM(M-1)*FACI(3,M)+CPM(M)*FACI(4,M)
+<span class="ln">217</span>      ELSE
+<span class="ln">218</span>         I1 = IMAX
+<span class="ln">219</span>      ENDIF
+<span class="ln">220</span>C  COMPUTE INTERPOLATION FACTORS FOR ALL OTHER POINTS.
+<span class="ln">221</span>      DO 20 I = I0,I1
+<span class="ln">222</span>         A43 = HRU(I+1) - HRU(I)
+<span class="ln">223</span>         A42 = HRU(I+1) - HRU(I-1)
+<span class="ln">224</span>         A41 = HRU(I+1) - HRU(I-2)
+<span class="ln">225</span>         A32 = HRU(I) - HRU(I-1)
+<span class="ln">226</span>         A31 = HRU(I) - HRU(I-2)
+<span class="ln">227</span>         A21 = HRU(I-1) - HRU(I-2)
+<span class="ln">228</span>         D1 = -A21*A31*A41
+<span class="ln">229</span>         D2 = A21*A32*A42
+<span class="ln">230</span>         D3 = -A31*A32*A43
+<span class="ln">231</span>         D4 = A41*A42*A43
+<span class="ln">232</span>         XA1 = RM(I) - HRU(I-2)
+<span class="ln">233</span>         XA2 = RM(I) - HRU(I-1)
+<span class="ln">234</span>         XA3 = RM(I) - HRU(I)
+<span class="ln">235</span>         XA4 = RM(I) - HRU(I+1)
+<span class="ln">236</span>         FACI(1,I) = (XA2*XA3*XA4)/D1
+<span class="ln">237</span>         FACI(2,I) = (XA1*XA3*XA4)/D2
+<span class="ln">238</span>         FACI(3,I) = (XA1*XA2*XA4)/D3
+<span class="ln">239</span>         FACI(4,I) = (XA1*XA2*XA3)/D4
+<span class="ln">240</span>   20 CONTINUE
+<span class="ln">241</span>      CG = EXP(CLN*CGL)
+<span class="ln">242</span>      CG2 = CG**2
+<span class="ln">243</span>      DO 30 I = I0,I1
+<span class="ln">244</span>C  USE 4-POINT LAGRANGIAN INTERPOLATION TO FIND PHYSICAL VARIABLES
+<span class="ln">245</span>C  AT THE INTERFACES.
+<span class="ln">246</span>C  PRESSURE.
+<span class="ln">247</span>         PM(I)=EXP(CLN*(HP(I-2)*FACI(1,I)+HP(I-1)*FACI(2,I)
+<span class="ln">248</span>     *         +HP(I)*FACI(3,I)+HP(I+1)*FACI(4,I)))
+<span class="ln">249</span>C  TEMPERATURE.
+<span class="ln">250</span>         TM(I)=EXP(CLN*(HT(I-2)*FACI(1,I)+HT(I-1)*FACI(2,I)
+<span class="ln">251</span>     *         +HT(I)*FACI(3,I)+HT(I+1)*FACI(4,I)))
+<span class="ln">252</span>C  DENSITY.
+<span class="ln">253</span>         DM(I)=EXP(CLN*(HD(I-2)*FACI(1,I)+HD(I-1)*FACI(2,I)
+<span class="ln">254</span>     *         +HD(I)*FACI(3,I)+HD(I+1)*FACI(4,I)))
+<span class="ln">255</span>C  DEL (ACTUAL).
+<span class="ln">256</span>C  DEL (RADIATIVE) IS INTERPOLATED, AND DEL IS THE MIN OF DELA,DELR.
+<span class="ln">257</span>         DELMI(I)=DELRM(I-2)*FACI(1,I)+DELRM(I-1)*FACI(2,I)+
+<span class="ln">258</span>     *            DELRM(I)*FACI(3,I)+DELRM(I+1)*FACI(4,I)
+<span class="ln">259</span>C  DEL(ADIABATIC).
+<span class="ln">260</span>         DELAMI(I)=DELAM(I-2)*FACI(1,I)+DELAM(I-1)*FACI(2,I)+
+<span class="ln">261</span>     *             DELAM(I)*FACI(3,I)+DELAM(I+1)*FACI(4,I)
+<span class="ln">262</span>C  D LN RHO/D LN T.
+<span class="ln">263</span>         QDTMI(I)=QDTM(I-2)*FACI(1,I)+QDTM(I-1)*FACI(2,I)+
+<span class="ln">264</span>     *           QDTM(I)*FACI(3,I)+QDTM(I+1)*FACI(4,I)
+<span class="ln">265</span>C  UNLOGGED MASS INTERIOR TO THE INTERFACE.
+<span class="ln">266</span>         HS3(I)=HS1(I-2)*FACI(1,I)+HS1(I-1)*FACI(2,I)+
+<span class="ln">267</span>     *          HS1(I)*FACI(3,I)+HS1(I+1)*FACI(4,I)
+<span class="ln">268</span>C  SPECIFIC ENERGY GENERATION RATE.
+<span class="ln">269</span>         EPSILM(I)=ESUMM(I-2)*FACI(1,I)+ESUMM(I-1)*FACI(2,I)+
+<span class="ln">270</span>     *           ESUMM(I)*FACI(3,I)+ESUMM(I+1)*FACI(4,I)
+<span class="ln">271</span>C  LUMINOSITY.
+<span class="ln">272</span>         ALM(I)=CLSUN*(HL(I-2)*FACI(1,I)+HL(I-1)*FACI(2,I)+
+<span class="ln">273</span>     *          HL(I)*FACI(3,I)+HL(I+1)*FACI(4,I))
+<span class="ln">274</span>C  LOCAL AVERAGE FORCE OF GRAVITY.
+<span class="ln">275</span>         HGM(I)=HG(I-2)*FACI(1,I)+HG(I-1)*FACI(2,I)+
+<span class="ln">276</span>     *          HG(I)*FACI(3,I)+HG(I+1)*FACI(4,I)
+<span class="ln">277</span>C  opacity.
+<span class="ln">278</span>         OPM(I)=OM(I-2)*FACI(1,I)+OM(I-1)*FACI(2,I)+
+<span class="ln">279</span>     *          OM(I)*FACI(3,I)+OM(I+1)*FACI(4,I)
+<span class="ln">280</span>C  specific heat
+<span class="ln">281</span>         CPMI(I)=CPM(I-2)*FACI(1,I)+CPM(I-1)*FACI(2,I)+
+<span class="ln">282</span>     *          CPM(I)*FACI(3,I)+CPM(I+1)*FACI(4,I)
+<span class="ln">283</span>   30 CONTINUE
+<span class="ln">284</span>      DO 35 I = IMIN,IMAX
+<span class="ln">285</span>         DELMI(I) = MIN(DELMI(I),DELAMI(I))
+<span class="ln">286</span>   35 CONTINUE
+<span class="ln">287</span>      DO I = 1,M
+<span class="ln">288</span>         FES1(I) = 0.0D0
+<span class="ln">289</span>         FES2(I) = 0.0D0
+<span class="ln">290</span>         FES3(I) = 0.0D0
+<span class="ln">291</span>         FGSFJ(I) = 0.0D0
+<span class="ln">292</span>         FGSFK(I) = 0.0D0
+<span class="ln">293</span>         FACT1(I) = 0.0D0
+<span class="ln">294</span>         FACT2(I) = 0.0D0
+<span class="ln">295</span>         FACT3(I) = 0.0D0
+<span class="ln">296</span>         FACT4(I) = 0.0D0
+<span class="ln">297</span>         FACT5(I) = 0.0D0
+<span class="ln">298</span>C MHP 06/02
+<span class="ln">299</span>         FESTIME(I) = 0.0D0
+<span class="ln">300</span>         THM(I) = 0.0D0
+<span class="ln">301</span>         FACT7(I) = 0.0D0
+<span class="ln">302</span>         FACT8(I) = 0.0D0
+<span class="ln">303</span>      END DO
+<span class="ln">304</span>      DO I = 2,M
+<span class="ln">305</span>C ADDED FOR D THETA/DT TERM FROM ZAHN&amp;MAEDER 1998
+<span class="ln">306</span>         FAC = 2.0D0*(HR(I)+HR(I-1))-0.5D0*
+<span class="ln">307</span>     *         (LOG10(HS1(I))+LOG10(HS1(I-1)))-CGL
+<span class="ln">308</span>         THM(I) = EXP(CLN*FAC)
+<span class="ln">309</span>      END DO
+<span class="ln">310</span>C  NOW COMPUTE STRUCTURAL QUANTITIES NEEDED TO EVALUATE VELOCITIES AT
+<span class="ln">311</span>C  ALL INTERFACES.
+<span class="ln">312</span>      CPIGI = 4.0D0/C4PI/CG
+<span class="ln">313</span>      DO 40 I = IMIN,IMAX
+<span class="ln">314</span>         IF(.NOT.LDIFAD)THEN
+<span class="ln">315</span>            DELMU = (LOG10(AMUM(I))-LOG10(AMUM(I-1)))/
+<span class="ln">316</span>     *              (HP(I)-HP(I-1))
+<span class="ln">317</span>         ELSE
+<span class="ln">318</span>            DELMU = 0.0D0
+<span class="ln">319</span>         ENDIF
+<span class="ln">320</span>         IF(I.EQ.IMIN)THEN
+<span class="ln">321</span>            DMIN=MAX(1.0D-3,0.5D0*(DELAM(IMIN+1)-DELM(IMIN+1))
+<span class="ln">322</span>     *               +DELMU)
+<span class="ln">323</span>         ELSE IF(I.EQ.IMAX)THEN
+<span class="ln">324</span>            DMIN=MAX(1.0D-3,0.5D0*(DELAM(IMAX-1)-DELM(IMAX-1))
+<span class="ln">325</span>     *               +DELMU)
+<span class="ln">326</span>         ELSE
+<span class="ln">327</span>            DMIN = 1.0D-3
+<span class="ln">328</span>         ENDIF
+<span class="ln">329</span>         DDEL = MAX(DELAMI(I)-DELMI(I),DMIN)
+<span class="ln">330</span>C MHP 06/02
+<span class="ln">331</span>C ADDED FOR ALTERNATE TREATMENT OF MU GRADIENTS
+<span class="ln">332</span>C         DDELM(I) = 0.5D0*(DELAMI(I)+DELAMI(I-1)-
+<span class="ln">333</span>C     *                     DELMI(I)-DELMI(I-1))
+<span class="ln">334</span>C         DDELM(I) = DDEL
+<span class="ln">335</span>         DDELM(I) = MAX(DELAMI(I)-DELMI(I)+DELMU,DMIN)
+<span class="ln">336</span>C         FESTIME(I) = PM(I)/(HGM(I)*DDEL*DM(I)*TM(I))
+<span class="ln">337</span>         FESTIME(I) = PM(I)/(HGM(I)*DDEL*DM(I))
+<span class="ln">338</span>         HPSC = PM(I)*RM(I)**2/DM(I)/HS3(I)/CG
+<span class="ln">339</span>         HTSC = HPSC/DELMI(I)
+<span class="ln">340</span>         ETA = 2.0D0*CC23*RM(I)**3/CG/HS3(I)
+<span class="ln">341</span>C        TTHERM = 8.0d0*CC23*CSIG*TM(I)**3/OPM(I)/DM(I)**2/CPM(I)
+<span class="ln">342</span>         FGSFK(I)= 8.0D0*HPSC*ETA/DDEL
+<span class="ln">343</span>         FF = PM(I)/(HGM(I)*DDEL*CPMI(I)*DM(I)*TM(I))
+<span class="ln">344</span>         FAC = 2.0D0*ETA*FF
+<span class="ln">345</span>         EM = ALM(I)/HS3(I)
+<span class="ln">346</span>         FES1(I) = FAC*(EM-EPSILM(I))
+<span class="ln">347</span>         FES2(I)= -0.5D0*FAC*EM*CPIGI/DM(I)
+<span class="ln">348</span>         FES3(I) = EM*FF*CC13*CPIGI*RM(I)/DM(I)
+<span class="ln">349</span>C         FES3(I) = EM*FF*CPIGI*(3.0D0*HTSC-RM(I))/DM(I)
+<span class="ln">350</span>         FV0(I) = FF
+<span class="ln">351</span>         FV1A(I) = FES1(I)/FF
+<span class="ln">352</span>         FV1B(I) = FES2(I)/FF
+<span class="ln">353</span>         FV2A(I) = EM*CPIGI*3.0D0*HTSC/DM(I)
+<span class="ln">354</span>         FV2B(I) = -EM*CPIGI*RM(I)/DM(I)
+<span class="ln">355</span>         FGSFJ(I) = ABS(FAC*EM*HTSC)*RM(I)
+<span class="ln">356</span>C  EDDINGTON CIRCULATION VELOCITY IS DEFINED AS
+<span class="ln">357</span>C  VES = FACT1*FACT2*OMEGA**2 (ENDAL AND SOFIA PAPER II).
+<span class="ln">358</span>C  NOTE THAT TO AVOID OVERFLOW 1/(DEL(AD)-DEL)IS SET TO A MAXIMUM OF 10^6.
+<span class="ln">359</span>C  THIS SHOULD ONLY BE AN ISSUE IF YOU HAVE ZERO OVERSHOOT AT THE BOUNDARY
+<span class="ln">360</span>C  OF A CONVECTION ZONE.  CAVEAT EMPTOR.
+<span class="ln">361</span>         FACT1(I) = 1.0D0/QDTMI(I)/MAX(DELAMI(I)-DELMI(I),1.0D-3)
+<span class="ln">362</span>C         FACT2(I) = DELAMI(I)*ALM(I)*(RM(I)**3/CG2/HS3(I)**2)*
+<span class="ln">363</span>C     *              (2.0D0*RM(I)**2*(EPSILM(I)/ALM(I) - 1.0D0/HS3(I))
+<span class="ln">364</span>C    *              - 3.0D0/(C4PI*DM(I)*RM(I)))
+<span class="ln">365</span>         FAC = DELAMI(I)/HGM(I)
+<span class="ln">366</span>         FACT2(I) = FAC*ETA*(EPSILM(I)-EM)
+<span class="ln">367</span>         FACT6(I) = -FAC*EM/C4PI/CG/DM(I)/RM(I)
+<span class="ln">368</span>C GSF VELOCITY IS DEFINED AS
+<span class="ln">369</span>C VGSF = VES*FACT3/Hj**2/(2OMEGA/(D OMEGA/D LNR) + 1)
+<span class="ln">370</span>C WHERE HJ IS THE SPECIFIC ANGULAR MOMENTUM SCALE HEIGHT.
+<span class="ln">371</span>C AND FACT3 IS THE TEMPERATURE SCALE HEIGHT TIMES THE RADIUS.
+<span class="ln">372</span>C  HT = (DEL*D(LN P)/DR)**-1 = P*R**2/(DEL*RHO*GM)
+<span class="ln">373</span>C        FACT3(I) = PM(I)*RM(I)**3/(DELMI(I)*DM(I)*CG*HS3(I))
+<span class="ln">374</span>         FACT3(I) = ABS(HTSC*RM(I))
+<span class="ln">375</span>C  FICTITIOUS MU CURRENTS THAT OPPOSE ES AND GSF CIRCULATION CALCULATED HERE.
+<span class="ln">376</span>C  VMU = FMU*FACT1*FACT4*mu*del(mu), FACT4=(D RHO/D MU)*PSCALH/TKH/MU
+<span class="ln">377</span>C  (KIPPENHAHN, IAU#66,P.22) USING TKH* = THE LOCAL KELVIN-HELMHOLTZ TIMESCALE.
+<span class="ln">378</span>C  FMU IS A USER PARAMETER, DMU IS DELTA MU BETWEEN THE SHELLS, AND QDMU IS
+<span class="ln">379</span>C  THE DERIVATIVE OF THE DENSITY WITH RESPECT TO MU.
+<span class="ln">380</span>C  IF VMU EXCEEDS VES AND VGSF THE INTERFACE IS STABLE.
+<span class="ln">381</span>C  D RHO/DMU = (1-(a/3)*T**4/P)*P*MU/(RHO*T*CGAS)
+<span class="ln">382</span>C  THE PRESSURE SCALE HEIGHT IS CGAS*T*R**2/GM (EXCLUDING A FACTOR MU
+<span class="ln">383</span>C  WHICH CANCELS WITH ANOTHER FACTOR OF MU WHICH ARISES ELSEWHERE) AND
+<span class="ln">384</span>C  THE KELVIN-HELMHOLTZ TIMESCALE IS G*M**2/(R*L).
+<span class="ln">385</span>C         FACT4(I) = ALM(I)*(RM(I)/HS3(I))**3/CG2/DM(I)*
+<span class="ln">386</span>C     *              (PM(I)-CA3*TM(I)**4)
+<span class="ln">387</span>         FACT4(I) = RM(I)**2/HS3(I)/CG/DM(I)*
+<span class="ln">388</span>     *              (PM(I)-CA3*TM(I)**4)/SQRT(HGM(I))
+<span class="ln">389</span>C  DYNAMICAL SHEAR INSTABILITY.
+<span class="ln">390</span>C  AN INTERFACE IS STABLE AGAINST THIS SHEAR WHENEVER THE RICHARDSON NUMBER
+<span class="ln">391</span>C  RICHNO = (RHO/P)*(DEL(AD)-DEL)*g**2/(D OMEGA/D LN R)**2&gt;.25.
+<span class="ln">392</span>         QWRMAX(I)=SQRT(DM(I)/PM(I)*MAX(DELAMI(I) - DELMI(I),1.0D-3))
+<span class="ln">393</span>     *             *2.0D0*HGM(I)
+<span class="ln">394</span>C  THE DIFFUSIVE SHEAR IS INHIBITED BY MU GRADIENTS.
+<span class="ln">395</span>C  AN INTERFACE IS STABLE AGAINST THE DIFFUSIVE SHEAR IF
+<span class="ln">396</span>C  RICHARDSON NUMBER = FACT5*DMU/MU/(D OMEGA/D LNR)**2 &gt; .25, WHERE
+<span class="ln">397</span>C  FACT5 = RHO/P*(-d lnT/d lnMU)/(del LN P)*G**2 AND
+<span class="ln">398</span>C   -d lnT/d lnMU = (CON-1)/(1+3CON),CON=(a/3)T**4/P
+<span class="ln">399</span>C  GIVEN (1 - CON)P = CGAS*RHO*T/MU
+<span class="ln">400</span>C  1 - CON IS BETA(CORRECTION FOR RADIATION PRESSURE).
+<span class="ln">401</span>         FACT5(I) = DM(I)*HGM(I)**2/PM(I)/CLN/(HP(I)-HP(I-1))*
+<span class="ln">402</span>     *   (CA3*TM(I)**4/PM(I)-1.0D0)/(1.0D0 + 3.0D0*CA3*TM(I)**4/PM(I))
+<span class="ln">403</span>C MHP 3/92 ADD VECTOR FOR LOCAL KELVIN-HELMHOLTZ TIME SCALE.
+<span class="ln">404</span>C         TKH(I) = CG*HS3(I)**2/ABS(ALM(I))/RM(I)
+<span class="ln">405</span>   40 CONTINUE
+<span class="ln">406</span>C MHP 06/02 ADDED TERMS OF ORDER DW/DR FROM ZAH&amp;MAEDER 1998
+<span class="ln">407</span>      IF(LDIFAD)THEN
+<span class="ln">408</span>         HTM = EXP(CLN*(HP(IMIN-1)+2.0D0*HR(IMIN-1)-HD(IMIN-1)))
+<span class="ln">409</span>     *         /HS1(IMIN-1)/CG/DELRM(IMIN-1)
+<span class="ln">410</span>         QQQCOD(IMIN-1) = HTM
+<span class="ln">411</span>         DO I = IMIN,IMAX
+<span class="ln">412</span>C         DDEL = MAX(DELAMI(I)-DELMI(I),1.0D-3)
+<span class="ln">413</span>         HPSC = PM(I)*RM(I)**2/DM(I)/HS3(I)/CG
+<span class="ln">414</span>         HTSC = HPSC/DELMI(I)
+<span class="ln">415</span>         F1 = PM(I)/(HGM(I)*DDELM(I)*CPMI(I)*DM(I)*TM(I))
+<span class="ln">416</span>         F2 = ALM(I)*RM(I)/HS3(I)/3.0D0
+<span class="ln">417</span>         F3 = 0.75D0*HS3(I)/(CPI*DM(I)*RM(I)**3)
+<span class="ln">418</span>         V0 = -F1*F2*F3
+<span class="ln">419</span>C         V0 = -PM(I)*ALM(I)/(C4PI*CG**2*HS3(I)*DDEL*CPM(I)*
+<span class="ln">420</span>C     *         DM(I)**2*TM(I))
+<span class="ln">421</span>         FF = RM(I)**3/HS3(I)
+<span class="ln">422</span>         C1 = CC23*RM(I)**4/CG/HS3(I)
+<span class="ln">423</span>         QQCOD(I) = C1
+<span class="ln">424</span>         QC1R = 4.0D0*CC23*FF/CG*
+<span class="ln">425</span>     *          (1.0D0-CPI*DM(I)*FF)
+<span class="ln">426</span>         DR = 10.0D0**HR(I)-10.0D0**HR(I-1)
+<span class="ln">427</span>         QDR = (10.0D0**HD(I)-10.0D0**HD(I-1))/DR
+<span class="ln">428</span>         QQC1RR = 8.0D0*FF/CG/RM(I)*
+<span class="ln">429</span>     *   (1.0D0-CC13*CPI*FF*(1.0D1*DM(I)-RM(I)*QDR)
+<span class="ln">430</span>     *    + CC13*8.0D0*(CPI*DM(I)*FF)**2)
+<span class="ln">431</span>C D LN CHI/D LN T = 3 - D LN CAPPA/D LN T
+<span class="ln">432</span>         QCHIT = 3.0D0 - 0.5D0*(SQOT(I)+SQOT(I-1))
+<span class="ln">433</span>         QQCHITR = (SQOT(I-1)-SQOT(I))/DR
+<span class="ln">434</span>         HTP = EXP(CLN*(HP(I)+2.0D0*HR(I)-HD(I)))/HS1(I)/CG/DELM(I)
+<span class="ln">435</span>         QQQCOD(I) = HTP
+<span class="ln">436</span>         HTP2 = DR/CLN/(HT(I-1)-HT(I))
+<span class="ln">437</span>         QHTR = (ABS(HTP)-ABS(HTM))/DR
+<span class="ln">438</span>         HTM = HTP
+<span class="ln">439</span>         QETM = 0.5D0*(SQET(I)+SQET(I-1))
+<span class="ln">440</span>         FNU = 0.5D0*(FRACNUC(I)+FRACNUC(I-1))
+<span class="ln">441</span>C         FACT7(I)= -V0*(QQCHITR*C1+QCHIT*QC1R)
+<span class="ln">442</span>C         FACT7(I)= -V0*(QQCHITR*C1)
+<span class="ln">443</span>         FACT7(I)=
+<span class="ln">444</span>     *   - F1*C1*(FNU*QETM + EPSILM(I)*(1.0D0 - FNU - QCHIT))
+<span class="ln">445</span>         FV2B(I) = FV2B(I)+FACT7(I)/F1
+<span class="ln">446</span>C         FACT7(I)=V0*((QHTR-QCHIT)*QC1R-QQCHITR*C1+HTSC*QQC1RR)
+<span class="ln">447</span>C     *            - F1*EPSILM(I)*(HTSC*QC1R + C1*(QETM - QCHIT))
+<span class="ln">448</span>         FACT8(I) = 0.0D0
+<span class="ln">449</span>C         FACT8(I)=V0*((QHTR-QCHIT)*C1+HTSC*2.0D0*QC1R)
+<span class="ln">450</span>C     *            - F1*EPSILM(I)*HTSC*C1
+<span class="ln">451</span>C Q variables not used
+<span class="ln">452</span>C         Q1 = -V0*(QQCHITR*C1)
+<span class="ln">453</span>C         Q2 = -F1*C1*FNU*QETM
+<span class="ln">454</span>C         Q3 = -F1*C1*EPSILM(I)*(1.0D0 - FNU - QCHIT)
+<span class="ln">455</span>C         Q4 = F1*FL*QCHIT
+<span class="ln">456</span>C         Q5 = -F1*EPSILM(I)*HTSC
+<span class="ln">457</span>         FL = ALM(I)/C4PI/DM(I)/RM(I)**2
+<span class="ln">458</span>         FACD2(I) = F1*(FL*QCHIT - EPSILM(I)*HTSC)
+<span class="ln">459</span>         FACD3(I) = -F1*FL
+<span class="ln">460</span>C         WRITE(*,911)I,V0,FES3(I),FACT7(I),FACD2(I),FACD3(I),DDELM(I)
+<span class="ln">461</span>C         WRITE(*,912)Q1,Q2,Q3,Q4,Q5
+<span class="ln">462</span>C 911     FORMAT(I5,1P6E12.3)
+<span class="ln">463</span>C 912     FORMAT(5X,1P5E12.3)
+<span class="ln">464</span>         END DO
+<span class="ln">465</span>      ENDIF
+<span class="ln">466</span>      RETURN
+<span class="ln">467</span>      END</pre></details>
+<details class='py' id='py-setupv'><summary>Python version: setupv</summary><pre class='doc'>Prepare, for the interfaces imin..imax (interface i lies between
+shells i-1 and i), the factors of the stability criteria and
+circulation velocities that do not change during a diffusion time
+step; VCIRC multiplies them by the current Omega gradients.
+
+Translates: setupv.f#SETUPV (09c3b9b)
+
+Arguments: the model&#x27;s log rho (hd), gravity (hg), L in solar units
+(hl), log P (hp), log r (hr), enclosed mass in g (hs1), log T (ht),
+arrays with index 0 unused; the interface range imin, imax; m, the
+number of shells. Set in place: hru (unlogged radii), qwrmax (the
+largest stable d Omega / d ln r against the dynamical shear) and
+faci[1..4, i], the interpolation weights (owned by SECULR, read by
+VCIRC). Also set: the interface values in intvar_mod, the velocity
+factors in vfact_mod, taukh_mod, oldrot2_mod and, with ldifad, in
+difad3_mod and egridder_mod.
+
+Returns nothing.</pre><pre class='src'><span class="ln">79</span>def setupv(hd, hg, hl, hp, hr, hs1, ht, imin, imax, m, hru, qwrmax, faci):
+<span class="ln">80</span>    &quot;&quot;&quot;Prepare, for the interfaces imin..imax (interface i lies between
+<span class="ln">81</span>    shells i-1 and i), the factors of the stability criteria and
+<span class="ln">82</span>    circulation velocities that do not change during a diffusion time
+<span class="ln">83</span>    step; VCIRC multiplies them by the current Omega gradients.
+<span class="ln">84</span>
+<span class="ln">85</span>    Translates: setupv.f#SETUPV (09c3b9b)
+<span class="ln">86</span>
+<span class="ln">87</span>    Arguments: the model&#x27;s log rho (hd), gravity (hg), L in solar units
+<span class="ln">88</span>    (hl), log P (hp), log r (hr), enclosed mass in g (hs1), log T (ht),
+<span class="ln">89</span>    arrays with index 0 unused; the interface range imin, imax; m, the
+<span class="ln">90</span>    number of shells. Set in place: hru (unlogged radii), qwrmax (the
+<span class="ln">91</span>    largest stable d Omega / d ln r against the dynamical shear) and
+<span class="ln">92</span>    faci[1..4, i], the interpolation weights (owned by SECULR, read by
+<span class="ln">93</span>    VCIRC). Also set: the interface values in intvar_mod, the velocity
+<span class="ln">94</span>    factors in vfact_mod, taukh_mod, oldrot2_mod and, with ldifad, in
+<span class="ln">95</span>    difad3_mod and egridder_mod.
+<span class="ln">96</span>
+<span class="ln">97</span>    Returns nothing.
+<span class="ln">98</span>    &quot;&quot;&quot;
+<span class="ln">99</span>    c = constants_mod
+<span class="ln">100</span>    iv = intvar_mod
+<span class="ln">101</span>    md = mdphy_mod
+<span class="ln">102</span>    vf = vfact_mod
+<span class="ln">103</span>    tk = taukh_mod
+<span class="ln">104</span>    o2 = oldrot2_mod
+<span class="ln">105</span>    da = difad3_mod
+<span class="ln">106</span>    rd = rotder_mod
+<span class="ln">107</span>    eg = egridder_mod
+<span class="ln">108</span>
+<span class="ln">109</span>    # Unlogged radii of the model points (label 5).
+<span class="ln">110</span>    for i in range(1, m + 1):
+<span class="ln">111</span>        hru[i] = math.exp(c.cln*hr[i])
+<span class="ln">112</span>    # Radii of the midpoints of the interfaces (label 10).
+<span class="ln">113</span>    for i in range(2, m + 1):
+<span class="ln">114</span>        iv.rm[i] = 0.5*(hru[i] + hru[i - 1])
+<span class="ln">115</span>    # 4-point Lagrange interpolation: the first interface uses the first 4
+<span class="ln">116</span>    # points, the last the last 4, and interface i uses i-2, i-1, i, i+1.
+<span class="ln">117</span>    if imin &lt; 3:
+<span class="ln">118</span>        _lagrange(hru, iv.rm, 2, 1, faci)
+<span class="ln">119</span>        i0 = 3
+<span class="ln">120</span>        _interface_values(2, 1, hd, hg, hl, hp, hs1, ht, faci)
+<span class="ln">121</span>    else:
+<span class="ln">122</span>        i0 = imin
+<span class="ln">123</span>    if imax == m:
+<span class="ln">124</span>        _lagrange(hru, iv.rm, m, m - 3, faci)
+<span class="ln">125</span>        i1 = m - 1
+<span class="ln">126</span>        _interface_values(m, m - 3, hd, hg, hl, hp, hs1, ht, faci)
+<span class="ln">127</span>    else:
+<span class="ln">128</span>        i1 = imax
+<span class="ln">129</span>    # Interpolation factors for all other interfaces (label 20).
+<span class="ln">130</span>    for i in range(i0, i1 + 1):
+<span class="ln">131</span>        _lagrange(hru, iv.rm, i, i - 2, faci)
+<span class="ln">132</span>    cg = math.exp(c.cln*c.cgl)
+<span class="ln">133</span>    cg2 = cg**2   # unused, as in the Fortran
+<span class="ln">134</span>    # Physical variables at the interfaces (label 30).
+<span class="ln">135</span>    for i in range(i0, i1 + 1):
+<span class="ln">136</span>        _interface_values(i, i - 2, hd, hg, hl, hp, hs1, ht, faci)
+<span class="ln">137</span>    # The actual del is min(del_rad, del_ad) (label 35).
+<span class="ln">138</span>    for i in range(imin, imax + 1):
+<span class="ln">139</span>        iv.delmi[i] = min(iv.delmi[i], iv.delami[i])
+<span class="ln">140</span>    for i in range(1, m + 1):
+<span class="ln">141</span>        tk.fes1[i] = 0.0
+<span class="ln">142</span>        tk.fes2[i] = 0.0
+<span class="ln">143</span>        tk.fes3[i] = 0.0
+<span class="ln">144</span>        tk.fgsfj[i] = 0.0
+<span class="ln">145</span>        tk.fgsfk[i] = 0.0
+<span class="ln">146</span>        vf.fact1[i] = 0.0
+<span class="ln">147</span>        vf.fact2[i] = 0.0
+<span class="ln">148</span>        vf.fact3[i] = 0.0
+<span class="ln">149</span>        vf.fact4[i] = 0.0
+<span class="ln">150</span>        vf.fact5[i] = 0.0
+<span class="ln">151</span>        o2.festime[i] = 0.0
+<span class="ln">152</span>        o2.thm[i] = 0.0
+<span class="ln">153</span>        vf.fact7[i] = 0.0
+<span class="ln">154</span>        vf.fact8[i] = 0.0
+<span class="ln">155</span>    # The d theta/dt term of Zahn and Maeder 1998: r^4 / (sqrt(m) G).
+<span class="ln">156</span>    for i in range(2, m + 1):
+<span class="ln">157</span>        fac = (2.0*(hr[i] + hr[i - 1])
+<span class="ln">158</span>               - 0.5*(math.log10(hs1[i]) + math.log10(hs1[i - 1])) - c.cgl)
+<span class="ln">159</span>        o2.thm[i] = math.exp(c.cln*fac)
+<span class="ln">160</span>
+<span class="ln">161</span>    # Structural quantities for the velocities at all interfaces (label 40).
+<span class="ln">162</span>    cpigi = 4.0/c.c4pi/cg
+<span class="ln">163</span>    for i in range(imin, imax + 1):
+<span class="ln">164</span>        if not nmlpar_mod.ldifad:
+<span class="ln">165</span>            delmu = ((math.log10(md.amum[i]) - math.log10(md.amum[i - 1]))
+<span class="ln">166</span>                     / (hp[i] - hp[i - 1]))
+<span class="ln">167</span>        else:
+<span class="ln">168</span>            delmu = 0.0
+<span class="ln">169</span>        if i == imin:
+<span class="ln">170</span>            dmin = max(1.0e-3, 0.5*(md.delam[imin + 1] - md.delm[imin + 1])
+<span class="ln">171</span>                       + delmu)
+<span class="ln">172</span>        elif i == imax:
+<span class="ln">173</span>            dmin = max(1.0e-3, 0.5*(md.delam[imax - 1] - md.delm[imax - 1])
+<span class="ln">174</span>                       + delmu)
+<span class="ln">175</span>        else:
+<span class="ln">176</span>            dmin = 1.0e-3
+<span class="ln">177</span>        ddel = max(iv.delami[i] - iv.delmi[i], dmin)
+<span class="ln">178</span>        o2.ddelm[i] = max(iv.delami[i] - iv.delmi[i] + delmu, dmin)
+<span class="ln">179</span>        o2.festime[i] = iv.pm[i]/(iv.hgm[i]*ddel*iv.dm[i])
+<span class="ln">180</span>        hpsc = iv.pm[i]*iv.rm[i]**2/iv.dm[i]/iv.hs3[i]/cg
+<span class="ln">181</span>        htsc = hpsc/iv.delmi[i]
+<span class="ln">182</span>        # Question (see the page): the factor 2 in eta.
+<span class="ln">183</span>        eta = 2.0*c.cc23*iv.rm[i]**3/cg/iv.hs3[i]
+<span class="ln">184</span>        tk.fgsfk[i] = 8.0*hpsc*eta/ddel
+<span class="ln">185</span>        ff = iv.pm[i]/(iv.hgm[i]*ddel*cpmi[i]*iv.dm[i]*iv.tm[i])
+<span class="ln">186</span>        fac = 2.0*eta*ff
+<span class="ln">187</span>        em = iv.alm[i]/iv.hs3[i]
+<span class="ln">188</span>        tk.fes1[i] = fac*(em - iv.epsilm[i])
+<span class="ln">189</span>        tk.fes2[i] = -0.5*fac*em*cpigi/iv.dm[i]
+<span class="ln">190</span>        tk.fes3[i] = em*ff*c.cc13*cpigi*iv.rm[i]/iv.dm[i]
+<span class="ln">191</span>        da.fv0[i] = ff
+<span class="ln">192</span>        da.fv1a[i] = tk.fes1[i]/ff
+<span class="ln">193</span>        da.fv1b[i] = tk.fes2[i]/ff
+<span class="ln">194</span>        da.fv2a[i] = em*cpigi*3.0*htsc/iv.dm[i]
+<span class="ln">195</span>        da.fv2b[i] = -em*cpigi*iv.rm[i]/iv.dm[i]
+<span class="ln">196</span>        tk.fgsfj[i] = abs(fac*em*htsc)*iv.rm[i]
+<span class="ln">197</span>        # Eddington circulation: v_ES = fact1*fact2*Omega**2 (Endal and
+<span class="ln">198</span>        # Sofia, paper II).
+<span class="ln">199</span>        # Question (see the page): the floor 1e-3 caps 1/(del_ad - del)
+<span class="ln">200</span>        # at 1e3, not the comment&#x27;s 1e6.
+<span class="ln">201</span>        vf.fact1[i] = 1.0/iv.qdtmi[i]/max(iv.delami[i] - iv.delmi[i], 1.0e-3)
+<span class="ln">202</span>        fac = iv.delami[i]/iv.hgm[i]
+<span class="ln">203</span>        vf.fact2[i] = fac*eta*(iv.epsilm[i] - em)
+<span class="ln">204</span>        tk.fact6[i] = -fac*em/c.c4pi/cg/iv.dm[i]/iv.rm[i]
+<span class="ln">205</span>        # GSF: fact3 is the temperature scale height times the radius.
+<span class="ln">206</span>        vf.fact3[i] = abs(htsc*iv.rm[i])
+<span class="ln">207</span>        # Fictitious mu currents (Kippenhahn, IAU 66).
+<span class="ln">208</span>        vf.fact4[i] = (iv.rm[i]**2/iv.hs3[i]/cg/iv.dm[i]
+<span class="ln">209</span>                       * (iv.pm[i] - c.ca3*iv.tm[i]**4)/math.sqrt(iv.hgm[i]))
+<span class="ln">210</span>        # Dynamical shear: stable when the Richardson number exceeds 1/4.
+<span class="ln">211</span>        qwrmax[i] = (math.sqrt(iv.dm[i]/iv.pm[i]
+<span class="ln">212</span>                               * max(iv.delami[i] - iv.delmi[i], 1.0e-3))
+<span class="ln">213</span>                     * 2.0*iv.hgm[i])
+<span class="ln">214</span>        # Secular shear inhibited by mu gradients.
+<span class="ln">215</span>        vf.fact5[i] = (iv.dm[i]*iv.hgm[i]**2/iv.pm[i]/c.cln
+<span class="ln">216</span>                       / (hp[i] - hp[i - 1])
+<span class="ln">217</span>                       * (c.ca3*iv.tm[i]**4/iv.pm[i] - 1.0)
+<span class="ln">218</span>                       / (1.0 + 3.0*c.ca3*iv.tm[i]**4/iv.pm[i]))
+<span class="ln">219</span>
+<span class="ln">220</span>    # Terms of order d Omega/dr from Zahn and Maeder 1998.
+<span class="ln">221</span>    if nmlpar_mod.ldifad:
+<span class="ln">222</span>        # Question (see the page): reads shell imin-1, index 0 if imin = 1.
+<span class="ln">223</span>        htm = (math.exp(c.cln*(hp[imin - 1] + 2.0*hr[imin - 1]
+<span class="ln">224</span>                               - hd[imin - 1]))
+<span class="ln">225</span>               / hs1[imin - 1]/cg/md.delrm[imin - 1])
+<span class="ln">226</span>        eg.qqqcod[imin - 1] = htm
+<span class="ln">227</span>        for i in range(imin, imax + 1):
+<span class="ln">228</span>            hpsc = iv.pm[i]*iv.rm[i]**2/iv.dm[i]/iv.hs3[i]/cg
+<span class="ln">229</span>            htsc = hpsc/iv.delmi[i]
+<span class="ln">230</span>            f1 = iv.pm[i]/(iv.hgm[i]*o2.ddelm[i]*cpmi[i]*iv.dm[i]*iv.tm[i])
+<span class="ln">231</span>            f2 = iv.alm[i]*iv.rm[i]/iv.hs3[i]/3.0
+<span class="ln">232</span>            f3 = 0.75*iv.hs3[i]/(c.cpi*iv.dm[i]*iv.rm[i]**3)
+<span class="ln">233</span>            # Question (see the page): v0, qc1r, qqc1rr, qqchitr, htp2 and
+<span class="ln">234</span>            # qhtr feed only commented-out formulas.
+<span class="ln">235</span>            v0 = -f1*f2*f3
+<span class="ln">236</span>            ff = iv.rm[i]**3/iv.hs3[i]
+<span class="ln">237</span>            c1 = c.cc23*iv.rm[i]**4/cg/iv.hs3[i]
+<span class="ln">238</span>            eg.qqcod[i] = c1
+<span class="ln">239</span>            qc1r = 4.0*c.cc23*ff/cg*(1.0 - c.cpi*iv.dm[i]*ff)
+<span class="ln">240</span>            dr = 10.0**hr[i] - 10.0**hr[i - 1]
+<span class="ln">241</span>            qdr = (10.0**hd[i] - 10.0**hd[i - 1])/dr
+<span class="ln">242</span>            qqc1rr = (8.0*ff/cg/iv.rm[i]
+<span class="ln">243</span>                      * (1.0 - c.cc13*c.cpi*ff*(1.0e1*iv.dm[i] - iv.rm[i]*qdr)
+<span class="ln">244</span>                         + c.cc13*8.0*(c.cpi*iv.dm[i]*ff)**2))
+<span class="ln">245</span>            # d ln chi / d ln T = 3 - d ln kappa / d ln T
+<span class="ln">246</span>            qchit = 3.0 - 0.5*(rd.sqot[i] + rd.sqot[i - 1])
+<span class="ln">247</span>            qqchitr = (rd.sqot[i - 1] - rd.sqot[i])/dr
+<span class="ln">248</span>            htp = (math.exp(c.cln*(hp[i] + 2.0*hr[i] - hd[i]))
+<span class="ln">249</span>                   / hs1[i]/cg/md.delm[i])
+<span class="ln">250</span>            eg.qqqcod[i] = htp
+<span class="ln">251</span>            htp2 = dr/c.cln/(ht[i - 1] - ht[i])
+<span class="ln">252</span>            qhtr = (abs(htp) - abs(htm))/dr
+<span class="ln">253</span>            htm = htp
+<span class="ln">254</span>            qetm = 0.5*(rd.sqet[i] + rd.sqet[i - 1])
+<span class="ln">255</span>            fnu = 0.5*(rd.fracnuc[i] + rd.fracnuc[i - 1])
+<span class="ln">256</span>            vf.fact7[i] = (-f1*c1*(fnu*qetm
+<span class="ln">257</span>                                   + iv.epsilm[i]*(1.0 - fnu - qchit)))
+<span class="ln">258</span>            da.fv2b[i] = da.fv2b[i] + vf.fact7[i]/f1
+<span class="ln">259</span>            vf.fact8[i] = 0.0
+<span class="ln">260</span>            fl = iv.alm[i]/c.c4pi/iv.dm[i]/iv.rm[i]**2
+<span class="ln">261</span>            da.facd2[i] = f1*(fl*qchit - iv.epsilm[i]*htsc)
+<span class="ln">262</span>            da.facd3[i] = -f1*fl</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_lagrange'><summary>Python version: _lagrange</summary><pre class='doc'>Fill faci[1..4, i], the 4-point Lagrange weights at rm[i] over the
+shells j .. j+3 (the Fortran repeats this block three times).</pre><pre class='src'><span class="ln">27</span>def _lagrange(hru, rm, i, j, faci):
+<span class="ln">28</span>    &quot;&quot;&quot;Fill faci[1..4, i], the 4-point Lagrange weights at rm[i] over the
+<span class="ln">29</span>    shells j .. j+3 (the Fortran repeats this block three times).&quot;&quot;&quot;
+<span class="ln">30</span>    a43 = hru[j + 3] - hru[j + 2]
+<span class="ln">31</span>    a42 = hru[j + 3] - hru[j + 1]
+<span class="ln">32</span>    a41 = hru[j + 3] - hru[j]
+<span class="ln">33</span>    a32 = hru[j + 2] - hru[j + 1]
+<span class="ln">34</span>    a31 = hru[j + 2] - hru[j]
+<span class="ln">35</span>    a21 = hru[j + 1] - hru[j]
+<span class="ln">36</span>    d1 = -a21*a31*a41
+<span class="ln">37</span>    d2 = a21*a32*a42
+<span class="ln">38</span>    d3 = -a31*a32*a43
+<span class="ln">39</span>    d4 = a41*a42*a43
+<span class="ln">40</span>    xa1 = rm[i] - hru[j]
+<span class="ln">41</span>    xa2 = rm[i] - hru[j + 1]
+<span class="ln">42</span>    xa3 = rm[i] - hru[j + 2]
+<span class="ln">43</span>    xa4 = rm[i] - hru[j + 3]
+<span class="ln">44</span>    faci[1, i] = (xa2*xa3*xa4)/d1
+<span class="ln">45</span>    faci[2, i] = (xa1*xa3*xa4)/d2
+<span class="ln">46</span>    faci[3, i] = (xa1*xa2*xa4)/d3
+<span class="ln">47</span>    faci[4, i] = (xa1*xa2*xa3)/d4</pre></details>
+<details class='py' id='py-_interp'><summary>Python version: _interp</summary><pre class='doc'>y interpolated to interface i from shells j .. j+3, summed in the
+Fortran&#x27;s order.</pre><pre class='src'><span class="ln">50</span>def _interp(y, faci, i, j):
+<span class="ln">51</span>    &quot;&quot;&quot;y interpolated to interface i from shells j .. j+3, summed in the
+<span class="ln">52</span>    Fortran&#x27;s order.&quot;&quot;&quot;
+<span class="ln">53</span>    return (y[j]*faci[1, i] + y[j + 1]*faci[2, i]
+<span class="ln">54</span>            + y[j + 2]*faci[3, i] + y[j + 3]*faci[4, i])</pre></details>
+<details class='py' id='py-_interface_values'><summary>Python version: _interface_values</summary><pre class='doc'>The physical variables at interface i, from shells j .. j+3 (the
+Fortran repeats this block three times: first, last and inner
+interfaces). P, T and rho are interpolated in the log.</pre><pre class='src'><span class="ln">57</span>def _interface_values(i, j, hd, hg, hl, hp, hs1, ht, faci):
+<span class="ln">58</span>    &quot;&quot;&quot;The physical variables at interface i, from shells j .. j+3 (the
+<span class="ln">59</span>    Fortran repeats this block three times: first, last and inner
+<span class="ln">60</span>    interfaces). P, T and rho are interpolated in the log.&quot;&quot;&quot;
+<span class="ln">61</span>    c = constants_mod
+<span class="ln">62</span>    iv = intvar_mod
+<span class="ln">63</span>    md = mdphy_mod
+<span class="ln">64</span>    iv.pm[i] = math.exp(c.cln*_interp(hp, faci, i, j))
+<span class="ln">65</span>    iv.tm[i] = math.exp(c.cln*_interp(ht, faci, i, j))
+<span class="ln">66</span>    iv.dm[i] = math.exp(c.cln*_interp(hd, faci, i, j))
+<span class="ln">67</span>    # del (radiative) is interpolated; del is set to min(dela, delr) later.
+<span class="ln">68</span>    iv.delmi[i] = _interp(md.delrm, faci, i, j)
+<span class="ln">69</span>    iv.delami[i] = _interp(md.delam, faci, i, j)
+<span class="ln">70</span>    iv.qdtmi[i] = _interp(md.qdtm, faci, i, j)       # d ln rho / d ln T
+<span class="ln">71</span>    iv.hs3[i] = _interp(hs1, faci, i, j)             # mass inside (g)
+<span class="ln">72</span>    iv.epsilm[i] = _interp(md.esumm, faci, i, j)     # energy generation
+<span class="ln">73</span>    iv.alm[i] = c.clsun*_interp(hl, faci, i, j)      # luminosity (erg/s)
+<span class="ln">74</span>    iv.hgm[i] = _interp(hg, faci, i, j)              # gravity
+<span class="ln">75</span>    opm[i] = _interp(md.om, faci, i, j)              # opacity
+<span class="ln">76</span>    cpmi[i] = _interp(md.cpm, faci, i, j)            # specific heat</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ul>
+<li><strong>Unclear (mathematics).</strong> In <code>FACT5</code>, $\beta_r = aT^4/(3P)$ is the ratio of radiation to total pressure, while the code's comment calls $1 -$ that ratio "BETA" (the usual gas-pressure fraction). Fix: name it $p_r$, the radiation-pressure fraction, and say that $1-p_r$ is the comment's $\beta$.</li>
+<li>Checked and confirmed: the call from <code>SECULR</code> (before its iterations), the interpolated interface values ($\nabla$ from $\nabla_\mathrm{rad}$, capped at $\nabla_\mathrm{ad}$), <code>DMIN</code>, <code>FACT1</code>–<code>FACT4</code>, <code>QWRMAX</code>, $\eta$, <code>THM</code>, <code>FES1</code>–<code>FES3</code>, and questions 1–4.</li>
+</ul>
+<p>Revised: the radiation-pressure fraction in <code>FACT5</code> renamed $p_r$ and explained.</p></div></details>
+</main></body></html>

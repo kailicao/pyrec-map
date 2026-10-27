@@ -1,0 +1,118 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>scveos_mod.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ scveos_mod.f</span></header><main>
+<h1>scveos_mod.f</h1>
+<p class='muted'>41 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/scveos_mod.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>scveos_mod.py</code>, 25 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>SCVEOS_MOD</code> holds the tables of the SCV equation of state ("MHP 5/97"): those of pure hydrogen, pure helium and the metals as read, the table built from them for the envelope's mixture, and the search indices of the last interpolation. Shared by 4 routines. It replaces <code>COMMON/SCVEOS/</code> (MHP via Claude, 10/14/26), less its switch <code>LSCV</code>, now in <a href="../yrec-map/nmlpar_mod.f.html"><code>NMLPAR_MOD</code></a>, and with <code>IDT</code> renamed <code>IDTSCV</code> (10/9/26), since PARMIN and STARIN had an unrelated <code>IDT</code> of <code>COMMON/OPTAB/</code> and called this one <code>IDTT</code>. The dimensions <code>NTS</code> = 63 (temperatures) and <code>NPS</code> = 76 (pressures per temperature) are <code>PRIVATE</code>, because the importing files declare their own.</p>
+<p><strong>What its variables hold, who sets them, who reads them.</strong></p>
+<ul>
+<li><code>TLOGX(NTS)</code>, <code>NPTSX(NTS)</code>: the tables' $\log T$ values and the number of pressure points at each; read by <a href="../yrec-map/setups.f.html#def-SETUPS"><code>SETUPS</code></a> from the hydrogen table.</li>
+<li><code>TABLEX(NTS,NPS,12)</code>, <code>TABLEY(NTS,NPS,12)</code>: the hydrogen and helium tables (11 columns as read by <code>SETUPS</code>, the first $\log P$); <a href="../yrec-map/setscv.f.html#def-SETSCV"><code>SETSCV</code></a> adds column 12, $\mathrm{d}U/\mathrm{d}T$. <code>TABLEZ(NTS,NPS,13)</code>: the metals' table, read by <code>SETUPS</code>.</li>
+<li><code>SMIX(NTS,NPS)</code>: the entropy of mixing of hydrogen and helium, computed by <code>SETSCV</code>; read by <code>SETSCV</code> and <a href="../yrec-map/eqscvg.f.html#def-EQSCVG"><code>EQSCVG</code></a>.</li>
+<li><code>TABLENV(NTS,NPS,12)</code>: the table for the envelope's mixture ($\log P$, $\log\rho$, the derivatives, $c_P$, $\mathrm{d}U/\mathrm{d}T$, …), built by <code>SETSCV</code>; read by <code>SETSCV</code>, <a href="../yrec-map/eqscve.f.html#def-EQSCVE"><code>EQSCVE</code></a> and <code>EQSCVG</code>.</li>
+<li><code>IDTSCV</code>, <code>IDP</code>: the first indices of the four-point stencil in temperature and in pressure, kept between calls as the starting point of the next search; set and read by <code>EQSCVE</code>, <code>EQSCVG</code> and <code>SETSCV</code>.</li>
+</ul>
+<p><strong>Design.</strong> A blanket <code>USE SCVEOS_MOD</code> in each routine. <code>EQSCVE</code> and <code>EQSCVG</code> share <code>IDTSCV</code> and <code>IDP</code>, so a call of one starts its search where the other left off.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> New file: <code>COMMON/SCVEOS/</code> as a module, with <code>LSCV</code> moved to <code>NMLPAR_MOD</code> and <code>IDT</code> renamed <code>IDTSCV</code>.</p></div>
+<h2>Questions for the experts</h2>
+<p class='placeholder'>None yet.</p>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+SCVEOS_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/14/26 MHP via Claude
+code changed to convert COMMON/SCVEOS/ into this module.
+
+Imported with a blanket USE, the convention for the conversion.
+All 4 files declared this block identically, so the USE
+imports exactly the names the declaration already made global in
+each scoping unit and cannot change meaning.
+
+The types restate what the implicit rules supplied: L is
+LOGICAL*4, I/J/K/M/N are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while ifort
+Classic predates it.  That matches COMMON&#x27;s semantics.
+
+The dimension parameters are PRIVATE: the importing files
+declare their own PARAMETER statements for these, and an
+exported copy would collide with them.</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-SCVEOS_MOD'>SCVEOS_MOD</a> <span class='muted'>module · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-SCVEOS_MOD'><h3><span class='kind'>module</span>SCVEOS_MOD</h3>
+<p class='muted'>lines 23–41 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/scveos_mod.f#L23-L41'>GitHub</a></p>
+<pre>MODULE SCVEOS_MOD</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+SCVEOS_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/14/26 MHP via Claude
+code changed to convert COMMON/SCVEOS/ into this module.
+
+Imported with a blanket USE, the convention for the conversion.
+All 4 files declared this block identically, so the USE
+imports exactly the names the declaration already made global in
+each scoping unit and cannot change meaning.
+
+The types restate what the implicit rules supplied: L is
+LOGICAL*4, I/J/K/M/N are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while ifort
+Classic predates it.  That matches COMMON&#x27;s semantics.
+
+The dimension parameters are PRIVATE: the importing files
+declare their own PARAMETER statements for these, and an
+exported copy would collide with them.</pre></details>
+<details><summary>Used by (4 units)</summary><p><a href='../yrec-map/eqscve.f.html#def-EQSCVE'>EQSCVE</a>, <a href='../yrec-map/eqscvg.f.html#def-EQSCVG'>EQSCVG</a>, <a href='../yrec-map/setscv.f.html#def-SETSCV'>SETSCV</a>, <a href='../yrec-map/setups.f.html#def-SETUPS'>SETUPS</a></p></details>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">23</span>      MODULE SCVEOS_MOD
+<span class="ln">24</span>
+<span class="ln">25</span>      IMPLICIT NONE
+<span class="ln">26</span>      SAVE
+<span class="ln">27</span>
+<span class="ln">28</span>      INTEGER*4, PARAMETER, PRIVATE :: NPS = 76
+<span class="ln">29</span>      INTEGER*4, PARAMETER, PRIVATE :: NTS = 63
+<span class="ln">30</span>
+<span class="ln">31</span>      REAL*8    :: TLOGX(NTS)
+<span class="ln">32</span>      REAL*8    :: TABLEX(NTS,NPS,12)
+<span class="ln">33</span>      REAL*8    :: TABLEY(NTS,NPS,12)
+<span class="ln">34</span>      REAL*8    :: SMIX(NTS,NPS)
+<span class="ln">35</span>      REAL*8    :: TABLEZ(NTS,NPS,13)
+<span class="ln">36</span>      REAL*8    :: TABLENV(NTS,NPS,12)
+<span class="ln">37</span>      INTEGER*4 :: NPTSX(NTS)
+<span class="ln">38</span>      INTEGER*4 :: IDTSCV
+<span class="ln">39</span>      INTEGER*4 :: IDP
+<span class="ln">40</span>
+<span class="ln">41</span>      END MODULE SCVEOS_MOD</pre></details>
+<details class='py' id='py-_module_level_'><summary>Python version: scveos_mod.py</summary><pre class='src'><span class="ln">1</span>&quot;&quot;&quot;Python version of scveos_mod.f (YREC 09c3b9b): the tables of the SCV equation of state, formerly COMMON/SCVEOS/.
+<span class="ln">2</span>
+<span class="ln">3</span>Translates: scveos_mod.f#SCVEOS_MOD (09c3b9b)
+<span class="ln">4</span>
+<span class="ln">5</span>Module-level names, as in the Fortran module, in lower case. Routines that
+<span class="ln">6</span>USE SCVEOS_MOD import this module and write ``scveos_mod.&lt;name&gt;``.
+<span class="ln">7</span>(LSCV, formerly in the block, is in nmlpar_mod.) Index 0 unused in every
+<span class="ln">8</span>dimension.
+<span class="ln">9</span>&quot;&quot;&quot;
+<span class="ln">10</span>
+<span class="ln">11</span>import numpy as np
+<span class="ln">12</span>
+<span class="ln">13</span># Table dimensions (PRIVATE in the Fortran).
+<span class="ln">14</span>_NPS = 76      # pressures per temperature
+<span class="ln">15</span>_NTS = 63      # temperatures
+<span class="ln">16</span>
+<span class="ln">17</span>tlogx = np.zeros(_NTS + 1)                      # log T of the tables (setups)
+<span class="ln">18</span>tablex = np.zeros((_NTS + 1, _NPS + 1, 13))     # hydrogen (setups; column 12 setscv)
+<span class="ln">19</span>tabley = np.zeros((_NTS + 1, _NPS + 1, 13))     # helium
+<span class="ln">20</span>smix = np.zeros((_NTS + 1, _NPS + 1))           # entropy of mixing (setscv)
+<span class="ln">21</span>tablez = np.zeros((_NTS + 1, _NPS + 1, 14))     # metals (setups)
+<span class="ln">22</span>tablenv = np.zeros((_NTS + 1, _NPS + 1, 13))    # envelope mixture (setscv)
+<span class="ln">23</span>nptsx = np.zeros(_NTS + 1, dtype=np.int32)      # pressure points at each T
+<span class="ln">24</span>idtscv = 0     # stencil start in T, kept between calls (formerly IDT)
+<span class="ln">25</span>idp = 0        # stencil start in P</pre></details>
+</section>
+</main></body></html>

@@ -1,0 +1,250 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>setscal.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ setscal.f</span></header><main>
+<h1>setscal.f</h1>
+<p class='muted'>143 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/setscal.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>setscal.py</code>, 66 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Prepares the list of runs for the automatic calibration of a star to a given luminosity and effective temperature (or radius): 50 runs, 25 repetitions of a two-run pattern. The adjustment between repetitions is done in <a href="../yrec-map/chkscal.f.html#def-CHKSCAL"><code>CHKSCAL</code></a>. It is the analogue, for any star, of <a href="../yrec-map/setcal.f.html#def-SETCAL"><code>SETCAL</code></a> for the Sun.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> the main program (<a href="../yrec-map/main.f.html"><code>main.f</code></a>), when <code>LCALST</code> is true, before the loop over runs.</li>
+<li><strong>Arguments:</strong> the state of the search, which the main program keeps and passes on to <code>CHKSCAL</code>: <code>ALRI</code> ($\log R/R_\odot$ of the previous model, set to 0) and the flags <code>LSTAR</code>, <code>LPASSR</code> (set to false); the comments in the routine define each.</li>
+<li><strong>Through modules:</strong> <code>NMLPAR_MOD</code>, the target (<code>XLS</code> the luminosity in solar units, <code>XLSTOL</code> its tolerance, <code>LTEFF</code>, <code>STEFF</code>, <code>SR</code>) and the run list's arrays, and <code>RUNLOOP_MOD</code>, as in <code>SETCAL</code>; <code>CONSTANTS_MOD</code>; <code>IOUNITS_MOD</code> (<code>ITRACK</code>).</li>
+<li><strong>Outputs:</strong> the run list; the target's radius or temperature; a line "Evolve to R<em>, L</em> =" on the terminal and in the track file (<code>ITRACK</code>).</li>
+</ul>
+<p><strong>The method.</strong> From $L = 4\pi R^2\sigma T_\mathrm{eff}^4$, the missing one of $R$ and $T_\mathrm{eff}$ is computed:</p>
+<p>$$\frac{R}{R_\odot} = \frac{\sqrt{L/(4\pi\sigma)}}{T_\mathrm{eff}^2\,R_\odot}\quad(\texttt{LTEFF}\ \text{true}),\qquad T_\mathrm{eff} = \left(\frac{L}{4\pi\sigma R^2}\right)^{1/4}\quad(\text{otherwise}),$$</p>
+<p>with $L$ = <code>XLS</code>·<code>CLSUN</code> (erg s$^{-1}$), $\sigma$ = <code>CSIG</code>, $R_\odot$ = <code>CRSUN</code> (cm). Then <code>NUMRUN</code> = 50: runs 3, 5, …, 49 repeat run 1 (a new starting model), and runs 4, 6, …, 50 repeat run 2 (evolution from the previous model).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> <code>ALRI</code>, <code>LSTAR</code> and <code>LPASSR</code> are arguments (formerly in <code>/CALSTAR/</code>); declarations only otherwise: COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The new stop criteria are not copied.</strong> As in <code>SETCAL</code>, <code>END_DCEN</code>, <code>END_XCEN</code> and <code>END_YCEN</code> are not copied to the repeated runs.</li>
+<li><strong>Stale comment.</strong> The comment speaks of "THE NEXT SERIES OF 24 CALIBRATING RUNS"; it is 48 runs after the first two.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+SETSCAL
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-SETSCAL'>SETSCAL</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-SETSCAL'><h3><span class='kind'>subroutine</span>SETSCAL</h3>
+<p class='muted'>lines 7–143 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/setscal.f#L7-L143'>GitHub</a></p>
+<pre>SUBROUTINE SETSCAL(ALRI,LSTAR,LPASSR)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+SETSCAL
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/runloop_mod.f.html#def-RUNLOOP_MOD'>RUNLOOP_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">7</span>      SUBROUTINE SETSCAL(ALRI,LSTAR,LPASSR)
+<span class="ln">8</span>C 10/14/26 MHP via Claude
+<span class="ln">9</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">10</span>      USE NMLPAR_MOD
+<span class="ln">11</span>C 10/14/26 MHP via Claude
+<span class="ln">12</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">13</span>      USE CONSTANTS_MOD
+<span class="ln">14</span>C 10/14/26 MHP via Claude
+<span class="ln">15</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">16</span>      USE IOUNITS_MOD
+<span class="ln">17</span>C 10/14/26 MHP via Claude
+<span class="ln">18</span>C code changed to convert COMMON/RUNLOOP/ into RUNLOOP_MOD.  A blanket
+<span class="ln">19</span>C USE imports exactly the names the COMMON declaration made global here,
+<span class="ln">20</span>C so it cannot change meaning.  See runloop_mod.f for the block history
+<span class="ln">21</span>C and for why the module declares the types the implicit rules supplied.
+<span class="ln">22</span>      USE RUNLOOP_MOD
+<span class="ln">23</span>C 10/20/26 MHP via Claude
+<span class="ln">24</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">25</span>C explicit declarations.
+<span class="ln">26</span>      IMPLICIT NONE
+<span class="ln">27</span>      REAL*8 ALRI
+<span class="ln">28</span>      INTEGER I,J
+<span class="ln">29</span>      LOGICAL*4 LPASSR,LSTAR
+<span class="ln">30</span>C 10/13/26 MHP via Claude
+<span class="ln">31</span>C code changed to replace COMMON/CALSTAR/ with explicit arguments.
+<span class="ln">32</span>C setscal.f initializes ALRI, LSTAR and LPASSR, chkscal.f reads and
+<span class="ln">33</span>C updates ALRI and sets the two flags, and main.f reads the flags; main.f
+<span class="ln">34</span>C calls both routines, so it now owns all three.  ALRI is read as well as
+<span class="ln">35</span>C written inside chkscal.f and is carried across calls there, which
+<span class="ln">36</span>C main.f&#x27;s blanket SAVE preserves exactly as the block did.
+<span class="ln">37</span>C MHP 8/25 Removed unused variables
+<span class="ln">38</span>C      CHARACTER*256 FLAOL2, FOPAL2
+<span class="ln">39</span>C 10/12/26 MHP via Claude
+<span class="ln">40</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">41</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">42</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">43</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">44</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">45</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">46</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">47</span>C
+<span class="ln">48</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">49</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">50</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">51</span>C 9/25/26 MHP via Claude
+<span class="ln">52</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">53</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">54</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">55</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">56</span>C COMMON/IOUNITS/
+<span class="ln">57</span>C MHP 10/24 ADDED STOP CRITERIA FOR CENTRAL H,D,AND HE4
+<span class="ln">58</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">59</span>C 9/24/26 MHP via Claude
+<span class="ln">60</span>C code changed to remove dead IOOPAL2 from COMMON/ZRAMP/
+<span class="ln">61</span>C 10/9/26 MHP via Claude
+<span class="ln">62</span>C code changed to remove NK from COMMON/ZRAMP/: it was only ever a
+<span class="ln">63</span>C redundant copy of the run-index loop variable main.f already passes
+<span class="ln">64</span>C explicitly to the subroutines that need it (STARIN/RSCALE), and was
+<span class="ln">65</span>C never read by name in this file (the &quot;NK-1&quot; in the comment below is
+<span class="ln">66</span>C just documentation, not live code).
+<span class="ln">67</span>C 10/13/26 MHP via Claude
+<span class="ln">68</span>C code changed to remove COMMON/ZRAMP/: its sole remaining member
+<span class="ln">69</span>C IOLAOL2 is neither written nor read anywhere.  The namelist members
+<span class="ln">70</span>C that shared this block moved to the consolidated block in stage 2b.
+<span class="ln">71</span>C 9/25/26 MHP via Claude
+<span class="ln">72</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">73</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">74</span>C 10/12/26 MHP via Claude
+<span class="ln">75</span>C code changed to drop BLI, AGER, BLR, BLRP and AGEI from
+<span class="ln">76</span>C COMMON/CALSTAR/; they are written and read only in chkscal.f and are
+<span class="ln">77</span>C now locals there.  This file never referenced them.
+<span class="ln">78</span>      SAVE
+<span class="ln">79</span>C     LSTAR     T - have got a star at Teff and L
+<span class="ln">80</span>C     LPASSR    T - on run have just passed Teff
+<span class="ln">81</span>C     XLS       Luminosity (L/Lsun) wanted by adjusting Y
+<span class="ln">82</span>C     XLSTOL    tolerance wanted for luminosity
+<span class="ln">83</span>C     LTEFF     T - specify Teff for star
+<span class="ln">84</span>C               F - specify R/Rsun for star
+<span class="ln">85</span>C     STEFF     Effective temperature of star (K) or...
+<span class="ln">86</span>C     SR        Radius of star (R/Rsun)
+<span class="ln">87</span>C     TEFF      Teff of current model
+<span class="ln">88</span>C     ALR       log(R/Rsun) of current model
+<span class="ln">89</span>C     ALRI      log(R/Rsun) of previous model
+<span class="ln">90</span>C     DAGE      age of current model (Gyr)
+<span class="ln">91</span>C     AGEI      age of previous model (Gyr)
+<span class="ln">92</span>C     AGER      age of model at R*
+<span class="ln">93</span>C     BL        luminosity of current model
+<span class="ln">94</span>C     BLI       luminosity of previous model
+<span class="ln">95</span>C     BLR       luminosity of model at R
+<span class="ln">96</span>C     BLRP      luminosity of model at R* of previous run
+<span class="ln">97</span>C     XP        X of previous run = RESCAL(2, NK-1)
+<span class="ln">98</span>C mhp 10/02 linct not used, commented out
+<span class="ln">99</span>C      LINCT = .TRUE.
+<span class="ln">100</span>      LSTAR = .FALSE.
+<span class="ln">101</span>      LPASSR = .FALSE.
+<span class="ln">102</span>      IF (LTEFF) THEN
+<span class="ln">103</span>         SR = SQRT(XLS*CLSUN/(C4PI*CSIG))/(STEFF*STEFF*CRSUN)
+<span class="ln">104</span>      ELSE
+<span class="ln">105</span>         STEFF = ((XLS*CLSUN)/(C4PI*CSIG*SR*SR*CRSUN*CRSUN))**0.25D0
+<span class="ln">106</span>      END IF
+<span class="ln">107</span>      ALRI = 0
+<span class="ln">108</span>C     SET UP RUN TO EVOLVE TO L, Teff IN HR-DIAGRM.
+<span class="ln">109</span>C     THIS CONSISTS OF SETTING THE NUMBER OF RUNS TO THE MAXIMUM (50),
+<span class="ln">110</span>C     AND COPYING THE RELEVANT PARAMETERS FROM THE FIRST TWO RUNS TO
+<span class="ln">111</span>C     THE NEXT SERIES OF 24 CALIBRATING RUNS.
+<span class="ln">112</span>      NUMRUN = 50
+<span class="ln">113</span>      DO I = 2,50
+<span class="ln">114</span>         XENV0A(I) = XENV0A(1)
+<span class="ln">115</span>         ZENV0A(I) = ZENV0A(1)
+<span class="ln">116</span>         CMIXLA(I) = CMIXLA(1)
+<span class="ln">117</span>         LSENV0A(I) = LSENV0A(1)
+<span class="ln">118</span>         SENV0A(I) = SENV0A(1)
+<span class="ln">119</span>      END DO
+<span class="ln">120</span>      DO I = 3,49,2
+<span class="ln">121</span>         IRESCA(I) = IRESCA(1)
+<span class="ln">122</span>         LFIRST(I) = .TRUE.
+<span class="ln">123</span>         NMODLS(I) = NMODLS(1)
+<span class="ln">124</span>         RSCLZC(I) = RSCLZC(1)
+<span class="ln">125</span>         RSCLZM1(I) = RSCLZM1(1)
+<span class="ln">126</span>         RSCLZM2(I) = RSCLZM2(1)
+<span class="ln">127</span>         DO J = 1,4
+<span class="ln">128</span>            RESCAL(J,I) = RESCAL(J,1)
+<span class="ln">129</span>         END DO
+<span class="ln">130</span>      END DO
+<span class="ln">131</span>      DO I = 4,50,2
+<span class="ln">132</span>         IRESCA(I) = 1
+<span class="ln">133</span>         LFIRST(I) = .FALSE.
+<span class="ln">134</span>         NMODLS(I) = NMODLS(2)
+<span class="ln">135</span>         ENDAGE(I) = ENDAGE(2)
+<span class="ln">136</span>         LENDAG(I) = LENDAG(2)
+<span class="ln">137</span>         SETDT(I) = SETDT(2)
+<span class="ln">138</span>         LSETDT(I) = LSETDT(2)
+<span class="ln">139</span>      END DO
+<span class="ln">140</span>      WRITE(*,*) &#x27; Evolve to R*, L* = &#x27;, SR, XLS
+<span class="ln">141</span>      WRITE(ITRACK,*) &#x27;#Evolve to R*, L* = &#x27;, SR, XLS
+<span class="ln">142</span>      RETURN
+<span class="ln">143</span>      END</pre></details>
+<details class='py' id='py-setscal'><summary>Python version: setscal</summary><pre class='doc'>Compute the target&#x27;s missing radius or Teff from L = 4 pi R^2
+sigma Teff^4, reset the search&#x27;s state, and fill the run list: 25
+repetitions of runs 1 (a new starting model) and 2 (evolution).
+
+Translates: setscal.f#SETSCAL (09c3b9b)
+
+Arguments: alri, log R/Rsun of the previous model; lstar, lpassr, the
+search&#x27;s flags (all only set).
+
+Returns (alri, lstar, lpassr) = (0, False, False).</pre><pre class='src'><span class="ln">12</span>def setscal(alri, lstar, lpassr):
+<span class="ln">13</span>    &quot;&quot;&quot;Compute the target&#x27;s missing radius or Teff from L = 4 pi R^2
+<span class="ln">14</span>    sigma Teff^4, reset the search&#x27;s state, and fill the run list: 25
+<span class="ln">15</span>    repetitions of runs 1 (a new starting model) and 2 (evolution).
+<span class="ln">16</span>
+<span class="ln">17</span>    Translates: setscal.f#SETSCAL (09c3b9b)
+<span class="ln">18</span>
+<span class="ln">19</span>    Arguments: alri, log R/Rsun of the previous model; lstar, lpassr, the
+<span class="ln">20</span>    search&#x27;s flags (all only set).
+<span class="ln">21</span>
+<span class="ln">22</span>    Returns (alri, lstar, lpassr) = (0, False, False).
+<span class="ln">23</span>    &quot;&quot;&quot;
+<span class="ln">24</span>    c = constants_mod
+<span class="ln">25</span>    n = nmlpar_mod
+<span class="ln">26</span>    r = runloop_mod
+<span class="ln">27</span>    lstar = False
+<span class="ln">28</span>    lpassr = False
+<span class="ln">29</span>    if n.lteff:
+<span class="ln">30</span>        n.sr = math.sqrt(n.xls * c.clsun / (c.c4pi * c.csig)) / (
+<span class="ln">31</span>            n.steff * n.steff * c.crsun)
+<span class="ln">32</span>    else:
+<span class="ln">33</span>        n.steff = ((n.xls * c.clsun)
+<span class="ln">34</span>                   / (c.c4pi * c.csig * n.sr * n.sr * c.crsun * c.crsun)
+<span class="ln">35</span>                   )**0.25
+<span class="ln">36</span>    alri = 0.0
+<span class="ln">37</span>    # Question (see the page): the comment says 24 runs.
+<span class="ln">38</span>    n.numrun = 50
+<span class="ln">39</span>    for i in range(2, 51):
+<span class="ln">40</span>        n.xenv0a[i] = n.xenv0a[1]
+<span class="ln">41</span>        n.zenv0a[i] = n.zenv0a[1]
+<span class="ln">42</span>        n.cmixla[i] = n.cmixla[1]
+<span class="ln">43</span>        n.lsenv0a[i] = n.lsenv0a[1]
+<span class="ln">44</span>        n.senv0a[i] = n.senv0a[1]
+<span class="ln">45</span>    for i in range(3, 50, 2):
+<span class="ln">46</span>        r.iresca[i] = r.iresca[1]
+<span class="ln">47</span>        n.lfirst[i] = True
+<span class="ln">48</span>        n.nmodls[i] = n.nmodls[1]
+<span class="ln">49</span>        n.rsclzc[i] = n.rsclzc[1]
+<span class="ln">50</span>        n.rsclzm1[i] = n.rsclzm1[1]
+<span class="ln">51</span>        n.rsclzm2[i] = n.rsclzm2[1]
+<span class="ln">52</span>        for j in range(1, 5):
+<span class="ln">53</span>            r.rescal[j, i] = r.rescal[j, 1]
+<span class="ln">54</span>    # Question (see the page): END_DCEN, END_XCEN, END_YCEN not copied.
+<span class="ln">55</span>    for i in range(4, 51, 2):
+<span class="ln">56</span>        r.iresca[i] = 1
+<span class="ln">57</span>        n.lfirst[i] = False
+<span class="ln">58</span>        n.nmodls[i] = n.nmodls[2]
+<span class="ln">59</span>        n.endage[i] = n.endage[2]
+<span class="ln">60</span>        r.lendag[i] = r.lendag[2]
+<span class="ln">61</span>        n.setdt[i] = n.setdt[2]
+<span class="ln">62</span>        r.lsetdt[i] = r.lsetdt[2]
+<span class="ln">63</span>    print(&quot; Evolve to R*, L* = &quot;, n.sr, n.xls)
+<span class="ln">64</span>    iounits_mod.write(iounits_mod.itrack,
+<span class="ln">65</span>                      f&quot; #Evolve to R*, L* = {n.sr} {n.xls}&quot;)
+<span class="ln">66</span>    return alri, lstar, lpassr</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ul>
+<li><strong>Not a real question.</strong> Question 3 (<code>ALRI = 0</code>, an integer literal for a REAL*8, "harmless") asks nothing. Fix: cut it.</li>
+</ul>
+<p>Revised: question 3 cut.</p></div></details>
+</main></body></html>

@@ -1,0 +1,1755 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>starin.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ starin.f</span></header><main>
+<h1>starin.f</h1>
+<p class='muted'>1015 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/starin.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>starin.py</code>, 671 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>STARIN</code> provides the starting model of each run of a job: it reads the initial stellar model from a file, or keeps the one in memory, then prepares it for evolution. Along the way it can change the model's composition, extend the model toward the centre, rescale it, move the envelope's fitting point, and it computes the shell masses, the rotation quantities, the surface composition and the first convection-zone quantities.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the model file on the unit <code>IFIRST</code> (<a href="../yrec-map/iounits_mod.f.html"><code>IOUNITS_MOD</code></a>), opened by the set-up routines; its first four characters say its format, <code>NMOD</code> (YREC7) or <code>MOD2</code> (MODEL2). The run's mixing length <code>CMIXL</code> is an argument, and <code>COMPMIX</code> (the initial model's composition code, set by the readers) is passed through to them. The run's settings come through modules filled by <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a> and <a href="../yrec-map/setups.f.html#def-SETUPS">SETUPS</a>: <a href="../yrec-map/nmlpar_mod.f.html"><code>NMLPAR_MOD</code></a> (the namelist: <code>LFIRST</code>, <code>LCORE</code>, <code>MCORE</code>, <code>FCORE</code>, the mixture controls, <code>LROT</code>, <code>LWNEW</code>, <code>WNEW</code>, <code>HPTTOL</code>, the spot parameters, <code>VNEW</code>, <code>LSCV</code>, <code>LDH</code> and others), <a href="../yrec-map/runloop_mod.f.html"><code>RUNLOOP_MOD</code></a> (<code>IRESCA</code>, per run <code>NK</code>), <a href="../yrec-map/cenv_mod.f.html"><code>CENV_MOD</code></a> (<code>LSENV0</code>, <code>SENV0</code>), <a href="../yrec-map/newopac_mod.f.html"><code>NEWOPAC_MOD</code></a> (<code>LLAOL</code>).</li>
+<li><strong>Who calls it:</strong> the main program, <a href="../yrec-map/main.f.html#def-_file_level_">main.f</a>, at the start of each run (two calls).</li>
+<li><strong>What it calls:</strong> the readers <a href="../yrec-map/getyrec7.f.html#def-GETYREC7">GETYREC7</a> and <a href="../yrec-map/getmodel2.f.html#def-GETMODEL2">GETMODEL2</a>; <a href="../yrec-map/rscale.f.html#def-RSCALE">RSCALE</a> (rescaling); for a new envelope base, the physics <a href="../yrec-map/eqstat.f.html#def-EQSTAT">EQSTAT</a>, <a href="../yrec-map/getopac.f.html#def-GETOPAC">GETOPAC</a>, <a href="../yrec-map/tpgrad.f.html#def-TPGRAD">TPGRAD</a> and the envelope integration <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a>; for rotation, <a href="../yrec-map/fpft.f.html#def-FPFT">FPFT</a> and <a href="../yrec-map/momi.f.html#def-MOMI">MOMI</a>; then <a href="../yrec-map/surfopac.f.html#def-SURFOPAC">SURFOPAC</a>, <a href="../yrec-map/setscv.f.html#def-SETSCV">SETSCV</a>, <a href="../yrec-map/physic.f.html#def-PHYSIC">PHYSIC</a>, <a href="../yrec-map/ovrot.f.html#def-OVROT">OVROT</a> and <a href="../yrec-map/gettau.f.html#def-GETTAU">GETTAU</a>.</li>
+<li><strong>Outputs:</strong> the model in the arguments (<code>HS</code>, <code>HR</code>, <code>HL</code>, <code>HP</code>, <code>HT</code>, <code>HD</code>, <code>HCOMP</code>, <code>LC</code>, <code>OMEGA</code>, <code>M</code> and the rest), and many modules: the surface composition in <a href="../yrec-map/comp_mod.f.html"><code>COMP_MOD</code></a> and <a href="../yrec-map/comp2_mod.f.html"><code>COMP2_MOD</code></a> (<code>XENV</code>, <code>ZENV</code>, <code>ZENVM</code>, <code>AMUENV</code>, <code>FXENV</code>, <code>YENV</code>, <code>Y3ENV</code>), read by the equation of state and opacity routines; the previous model in <a href="../yrec-map/oldmod_mod.f.html"><code>OLDMOD_MOD</code></a> (<code>HPO</code>, <code>HTO</code>, <code>HRO</code>, <code>HLO</code>, <code>TEFFLO</code>, <code>MO</code>), read by <a href="../yrec-map/htimer.f.html#def-HTIMER">HTIMER</a> and others to limit the time step; <a href="../yrec-map/oldrot_mod.f.html"><code>OLDROT_MOD</code></a> (<code>WOLD</code>); and <a href="../yrec-map/ovrtrn_mod.f.html"><code>OVRTRN_MOD</code></a> (<code>TAUCZ0</code>, <code>PPHOT0</code>, <code>FRACSTEP</code>).</li>
+<li><strong>Modules:</strong> 16 of them; besides those above, <a href="../yrec-map/constants_mod.f.html"><code>CONSTANTS_MOD</code></a>, <a href="../yrec-map/debhu_mod.f.html"><code>DEBHU_MOD</code></a> (the Debye–Hückel composition), <a href="../yrec-map/dpmix_mod.f.html"><code>DPMIX_MOD</code></a> (<code>IOVIM</code>), <a href="../yrec-map/nmlbypass_mod.f.html"><code>NMLBYPASS_MOD</code></a>, <code>JSON</code> from <a href="../yrec-map/dimensions_mod.f.html"><code>DIMENSIONS_MOD</code></a>, and the envelope's <a href="../yrec-map/envstruct_mod.f.html"><code>ENVSTRUCT_MOD</code></a> (filled by <code>ENVINT</code>, shared with <a href="../yrec-map/stitch.f.html#def-STITCH">STITCH</a>, <a href="../yrec-map/gettau.f.html#def-GETTAU">GETTAU</a>, <a href="../yrec-map/tauint.f.html#def-TAUINT">TAUINT</a> and others).</li>
+</ul>
+<p><strong>The method, in order.</strong></p>
+<ol>
+<li><strong>Stop on failure.</strong> If <code>LARGE</code> is set (the previous model failed to converge), the run stops.</li>
+<li><strong>Read or keep.</strong> If <code>LFIRST(NK)</code> is false, the model in memory is kept (rescaled with <code>RSCALE</code> when <code>IRESCA(NK)</code> ≠ 1), and the reading is skipped. Otherwise the format keyword decides the reader. After reading: $\Delta t$ in seconds, <code>DELTS = CSECYR*DDAGE</code> (the step <code>DDAGE</code> is in years); for an evolved model (<code>MODEL &gt; 0</code>), a warning if the model's mixing length differs from the run's by $2\times10^{-3}$ or more, or its "extended composition" switch differs (the run is no longer stopped, since 1/92). The envelope is always recomputed (<code>LNEW = .TRUE.</code>). If <code>LWNEW</code>, the model is set to solid-body rotation at <code>WNEW</code>; without rotation, the distortion factors <code>FP</code>, <code>FT</code> are 1.</li>
+<li><strong>Change the mixture</strong> (MHP 10/24), only for a model read from file, and only if it is chemically homogeneous (every species within $10^{-6}$ of its central value). With <code>LMIXTURE</code>, the C, N and O isotopes are scaled so that each element's share of $Z$ (<code>HCOMP(3,·)</code>) becomes <code>FRAC_C</code>, <code>FRAC_N</code>, <code>FRAC_O</code>:
+   $$X_i \to X_i\,\frac{f_\mathrm{C}}{(X_{^{12}\mathrm{C}} + X_{^{13}\mathrm{C}})/Z}\quad (i = {}^{12}\mathrm{C}, {}^{13}\mathrm{C}),$$
+   and likewise for N (indices 7–8) and O (9–11). With <code>LISOTOPE</code>, the ratios $^{12}$C/$^{13}$C = <code>R12_13</code> and $^{16}$O/$^{18}$O = <code>R16_18</code> are imposed at fixed sums, and $^3$He, $^2$H, $^6$Li, $^7$Li and $^9$Be are set to their <code>…_INI</code> values. (The order of <code>HCOMP</code>'s 15 species, from the printed labels: X, Y, Z, $^3$He, $^{12}$C, $^{13}$C, $^{14}$N, $^{15}$N, $^{16}$O, $^{17}$O, $^{18}$O, $^2$H, $^6$Li, $^7$Li, $^9$Be.)</li>
+<li><strong>Extend the core</strong> (<code>LCORE</code>, for a model read from file; MHP 9/98, 9/14). <code>MCORE</code> points are added inside the innermost shell, spaced by <code>HPTTOL(2)</code> in $\log m$, with <code>MCORE = INT(DLOG10(FCORE)/HPTTOL(2))+1</code>; <code>FCORE</code> (a namelist variable) is then overwritten with <code>MCORE*HPTTOL(2)</code>, a log offset rather than the factor it was. Inward, at constant density $\rho_c$ (<code>HD(1)</code>), constant energy generation and constant $\nabla$:
+   $$\log r = \tfrac13\left(\log m - \log\tfrac{4\pi}{3} - \log\rho_c\right),\qquad L = L_1\,\frac{m}{m_1},$$
+   $$\frac{d\ln P}{d\ln m} = -\frac{G m^2}{4\pi r^4 P},\qquad \Delta\log T = \nabla\,\Delta\log P,$$
+   with the pressure step taken at the midpoint (two evaluations), and the density from $\log\rho = \log P - \log T - $ const (<code>FACD</code>, fixed at the first old point; MHP 4/12 replaced a "broken" EOS call).</li>
+<li><strong>Rescale</strong> with <code>RSCALE</code> if <code>IRESCA(NK)</code> ≠ 1.</li>
+<li><strong>Move the envelope's fitting point</strong> (<code>LSENV0</code>), to <code>SENV0</code>, the log of the fitting point's mass fraction, $\log_{10}(m_\mathrm{fit}/M_\star)$ (as <code>SENV = HS(M) - HSTOT</code>): a small negative number, at most $-10^{-12}$ ("τ = 2/3"), which puts the fitting point a fraction $\approx 2\times10^{-12}$ of the mass below the surface. For a deeper point, shells beyond it are dropped and the new last shell is interpolated linearly in $\log m$; if it lies between a convective and a radiative shell, the physics routines (<code>EQSTAT</code>, <code>GETOPAC</code>, <code>TPGRAD</code>) decide whether it is convective. For a shallower point, an envelope is integrated with <code>ENVINT</code> from the surface (at the model's $L$ and $T_\mathrm{eff}$, or the spotted star's ambient temperature, below), shifted to match the last interior point, and its points down to the new fitting mass become interior shells (constant $L$). With rotation the new shells rotate at the old surface rate, with $j = \tfrac23\,\Omega r^2$.</li>
+<li><strong>Shell masses.</strong> With $m_i = 10^{\texttt{HS}(i)}$ (<code>HS1</code>), each shell's mass <code>HS2</code> is
+   $$\Delta m_i = \tfrac12\,(m_{i+1} - m_{i-1}),\quad \Delta m_1 = \tfrac12\,(m_2 + m_1),\quad \Delta m_M = M_\star - \tfrac12\,(m_{M-1} + m_M).$$</li>
+<li><strong>Rotation.</strong> <code>FPFT</code> and <code>MOMI</code> give the distortion and moments of inertia $I_i$; then $J_i = \Omega_i I_i$, $j_i = J_i/\Delta m_i$ (<code>HJM</code>), $K_i = \tfrac12 \Omega_i J_i$ (<code>HKEROT</code>), and the totals <code>SJTOT</code>, <code>SKEROT</code>, printed beside the previous ones.</li>
+<li><strong>Surface composition</strong> (first run only, <code>NK = 1</code>): from the relative mass fractions <code>V</code> of 12 elements (<code>VNEW</code> from the parameters unless the old <code>LLAOL</code> opacities are used), with H and He set from $X$ and $Y$, the number fractions $f_k = (V_k/A_k)/\sum_l (V_l/A_l)$ (<code>FXENV</code>, atomic weights <code>ATOMWT</code>), and $Z$ without C, N and O (<code>ZENVM</code>). With the mass fractions $X_k$ of all 12 elements, H and He included,
+   $$\texttt{AMUENV} = \sum_{k=1}^{12} \frac{X_k}{A_k},$$
+   the inverse mean atomic weight per ion (as <a href="../yrec-map/checkc.f.html#def-CHECKC">CHECKC</a>'s comment says). Then the surface opacity tables (<code>SURFOPAC</code>) and, with <code>LSCV</code>, the SCV equation of state (<code>SETSCV</code>).</li>
+<li><strong>Save the old model</strong> in <code>OLDMOD_MOD</code>/<code>OLDROT_MOD</code>, then compute the physics of all shells (<code>PHYSIC</code>), the convection and overshoot zones (<code>OVROT</code>) and the convective turnover time and photospheric pressure (<code>GETTAU</code>), kept as <code>TAUCZ0</code>, <code>PPHOT0</code>; <code>FRACSTEP = 0.5</code>.</li>
+</ol>
+<p><strong>Spots</strong> (G. Somers 10/14). For a spotted star (<code>SPOTF</code> the covering fraction, <code>SPOTX</code> the spot-to-ambient temperature ratio), the envelope is integrated at the ambient temperature
+$$\log T_\mathrm{amb} = \log T_\mathrm{eff} - \tfrac14 \log_{10}\!\left(f\,x^4 + 1 - f\right).$$</p>
+<p><strong>Design.</strong> Many paths print to the screen (<code>WRITE(*,…)</code>) as well as to <code>ISHORT</code>. Errors end the run with bare <code>STOP 9999</code> or <code>STOP 9998</code> (too many points, coincident masses). A large commented-out block (G. Somers 8/17) computed the gradients of every shell; <code>PHYSIC</code> does that now. <code>FCORE</code> and <code>MCORE</code>, which the core extension overwrites, are namelist variables in <code>NMLPAR_MOD</code>.</p>
+<p><strong>KC's changes.</strong> Removed the unused arguments <code>DELTS0</code> and <code>JCORE</code> from <code>STARIN</code>, <code>ISHORT</code> from the call to <code>GETMODEL2</code>, the last three arguments of <code>MEQOS</code>, <code>LCZ</code> from <code>PHYSIC</code>, <code>HG</code> from <code>GETTAU</code>, and <code>HD</code>, <code>M</code> from <code>MOMI</code> (2025-05-31); removed the unused array <code>MXZON0</code> (2025-07-22); reordered the elements of COMMON <code>ENVSTRUCT</code> (2025-05-30).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> COMMON blocks to modules, <code>IMPLICIT NONE</code> (unused blocks and the old opacity-table arrays dropped); new arguments <code>CMIXL</code> (formerly in COMMON) and <code>COMPMIX</code> (formerly COMMON <code>I2O</code>), with <code>CMIXL</code> passed on to <code>TPGRAD</code>, <code>ENVINT</code>, <code>PHYSIC</code> and <code>GETTAU</code>; the MHD equation of state is removed, and for a new last shell between a convective and a radiative one <code>EQSTAT</code> is now always called (the authors' fix of an unintended bug), which settles former question 1, so former questions 2–11 are now 1–10; the write-only <code>IDT</code>, <code>IDD</code> are gone.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>JSON</code> too small, but no stop.</strong> In the core extension, when <code>M + MCORE &gt; JSON</code> the code writes "RUN TERMINATED", but does not stop, and then writes beyond the arrays.</li>
+<li><strong>The density in the core extension.</strong> The loop that shifts the old points outward by <code>MCORE</code> moves <code>HS</code>, <code>HR</code>, <code>HL</code>, <code>HP</code>, <code>HT</code>, <code>LC</code>, <code>HCOMP</code> and <code>OMEGA</code>, but not <code>HD</code>. So the whole density profile above the new core is misaligned by <code>MCORE</code> shells (every old density stays at its old index), PHYSIC then reads <code>HD</code>, and <code>FACD</code> is taken from <code>HD(MP1)</code>, which is not the density of the shifted first point. Is <code>HD</code> meant to be shifted too?</li>
+<li><strong>The warning's variable.</strong> Format 1040 prints <code>LEXCP0</code>, which is never set; the model's value is <code>LEXCOM0</code> (after "MHP 9/03 FIXED TYPO").</li>
+<li><strong>A sign in the envelope interpolation.</strong> For the first envelope point (<code>JM = 1</code>), <code>HCOMP(1,J) = HCOMP(1,M) + FX*(HCOMP(1,M) - ENVX(JM))</code>, and likewise for <code>HCOMP(3,J)</code>; the other quantities use <code>(new - old)</code>. Is the sign reversed?</li>
+<li><strong>Unused isotope ratios.</strong> <code>R14_15</code> and <code>R16_17</code> (and <code>XB10_INI</code>, <code>XB11_INI</code>) are namelist variables (<code>NMLPAR_MOD</code>) but not applied; the comment says $^{15}$N, $^{17}$O and B are not used. Should <code>PARMIN</code> warn when they are set?</li>
+<li><strong>The surface composition only for the first run.</strong> Step 9 is skipped when <code>NK &gt; 1</code> (<code>GOTO 630</code>), so a later run that reads a new model from file (or changes the mixture) keeps the first run's <code>XENV</code>, <code>ZENV</code>, <code>FXENV</code>. Intended?</li>
+<li><strong>The mixing-length check.</strong> A mismatch of mixing length or composition switch now only warns. Should the run still stop, as the commented-out <code>STOP</code> did?</li>
+<li><strong>Loop-invariant assignments.</strong> <code>TEFFLO = TEFFL</code> and <code>MO = M</code> sit inside the loop over shells (label 710); harmless, but probably meant before it.</li>
+<li><strong>The comment on <code>AMUENV</code>.</strong> STARIN's comment says "AMUENV = MEAN ATOMIC WEIGHT OF SURFACE Z", but the code computes $\sum_k X_k/A_k$ over all 12 elements, H and He included (the inverse mean atomic weight per ion, as CHECKC's comment says). A comment to fix?</li>
+<li><strong>0/0 with one core point.</strong> With <code>MCORE = 1</code> (for example the default <code>FCORE = 1.0</code>, which gives <code>INT(0)+1 = 1</code>), after the shift <code>HT(2) = HT(1)</code> and <code>HP(2) = HP(1)</code>, so <code>DEL = (HT(2)-HT(1))/(HP(2)-HP(1))</code> is 0/0. Should <code>DEL</code> be taken from the first two shifted points (<code>MP1</code>, <code>MP1+1</code>)?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+STARIN
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+SUBROUTINE STARIN(BL,CFENV,DAGE,DDAGE,DELTS,DELTSH,DELTS0,ETA2,FP,  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-STARIN'>STARIN</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-STARIN'><h3><span class='kind'>subroutine</span>STARIN</h3>
+<p class='muted'>lines 7–1015 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/starin.f#L7-L1015'>GitHub</a></p>
+<pre>SUBROUTINE STARIN(BL,CFENV,DAGE,DDAGE,DELTS,DELTSH,ETA2,FP,</pre>
+<div class='notes'><p>Reads or keeps the starting model and prepares it: mixture changes, core extension, rescaling, a new envelope fitting point, shell masses, rotation, surface composition, and the first convection-zone quantities (steps above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+STARIN
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+SUBROUTINE STARIN(BL,CFENV,DAGE,DDAGE,DELTS,DELTSH,DELTS0,ETA2,FP,  ! KC 2025-05-31</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/cenv_mod.f.html#def-CENV_MOD'>CENV_MOD</a>, <a href='../yrec-map/comp2_mod.f.html#def-COMP2_MOD'>COMP2_MOD</a>, <a href='../yrec-map/comp_mod.f.html#def-COMP_MOD'>COMP_MOD</a>, <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/debhu_mod.f.html#def-DEBHU_MOD'>DEBHU_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/dpmix_mod.f.html#def-DPMIX_MOD'>DPMIX_MOD</a>, <a href='../yrec-map/envstruct_mod.f.html#def-ENVSTRUCT_MOD'>ENVSTRUCT_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/newopac_mod.f.html#def-NEWOPAC_MOD'>NEWOPAC_MOD</a>, <a href='../yrec-map/nmlbypass_mod.f.html#def-NMLBYPASS_MOD'>NMLBYPASS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/oldmod_mod.f.html#def-OLDMOD_MOD'>OLDMOD_MOD</a>, <a href='../yrec-map/oldrot_mod.f.html#def-OLDROT_MOD'>OLDROT_MOD</a>, <a href='../yrec-map/ovrtrn_mod.f.html#def-OVRTRN_MOD'>OVRTRN_MOD</a>, <a href='../yrec-map/runloop_mod.f.html#def-RUNLOOP_MOD'>RUNLOOP_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+<li><a href='../yrec-map/eqstat.f.html#def-EQSTAT'>EQSTAT</a> <span class='muted'>(eqstat.f)</span></li>
+<li><a href='../yrec-map/fpft.f.html#def-FPFT'>FPFT</a> <span class='muted'>(fpft.f)</span></li>
+<li><a href='../yrec-map/getmodel2.f.html#def-GETMODEL2'>GETMODEL2</a> <span class='muted'>(getmodel2.f)</span></li>
+<li><a href='../yrec-map/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span></li>
+<li><a href='../yrec-map/gettau.f.html#def-GETTAU'>GETTAU</a> <span class='muted'>(gettau.f)</span></li>
+<li><a href='../yrec-map/getyrec7.f.html#def-GETYREC7'>GETYREC7</a> <span class='muted'>(getyrec7.f)</span></li>
+<li><a href='../yrec-map/momi.f.html#def-MOMI'>MOMI</a> <span class='muted'>(momi.f)</span></li>
+<li><a href='../yrec-map/ovrot.f.html#def-OVROT'>OVROT</a> <span class='muted'>(ovrot.f)</span></li>
+<li><a href='../yrec-map/physic.f.html#def-PHYSIC'>PHYSIC</a> <span class='muted'>(physic.f)</span></li>
+<li><a href='../yrec-map/rscale.f.html#def-RSCALE'>RSCALE</a> <span class='muted'>(rscale.f)</span> ×2</li>
+<li><a href='../yrec-map/setscv.f.html#def-SETSCV'>SETSCV</a> <span class='muted'>(setscv.f)</span></li>
+<li><a href='../yrec-map/surfopac.f.html#def-SURFOPAC'>SURFOPAC</a> <span class='muted'>(surfopac.f)</span></li>
+<li><a href='../yrec-map/tpgrad.f.html#def-TPGRAD'>TPGRAD</a> <span class='muted'>(tpgrad.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span> ×2</li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">7</span>      SUBROUTINE STARIN(BL,CFENV,DAGE,DDAGE,DELTS,DELTSH,ETA2,FP,
+<span class="ln">8</span>     * FT,FTRI,HCOMP,HD,HI,HJM,HKEROT,HL,HP,HR,HS,HS1,HS2,HSTOT,HT,IKUT,
+<span class="ln">9</span>C      * ISTORE,JCORE,JENV,LARGE,LC,LNEW,M,MODEL,NK,OMEGA,PS,QDP,QDT,QIW,  ! KC 2025-05-31
+<span class="ln">10</span>     * ISTORE,JENV,LARGE,LC,LNEW,M,MODEL,NK,OMEGA,PS,QDP,QDT,QIW,
+<span class="ln">11</span>     * R0,RS,SJTOT,SKEROT,SMASS,TEFFL,TLUMX,TRIL,TRIT,TS,VEL,HG,V,
+<span class="ln">12</span>     * CMIXL,COMPMIX)
+<span class="ln">13</span>C 10/15/26 MHP via Claude
+<span class="ln">14</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">15</span>C PARAMETER(JSON=5000) here.
+<span class="ln">16</span>      USE DIMENSIONS_MOD
+<span class="ln">17</span>C 10/14/26 MHP via Claude
+<span class="ln">18</span>C code changed to convert COMMON/NEWOPAC/ into NEWOPAC_MOD.
+<span class="ln">19</span>      USE NEWOPAC_MOD
+<span class="ln">20</span>C 10/14/26 MHP via Claude
+<span class="ln">21</span>C code changed to convert COMMON/OVRTRN/ into OVRTRN_MOD.
+<span class="ln">22</span>      USE OVRTRN_MOD
+<span class="ln">23</span>C 10/14/26 MHP via Claude
+<span class="ln">24</span>C code changed to convert COMMON/OLDROT/ into OLDROT_MOD.
+<span class="ln">25</span>      USE OLDROT_MOD
+<span class="ln">26</span>C 10/14/26 MHP via Claude
+<span class="ln">27</span>C code changed to convert COMMON/OLDMOD/ into OLDMOD_MOD.
+<span class="ln">28</span>      USE OLDMOD_MOD
+<span class="ln">29</span>C 10/14/26 MHP via Claude
+<span class="ln">30</span>C code changed to convert COMMON/ENVSTRUCT/ into ENVSTRUCT_MOD.
+<span class="ln">31</span>      USE ENVSTRUCT_MOD
+<span class="ln">32</span>C 10/14/26 MHP via Claude
+<span class="ln">33</span>C code changed to convert COMMON/DPMIX/ into DPMIX_MOD.
+<span class="ln">34</span>      USE DPMIX_MOD
+<span class="ln">35</span>C 10/14/26 MHP via Claude
+<span class="ln">36</span>C code changed to convert COMMON/DEBHU/ into DEBHU_MOD.
+<span class="ln">37</span>      USE DEBHU_MOD
+<span class="ln">38</span>C 10/14/26 MHP via Claude
+<span class="ln">39</span>C code changed to convert COMMON/COMP2/ into COMP2_MOD.
+<span class="ln">40</span>      USE COMP2_MOD
+<span class="ln">41</span>C 10/14/26 MHP via Claude
+<span class="ln">42</span>C code changed to convert COMMON/COMP/ into COMP_MOD.
+<span class="ln">43</span>      USE COMP_MOD
+<span class="ln">44</span>C 10/14/26 MHP via Claude
+<span class="ln">45</span>C code changed to convert COMMON/CENV/ into CENV_MOD.
+<span class="ln">46</span>      USE CENV_MOD
+<span class="ln">47</span>C 10/14/26 MHP via Claude
+<span class="ln">48</span>C code changed to convert COMMON/NMLBYPASS/ into NMLBYPASS_MOD.
+<span class="ln">49</span>      USE NMLBYPASS_MOD
+<span class="ln">50</span>C 10/14/26 MHP via Claude
+<span class="ln">51</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">52</span>      USE NMLPAR_MOD
+<span class="ln">53</span>C 10/14/26 MHP via Claude
+<span class="ln">54</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">55</span>      USE CONSTANTS_MOD
+<span class="ln">56</span>C 10/14/26 MHP via Claude
+<span class="ln">57</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">58</span>      USE IOUNITS_MOD
+<span class="ln">59</span>C 10/14/26 MHP via Claude
+<span class="ln">60</span>C code changed to convert COMMON/RUNLOOP/ into RUNLOOP_MOD.  A blanket
+<span class="ln">61</span>C USE imports exactly the names the COMMON declaration made global here,
+<span class="ln">62</span>C so it cannot change meaning.  See runloop_mod.f for the block history
+<span class="ln">63</span>C and for why the module declares the types the implicit rules supplied.
+<span class="ln">64</span>      USE RUNLOOP_MOD
+<span class="ln">65</span>C 10/20/26 MHP via Claude
+<span class="ln">66</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">67</span>C explicit declarations.
+<span class="ln">68</span>      IMPLICIT NONE
+<span class="ln">69</span>      REAL*8 AMU,ATEFFL,ATOMWT,B,BETA,BETA14,BETAI,BL,CFENV,CMIXL,
+<span class="ln">70</span>     *       CMIXL0,D,DAGE,DD,DDAGE,DEL,DELA,DELR,DELTS,DELTSH,DL,DP,DR,
+<span class="ln">71</span>     *       DS,DS1,DS2,DS3,DT,DUM1,DUM2,DUM3,DUM4,EBEG0,EMAX0,EMIN0,
+<span class="ln">72</span>     *       EMU,ETA,ETA2,FACD,FP,FPL,FS,FT,FTL,FTRI,FV,FX,FXION,GL,
+<span class="ln">73</span>     *       HCOMP,HD,HG,HI,HJ,HJM,HKEROT,HL,HLC,HP,HR,HS,HS1,HS2,HSEND,
+<span class="ln">74</span>     *       HSTOT,HT,O,OL,OMEGA,P,PDISK0,PL,PLIM,PP,PS,QACP,QACR,QACT,
+<span class="ln">75</span>     *       QAP,QAT,QCP,QCPP,QCPT,QDP,QDT,QDTP,QDTT,QIW,QOD,QOT,R0,
+<span class="ln">76</span>     *       RAT_C,RAT_N,RAT_O,RHOC,RL,RMU,RS,SENV1,SJTOT,SKEROT,SL,
+<span class="ln">77</span>     *       SMASS,SUMJ,SUMKE,SUM_C,SUM_O,T,TDISK0,TEFFL,TEMP,TEST,TL,
+<span class="ln">78</span>     *       TLUMX,TOT_C,TOT_N,TOT_O,TRIL,TRIT,TS,V,VEL,VSUM,WMAX0,X,X0,
+<span class="ln">79</span>     *       X1,X2,Z
+<span class="ln">80</span>      INTEGER I,IDUM,IKUT,IREAD,ISTORE,IXX,J,JCORE0,JEND,JENV,JENV0,JM,
+<span class="ln">81</span>     *       K,M,MM,MN,MODEL,MP1,MRZONE,MXZONE,NK,NRZONE,NZONE
+<span class="ln">82</span>      LOGICAL*4 LARGE,LATMO,LC,LCONV,LCZ,LDERIV,LDIFY0,LDIFZ0,LDISK0,
+<span class="ln">83</span>     *       LEXCOM0,LEXCP0,LINSTB0,LJDOT00,LMIXL,LNEW,LOCOND,LOVSTC0,
+<span class="ln">84</span>     *       LOVSTE0,LOVSTM0,LPRT,LPULPT,LPUREZ0,LROT0,LSBC0,LSEMIC0
+<span class="ln">85</span>
+<span class="ln">86</span>C DBGLAOL
+<span class="ln">87</span>      INTEGER*4 KATM, KENV, KSAHA
+<span class="ln">88</span>C      CHARACTER*256 OPECALEX(7)
+<span class="ln">89</span>      CHARACTER*4 ATEMP
+<span class="ln">90</span>      CHARACTER*6 EOS
+<span class="ln">91</span>      CHARACTER*4 ATM, LOK, HIK, COMPMIX
+<span class="ln">92</span>C MHP 8/25 Removed unused character strings
+<span class="ln">93</span>C      CHARACTER*256 FLAOL, FPUREZ
+<span class="ln">94</span>C      CHARACTER*256 FLAST, FFIRST, FRUN, FSTAND, FFERMI,
+<span class="ln">95</span>C     1    FDEBUG, FTRACK, FSHORT, FMILNE, FMODPT,
+<span class="ln">96</span>C     2    FSTOR, FPMOD, FPENV, FPATM, FDYN,
+<span class="ln">97</span>C     3    FLLDAT, FSNU, FSCOMP, FKUR,
+<span class="ln">98</span>C     4    FMHD1, FMHD2, FMHD3, FMHD4, FMHD5, FMHD6, FMHD7, FMHD8
+<span class="ln">99</span>C 9/24/26 MHP via Claude
+<span class="ln">100</span>C code changed to remove dead ILLDAT, IKUR from COMMON/LUNUM/
+<span class="ln">101</span>C 9/24/26 MHP via Claude
+<span class="ln">102</span>C code changed to remove dead IDYN from COMMON/LUNUM/
+<span class="ln">103</span>C 9/25/26 MHP via Claude
+<span class="ln">104</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">105</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">106</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">107</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">108</span>C COMMON/IOUNITS/
+<span class="ln">109</span>C 9/25/26 MHP via Claude
+<span class="ln">110</span>C code changed to remove dead COMMON/LUNUM/ISCOMP (declared,
+<span class="ln">111</span>C assigned a unit number, but never opened or read anywhere)
+<span class="ln">112</span>C     COMMON/LUFNM/ FLAST, FFIRST, FRUN, FSTAND, FFERMI,
+<span class="ln">113</span>C     1    FDEBUG, FTRACK, FSHORT, FMILNE, FMODPT,
+<span class="ln">114</span>C     2    FSTOR, FPMOD, FPENV, FPATM, FDYN,
+<span class="ln">115</span>C     3    FLLDAT, FSNU, FSCOMP, FKUR,
+<span class="ln">116</span>C     4    FMHD1, FMHD2, FMHD3, FMHD4, FMHD5, FMHD6, FMHD7, FMHD8
+<span class="ln">117</span>C DBGLAOL
+<span class="ln">118</span>C MHP 8/25 Removed all character strings from common blocks
+<span class="ln">119</span>C 10/12/26 MHP via Claude
+<span class="ln">120</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">121</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">122</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">123</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">124</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">125</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">126</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">127</span>C
+<span class="ln">128</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">129</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">130</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">131</span>C 9/25/26 MHP via Claude
+<span class="ln">132</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">133</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">134</span>C 9/24/26 MHP via Claude
+<span class="ln">135</span>C code changed to pass CMIXL as an explicit argument instead of via
+<span class="ln">136</span>C common block, to reduce implicit global state ahead of the F90
+<span class="ln">137</span>C module conversion
+<span class="ln">138</span>C 10/13/26 MHP via Claude: removed the unused COMMON/ENVPRT/ declaration
+<span class="ln">139</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">140</span>C 10/12/26 MHP via Claude
+<span class="ln">141</span>C code changed to remove COMMON/OPTAB/ entirely.  Once OPTOL moved to the
+<span class="ln">142</span>C consolidated namelist block, every remaining member was write-only:
+<span class="ln">143</span>C ZSI appeared only in a DATA statement in parmin.f, and IDT and IDD were
+<span class="ln">144</span>C assigned the constants 15 and 5 in coefft.f, envint.f, physic.f and
+<span class="ln">145</span>C starin.f and read nowhere in the code.  They are leftovers from the
+<span class="ln">146</span>C removed opacity-table interpolation schemes.
+<span class="ln">147</span>C DBG 7/92 COMMON BLOCK ADDED TO COMPUTE DEBYE-HUCKEL CORRECTION.
+<span class="ln">148</span>      DIMENSION TLUMX(8),TRIL(3),TRIT(3),PS(3),TS(3),RS(3),CFENV(9),
+<span class="ln">149</span>     *HS(JSON),HL(JSON),HR(JSON),HP(JSON),HT(JSON),HD(JSON),LC(JSON),
+<span class="ln">150</span>     *HCOMP(15,JSON),OMEGA(JSON),HS1(JSON),HS2(JSON),QIW(JSON),
+<span class="ln">151</span>     *ETA2(JSON),FP(JSON),FT(JSON),HI(JSON),HJM(JSON),R0(JSON),
+<span class="ln">152</span>     * HKEROT(JSON),HG(JSON),ATOMWT(12),V(12),DUM1(4),
+<span class="ln">153</span>     * DUM2(3),DUM3(3),DUM4(3),FXION(3)
+<span class="ln">154</span>C     MHP 10/24 ENSURE THAT ONLY HOMOGENEOUS MODELS HAVE THE MIXTURE ALTERED
+<span class="ln">155</span>      REAL*8 TESTMIX(15)
+<span class="ln">156</span>C OPACITY COMMON BLOCKS - modified 3/09
+<span class="ln">157</span>C 9/23/26 MHP via Claude
+<span class="ln">158</span>C code changed to remove the OPAL92 opacity tables
+<span class="ln">159</span>C 9/23/26 MHP via Claude
+<span class="ln">160</span>C code changed to remove the Kurucz 1990 opacity tables
+<span class="ln">161</span>C 9/23/26 MHP via Claude
+<span class="ln">162</span>C code changed to remove the LAOL89 opacity tables
+<span class="ln">163</span>C 9/24/26 MHP via Claude
+<span class="ln">164</span>C code changed to remove the Alexander 1995 opacity tables
+<span class="ln">165</span>C 9/24/26 MHP via Claude
+<span class="ln">166</span>C code changed to remove dead opacity-table Z-value inputs
+<span class="ln">167</span>C 9/24/26 MHP via Claude
+<span class="ln">168</span>C code changed to merge COMMON /MISCOPAC/ and COMMON/NWLAOL/ into
+<span class="ln">169</span>C COMMON /NEWOPAC/
+<span class="ln">170</span>C 10/13/26 MHP via Claude: removed the unused COMMON/SCVEOS/ declaration
+<span class="ln">171</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">172</span>C MHP 10/98 ADDED HPTTOL FOR CHANGING CORE FITTING POINT
+<span class="ln">173</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CTOL/ declaration
+<span class="ln">174</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">175</span>C MHP 07/02 ADDED FOR ENVELOPE INTEGRATION WHEN CHANGING THE
+<span class="ln">176</span>C OUTER FITTING POINT
+<span class="ln">177</span>C MHP 07/02 STORE CONTENTS OF ENVELOPE INTEGRATION INTO A
+<span class="ln">178</span>C SET OF VECTORS, WHICH ARE FLIPPED AND CONVERTED INTO AN ASCENDING
+<span class="ln">179</span>C SERIES AFTER THE INTEGRATION IS DONE.
+<span class="ln">180</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">181</span>C JvS 08/25 Updated with new elements
+<span class="ln">182</span>C LLP  3/19/03 Add COMMON block /I2O/ for info directly transferred from
+<span class="ln">183</span>C      input to output model - starting with a code for th initial model
+<span class="ln">184</span>C      compostion (COMPMIX)
+<span class="ln">185</span>C 10/13/26 MHP via Claude
+<span class="ln">186</span>C code changed to replace COMMON/I2O/ with an explicit argument.  COMPMIX
+<span class="ln">187</span>C is CHARACTER, which does not belong in a COMMON block.  GETMODEL2,
+<span class="ln">188</span>C GETYREC7 and PUTMODEL2 already took it as an argument; only these three
+<span class="ln">189</span>C files shared it through the block.
+<span class="ln">190</span>C G Somers 10/14, Add spot common block
+<span class="ln">191</span>C G Somers END
+<span class="ln">192</span>C MHP 10/24 ADDED NEW CONTROLS FOR ALTERING THE CNO MASS FRACTIONS
+<span class="ln">193</span>C ISOTOPIC RATIOS(C,N,O) AND D/HE3/LI/BE/B ABUNDANCES.
+<span class="ln">194</span>C THESE CONTROLS ONLY ALTER THE MIXTURE IN THE STARTING MODEL AND ONLY
+<span class="ln">195</span>C IF THE MODEL IS CHEMICALLY UNEVOLVED. POSTPROCESSING TOOLS SHOULD BE USED FOR THE
+<span class="ln">196</span>C CORE HE BURNING PHASE.
+<span class="ln">197</span>c      COMMON/NEWCMP/XNEWCP,INEWCP,LNEWCP,LREL,ANEWCP
+<span class="ln">198</span>C 10/12/26 MHP via Claude
+<span class="ln">199</span>C code changed to merge COMMON/NEWPARAM/, COMMON/NEWCROSS/ and
+<span class="ln">200</span>C COMMON/XSECT/ into a single COMMON/NMLBYPASS/, declared here, in
+<span class="ln">201</span>C remap.f and in starin.f.
+<span class="ln">202</span>C
+<span class="ln">203</span>C These are namelist variables that exist only to set other quantities,
+<span class="ln">204</span>C or that are reserved for future development; none is read by the wider
+<span class="ln">205</span>C code.  Keeping them in their own block keeps them OUT of the single
+<span class="ln">206</span>C consolidated namelist block being built, so that block holds only
+<span class="ln">207</span>C variables the physics routines actually consume.  starin.f declares it
+<span class="ln">208</span>C although it uses none of them yet, so the isotope and cross-section
+<span class="ln">209</span>C machinery there can reach them without reopening this layout.
+<span class="ln">210</span>C
+<span class="ln">211</span>C Member order is NEWPARAM, then NEWCROSS, then XSECT, and the three
+<span class="ln">212</span>C declarations are generated from one list so all files agree.
+<span class="ln">213</span>      DATA ATOMWT/23.0D0,26.99D0,24.32D0,55.86D0,28.1D0,12.015D0,
+<span class="ln">214</span>     * 1.008D0,16.0D0,14.01D0,39.96D0,20.19D0,4.004D0/
+<span class="ln">215</span>C 10/13/26 MHP via Claude: removed the unused COMMON/SCRTCH/ declaration
+<span class="ln">216</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">217</span>
+<span class="ln">218</span>C       DIMENSION MXZONE(12,2),MXZON0(12,2),MRZONE(13,2)  ! KC 2025-07-22
+<span class="ln">219</span>      DIMENSION MXZONE(12,2),MRZONE(13,2)
+<span class="ln">220</span>      DIMENSION LCZ(JSON)
+<span class="ln">221</span>      SAVE
+<span class="ln">222</span>
+<span class="ln">223</span>
+<span class="ln">224</span>C If flag LARGE is set, model has failed to converge.  Terminate the run.
+<span class="ln">225</span>      IF(LARGE) THEN
+<span class="ln">226</span>          WRITE(ISHORT,1000)
+<span class="ln">227</span> 1000       FORMAT(1X,39(&#x27;&gt;&#x27;),40(&#x27;&lt;&#x27;)/,
+<span class="ln">228</span>     *            &quot;STARIN:        ***** RUN STOPPED *****&quot;)
+<span class="ln">229</span>          WRITE(ISHORT,1010)
+<span class="ln">230</span> 1010       FORMAT(&quot;STARIN: ***** MODEL FAILED TO CONVERGE *****&quot;)
+<span class="ln">231</span>            STOP
+<span class="ln">232</span>      ENDIF
+<span class="ln">233</span>
+<span class="ln">234</span>C THIS SUBROUTINE READS IN THE INITIAL STELLAR MODEL
+<span class="ln">235</span>C INITIAL MODEL IS STORED IN LOGICAL UNIT IFIRST
+<span class="ln">236</span>
+<span class="ln">237</span>C Set flags for reading an input model
+<span class="ln">238</span>      IKUT = 0
+<span class="ln">239</span>      IREAD = IFIRST
+<span class="ln">240</span>
+<span class="ln">241</span>C INITIALIZE VARIABLES
+<span class="ln">242</span>      VEL = 0.0D0
+<span class="ln">243</span>      QDT = -1.0D0
+<span class="ln">244</span>      QDP = 1.0D0
+<span class="ln">245</span>
+<span class="ln">246</span>C Flag LFIRST(NK) tells where to get the starting stellar model for the current
+<span class="ln">247</span>C step (step NK).  If LFIRST(NK) is true, read in the starting stellarmodel from
+<span class="ln">248</span>C the file specified by LU IFIRST.  If LFIRST(NK) is false, as starting model use
+<span class="ln">249</span>C the stellar model currently stored in memory.
+<span class="ln">250</span>
+<span class="ln">251</span>      IF(.NOT.LFIRST(NK)) THEN
+<span class="ln">252</span>C Use the model currently in memory as the starting model.
+<span class="ln">253</span>C DBG 2/92 CHANGED SO WILL RESCALE ENVELOPE MASS ON EACH NEW RUN
+<span class="ln">254</span>         IF(IRESCA(NK).NE.1) CALL <a href="../yrec-map/rscale.f.html#def-RSCALE" title="RSCALE in rscale.f">RSCALE</a>(HL,HCOMP,HS,HSTOT,M,NK,
+<span class="ln">255</span>     *      SMASS,LC)
+<span class="ln">256</span>C Now skip over the reading and processing of an input model file
+<span class="ln">257</span>         GOTO 3000
+<span class="ln">258</span>      ENDIF
+<span class="ln">259</span>
+<span class="ln">260</span>
+<span class="ln">261</span>C     Read in the starting model from LU IFIRST and process it.
+<span class="ln">262</span>
+<span class="ln">263</span>C  Get file format of input model
+<span class="ln">264</span>
+<span class="ln">265</span>      REWIND IREAD
+<span class="ln">266</span>      READ(IREAD,10) ATEMP
+<span class="ln">267</span> 10   FORMAT(A4)
+<span class="ln">268</span>
+<span class="ln">269</span>C ATEMP now contains a keyword describing the format of the input stellar
+<span class="ln">270</span>C model.  We decide what kind of model format it has and process accordingly.
+<span class="ln">271</span>
+<span class="ln">272</span>      IF(ATEMP .EQ. &#x27;NMOD&#x27;) THEN
+<span class="ln">273</span>         WRITE(ISHORT,12)
+<span class="ln">274</span> 12      FORMAT(&#x27;STARIN:  Input model has YREC7 format&#x27;)
+<span class="ln">275</span>         CALL <a href="../yrec-map/getyrec7.f.html#def-GETYREC7" title="GETYREC7 in getyrec7.f">GETYREC7</a>(BL,CFENV,CMIXL0,DAGE,DDAGE,FTRI,HCOMP,HD,HL,
+<span class="ln">276</span>     *    HP,HR,HS,HSTOT,HT,IREAD,ISHORT,JCORE0,JENV0,LC,LEXCOM0,
+<span class="ln">277</span>     *    LROT0,M,MODEL,OMEGA,PS,RS,SMASS,TEFFL,TLUMX,TRIL,TRIT,TS,
+<span class="ln">278</span>     &amp;    ATM,EOS,HIK,LDIFY0,LDIFZ0,LDISK0,LINSTB0,LJDOT00,LOK,
+<span class="ln">279</span>     &amp;    LOVSTC0,LOVSTE0,LOVSTM0,LPUREZ0,LSEMIC0,COMPMIX,PDISK0,
+<span class="ln">280</span>     &amp;    TDISK0,WMAX0)
+<span class="ln">281</span>C First three lines above are YREC7 inputs
+<span class="ln">282</span>C Last three lines are MODEL2 add-ons
+<span class="ln">283</span>
+<span class="ln">284</span>      ELSE IF(ATEMP .EQ. &#x27;MOD2 &#x27;) THEN
+<span class="ln">285</span>         WRITE(ISHORT,16)
+<span class="ln">286</span> 16      FORMAT(&#x27;STARIN:  Input model has MODEL2 format&#x27;)
+<span class="ln">287</span>         CALL <a href="../yrec-map/getmodel2.f.html#def-GETMODEL2" title="GETMODEL2 in getmodel2.f">GETMODEL2</a>(BL,CFENV,CMIXL0,DAGE,DDAGE,FTRI,HCOMP,HD,HL,
+<span class="ln">288</span>C      *    HP,HR,HS,HSTOT,HT,IREAD,ISHORT,JCORE0,JENV0,LC,LEXCOM0,  ! KC 2025-05-31
+<span class="ln">289</span>     *    HP,HR,HS,HSTOT,HT,IREAD,JCORE0,JENV0,LC,LEXCOM0,
+<span class="ln">290</span>     *    LROT0,M,MODEL,OMEGA,PS,RS,SMASS,TEFFL,TLUMX,TRIL,TRIT,TS,
+<span class="ln">291</span>     &amp;    ATM,EOS,HIK,LDIFY0,LDIFZ0,LDISK0,LINSTB0,LJDOT00,LOK,
+<span class="ln">292</span>     &amp;    LOVSTC0,LOVSTE0,LOVSTM0,LPUREZ0,LSEMIC0,COMPMIX,PDISK0,
+<span class="ln">293</span>     &amp;    TDISK0,WMAX0)
+<span class="ln">294</span>C First three lines above are YREC7 inputs
+<span class="ln">295</span>C Last three lines are MODEL2 add-ons
+<span class="ln">296</span>
+<span class="ln">297</span>      ELSE
+<span class="ln">298</span>         WRITE(ISHORT,20)
+<span class="ln">299</span> 20      FORMAT(&#x27;STARIN: ***** RUN TERMINATED, INVALID INPUT&#x27;,
+<span class="ln">300</span>     *         &#x27; MODEL FILE.  *****&#x27;)
+<span class="ln">301</span>         STOP
+<span class="ln">302</span>      ENDIF
+<span class="ln">303</span>
+<span class="ln">304</span>C Model has now been read in. Some post-processing is required.
+<span class="ln">305</span>
+<span class="ln">306</span>      DELTS = CSECYR*DDAGE
+<span class="ln">307</span>      DELTSH = DABS(DELTS)
+<span class="ln">308</span>      STOTAL = HSTOT
+<span class="ln">309</span>
+<span class="ln">310</span>C CHECK TO ENSURE THAT MIX LENGTH, SURFACE B.C. AND CONVECTION ZONE
+<span class="ln">311</span>C THEORY OF THE MODEL ARE THE SAME AS USER PARAMETERS
+<span class="ln">312</span>C CHECKED ONLY FOR EVOLVED MODELS(MODEL NUMBER &gt; 0)
+<span class="ln">313</span>C 1/92 Changed to not stop just give warning.
+<span class="ln">314</span>      IF(MODEL.GT.0) THEN
+<span class="ln">315</span>       LMIXL = .TRUE.
+<span class="ln">316</span>C Jan 12, 1989 : in STARIN changed test to see if model has correct mixing
+<span class="ln">317</span>C length from 1.0e-6 to 2.0e-3 because models only store
+<span class="ln">318</span>C mixing length to four sig digits.
+<span class="ln">319</span>       IF(CMIXL0.GT.0.0D0) LMIXL = (DABS(CMIXL-CMIXL0).LT.2.0D-3)
+<span class="ln">320</span>C MHP 9/03 FIXED TYPO
+<span class="ln">321</span>       IF(.NOT.LMIXL .OR. LEXCOM0.NEQV.LEXCOM) THEN
+<span class="ln">322</span>          WRITE(ISHORT,1040) CMIXL,CMIXL0,LEXCOM,LEXCP0
+<span class="ln">323</span>          WRITE(IOWR,1040) CMIXL,CMIXL0,LEXCOM,LEXCP0
+<span class="ln">324</span> 1040       FORMAT(1X,&#x27;ERROR IN SUBROUTINE STARIN&#x27;/1X,&#x27;USER PARAMETERS&#x27;,
+<span class="ln">325</span>     *      &#x27; OF WRONG TYPE FOR INITIAL MODEL&#x27;/1X,&#x27;MIXING LENGTH - USER&#x27;
+<span class="ln">326</span>     *      ,&#x27; DESIRES&#x27;,F7.3,&#x27; MODEL MIX LENGTH&#x27;,F7.3/1X,
+<span class="ln">327</span>     *      &#x27;EXTENDED COMP-USER DESIRES &#x27;,L1,&#x27; MODEL USED &#x27;,L1)
+<span class="ln">328</span>C =&gt;RUN STOPPED DUE TO INCONSISTENCY BETWEEN MODEL AND RUN PARMS
+<span class="ln">329</span>c            STOP
+<span class="ln">330</span>       ENDIF
+<span class="ln">331</span>      ENDIF
+<span class="ln">332</span>
+<span class="ln">333</span>C ENVELOPE DATA (Now bypassed)
+<span class="ln">334</span>C LNEW0 HAS BEEN READ IN, IF TRUE THEN RECOMPUTE ENVELOPE EVERY MODEL
+<span class="ln">335</span>C STORED ENVELOPE RECORDS ONLY USED FOR HE FLASH CALCS
+<span class="ln">336</span>c      IF(LNEW0) THEN
+<span class="ln">337</span>c       LNEW = .TRUE.
+<span class="ln">338</span>c      ELSE
+<span class="ln">339</span>c       LNEW = .NOT.LKUTHE
+<span class="ln">340</span>c      ENDIF
+<span class="ln">341</span>c      DO 80 I = 1,3
+<span class="ln">342</span>c       IF((.NOT.LNEW).AND.IABS(IO).NE.I) LNEW = .TRUE.
+<span class="ln">343</span>c 80   CONTINUE
+<span class="ln">344</span>
+<span class="ln">345</span>      ISTORE = 0
+<span class="ln">346</span>      FTRI = 1.0D0
+<span class="ln">347</span>c Require recompute of envelope. No assurance of reliable
+<span class="ln">348</span>c input triangle
+<span class="ln">349</span>       LNEW = .TRUE.
+<span class="ln">350</span>
+<span class="ln">351</span>
+<span class="ln">352</span>C GET XNEW AND ZNEW FROM HENYEY POINTS
+<span class="ln">353</span>
+<span class="ln">354</span>      XNEW = HCOMP(1,M)
+<span class="ln">355</span>      ZNEW = HCOMP(3,M)
+<span class="ln">356</span>
+<span class="ln">357</span>C FOURTH PART:  - LOG J/M STORED
+<span class="ln">358</span>
+<span class="ln">359</span>      IF(LROT) THEN
+<span class="ln">360</span>       IF(LWNEW) THEN
+<span class="ln">361</span>C GENERATE A SOLID BODY ROTATION CURVE WITH OMEGA = WNEW;
+<span class="ln">362</span>C THIS IS DONE TO CONVERT A NON-ROTATING MODEL TO A ROTATING ONE.
+<span class="ln">363</span>          DO 540 I = 1,M
+<span class="ln">364</span>             OMEGA(I) = WNEW
+<span class="ln">365</span> 540        CONTINUE
+<span class="ln">366</span>       ENDIF
+<span class="ln">367</span>      ELSE
+<span class="ln">368</span>         DO 570 I = 1,JSON
+<span class="ln">369</span>            FP(I) = 1.0D0
+<span class="ln">370</span>            FT(I) = 1.0D0
+<span class="ln">371</span> 570     CONTINUE
+<span class="ln">372</span>      ENDIF
+<span class="ln">373</span>C KEEP IREAD OPEN
+<span class="ln">374</span>      REWIND IREAD
+<span class="ln">375</span>C End of the reading and processing of an input model file.
+<span class="ln">376</span>      IF(.NOT.LFIRST(NK))GOTO 3000
+<span class="ln">377</span>C      IF(.NOT.LFIRST(NK).OR.NK.GT.1)GOTO 3000
+<span class="ln">378</span>C     MHP 10/24 MACHINERY TO ALTER THE HEAVY ELEMENT MIXTURE
+<span class="ln">379</span>C     THIS IS ONLY DONE if the first MODEL IS being READ IN, AND ONLY FOR A
+<span class="ln">380</span>C CHEMICALLY HOMOGENEOUS MODEL. IT CAN OVER-WRITE MASS FRACTIONS 4-15 WITH USER-SPECIFIED VALUES
+<span class="ln">381</span>C ISETMIX=1 -&gt; CAN ADJUST CNO FRACTIONS ISETISO=1-&gt; CHANGE ISOTOPE RATIOS
+<span class="ln">382</span>      IF(LMIXTURE .OR. LISOTOPE)THEN
+<span class="ln">383</span>C ENSURE STARTING MODEL IS HOMOGENEOUS BEFORE EITHER IS CHANGED
+<span class="ln">384</span>         DO I = 1,15
+<span class="ln">385</span>            TESTMIX(I)=HCOMP(I,1)
+<span class="ln">386</span>         END DO
+<span class="ln">387</span>         DO J = 2,M
+<span class="ln">388</span>            DO I = 1,15
+<span class="ln">389</span>               TEST = ABS(HCOMP(I,J)-TESTMIX(I))
+<span class="ln">390</span>               IF(TEST.GT.1.0D-6)THEN
+<span class="ln">391</span>                  WRITE(*,592)I,J,TEST
+<span class="ln">392</span>                  WRITE(ISHORT,592)I,J,TEST
+<span class="ln">393</span> 592              FORMAT(&#x27;SPECIES &#x27;,I3,&#x27; IN SHELL &#x27;,I5,
+<span class="ln">394</span>     *              &#x27; DIFFERS FROM CENTER BY &#x27;,E12.4,
+<span class="ln">395</span>     *              &#x27; MIX NOT MODIFIED IN EVOLVED MODEL&#x27;)
+<span class="ln">396</span>                  GOTO 602
+<span class="ln">397</span>               ENDIF
+<span class="ln">398</span>            END DO
+<span class="ln">399</span>         END DO
+<span class="ln">400</span>      ENDIF
+<span class="ln">401</span>C LOOP FOR CHANGING CNO MIX
+<span class="ln">402</span>      IF(LMIXTURE)THEN
+<span class="ln">403</span>C     INFER CURRENT TOTAL CNO FRACTIONS AND SCALE ALL ISOTOPES BY THE RATIO BETWEEN
+<span class="ln">404</span>C     DESIRED AND CURRENT FRACTIONS. RELATIVE ISOTOPES ARE ADJUSTED IN THE ISOTOPE SECTION BELOW.
+<span class="ln">405</span>         TOT_C = (TESTMIX(5)+TESTMIX(6))/TESTMIX(3)
+<span class="ln">406</span>         TOT_N = (TESTMIX(7)+TESTMIX(8))/TESTMIX(3)
+<span class="ln">407</span>         TOT_O = (TESTMIX(9)+TESTMIX(10)+TESTMIX(11))/TESTMIX(3)
+<span class="ln">408</span>         RAT_C = FRAC_C/TOT_C
+<span class="ln">409</span>         RAT_N = FRAC_N/TOT_N
+<span class="ln">410</span>         RAT_O = FRAC_O/TOT_O
+<span class="ln">411</span>         WRITE(*,*)FRAC_C,FRAC_N,FRAC_O
+<span class="ln">412</span>         DO I = 5,6
+<span class="ln">413</span>            DO J = 1,M
+<span class="ln">414</span>               HCOMP(I,J)=RAT_C*HCOMP(I,J)
+<span class="ln">415</span>            END DO
+<span class="ln">416</span>         END DO
+<span class="ln">417</span>         DO I = 7,8
+<span class="ln">418</span>            DO J = 1,M
+<span class="ln">419</span>               HCOMP(I,J)=RAT_N*HCOMP(I,J)
+<span class="ln">420</span>            END DO
+<span class="ln">421</span>         END DO
+<span class="ln">422</span>         DO I = 9,11
+<span class="ln">423</span>            DO J = 1,M
+<span class="ln">424</span>               HCOMP(I,J)=RAT_O*HCOMP(I,J)
+<span class="ln">425</span>            END DO
+<span class="ln">426</span>         END DO
+<span class="ln">427</span>         WRITE(*,594)(TESTMIX(K),K=5,11),(HCOMP(K,1),K=5,11)
+<span class="ln">428</span>         WRITE(ISHORT,594)(TESTMIX(K),K=5,11),(HCOMP(K,1),K=5,11)
+<span class="ln">429</span> 594     FORMAT(&#x27;CNO MIX CHANGED IN STARIN. OLD C12 C13 N14&#x27;
+<span class="ln">430</span>     *   &#x27; N15 O16 O17 O18 &#x27;,7E12.4,&#x27; NEW &#x27;,7E12.4)
+<span class="ln">431</span>      ENDIF
+<span class="ln">432</span>C DESIRED ISOTOPE RATIOS AND LIGHT ELEMENT ABUNDANCES ASSIGNED.
+<span class="ln">433</span>C     AT PRESENT B10,B11,N15,O17 ARE NOT USED AND THUS NOT ALTERED.
+<span class="ln">434</span>C     START WITH LIGHT ELEMENTS
+<span class="ln">435</span>      IF(LISOTOPE)THEN
+<span class="ln">436</span>         SUM_C = HCOMP(5,1)+HCOMP(6,1)
+<span class="ln">437</span>         SUM_O = HCOMP(9,1)+HCOMP(11,1)
+<span class="ln">438</span>         DO J = 1,M
+<span class="ln">439</span>            HCOMP(4,J)=XHE3_INI
+<span class="ln">440</span>            HCOMP(5,J)= R12_13*SUM_C/(1.0D0+R12_13)
+<span class="ln">441</span>            HCOMP(6,J)= SUM_C/(1.0D0+R12_13)
+<span class="ln">442</span>            HCOMP(9,J)= R16_18*SUM_O/(1.0D0+R16_18)
+<span class="ln">443</span>            HCOMP(11,J)= SUM_O/(1.0D0+R16_18)
+<span class="ln">444</span>            HCOMP(12,J)=XH2_INI
+<span class="ln">445</span>            HCOMP(13,J)=XLI6_INI
+<span class="ln">446</span>            HCOMP(14,J)=XLI7_INI
+<span class="ln">447</span>            HCOMP(15,J)=XBE9_INI
+<span class="ln">448</span>         END DO
+<span class="ln">449</span>         WRITE(*,593)(TESTMIX(K),K=4,15),(HCOMP(K,1),K=4,15)
+<span class="ln">450</span>         WRITE(ISHORT,593)(TESTMIX(K),K=4,15),(HCOMP(K,1),K=4,15)
+<span class="ln">451</span> 593     FORMAT(&#x27;CNO ISOTOPES AND LIGHT ELEMENTS CHANGED IN &#x27;,
+<span class="ln">452</span>     *        &#x27;STARIN. OLD HE3 C12 C13 N14 N15 O16 O17 O18 H2 LI6 &#x27;,
+<span class="ln">453</span>     *         &#x27;LI7 BE9&#x27;,12E12.4,&#x27; NEW &#x27;,12E12.4)
+<span class="ln">454</span>      ENDIF
+<span class="ln">455</span> 602  CONTINUE
+<span class="ln">456</span> 3000 CONTINUE
+<span class="ln">457</span>
+<span class="ln">458</span>C     The following code enables us to extend the model from the current
+<span class="ln">459</span>C     inner most shell to a point ncloser to center, if flag LCORE is set.
+<span class="ln">460</span>C 9/98 MHP REPLACE AS FOLLOWS:
+<span class="ln">461</span>C ADD INTEGER NUMBER OF POINTS USING THE DESIRED SPACING IN MASS,HPTTOL.
+<span class="ln">462</span>C USE STELLAR STRUCTURE EQUATIONS CONSISTENT WITH THE ASSUMPTIONS
+<span class="ln">463</span>C IN THE MODEL, NAMELY CONSTANT ENERGY GENERATION RATE AND DENSITY
+<span class="ln">464</span>C INTERIOR TO THE LOCATION OF THE CENTRAL FITTING POINT.
+<span class="ln">465</span>C MHP 9/14 CHANGED SO THAT MOVING THE CORE FITTING IS ATTACHED TO ANY RUN
+<span class="ln">466</span>C WHICH READS IN THE STARTING MODEL; THIS AVOIDS OVER-WRITING THE CHANGE
+<span class="ln">467</span>C IN AUTO-CALIBRATED SOLAR MODELS
+<span class="ln">468</span>      IF(LCORE .AND. LFIRST(NK)) THEN
+<span class="ln">469</span>C      IF(LCORE .AND. NK .EQ. 1) THEN
+<span class="ln">470</span>C AVOID SHUFFLING POINTS BY ASSIGNING NEW CENTRAL POINTS IN INTEGER
+<span class="ln">471</span>C MULTIPLES OF THE CENTRAL POINT SPACING.
+<span class="ln">472</span>C     MCORE is number of shells to extrapolate to new core.
+<span class="ln">473</span>C     FCORE is factor to reduce inner mass shell.
+<span class="ln">474</span>          MCORE = INT(DLOG10(FCORE)/HPTTOL(2))+1
+<span class="ln">475</span>          FCORE = DBLE(MCORE)*HPTTOL(2)
+<span class="ln">476</span>          MN = M + MCORE
+<span class="ln">477</span>          IF(MN .GT. JSON) THEN
+<span class="ln">478</span>             WRITE(ISHORT,476)&quot;STARIN: Unable to extend core inward &quot;,
+<span class="ln">479</span>     *             &quot;- JSON too small&quot;
+<span class="ln">480</span>             WRITE(ISHORT,477) &quot;STARIN: Required size =&quot;, MN,
+<span class="ln">481</span>     *              &quot;, JSON = &quot;, JSON
+<span class="ln">482</span>             WRITE(ISHORT,478) &quot;STARIN:  ***** RUN TERMINATED *****&quot;
+<span class="ln">483</span>  476        FORMAT(2A)
+<span class="ln">484</span>  477        FORMAT(A, I8, A, I8)
+<span class="ln">485</span>  478        FORMAT(A)
+<span class="ln">486</span>          ENDIF
+<span class="ln">487</span>          DS = HPTTOL(2)
+<span class="ln">488</span>c shift data for remaining points by the required number
+<span class="ln">489</span>          DO I=M,1, -1
+<span class="ln">490</span>             HS(I+MCORE) = HS(I)
+<span class="ln">491</span>             HR(I+MCORE) = HR(I)
+<span class="ln">492</span>             HL(I+MCORE) = HL(I)
+<span class="ln">493</span>             HP(I+MCORE) = HP(I)
+<span class="ln">494</span>             HT(I+MCORE) = HT(I)
+<span class="ln">495</span>             LC(I+MCORE) = LC(I)
+<span class="ln">496</span>             DO J=1, 15
+<span class="ln">497</span>                HCOMP(J,I+MCORE) = HCOMP(J,I)
+<span class="ln">498</span>             END DO
+<span class="ln">499</span>             OMEGA(I+MCORE) = OMEGA(I)
+<span class="ln">500</span>          END DO
+<span class="ln">501</span>          MP1 = MCORE+1
+<span class="ln">502</span>C MARCH INWARD IN MASS FROM THE INNERMOST MODEL POINT.
+<span class="ln">503</span>C ASSUME EPSILON=CONSTANT AND DEL=CONSTANT
+<span class="ln">504</span>          RHOC = HD(1)
+<span class="ln">505</span>          DEL = (HT(2)-HT(1))/(HP(2)-HP(1))
+<span class="ln">506</span>          HLC = HL(1)
+<span class="ln">507</span>C MHP 4/12 FACTOR FOR ESTIMATING RHO FROM P AND T
+<span class="ln">508</span>          FACD = HP(MP1)-HD(MP1)-HT(MP1)
+<span class="ln">509</span>          DO I = MCORE,1,-1
+<span class="ln">510</span>             HS(I) = HS(I+1)-DS
+<span class="ln">511</span>C USE M  = 4PI/3*RHOC*R**3 TO GET R AS A FUNCTION OF M
+<span class="ln">512</span>             HR(I) = CC13*(HS(I)-C4PI3L-RHOC)
+<span class="ln">513</span>C USE EPSILON=CONSTANT TO GET L
+<span class="ln">514</span>             HL(I) = EXP(CLN*(HS(I)-HS(MP1)))*HLC
+<span class="ln">515</span>C USE HYDROSTATIC EQUILIBRIUM TO GET P
+<span class="ln">516</span>             PP = HP(I+1)
+<span class="ln">517</span>             TEMP = EXP(CLN*(CGL+2.0D0*HS(I)-C4PIL-PP-4.0D0*HR(I)))
+<span class="ln">518</span>             PP = PP+0.5D0*TEMP*DS
+<span class="ln">519</span>             TEMP = EXP(CLN*(CGL+2.0D0*HS(I)-C4PIL-PP-4.0D0*HR(I)))
+<span class="ln">520</span>             HP(I) = HP(I+1)+TEMP*DS
+<span class="ln">521</span>C ASSUME R/C FLAG IS THE SAME AS FOR THE FIRST POINT
+<span class="ln">522</span>             LC(I) = LC(MP1)
+<span class="ln">523</span>C ASSUME DEL= CONSTANT IN THE CORE
+<span class="ln">524</span>             HT(I) = HT(I+1)+TEMP*DEL*DS
+<span class="ln">525</span>C ASSUME OMEGA = CONSTANT
+<span class="ln">526</span>             OMEGA(I) = OMEGA(MP1)
+<span class="ln">527</span>C ASSUME COMPOSITION IS UNIFORM
+<span class="ln">528</span>             DO J=1, 15
+<span class="ln">529</span>                HCOMP(J,I) = HCOMP(J,MP1)
+<span class="ln">530</span>             END DO
+<span class="ln">531</span>C CALL EQUATION OF STATE TO GET CONSISTENT DENSITY
+<span class="ln">532</span>C           LDERIV = .FALSE.
+<span class="ln">533</span>C           LOCOND = .FALSE.
+<span class="ln">534</span>C           LATMO = .FALSE.
+<span class="ln">535</span>C             KSAHA = 0
+<span class="ln">536</span>C           X = HCOMP(1,I)
+<span class="ln">537</span>C           Z = HCOMP(3,I)
+<span class="ln">538</span>C           PL = HP(I)
+<span class="ln">539</span>C             P = EXP(CLN*PL)
+<span class="ln">540</span>C             TL = HT(I)
+<span class="ln">541</span>C             T = EXP(CLN*TL)
+<span class="ln">542</span>C           DL = HD(I+1)
+<span class="ln">543</span>C             D = EXP(CLN*DL)
+<span class="ln">544</span>C           FPL = 1.0D0
+<span class="ln">545</span>C           FTL = 1.0D0
+<span class="ln">546</span>C           CALL EQSTAT(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,
+<span class="ln">547</span>C     *                   RMU,AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,
+<span class="ln">548</span>C     *                   QAT,QAP,QCPT,QCPP,LDERIV,LATMO,KSAHA)
+<span class="ln">549</span>C             HD(I) = DL
+<span class="ln">550</span>C MHP 4/12 REPLACED (BROKEN) CALL TO EQSTAT WITH LOCAL ESTIMATE FOR RHO
+<span class="ln">551</span>             HD(I) = HP(I) - HT(I) - FACD
+<span class="ln">552</span>          END DO
+<span class="ln">553</span>          M = MN
+<span class="ln">554</span>      END IF
+<span class="ln">555</span>C End of code to extend core inward
+<span class="ln">556</span>
+<span class="ln">557</span>C PERFORM RESCALING OF FIRST MODEL IF REQUIRED
+<span class="ln">558</span>      IF(IRESCA(NK).NE.1) CALL <a href="../yrec-map/rscale.f.html#def-RSCALE" title="RSCALE in rscale.f">RSCALE</a>(HL,HCOMP,HS,HSTOT,M,NK,
+<span class="ln">559</span>     *      SMASS,LC)
+<span class="ln">560</span>
+<span class="ln">561</span>C What is the metallicity of your model? (surface X and Z)
+<span class="ln">562</span>C put in SETUPOPAC here, and take out of setups.
+<span class="ln">563</span>C DBG 2/92 CHANGED SO THAT WORKS ON FIRST MODEL OF EACH NEW RUN
+<span class="ln">564</span>C CHANGE FITTING POINT OF THE ENVELOPE INTEGRATION IF REQUESTED;
+<span class="ln">565</span>C PROCEDURE IS:
+<span class="ln">566</span>C IF THE REQUESTED ENVELOPE MASS(SENV0) IS GREATER THAN THE
+<span class="ln">567</span>C CURRENT ONE, DELETE POINTS UNTIL THE MASS IS EQUAL.
+<span class="ln">568</span>C LINEAR INTERPOLATION BETWEEN THE LAST POINT ABOVE THE FITTING
+<span class="ln">569</span>C MASS AND THE FIRST POINT BELOW IT IS USED;COMPOSITION IS
+<span class="ln">570</span>C ASSUMED EQUAL TO THE LAST OLD POINT BELOW THE NEW FITTING POINT.
+<span class="ln">571</span>C IF THE REQUESTED ENVELOPE MASS IS SMALLER THAN THE CURRENT ONE,
+<span class="ln">572</span>C AN ENVELOPE WITH TEFF AND L EQUAL TO THE STORED MODEL VALUE
+<span class="ln">573</span>C IS INTEGRATED FROM THE SURFACE TO THE DESIRED FITTING POINT.
+<span class="ln">574</span>C 1 NEW POINT IS ADDED, AND THE COMPOSITION OF THE NEW POINT
+<span class="ln">575</span>C IS ASSUMED EQUAL TO THAT OF THE LAST OLD POINT.
+<span class="ln">576</span>      IF(LSENV0) THEN
+<span class="ln">577</span>       IF(SENV0.GT.0.0D0) SENV0 = -SENV0
+<span class="ln">578</span>C DBG 2/92 CHANGED MINIMUM FROM 1.0D-10 TO 1.0D-12
+<span class="ln">579</span>C RESTRICT MIMIMUM ENVELOPE MASS;1.0D-12 CORRESPONDS TO TAU=2/3
+<span class="ln">580</span>C FOR THIS PURPOSE(BASE OF ATMOSPHERE).
+<span class="ln">581</span>       IF(SENV0.GT.-1.0D-12) SENV0 = -1.D-12
+<span class="ln">582</span>       SENV = HS(M) - HSTOT
+<span class="ln">583</span>       SENV1 = SENV
+<span class="ln">584</span>       IF(SENV.EQ.SENV0) GOTO 599
+<span class="ln">585</span>       JEND = 11
+<span class="ln">586</span>       IF(LEXCOM) JEND = 15
+<span class="ln">587</span>       IF(SENV0.LT.SENV) THEN
+<span class="ln">588</span>C NEW ENVELOPE DEEPER THAN THE OLD ONE
+<span class="ln">589</span>          HSEND = HSTOT + SENV0
+<span class="ln">590</span>          DO 575 I = M-1,1,-1
+<span class="ln">591</span>             IF(HS(I).LT.HSEND)GOTO 580
+<span class="ln">592</span> 575        CONTINUE
+<span class="ln">593</span>C ENVELOPE MASS DESIRED WITHIN FIRST POINT;PRINT NASTY MESSAGE
+<span class="ln">594</span>C AND ABORT.
+<span class="ln">595</span>          WRITE(ISHORT,576)SENV0
+<span class="ln">596</span> 576        FORMAT(5X,&#x27;ERROR IN SUBROUTINE STARIN&#x27;/5X,&#x27;DESIRED&#x27;,
+<span class="ln">597</span>     *      &#x27; ENVELOPE MASS&#x27;,1PE22.13,&#x27; TOO LARGE&#x27;/5X,&#x27;ENVELOPE&#x27;,
+<span class="ln">598</span>     *      &#x27; MASS NOT CHANGED&#x27;)
+<span class="ln">599</span>          GOTO 599
+<span class="ln">600</span> 580        M = I + 1
+<span class="ln">601</span>          SENV = SENV0
+<span class="ln">602</span>          FS = (HSEND - HS(I))/(HS(I+1) - HS(I))
+<span class="ln">603</span>          HS(M) = HSEND
+<span class="ln">604</span>          HD(M) = HD(I) + FS*(HD(I+1) - HD(I))
+<span class="ln">605</span>          HL(M) = HL(I) + FS*(HL(I+1) - HL(I))
+<span class="ln">606</span>          HP(M) = HP(I) + FS*(HP(I+1) - HP(I))
+<span class="ln">607</span>          HR(M) = HR(I) + FS*(HR(I+1) - HR(I))
+<span class="ln">608</span>          HT(M) = HT(I) + FS*(HT(I+1) - HT(I))
+<span class="ln">609</span>          DO 585 J = 1,JEND
+<span class="ln">610</span>             HCOMP(J,M) = HCOMP(J,I)
+<span class="ln">611</span> 585        CONTINUE
+<span class="ln">612</span>          XNEW = HCOMP(1,M)
+<span class="ln">613</span>          ZNEW = HCOMP(3,M)
+<span class="ln">614</span>          IF(LROT) OMEGA(M) = OMEGA(I) + FS*(OMEGA(I+1)-OMEGA(I))
+<span class="ln">615</span>          IF(LC(I).AND.LC(I+1))THEN
+<span class="ln">616</span>             LC(M) = .TRUE.
+<span class="ln">617</span>          ELSE IF(.NOT.LC(I).AND. .NOT.LC(I+1))THEN
+<span class="ln">618</span>             LC(M) = .FALSE.
+<span class="ln">619</span>          ELSE
+<span class="ln">620</span>C CALL BASIC PHYSICS ROUTINES TO DETERMINE IF THE NEW LAST SHELL IS
+<span class="ln">621</span>C CONVECTIVE OR RADIATIVE.
+<span class="ln">622</span>             LDERIV = .FALSE.
+<span class="ln">623</span>             LOCOND = .FALSE.
+<span class="ln">624</span>             LATMO = .TRUE.
+<span class="ln">625</span>             KSAHA = 0
+<span class="ln">626</span>             X = HCOMP(1,M)
+<span class="ln">627</span>             Z = HCOMP(3,M)
+<span class="ln">628</span>             PL = HP(M)
+<span class="ln">629</span>             TL = HT(M)
+<span class="ln">630</span>             DL = HD(M)
+<span class="ln">631</span>             B = HL(M)
+<span class="ln">632</span>             RL = HR(M)
+<span class="ln">633</span>             SL = HS(M)
+<span class="ln">634</span>             FPL = 1.0D0
+<span class="ln">635</span>             FTL = 1.0D0
+<span class="ln">636</span>C 9/22/26 MHP via Claude
+<span class="ln">637</span>C code changed to remove the MHD equation of state
+<span class="ln">638</span>C 9/23/26 MHP via Claude
+<span class="ln">639</span>C this EQSTAT call was previously only reached when LMHD was TRUE
+<span class="ln">640</span>C (there was no ELSE branch calling it otherwise, unlike every other
+<span class="ln">641</span>C LMHD site in the code), so with the default LMHD=.FALSE. it never
+<span class="ln">642</span>C executed. Identified as an unintended bug and fixed by calling it
+<span class="ln">643</span>C unconditionally, matching every other EQSTAT call site.
+<span class="ln">644</span>               IF (LDH) THEN
+<span class="ln">645</span>                  XXDH = HCOMP(1,M)
+<span class="ln">646</span>                  YYDH = HCOMP(2,M)+HCOMP(4,M)
+<span class="ln">647</span>                  ZZDH = HCOMP(3,M)
+<span class="ln">648</span>                  ZDH(1) = HCOMP(5,M)+HCOMP(6,M)
+<span class="ln">649</span>                  ZDH(2) = HCOMP(7,M)+HCOMP(8,M)
+<span class="ln">650</span>                  ZDH(3) = HCOMP(9,M)+HCOMP(10,M)+HCOMP(11,M)
+<span class="ln">651</span>               END IF
+<span class="ln">652</span>               CALL <a href="../yrec-map/eqstat.f.html#def-EQSTAT" title="EQSTAT in eqstat.f">EQSTAT</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,
+<span class="ln">653</span>     *                 FXION,RMU,AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,
+<span class="ln">654</span>     *                 QDTP,QAT,QAP,QCPT,QCPP,LDERIV,LATMO,KSAHA)
+<span class="ln">655</span>               CALL <a href="../yrec-map/getopac.f.html#def-GETOPAC" title="GETOPAC in getopac.f">GETOPAC</a>(DL, TL, X, Z, O, OL, QOD, QOT, FXION)
+<span class="ln">656</span>               IOVIM = -1
+<span class="ln">657</span>               CALL <a href="../yrec-map/tpgrad.f.html#def-TPGRAD" title="TPGRAD in tpgrad.f">TPGRAD</a>(TL,T,PL,P,D,RL,SL,B,O,QDT,QDP,QOT,QOD,
+<span class="ln">658</span>     *              QCP,DEL,DELR,DELA,QDTT,QDTP,QAT,QAP,QACT,QACP,
+<span class="ln">659</span>     *              QACR,QCPT,QCPP,VEL,LDERIV,LCONV,FPL,FTL,TEFFL,
+<span class="ln">660</span>     *              CMIXL)
+<span class="ln">661</span>               HD(M) = DL
+<span class="ln">662</span>               LC(M) = LCONV
+<span class="ln">663</span>          ENDIF
+<span class="ln">664</span>       ELSE
+<span class="ln">665</span>C DESIRED ENVELOPE MASS LESS THAN CURRENT VALUE.
+<span class="ln">666</span>            MM = M
+<span class="ln">667</span>            EMAX0 = ENVMAX
+<span class="ln">668</span>            EMIN0 = ENVMIN
+<span class="ln">669</span>            EBEG0 = ENVBEG
+<span class="ln">670</span>            ENVMAX = HPTTOL(8)
+<span class="ln">671</span>            ENVMIN = HPTTOL(8)
+<span class="ln">672</span>            ENVBEG = HPTTOL(8)
+<span class="ln">673</span>C          SENV = SENV0
+<span class="ln">674</span>          LSBC0 = .FALSE.
+<span class="ln">675</span>          LPRT = .TRUE.
+<span class="ln">676</span>          KATM = 0
+<span class="ln">677</span>          KENV = 0
+<span class="ln">678</span>          KSAHA = 0
+<span class="ln">679</span>          B = DEXP(CLN*BL)
+<span class="ln">680</span>          RL = 0.5D0*(BL + CLSUNL - 4.0D0*TEFFL - C4PIL - CSIGL)
+<span class="ln">681</span>          GL = CGL + STOTAL - RL - RL
+<span class="ln">682</span>          X = HCOMP(1,M)
+<span class="ln">683</span>          Z = HCOMP(3,M)
+<span class="ln">684</span>          FPL = 1.0D0
+<span class="ln">685</span>          FTL = 1.0D0
+<span class="ln">686</span>          IXX=0
+<span class="ln">687</span>          PLIM = HP(M)
+<span class="ln">688</span>C DBG PULSE: DO NOT DO PULSE OUTPUT
+<span class="ln">689</span>            LPULPT = .FALSE.
+<span class="ln">690</span>            IF (LDH) THEN
+<span class="ln">691</span>               XXDH = HCOMP(1,M)
+<span class="ln">692</span>               YYDH = HCOMP(2,M)+HCOMP(4,M)
+<span class="ln">693</span>               ZZDH = HCOMP(3,M)
+<span class="ln">694</span>               ZDH(1) = HCOMP(5,M)+HCOMP(6,M)
+<span class="ln">695</span>               ZDH(2) = HCOMP(7,M)+HCOMP(8,M)
+<span class="ln">696</span>               ZDH(3) = HCOMP(9,M)+HCOMP(10,M)+HCOMP(11,M)
+<span class="ln">697</span>            END IF
+<span class="ln">698</span>C MHP 10/02  define ISTORE - used in ENVINT
+<span class="ln">699</span>            IDUM = 0
+<span class="ln">700</span>C G Somers 10/14, FOR SPOTTED RUNS, FIND THE
+<span class="ln">701</span>C PRESSURE AT THE AMBIENT TEMPERATURE ATEFFL
+<span class="ln">702</span>          IF(JENV.EQ.M.AND.SPOTF.NE.0.0.AND.SPOTX.NE.1.0)THEN
+<span class="ln">703</span>               ATEFFL = TEFFL - 0.25*LOG10(SPOTF * SPOTX**4.0 + 1.0 - SPOTF)
+<span class="ln">704</span>          ELSE
+<span class="ln">705</span>             ATEFFL = TEFFL
+<span class="ln">706</span>          ENDIF
+<span class="ln">707</span>          CALL <a href="../yrec-map/envint.f.html#def-ENVINT" title="ENVINT in envint.f">ENVINT</a>(B,FPL,FTL,GL,HSTOT,IXX,LPRT,LSBC0,PLIM,RL,
+<span class="ln">708</span>     *           ATEFFL,X,Z,DUM1,IDUM,KATM,KENV,KSAHA,DUM2,
+<span class="ln">709</span>     *           DUM3,DUM4,LPULPT,CMIXL)
+<span class="ln">710</span>C G Somers END
+<span class="ln">711</span>            ENVMAX = EMAX0
+<span class="ln">712</span>            ENVMIN = EMIN0
+<span class="ln">713</span>            ENVBEG = EBEG0
+<span class="ln">714</span>          SENV = SENV0
+<span class="ln">715</span>            IF(M+NUMENV.GE.JSON) STOP 9999
+<span class="ln">716</span>C ENFORCE CONSISTENCY WITH THE INTERIOR SOLUTION;
+<span class="ln">717</span>C ADJUST THE (P, RHO, T, R) POINTS TO BE CONSISTENT
+<span class="ln">718</span>C WITH THE LAST MODEL POINT.
+<span class="ln">719</span>            DP = HP(M) - ENVP(1)
+<span class="ln">720</span>            DD = HD(M) - ENVD(1)
+<span class="ln">721</span>            DT = HT(M) - ENVT(1)
+<span class="ln">722</span>            DR = HR(M) - ENVR(1)
+<span class="ln">723</span>            DO J = 1,NUMENV - 1
+<span class="ln">724</span>               ENVD(J) = ENVD(J+1)+DD
+<span class="ln">725</span>               ENVP(J) = ENVP(J+1)+DP
+<span class="ln">726</span>               ENVR(J) = ENVR(J+1)+DR
+<span class="ln">727</span>               ENVS(J) = ENVS(J+1)
+<span class="ln">728</span>               ENVT(J) = ENVT(J+1)+DT
+<span class="ln">729</span>               ENVX(J) = ENVX(J+1)
+<span class="ln">730</span>               ENVZ(J) = ENVZ(J+1)
+<span class="ln">731</span>            END DO
+<span class="ln">732</span>            NUMENV = NUMENV - 1
+<span class="ln">733</span>            DO J = M+1,M+NUMENV
+<span class="ln">734</span>               JM = J-M
+<span class="ln">735</span>C LUMINOSITY ASSUMED CONSTANT
+<span class="ln">736</span>               HL(J) = HL(M)
+<span class="ln">737</span>C INCLUDE NEW POINTS UP TO THE DIFFERENT DESIRED FITTING POINT
+<span class="ln">738</span>               IF(ENVS(JM).LE.SENV)THEN
+<span class="ln">739</span>                  HD(J) = ENVD(JM)
+<span class="ln">740</span>                  HP(J) = ENVP(JM)
+<span class="ln">741</span>                  HR(J) = ENVR(JM)
+<span class="ln">742</span>                  HS(J) = ENVS(JM) + STOTAL
+<span class="ln">743</span>                  HT(J) = ENVT(JM)
+<span class="ln">744</span>                  HCOMP(1,J) = ENVX(JM)
+<span class="ln">745</span>                  HCOMP(3,J) = ENVZ(JM)
+<span class="ln">746</span>                  DO K = 4,JEND
+<span class="ln">747</span>                     HCOMP(K,J) = HCOMP(K,M)
+<span class="ln">748</span>                  END DO
+<span class="ln">749</span>                  HCOMP(2,J)=1.0D0-HCOMP(1,J)-HCOMP(3,J)-HCOMP(4,J)
+<span class="ln">750</span>                  LC(J) = LCENV(JM)
+<span class="ln">751</span>               ELSE
+<span class="ln">752</span>C POINTS BEYOND THIS ARE ABOVE THE NEW DESIRED FITTING POINT;
+<span class="ln">753</span>C INTERPOLATE LINEARLY, SET NEW NUMBER OF TOTAL POINTS, AND EXIT
+<span class="ln">754</span>                  IF(JM.EQ.1)THEN
+<span class="ln">755</span>C INTERPOLATE BETWEEN THE LAST INTERIOR POINT AND THE FIRST ENVELOPE POINT
+<span class="ln">756</span>                     X0 = HS(M)
+<span class="ln">757</span>                     X1 = STOTAL + SENV
+<span class="ln">758</span>                     X2 = ENVS(JM) + STOTAL
+<span class="ln">759</span>                     IF(X2-X0.LT.1.0D-14) STOP 9998
+<span class="ln">760</span>                     FX = (X1-X0)/(X2-X0)
+<span class="ln">761</span>                     HD(J) = HD(M)+FX*(ENVD(JM)-HD(M))
+<span class="ln">762</span>                     HP(J) = HP(M)+FX*(ENVP(JM)-HP(M))
+<span class="ln">763</span>                     HR(J) = HR(M)+FX*(ENVR(JM)-HR(M))
+<span class="ln">764</span>                     HS(J) = X1
+<span class="ln">765</span>                     HT(J) = HT(M)+FX*(ENVT(JM)-HT(M))
+<span class="ln">766</span>                     HCOMP(1,J) = HCOMP(1,M)+FX*(HCOMP(1,M)-ENVX(JM))
+<span class="ln">767</span>                     HCOMP(3,J) = HCOMP(3,M)+FX*(HCOMP(3,M)-ENVZ(JM))
+<span class="ln">768</span>                     DO K = 4,JEND
+<span class="ln">769</span>                        HCOMP(K,J) = HCOMP(K,M)
+<span class="ln">770</span>                     END DO
+<span class="ln">771</span>                     HCOMP(2,J)=1.0D0-HCOMP(1,J)-HCOMP(3,J)-HCOMP(4,J)
+<span class="ln">772</span>                     IF(LCENV(JM).OR.LC(M))THEN
+<span class="ln">773</span>                        LC(J) = .TRUE.
+<span class="ln">774</span>                     ELSE
+<span class="ln">775</span>                        LC(J) = .FALSE.
+<span class="ln">776</span>                     ENDIF
+<span class="ln">777</span>                  ELSE
+<span class="ln">778</span>C INTERPOLATE BETWEEN THE LAST 2 ENVELOPE POINTS
+<span class="ln">779</span>                     X0 = ENVS(JM-1) + STOTAL
+<span class="ln">780</span>                     X1 = STOTAL + SENV
+<span class="ln">781</span>                     X2 = ENVS(JM) + STOTAL
+<span class="ln">782</span>                     IF(X2-X0.LT.1.0D-14) STOP 9998
+<span class="ln">783</span>                     FX = (X1-X0)/(X2-X0)
+<span class="ln">784</span>                     HD(J) = ENVD(JM-1)+FX*(ENVD(JM)-ENVD(JM-1))
+<span class="ln">785</span>                     HP(J) = ENVP(JM-1)+FX*(ENVP(JM)-ENVP(JM-1))
+<span class="ln">786</span>                     HR(J) = ENVR(JM-1)+FX*(ENVR(JM)-ENVR(JM-1))
+<span class="ln">787</span>                     HS(J) = X1
+<span class="ln">788</span>                     HT(J) = ENVT(JM-1)+FX*(ENVT(JM)-ENVT(JM-1))
+<span class="ln">789</span>                     HCOMP(1,J) = ENVX(JM-1)+FX*(ENVX(JM)-ENVX(JM-1))
+<span class="ln">790</span>                     HCOMP(3,J) = ENVZ(JM-1)+FX*(ENVZ(JM)-ENVZ(JM-1))
+<span class="ln">791</span>                     DO K = 4,JEND
+<span class="ln">792</span>                        HCOMP(K,J) = HCOMP(K,M)
+<span class="ln">793</span>                     END DO
+<span class="ln">794</span>                     HCOMP(2,J)=1.0D0-HCOMP(1,J)-HCOMP(3,J)-HCOMP(4,J)
+<span class="ln">795</span>                     IF(LCENV(JM).OR.LCENV(JM-1))THEN
+<span class="ln">796</span>                        LC(J) = .TRUE.
+<span class="ln">797</span>                     ELSE
+<span class="ln">798</span>                        LC(J) = .FALSE.
+<span class="ln">799</span>                     ENDIF
+<span class="ln">800</span>                  ENDIF
+<span class="ln">801</span>                  M = J
+<span class="ln">802</span>                  GOTO 587
+<span class="ln">803</span>               ENDIF
+<span class="ln">804</span>            END DO
+<span class="ln">805</span>C ASSIGN THE BOUNDARY AT THE PHOTOSPHERE FOR ENVELOPE MASS BELOW 1.0D-12.
+<span class="ln">806</span>            M = M + NUMENV
+<span class="ln">807</span> 587        CONTINUE
+<span class="ln">808</span>            IF(LROT)THEN
+<span class="ln">809</span>               DO J = MM+1,M
+<span class="ln">810</span>                  OMEGA(J) = OMEGA(MM)
+<span class="ln">811</span>                  HJM(J) = CC23*OMEGA(MM)*10.0D0**(2.0D0*HR(J))
+<span class="ln">812</span>               END DO
+<span class="ln">813</span>            ENDIF
+<span class="ln">814</span>            WRITE(*,910)
+<span class="ln">815</span> 910  FORMAT(1X,&#x27;NEW INTERIOR POINTS FROM CHANGE IN ENVELOPE MASS&#x27;/
+<span class="ln">816</span>     *      &#x27; J,LOG RHO, LOG L, LOG P, LOG R, LOG M, LOG T, CONV T/F&#x27;)
+<span class="ln">817</span>      WRITE(*,911)(J,HD(J),HL(J),HP(J),HR(J),HS(J)-STOTAL,
+<span class="ln">818</span>     *             HT(J),LC(J), J = MM,M)
+<span class="ln">819</span> 911  FORMAT(I5,1P6E16.8,L2)
+<span class="ln">820</span>C          M = M + 1
+<span class="ln">821</span>C          HS(M) = HSTOT + SENV
+<span class="ln">822</span>C          HD(M) = ED
+<span class="ln">823</span>C          HL(M) = HL(M-1)
+<span class="ln">824</span>C          HP(M) = EP
+<span class="ln">825</span>C          HR(M) = ER
+<span class="ln">826</span>C          HT(M) = ET
+<span class="ln">827</span>C          LC(M) = EVEL.GT.0.0D0
+<span class="ln">828</span>C          DO 590 J = 1,JEND
+<span class="ln">829</span>C             HCOMP(J,M) = HCOMP(J,M-1)
+<span class="ln">830</span>C 590        CONTINUE
+<span class="ln">831</span>C          XNEW = HCOMP(1,M)
+<span class="ln">832</span>C          ZNEW = HCOMP(3,M)
+<span class="ln">833</span>C          IF(LROT) OMEGA(M) = OMEGA(I) + FS*(OMEGA(I+1)-OMEGA(I))
+<span class="ln">834</span>       ENDIF
+<span class="ln">835</span>       LNEW = .TRUE.
+<span class="ln">836</span>       WRITE(ISHORT,597)SENV1,SENV
+<span class="ln">837</span> 597     FORMAT(5X,&#x27;***** NEW ENVELOPE MASS CALCULATED *****&#x27;/8X,
+<span class="ln">838</span>     *        &#x27;OLD SENV &#x27;,1PE22.13,&#x27;  NEW SENV&#x27;,E22.13)
+<span class="ln">839</span> 599     CONTINUE
+<span class="ln">840</span>      ENDIF
+<span class="ln">841</span>
+<span class="ln">842</span>C SET UP WEIGHTS AND MASSES
+<span class="ln">843</span>C HS1 IS THE UNLOGGED HS; HS2 IS THE MASS OF THE SHELL(ALSO NOT LOG).
+<span class="ln">844</span>      DS3 = DEXP(CLN*HS(1))
+<span class="ln">845</span>      DS2 = - DS3
+<span class="ln">846</span>      DO 120 I = 2,M
+<span class="ln">847</span>       DS1 = DS2
+<span class="ln">848</span>       DS2 = DS3
+<span class="ln">849</span>       DS3 = DEXP(CLN*HS(I))
+<span class="ln">850</span>       HS1(I-1) = DS2
+<span class="ln">851</span>       HS2(I-1) = 0.5D0*(DS3-DS1)
+<span class="ln">852</span> 120  CONTINUE
+<span class="ln">853</span>      HS1(M) = DS3
+<span class="ln">854</span>      HS2(M) = DEXP(CLN*HSTOT) - 0.5D0*(DS2+DS3)
+<span class="ln">855</span>
+<span class="ln">856</span>      IF(LROT) THEN
+<span class="ln">857</span>C CALCULATE FP,FT,R0 AND ETA2 GIVEN OMEGA
+<span class="ln">858</span>       CALL <a href="../yrec-map/fpft.f.html#def-FPFT" title="FPFT in fpft.f">FPFT</a>(HD,HR,HS,M,OMEGA,ETA2,FP,FT,HG,R0)
+<span class="ln">859</span>C FIND MOMENT OF INERTIA(HI)
+<span class="ln">860</span>C        CALL MOMI(ETA2,HD,HR,HS,HS2,1,M,OMEGA,R0,HI,QIW,M)  ! KC 2025-05-31
+<span class="ln">861</span>       CALL <a href="../yrec-map/momi.f.html#def-MOMI" title="MOMI in momi.f">MOMI</a>(ETA2,HR,HS,HS2,1,M,OMEGA,R0,HI,QIW)
+<span class="ln">862</span>C GIVEN OMEGA AND I, FIND ANGULAR MOMENTUM AND ROTATIONAL K.E.
+<span class="ln">863</span>       SUMJ = 0.0D0
+<span class="ln">864</span>       SUMKE = 0.0D0
+<span class="ln">865</span>       DO 550 I = 1,M
+<span class="ln">866</span>          HJ = OMEGA(I)*HI(I)
+<span class="ln">867</span>          HJM(I) = HJ/HS2(I)
+<span class="ln">868</span>          HKEROT(I) = 0.5D0*OMEGA(I)*HJ
+<span class="ln">869</span>          SUMJ = SUMJ + HJ
+<span class="ln">870</span>          SUMKE = SUMKE + HKEROT(I)
+<span class="ln">871</span> 550     CONTINUE
+<span class="ln">872</span>       WRITE(ISHORT,560)SJTOT,SUMJ,SKEROT,SUMKE
+<span class="ln">873</span> 560     FORMAT(1X,&#x27;TOTAL J OF STAR - PREVIOUS &#x27;,1PE21.13,&#x27; NEW &#x27;,
+<span class="ln">874</span>     *        1PE21.13/1X,&#x27;TOTAL ROTATIONAL K.E. OF STAR - PREVIOUS &#x27;,
+<span class="ln">875</span>     *        1PE21.13,&#x27; NEW &#x27;,1PE21.13)
+<span class="ln">876</span>       SJTOT = SUMJ
+<span class="ln">877</span>       SKEROT = SUMKE
+<span class="ln">878</span>      ENDIF
+<span class="ln">879</span>
+<span class="ln">880</span>      IF(NK.GT.1) GOTO 630
+<span class="ln">881</span>C SET UP MASS FRACTIONS AND NUMBER FRACTIONS OF ELEMENTS IN
+<span class="ln">882</span>C ENVELOPE.
+<span class="ln">883</span>C DBG 1/96 V (ENVELOPE MASS FRACTIONS WAS NORMALLY READ IN VIA
+<span class="ln">884</span>C RDLAOL. NOW THAT THESE OPACITIES ARE OBSOLETE VNEW IS INTRODUCED
+<span class="ln">885</span>C HOLD THE RELATIVE MASS FRACTIONS OF THE ELEMENTS (SEE PARMIN).
+<span class="ln">886</span>C TO MAINTAIN BACKWARD COMPATIBILITY IF LLAOL=T THEN USE V READ IN
+<span class="ln">887</span>C VIA RDLAOL OTHERWISE USE VNEW.
+<span class="ln">888</span>      IF (.NOT.LLAOL) THEN
+<span class="ln">889</span>         DO I=1, 12
+<span class="ln">890</span>            V(I)=VNEW(I)
+<span class="ln">891</span>         END DO
+<span class="ln">892</span>      END IF
+<span class="ln">893</span>
+<span class="ln">894</span>C COMPUTE SURFACE MIX VALUES.
+<span class="ln">895</span>C ZENVM = Z OTHER THAN CNO CYCLE ELEMENTS;
+<span class="ln">896</span>C AMUENV = MEAN ATOMIC WEIGHT OF SURFACE Z;
+<span class="ln">897</span>C FXENV = NUMBER DENSITY OF SPECIES .
+<span class="ln">898</span>      XENV = XNEW
+<span class="ln">899</span>      ZENV = ZNEW
+<span class="ln">900</span>      YENV = 1.0D0 - XENV - ZENV - HCOMP(4,M)
+<span class="ln">901</span>      Y3ENV = HCOMP(4,M)
+<span class="ln">902</span>C EVERYTHING BUT V(7)=H, AND V(12)=HE
+<span class="ln">903</span>      VSUM = V(1)+V(2)+V(3)+V(4)+V(5)+V(6)+V(8)+V(9)+V(10)+V(11)
+<span class="ln">904</span>      ZENVM = ZENV*(VSUM -V(6)-V(8)-V(9))/VSUM
+<span class="ln">905</span>      FV = ZENV/VSUM
+<span class="ln">906</span>      V(7) = XENV/FV
+<span class="ln">907</span>      V(12) = (1.0D0-XENV-ZENV)/FV
+<span class="ln">908</span>      VSUM = 0.0D0
+<span class="ln">909</span>      DO 610 I = 1,12
+<span class="ln">910</span>       V(I) = FV*V(I)/ATOMWT(I)
+<span class="ln">911</span>       VSUM = VSUM + V(I)
+<span class="ln">912</span> 610  CONTINUE
+<span class="ln">913</span>      AMUENV = VSUM
+<span class="ln">914</span>      FV = 1.0D0/AMUENV
+<span class="ln">915</span>C DBG 1/96 FXENV ARE NUMBER FRACTIONS OF ELEMENTS REQURIED
+<span class="ln">916</span>C BY EOS ROUTINES (SEE EQSTAT AND EQSAHA)
+<span class="ln">917</span>      DO 620 I = 1,12
+<span class="ln">918</span>       FXENV(I) = V(I)*FV
+<span class="ln">919</span> 620  CONTINUE
+<span class="ln">920</span>C     FIND SURFACE COMPOSITION OPACITY TABLE
+<span class="ln">921</span>C     FIRST FIND INTERPOLATING FACTOR FOR COMPOSITION
+<span class="ln">922</span> 630  CONTINUE
+<span class="ln">923</span>C DBG 11/95 GENERATE NEW SURFACE OPACITY TABLES
+<span class="ln">924</span>      CALL <a href="../yrec-map/surfopac.f.html#def-SURFOPAC" title="SURFOPAC in surfopac.f">SURFOPAC</a>(XENV)
+<span class="ln">925</span>      IF(LSCV)THEN
+<span class="ln">926</span>         CALL <a href="../yrec-map/setscv.f.html#def-SETSCV" title="SETSCV in setscv.f">SETSCV</a>
+<span class="ln">927</span>      ENDIF
+<span class="ln">928</span>
+<span class="ln">929</span>C CLONE P,T,R,L ARRAY TO DUMMY ARRAY HPOLD.
+<span class="ln">930</span>C HPOLD IS USED TO LIMIT THE TIMESTEP BASED ON CHANGES FROM
+<span class="ln">931</span>C MODEL TO MODEL IN P,T,R,L.
+<span class="ln">932</span>      DO 710 I = 1,M
+<span class="ln">933</span>         HPO(I) = HP(I)
+<span class="ln">934</span>         HTO(I) = HT(I)
+<span class="ln">935</span>         HRO(I) = HR(I)
+<span class="ln">936</span>         HLO(I) = HL(I)
+<span class="ln">937</span>C  JVS 04/14 Added Teff to the list of saved values
+<span class="ln">938</span>         TEFFLO = TEFFL
+<span class="ln">939</span>C  JVS 05/25 Added model number to list of saved values
+<span class="ln">940</span>       MO = M
+<span class="ln">941</span> 710  CONTINUE
+<span class="ln">942</span>      IF(LROT) THEN
+<span class="ln">943</span>         DO 720 I = 1,M
+<span class="ln">944</span>          WOLD(I) = OMEGA(I)
+<span class="ln">945</span> 720     CONTINUE
+<span class="ln">946</span>      ENDIF
+<span class="ln">947</span>
+<span class="ln">948</span>C 8/17 G Somers
+<span class="ln">949</span>C  FIND BASIC PHYSICAL QUANTITIES. THIS CODE STOLEN FROM PHYSIC
+<span class="ln">950</span>C  FIND ACTUAL AND ADIABATIC TEMPERATURE GRADIENTS,OPACITY,AND
+<span class="ln">951</span>C  MEAN MOLECULAR WEIGHT FOR ALL RADIATIVE SHELLS.
+<span class="ln">952</span>C      if(.False.)then
+<span class="ln">953</span>C      LDERIV = .FALSE.
+<span class="ln">954</span>C      LOCOND = .FALSE.
+<span class="ln">955</span>C      LATMO = .FALSE.
+<span class="ln">956</span>C      IDT = 15
+<span class="ln">957</span>C      DO 725 I = 1,4
+<span class="ln">958</span>C         IDD(I) = 5
+<span class="ln">959</span>C 725  CONTINUE
+<span class="ln">960</span>C      DO 730 IM = 1,M
+<span class="ln">961</span>C         SL = HS(IM)
+<span class="ln">962</span>C         TL = HT(IM)
+<span class="ln">963</span>C         PL = HP(IM)
+<span class="ln">964</span>C         RL = HR(IM)
+<span class="ln">965</span>C         B = HL(IM)
+<span class="ln">966</span>C         X = HCOMP(1,IM)
+<span class="ln">967</span>C         Z = HCOMP(3,IM)
+<span class="ln">968</span>C         DL = HD(IM)
+<span class="ln">969</span>C         FPL = FP(IM)
+<span class="ln">970</span>C         FTL = FT(IM)
+<span class="ln">971</span>C
+<span class="ln">972</span>C         IF(LMHD) THEN
+<span class="ln">973</span>C            CALL MEQOS(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">974</span>C     *           AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,
+<span class="ln">975</span>C     *           QCPP,LDERIV,LATMO,KSAHA)
+<span class="ln">976</span>C         ELSE
+<span class="ln">977</span>C            IF (LDH) THEN
+<span class="ln">978</span>C               XXDH = HCOMP(1,IM)
+<span class="ln">979</span>C               YYDH = HCOMP(2,IM)+HCOMP(4,IM)
+<span class="ln">980</span>C               ZZDH = HCOMP(3,IM)
+<span class="ln">981</span>C               ZDH(1) = HCOMP(5,IM)+HCOMP(6,IM)
+<span class="ln">982</span>C               ZDH(2) = HCOMP(7,IM)+HCOMP(8,IM)
+<span class="ln">983</span>C               ZDH(3) = HCOMP(9,IM)+HCOMP(10,IM)+HCOMP(11,IM)
+<span class="ln">984</span>C            END IF
+<span class="ln">985</span>C            CALL EQSTAT(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">986</span>C     *           AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,
+<span class="ln">987</span>C     *           QCPP,LDERIV,LATMO,KSAHA)
+<span class="ln">988</span>C         ENDIF
+<span class="ln">989</span>C         CALL GETOPAC (DL,TL,X,Z,O,OL,QOD,QOT,FXION)
+<span class="ln">990</span>C         IOVIM=IM
+<span class="ln">991</span>C         CALL TPGRAD(TL,T,PL,P,D,RL,SL,B,O,QDT,QDP,QOT,QOD,QCP,DEL,
+<span class="ln">992</span>C     *        DELR,DELA,QDTT,QDTP,QAT,QAP,QACT,QACP,QACR,QCPT,QCPP,
+<span class="ln">993</span>C     *        VEL,LDERIV,LCONV,FPL,FTL,TEFFL)
+<span class="ln">994</span>C         SDEL(1,IM) = DELR
+<span class="ln">995</span>C         SDEL(2,IM) = DEL
+<span class="ln">996</span>C         SDEL(3,IM) = DELA
+<span class="ln">997</span>CC JVS 10/13 Always want SVEL
+<span class="ln">998</span>C       SVEL(IM) = VEL
+<span class="ln">999</span>C 730  CONTINUE
+<span class="ln">1000</span>C      endif
+<span class="ln">1001</span>
+<span class="ln">1002</span>C       CALL PHYSIC(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,LCZ,M,TEFFL)  ! KC 2025-05-31
+<span class="ln">1003</span>      CALL <a href="../yrec-map/physic.f.html#def-PHYSIC" title="PHYSIC in physic.f">PHYSIC</a>(FP,FT,HCOMP,HD,HG,HL,HP,HR,HS,HT,LC,M,TEFFL,CMIXL)
+<span class="ln">1004</span>      CALL <a href="../yrec-map/ovrot.f.html#def-OVROT" title="OVROT in ovrot.f">OVROT</a>(HCOMP,HD,HP,HR,HS,HT,LC,M,LCZ,MRZONE,MXZONE,NRZONE,
+<span class="ln">1005</span>     *           NZONE)
+<span class="ln">1006</span>C INITIALIZE TAUCZ, PPHOT, AND FRACSTEP
+<span class="ln">1007</span>C       CALL GETTAU(HCOMP,HR,HP,HD,HG,HS1,HT,FP,FT,TEFFL,  ! KC 2025-05-31
+<span class="ln">1008</span>      CALL <a href="../yrec-map/gettau.f.html#def-GETTAU" title="GETTAU in gettau.f">GETTAU</a>(HCOMP,HR,HP,HD,HS1,HT,FP,FT,TEFFL,
+<span class="ln">1009</span>     *            HSTOT,BL,M,LC,ENVR,CMIXL)
+<span class="ln">1010</span>      TAUCZ0 = TAUCZ
+<span class="ln">1011</span>      PPHOT0 = PPHOT
+<span class="ln">1012</span>      FRACSTEP = 0.5
+<span class="ln">1013</span>
+<span class="ln">1014</span>      RETURN
+<span class="ln">1015</span>      END</pre></details>
+<details class='py' id='py-starin'><summary>Python version: starin</summary><pre class='doc'>Provide the starting model of run nk: read it from the unit IFIRST
+(YREC7 or MODEL2 format) or keep the one in memory, then prepare it:
+change the mixture of a homogeneous model, extend the core inward,
+rescale, move the envelope&#x27;s fitting point, compute the shell masses,
+the rotation quantities, the surface composition, and the first
+physics, convection zones and overturn time.
+
+Translates: starin.f#STARIN (09c3b9b)
+
+Arguments: the model (hs, hr, hl, hp, ht, hd, hcomp[species, shell],
+lc, omega, m points, index 0 unused) and its rotation arrays (eta2, fp,
+ft, hi, hjm, hkerot, qiw, r0, hg), the envelope triangle (trit, tril,
+ps, ts, rs, cfenv, ftri, istore), bl, teffl, hstot, smass, dage, ddage,
+model, tlumx, the run number nk, jenv (read only, for the spots), large
+(the previous model failed: stop), the totals sjtot, skerot, v (the
+surface mixture&#x27;s relative mass fractions), cmixl (the run&#x27;s mixing
+length) and compmix (set by the readers). delts, deltsh, ikut, lnew,
+qdp, qdt and vel are output only. Arrays are changed in place.
+
+Returns (bl, dage, ddage, delts, deltsh, ftri, hstot, ikut, istore,
+lnew, m, model, qdp, qdt, sjtot, skerot, smass, teffl, vel, compmix).</pre><pre class='src'><span class="ln">74</span>def starin(bl, cfenv, dage, ddage, delts, deltsh, eta2, fp, ft, ftri, hcomp,
+<span class="ln">75</span>           hd, hi, hjm, hkerot, hl, hp, hr, hs, hs1, hs2, hstot, ht, ikut,
+<span class="ln">76</span>           istore, jenv, large, lc, lnew, m, model, nk, omega, ps, qdp, qdt,
+<span class="ln">77</span>           qiw, r0, rs, sjtot, skerot, smass, teffl, tlumx, tril, trit, ts,
+<span class="ln">78</span>           vel, hg, v, cmixl, compmix):
+<span class="ln">79</span>    &quot;&quot;&quot;Provide the starting model of run nk: read it from the unit IFIRST
+<span class="ln">80</span>    (YREC7 or MODEL2 format) or keep the one in memory, then prepare it:
+<span class="ln">81</span>    change the mixture of a homogeneous model, extend the core inward,
+<span class="ln">82</span>    rescale, move the envelope&#x27;s fitting point, compute the shell masses,
+<span class="ln">83</span>    the rotation quantities, the surface composition, and the first
+<span class="ln">84</span>    physics, convection zones and overturn time.
+<span class="ln">85</span>
+<span class="ln">86</span>    Translates: starin.f#STARIN (09c3b9b)
+<span class="ln">87</span>
+<span class="ln">88</span>    Arguments: the model (hs, hr, hl, hp, ht, hd, hcomp[species, shell],
+<span class="ln">89</span>    lc, omega, m points, index 0 unused) and its rotation arrays (eta2, fp,
+<span class="ln">90</span>    ft, hi, hjm, hkerot, qiw, r0, hg), the envelope triangle (trit, tril,
+<span class="ln">91</span>    ps, ts, rs, cfenv, ftri, istore), bl, teffl, hstot, smass, dage, ddage,
+<span class="ln">92</span>    model, tlumx, the run number nk, jenv (read only, for the spots), large
+<span class="ln">93</span>    (the previous model failed: stop), the totals sjtot, skerot, v (the
+<span class="ln">94</span>    surface mixture&#x27;s relative mass fractions), cmixl (the run&#x27;s mixing
+<span class="ln">95</span>    length) and compmix (set by the readers). delts, deltsh, ikut, lnew,
+<span class="ln">96</span>    qdp, qdt and vel are output only. Arrays are changed in place.
+<span class="ln">97</span>
+<span class="ln">98</span>    Returns (bl, dage, ddage, delts, deltsh, ftri, hstot, ikut, istore,
+<span class="ln">99</span>    lnew, m, model, qdp, qdt, sjtot, skerot, smass, teffl, vel, compmix).
+<span class="ln">100</span>    &quot;&quot;&quot;
+<span class="ln">101</span>    c = constants_mod
+<span class="ln">102</span>    nml = nmlpar_mod
+<span class="ln">103</span>    es = envstruct_mod
+<span class="ln">104</span>    ishort = iounits_mod.ishort
+<span class="ln">105</span>
+<span class="ln">106</span>    if large:
+<span class="ln">107</span>        iounits_mod.write(ishort, &quot; &quot; + &quot;&gt;&quot; * 39 + &quot;&lt;&quot; * 40 + &quot;\n&quot;
+<span class="ln">108</span>                          &quot;STARIN:        ***** RUN STOPPED *****&quot;)
+<span class="ln">109</span>        iounits_mod.write(ishort,
+<span class="ln">110</span>                          &quot;STARIN: ***** MODEL FAILED TO CONVERGE *****&quot;)
+<span class="ln">111</span>        raise SystemExit()
+<span class="ln">112</span>
+<span class="ln">113</span>    ikut = 0
+<span class="ln">114</span>    iread = iounits_mod.ifirst
+<span class="ln">115</span>    vel = 0.0
+<span class="ln">116</span>    qdt = -1.0
+<span class="ln">117</span>    qdp = 1.0
+<span class="ln">118</span>
+<span class="ln">119</span>    if not nml.lfirst[nk]:
+<span class="ln">120</span>        # Keep the model in memory (rescaled if asked).
+<span class="ln">121</span>        if runloop_mod.iresca[nk] != 1:
+<span class="ln">122</span>            hstot, smass = rscale(hl, hcomp, hs, hstot, m, nk, smass, lc)
+<span class="ln">123</span>    else:
+<span class="ln">124</span>        # Read the starting model; its first four characters give the
+<span class="ln">125</span>        # format.
+<span class="ln">126</span>        iounits_mod.rewind(iread)
+<span class="ln">127</span>        atemp = iounits_mod.read(iread)[:4]  # format 10, A4
+<span class="ln">128</span>        # The readers&#x27; returns (not yet translated) are taken as every
+<span class="ln">129</span>        # scalar argument except the units, in argument order.
+<span class="ln">130</span>        if atemp == &quot;NMOD&quot;:
+<span class="ln">131</span>            iounits_mod.write(ishort, &quot;STARIN:  Input model has YREC7 format&quot;)
+<span class="ln">132</span>            (bl, cmixl0, dage, ddage, ftri, hstot, jcore0, jenv0, lexcom0,
+<span class="ln">133</span>             lrot0, m, model, smass, teffl, atm, eos, hik, ldify0, ldifz0,
+<span class="ln">134</span>             ldisk0, linstb0, ljdot00, lok, lovstc0, lovste0, lovstm0,
+<span class="ln">135</span>             lpurez0, lsemic0, compmix, pdisk0, tdisk0, wmax0) = getyrec7(
+<span class="ln">136</span>                bl, cfenv, 0.0, dage, ddage, ftri, hcomp, hd, hl, hp, hr, hs,
+<span class="ln">137</span>                hstot, ht, iread, ishort, 0, 0, lc, False, False, m, model,
+<span class="ln">138</span>                omega, ps, rs, smass, teffl, tlumx, tril, trit, ts, &quot;&quot;, &quot;&quot;,
+<span class="ln">139</span>                &quot;&quot;, False, False, False, False, False, &quot;&quot;, False, False,
+<span class="ln">140</span>                False, False, False, compmix, 0.0, 0.0, 0.0)
+<span class="ln">141</span>        elif atemp == &quot;MOD2&quot;:
+<span class="ln">142</span>            iounits_mod.write(ishort,
+<span class="ln">143</span>                              &quot;STARIN:  Input model has MODEL2 format&quot;)
+<span class="ln">144</span>            (bl, cmixl0, dage, ddage, ftri, hstot, jcore0, jenv0, lexcom0,
+<span class="ln">145</span>             lrot0, m, model, smass, teffl, atm, eos, hik, ldify0, ldifz0,
+<span class="ln">146</span>             ldisk0, linstb0, ljdot00, lok, lovstc0, lovste0, lovstm0,
+<span class="ln">147</span>             lpurez0, lsemic0, compmix, pdisk0, tdisk0, wmax0) = getmodel2(
+<span class="ln">148</span>                bl, cfenv, 0.0, dage, ddage, ftri, hcomp, hd, hl, hp, hr, hs,
+<span class="ln">149</span>                hstot, ht, iread, 0, 0, lc, False, False, m, model, omega,
+<span class="ln">150</span>                ps, rs, smass, teffl, tlumx, tril, trit, ts, &quot;&quot;, &quot;&quot;, &quot;&quot;,
+<span class="ln">151</span>                False, False, False, False, False, &quot;&quot;, False, False, False,
+<span class="ln">152</span>                False, False, compmix, 0.0, 0.0, 0.0)
+<span class="ln">153</span>        else:
+<span class="ln">154</span>            iounits_mod.write(ishort, &quot;STARIN: ***** RUN TERMINATED, &quot;
+<span class="ln">155</span>                              &quot;INVALID INPUT MODEL FILE.  *****&quot;)
+<span class="ln">156</span>            raise SystemExit()
+<span class="ln">157</span>
+<span class="ln">158</span>        # The step in seconds (ddage in years).
+<span class="ln">159</span>        delts = c.csecyr * ddage
+<span class="ln">160</span>        deltsh = abs(delts)
+<span class="ln">161</span>        comp_mod.stotal = hstot
+<span class="ln">162</span>
+<span class="ln">163</span>        # An evolved model: warn if its mixing length or composition switch
+<span class="ln">164</span>        # differs from the run&#x27;s (the run is no longer stopped).
+<span class="ln">165</span>        # Question (see the page): should a mismatch still stop the run?
+<span class="ln">166</span>        if model &gt; 0:
+<span class="ln">167</span>            lmixl = True
+<span class="ln">168</span>            if cmixl0 &gt; 0.0:
+<span class="ln">169</span>                lmixl = abs(cmixl - cmixl0) &lt; 2.0e-3
+<span class="ln">170</span>            if not lmixl or lexcom0 != nml.lexcom:
+<span class="ln">171</span>                # Question (see the page): LEXCP0 is never set; the model&#x27;s
+<span class="ln">172</span>                # value is LEXCOM0. False stands for the undefined value.
+<span class="ln">173</span>                lexcp0 = False
+<span class="ln">174</span>                text = (&quot; ERROR IN SUBROUTINE STARIN\n USER PARAMETERS&quot;
+<span class="ln">175</span>                        &quot; OF WRONG TYPE FOR INITIAL MODEL\n MIXING LENGTH -&quot;
+<span class="ln">176</span>                        f&quot; USER DESIRES{cmixl:7.3f} MODEL MIX LENGTH&quot;
+<span class="ln">177</span>                        f&quot;{cmixl0:7.3f}\n EXTENDED COMP-USER DESIRES &quot;
+<span class="ln">178</span>                        f&quot;{&#x27;T&#x27; if nml.lexcom else &#x27;F&#x27;} MODEL USED &quot;
+<span class="ln">179</span>                        f&quot;{&#x27;T&#x27; if lexcp0 else &#x27;F&#x27;}&quot;)  # format 1040
+<span class="ln">180</span>                iounits_mod.write(ishort, text)
+<span class="ln">181</span>                iounits_mod.write(iounits_mod.iowr, text)
+<span class="ln">182</span>
+<span class="ln">183</span>        istore = 0
+<span class="ln">184</span>        ftri = 1.0
+<span class="ln">185</span>        lnew = True  # the envelope is always recomputed
+<span class="ln">186</span>        comp_mod.xnew = hcomp[1, m]
+<span class="ln">187</span>        comp_mod.znew = hcomp[3, m]
+<span class="ln">188</span>
+<span class="ln">189</span>        if nml.lrot:
+<span class="ln">190</span>            if nml.lwnew:
+<span class="ln">191</span>                for i in range(1, m + 1):  # loop 540
+<span class="ln">192</span>                    omega[i] = nml.wnew
+<span class="ln">193</span>        else:
+<span class="ln">194</span>            for i in range(1, JSON + 1):  # loop 570
+<span class="ln">195</span>                fp[i] = 1.0
+<span class="ln">196</span>                ft[i] = 1.0
+<span class="ln">197</span>        iounits_mod.rewind(iread)
+<span class="ln">198</span>
+<span class="ln">199</span>        # MHP 10/24: change the mixture, only of a homogeneous model.
+<span class="ln">200</span>        testmix = np.zeros(16)
+<span class="ln">201</span>        homogeneous = True
+<span class="ln">202</span>        if nml.lmixture or nml.lisotope:
+<span class="ln">203</span>            for i in range(1, 16):
+<span class="ln">204</span>                testmix[i] = hcomp[i, 1]
+<span class="ln">205</span>            for j in range(2, m + 1):
+<span class="ln">206</span>                for i in range(1, 16):
+<span class="ln">207</span>                    test = abs(hcomp[i, j] - testmix[i])
+<span class="ln">208</span>                    if test &gt; 1.0e-6:
+<span class="ln">209</span>                        text = (f&quot;SPECIES {i:3d} IN SHELL {j:5d} DIFFERS FROM&quot;
+<span class="ln">210</span>                                f&quot; CENTER BY {_e(test, 12, 4)} MIX NOT&quot;
+<span class="ln">211</span>                                f&quot; MODIFIED IN EVOLVED MODEL&quot;)  # format 592
+<span class="ln">212</span>                        print(text)
+<span class="ln">213</span>                        iounits_mod.write(ishort, text)
+<span class="ln">214</span>                        homogeneous = False
+<span class="ln">215</span>                        break
+<span class="ln">216</span>                if not homogeneous:
+<span class="ln">217</span>                    break  # GOTO 602
+<span class="ln">218</span>        if homogeneous:
+<span class="ln">219</span>            if nml.lmixture:
+<span class="ln">220</span>                # Scale C, N and O so that each element&#x27;s share of Z is
+<span class="ln">221</span>                # FRAC_C, FRAC_N, FRAC_O.
+<span class="ln">222</span>                tot_c = (testmix[5] + testmix[6]) / testmix[3]
+<span class="ln">223</span>                tot_n = (testmix[7] + testmix[8]) / testmix[3]
+<span class="ln">224</span>                tot_o = (testmix[9] + testmix[10] + testmix[11]) / testmix[3]
+<span class="ln">225</span>                rat_c = nml.frac_c / tot_c
+<span class="ln">226</span>                rat_n = nml.frac_n / tot_n
+<span class="ln">227</span>                rat_o = nml.frac_o / tot_o
+<span class="ln">228</span>                print(nml.frac_c, nml.frac_n, nml.frac_o)
+<span class="ln">229</span>                for i in range(5, 7):
+<span class="ln">230</span>                    for j in range(1, m + 1):
+<span class="ln">231</span>                        hcomp[i, j] = rat_c * hcomp[i, j]
+<span class="ln">232</span>                for i in range(7, 9):
+<span class="ln">233</span>                    for j in range(1, m + 1):
+<span class="ln">234</span>                        hcomp[i, j] = rat_n * hcomp[i, j]
+<span class="ln">235</span>                for i in range(9, 12):
+<span class="ln">236</span>                    for j in range(1, m + 1):
+<span class="ln">237</span>                        hcomp[i, j] = rat_o * hcomp[i, j]
+<span class="ln">238</span>                text = (&quot;CNO MIX CHANGED IN STARIN. OLD C12 C13 N14&quot;
+<span class="ln">239</span>                        &quot; N15 O16 O17 O18 &quot;
+<span class="ln">240</span>                        + &quot;&quot;.join(_e(testmix[k], 12, 4) for k in range(5, 12))
+<span class="ln">241</span>                        + &quot; NEW &quot;
+<span class="ln">242</span>                        + &quot;&quot;.join(_e(hcomp[k, 1], 12, 4)
+<span class="ln">243</span>                                  for k in range(5, 12)))  # format 594
+<span class="ln">244</span>                print(text)
+<span class="ln">245</span>                iounits_mod.write(ishort, text)
+<span class="ln">246</span>            if nml.lisotope:
+<span class="ln">247</span>                # Impose 12C/13C and 16O/18O at fixed sums, and the light
+<span class="ln">248</span>                # elements&#x27; initial values.
+<span class="ln">249</span>                # Question (see the page): R14_15, R16_17 are not applied.
+<span class="ln">250</span>                sum_c = hcomp[5, 1] + hcomp[6, 1]
+<span class="ln">251</span>                sum_o = hcomp[9, 1] + hcomp[11, 1]
+<span class="ln">252</span>                for j in range(1, m + 1):
+<span class="ln">253</span>                    hcomp[4, j] = nml.xhe3_ini
+<span class="ln">254</span>                    hcomp[5, j] = nml.r12_13 * sum_c / (1.0 + nml.r12_13)
+<span class="ln">255</span>                    hcomp[6, j] = sum_c / (1.0 + nml.r12_13)
+<span class="ln">256</span>                    hcomp[9, j] = nml.r16_18 * sum_o / (1.0 + nml.r16_18)
+<span class="ln">257</span>                    hcomp[11, j] = sum_o / (1.0 + nml.r16_18)
+<span class="ln">258</span>                    hcomp[12, j] = nml.xh2_ini
+<span class="ln">259</span>                    hcomp[13, j] = nml.xli6_ini
+<span class="ln">260</span>                    hcomp[14, j] = nml.xli7_ini
+<span class="ln">261</span>                    hcomp[15, j] = nml.xbe9_ini
+<span class="ln">262</span>                text = (&quot;CNO ISOTOPES AND LIGHT ELEMENTS CHANGED IN &quot;
+<span class="ln">263</span>                        &quot;STARIN. OLD HE3 C12 C13 N14 N15 O16 O17 O18 H2 LI6 &quot;
+<span class="ln">264</span>                        &quot;LI7 BE9&quot;
+<span class="ln">265</span>                        + &quot;&quot;.join(_e(testmix[k], 12, 4) for k in range(4, 16))
+<span class="ln">266</span>                        + &quot; NEW &quot;
+<span class="ln">267</span>                        + &quot;&quot;.join(_e(hcomp[k, 1], 12, 4)
+<span class="ln">268</span>                                  for k in range(4, 16)))  # format 593
+<span class="ln">269</span>                print(text)
+<span class="ln">270</span>                iounits_mod.write(ishort, text)
+<span class="ln">271</span>        # label 602
+<span class="ln">272</span>
+<span class="ln">273</span>    # label 3000
+<span class="ln">274</span>    # MHP 9/98, 9/14: extend the model inward by MCORE points.
+<span class="ln">275</span>    if nml.lcore and nml.lfirst[nk]:
+<span class="ln">276</span>        nml.mcore = int(math.log10(nml.fcore) / nml.hpttol[2]) + 1
+<span class="ln">277</span>        nml.fcore = float(nml.mcore) * nml.hpttol[2]  # now a log offset
+<span class="ln">278</span>        mn = m + nml.mcore
+<span class="ln">279</span>        if mn &gt; JSON:
+<span class="ln">280</span>            # Question (see the page): no stop; the arrays overflow below.
+<span class="ln">281</span>            iounits_mod.write(ishort, &quot;STARIN: Unable to extend core inward &quot;
+<span class="ln">282</span>                              &quot;- JSON too small&quot;)
+<span class="ln">283</span>            iounits_mod.write(ishort, f&quot;STARIN: Required size ={mn:8d}&quot;
+<span class="ln">284</span>                              f&quot;, JSON = {JSON:8d}&quot;)
+<span class="ln">285</span>            iounits_mod.write(ishort, &quot;STARIN:  ***** RUN TERMINATED *****&quot;)
+<span class="ln">286</span>        ds = nml.hpttol[2]
+<span class="ln">287</span>        mcore = nml.mcore
+<span class="ln">288</span>        # Shift the old points outward.
+<span class="ln">289</span>        # Question (see the page): hd is not shifted.
+<span class="ln">290</span>        for i in range(m, 0, -1):
+<span class="ln">291</span>            hs[i + mcore] = hs[i]
+<span class="ln">292</span>            hr[i + mcore] = hr[i]
+<span class="ln">293</span>            hl[i + mcore] = hl[i]
+<span class="ln">294</span>            hp[i + mcore] = hp[i]
+<span class="ln">295</span>            ht[i + mcore] = ht[i]
+<span class="ln">296</span>            lc[i + mcore] = lc[i]
+<span class="ln">297</span>            for j in range(1, 16):
+<span class="ln">298</span>                hcomp[j, i + mcore] = hcomp[j, i]
+<span class="ln">299</span>            omega[i + mcore] = omega[i]
+<span class="ln">300</span>        mp1 = mcore + 1
+<span class="ln">301</span>        rhoc = hd[1]
+<span class="ln">302</span>        # Question (see the page): with mcore = 1 this is 0/0.
+<span class="ln">303</span>        dele = (ht[2] - ht[1]) / (hp[2] - hp[1])
+<span class="ln">304</span>        hlc = hl[1]
+<span class="ln">305</span>        facd = hp[mp1] - hd[mp1] - ht[mp1]
+<span class="ln">306</span>        # Inward at constant density, energy generation and gradient.
+<span class="ln">307</span>        for i in range(mcore, 0, -1):
+<span class="ln">308</span>            hs[i] = hs[i + 1] - ds
+<span class="ln">309</span>            hr[i] = c.cc13 * (hs[i] - c.c4pi3l - rhoc)
+<span class="ln">310</span>            hl[i] = math.exp(c.cln * (hs[i] - hs[mp1])) * hlc
+<span class="ln">311</span>            pp = hp[i + 1]
+<span class="ln">312</span>            temp = math.exp(c.cln * (c.cgl + 2.0 * hs[i] - c.c4pil - pp
+<span class="ln">313</span>                                     - 4.0 * hr[i]))
+<span class="ln">314</span>            pp = pp + 0.5 * temp * ds
+<span class="ln">315</span>            temp = math.exp(c.cln * (c.cgl + 2.0 * hs[i] - c.c4pil - pp
+<span class="ln">316</span>                                     - 4.0 * hr[i]))
+<span class="ln">317</span>            hp[i] = hp[i + 1] + temp * ds
+<span class="ln">318</span>            lc[i] = lc[mp1]
+<span class="ln">319</span>            ht[i] = ht[i + 1] + temp * dele * ds
+<span class="ln">320</span>            omega[i] = omega[mp1]
+<span class="ln">321</span>            for j in range(1, 16):
+<span class="ln">322</span>                hcomp[j, i] = hcomp[j, mp1]
+<span class="ln">323</span>            hd[i] = hp[i] - ht[i] - facd
+<span class="ln">324</span>        m = mn
+<span class="ln">325</span>
+<span class="ln">326</span>    if runloop_mod.iresca[nk] != 1:
+<span class="ln">327</span>        hstot, smass = rscale(hl, hcomp, hs, hstot, m, nk, smass, lc)
+<span class="ln">328</span>
+<span class="ln">329</span>    # Move the envelope&#x27;s fitting point to SENV0.
+<span class="ln">330</span>    if cenv_mod.lsenv0:
+<span class="ln">331</span>        # (In one branch EQSTAT and TPGRAD set STARIN&#x27;s qdt, qdp and vel.)
+<span class="ln">332</span>        m, lnew, qdt, qdp, vel = _new_fitting_point(
+<span class="ln">333</span>            hcomp, hd, hjm, hl, hp, hr, hs, ht, lc, omega, m, bl, teffl,
+<span class="ln">334</span>            hstot, jenv, lnew, qdt, qdp, vel, cmixl)
+<span class="ln">335</span>
+<span class="ln">336</span>    # Shell masses.
+<span class="ln">337</span>    ds3 = math.exp(c.cln * hs[1])
+<span class="ln">338</span>    ds2 = -ds3
+<span class="ln">339</span>    for i in range(2, m + 1):  # loop 120
+<span class="ln">340</span>        ds1 = ds2
+<span class="ln">341</span>        ds2 = ds3
+<span class="ln">342</span>        ds3 = math.exp(c.cln * hs[i])
+<span class="ln">343</span>        hs1[i - 1] = ds2
+<span class="ln">344</span>        hs2[i - 1] = 0.5 * (ds3 - ds1)
+<span class="ln">345</span>    hs1[m] = ds3
+<span class="ln">346</span>    hs2[m] = math.exp(c.cln * hstot) - 0.5 * (ds2 + ds3)
+<span class="ln">347</span>
+<span class="ln">348</span>    # Rotation: distortion, moments of inertia, J and kinetic energy.
+<span class="ln">349</span>    if nml.lrot:
+<span class="ln">350</span>        fpft(hd, hr, hs, m, omega, eta2, fp, ft, hg, r0)
+<span class="ln">351</span>        momi(eta2, hr, hs, hs2, 1, m, omega, r0, hi, qiw)
+<span class="ln">352</span>        sumj = 0.0
+<span class="ln">353</span>        sumke = 0.0
+<span class="ln">354</span>        for i in range(1, m + 1):  # loop 550
+<span class="ln">355</span>            hj = omega[i] * hi[i]
+<span class="ln">356</span>            hjm[i] = hj / hs2[i]
+<span class="ln">357</span>            hkerot[i] = 0.5 * omega[i] * hj
+<span class="ln">358</span>            sumj = sumj + hj
+<span class="ln">359</span>            sumke = sumke + hkerot[i]
+<span class="ln">360</span>        iounits_mod.write(ishort,
+<span class="ln">361</span>                          f&quot; TOTAL J OF STAR - PREVIOUS {sjtot:21.13E} NEW &quot;
+<span class="ln">362</span>                          f&quot;{sumj:21.13E}\n TOTAL ROTATIONAL K.E. OF STAR - &quot;
+<span class="ln">363</span>                          f&quot;PREVIOUS {skerot:21.13E} NEW {sumke:21.13E}&quot;)
+<span class="ln">364</span>        sjtot = sumj
+<span class="ln">365</span>        skerot = sumke
+<span class="ln">366</span>
+<span class="ln">367</span>    # The surface composition, for the first run only.
+<span class="ln">368</span>    # Question (see the page): skipped for later runs.
+<span class="ln">369</span>    if nk &lt;= 1:
+<span class="ln">370</span>        if not newopac_mod.llaol:
+<span class="ln">371</span>            for i in range(1, 13):
+<span class="ln">372</span>                v[i] = nml.vnew[i]
+<span class="ln">373</span>        comp_mod.xenv = comp_mod.xnew
+<span class="ln">374</span>        comp_mod.zenv = comp_mod.znew
+<span class="ln">375</span>        comp2_mod.yenv = 1.0 - comp_mod.xenv - comp_mod.zenv - hcomp[4, m]
+<span class="ln">376</span>        comp2_mod.y3env = hcomp[4, m]
+<span class="ln">377</span>        vsum = v[1] + v[2] + v[3] + v[4] + v[5] + v[6] + v[8] + v[9] + v[10] \
+<span class="ln">378</span>            + v[11]
+<span class="ln">379</span>        comp_mod.zenvm = comp_mod.zenv * (vsum - v[6] - v[8] - v[9]) / vsum
+<span class="ln">380</span>        fv = comp_mod.zenv / vsum
+<span class="ln">381</span>        v[7] = comp_mod.xenv / fv
+<span class="ln">382</span>        v[12] = (1.0 - comp_mod.xenv - comp_mod.zenv) / fv
+<span class="ln">383</span>        vsum = 0.0
+<span class="ln">384</span>        for i in range(1, 13):  # loop 610
+<span class="ln">385</span>            v[i] = fv * v[i] / ATOMWT[i]
+<span class="ln">386</span>            vsum = vsum + v[i]
+<span class="ln">387</span>        # Question (see the page): the comment calls this the mean atomic
+<span class="ln">388</span>        # weight of the surface Z.
+<span class="ln">389</span>        comp_mod.amuenv = vsum
+<span class="ln">390</span>        fv = 1.0 / comp_mod.amuenv
+<span class="ln">391</span>        for i in range(1, 13):  # loop 620
+<span class="ln">392</span>            comp_mod.fxenv[i] = v[i] * fv
+<span class="ln">393</span>    # label 630
+<span class="ln">394</span>    surfopac(comp_mod.xenv)
+<span class="ln">395</span>    if nml.lscv:
+<span class="ln">396</span>        setscv()
+<span class="ln">397</span>
+<span class="ln">398</span>    # Save the old model.
+<span class="ln">399</span>    om = oldmod_mod
+<span class="ln">400</span>    for i in range(1, m + 1):  # loop 710
+<span class="ln">401</span>        om.hpo[i] = hp[i]
+<span class="ln">402</span>        om.hto[i] = ht[i]
+<span class="ln">403</span>        om.hro[i] = hr[i]
+<span class="ln">404</span>        om.hlo[i] = hl[i]
+<span class="ln">405</span>        # Question (see the page): these two are loop-invariant.
+<span class="ln">406</span>        om.tefflo = teffl
+<span class="ln">407</span>        om.mo = m
+<span class="ln">408</span>    if nml.lrot:
+<span class="ln">409</span>        for i in range(1, m + 1):  # loop 720
+<span class="ln">410</span>            oldrot_mod.wold[i] = omega[i]
+<span class="ln">411</span>
+<span class="ln">412</span>    # The first physics, convection zones and overturn time.
+<span class="ln">413</span>    physic(fp, ft, hcomp, hd, hg, hl, hp, hr, hs, ht, lc, m, teffl, cmixl)
+<span class="ln">414</span>    nrzone, nzone = ovrot(hcomp, hd, hp, hr, hs, ht, lc, m, lcz, mrzone,
+<span class="ln">415</span>                          mxzone, 0, 0)
+<span class="ln">416</span>    # Possible bug (update-findings, batch 12): the module array ENVR is
+<span class="ln">417</span>    # passed as GETTAU&#x27;s scalar RBCZ, so ENVR(1) receives the base&#x27;s radius.
+<span class="ln">418</span>    es.envr[1] = gettau(hcomp, hr, hp, hd, hs1, ht, fp, ft, teffl, hstot,
+<span class="ln">419</span>                        bl, m, lc, es.envr[1], cmixl)
+<span class="ln">420</span>    ovrtrn_mod.taucz0 = ovrtrn_mod.taucz
+<span class="ln">421</span>    ovrtrn_mod.pphot0 = ovrtrn_mod.pphot
+<span class="ln">422</span>    ovrtrn_mod.fracstep = 0.5
+<span class="ln">423</span>
+<span class="ln">424</span>    return (bl, dage, ddage, delts, deltsh, ftri, hstot, ikut, istore, lnew,
+<span class="ln">425</span>            m, model, qdp, qdt, sjtot, skerot, smass, teffl, vel, compmix)</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_set_debhu'><summary>Python version: _set_debhu</summary><pre class='src'><span class="ln">51</span>def _set_debhu(hcomp, m):
+<span class="ln">52</span>    # The composition for the Debye-Hueckel correction, at shell m.
+<span class="ln">53</span>    debhu_mod.xxdh = hcomp[1, m]
+<span class="ln">54</span>    debhu_mod.yydh = hcomp[2, m] + hcomp[4, m]
+<span class="ln">55</span>    debhu_mod.zzdh = hcomp[3, m]
+<span class="ln">56</span>    debhu_mod.zdh[1] = hcomp[5, m] + hcomp[6, m]
+<span class="ln">57</span>    debhu_mod.zdh[2] = hcomp[7, m] + hcomp[8, m]
+<span class="ln">58</span>    debhu_mod.zdh[3] = hcomp[9, m] + hcomp[10, m] + hcomp[11, m]</pre></details>
+<details class='py' id='py-_e'><summary>Python version: _e</summary><pre class='src'><span class="ln">61</span>def _e(x, w, d):
+<span class="ln">62</span>    # Fortran&#x27;s 0PEw.d: a mantissa in [0.1, 1).
+<span class="ln">63</span>    if x == 0.0:
+<span class="ln">64</span>        return f&quot;{&#x27;0.&#x27; + &#x27;0&#x27; * d + &#x27;E+00&#x27;:&gt;{w}}&quot;
+<span class="ln">65</span>    e = math.floor(math.log10(abs(x))) + 1
+<span class="ln">66</span>    mant = x / 10.0**e
+<span class="ln">67</span>    if round(abs(mant), d) &gt;= 1.0:
+<span class="ln">68</span>        mant /= 10.0
+<span class="ln">69</span>        e += 1
+<span class="ln">70</span>    s = (&quot;-&quot; if x &lt; 0 else &quot;&quot;) + &quot;0&quot; + f&quot;{abs(mant):.{d}f}&quot;[1:]
+<span class="ln">71</span>    return f&quot;{s + f&#x27;E{e:+03d}&#x27;:&gt;{w}}&quot;</pre></details>
+<details class='py' id='py-_new_fitting_point'><summary>Python version: _new_fitting_point</summary><pre class='doc'>STARIN&#x27;s block for LSENV0 (labels 575-599): move the envelope&#x27;s
+fitting point to SENV0, deeper (drop shells, interpolate the new last
+one) or shallower (integrate an envelope and take its points down to
+the new fitting mass as interior shells). Returns (m, lnew, qdt, qdp,
+vel): STARIN&#x27;s arguments, which the physics of one branch sets.</pre><pre class='src'><span class="ln">428</span>def _new_fitting_point(hcomp, hd, hjm, hl, hp, hr, hs, ht, lc, omega, m, bl,
+<span class="ln">429</span>                       teffl, hstot, jenv, lnew, qdt, qdp, vel, cmixl):
+<span class="ln">430</span>    &quot;&quot;&quot;STARIN&#x27;s block for LSENV0 (labels 575-599): move the envelope&#x27;s
+<span class="ln">431</span>    fitting point to SENV0, deeper (drop shells, interpolate the new last
+<span class="ln">432</span>    one) or shallower (integrate an envelope and take its points down to
+<span class="ln">433</span>    the new fitting mass as interior shells). Returns (m, lnew, qdt, qdp,
+<span class="ln">434</span>    vel): STARIN&#x27;s arguments, which the physics of one branch sets.&quot;&quot;&quot;
+<span class="ln">435</span>    c = constants_mod
+<span class="ln">436</span>    nml = nmlpar_mod
+<span class="ln">437</span>    ce = cenv_mod
+<span class="ln">438</span>    es = envstruct_mod
+<span class="ln">439</span>    ishort = iounits_mod.ishort
+<span class="ln">440</span>
+<span class="ln">441</span>    if ce.senv0 &gt; 0.0:
+<span class="ln">442</span>        ce.senv0 = -ce.senv0
+<span class="ln">443</span>    if ce.senv0 &gt; -1.0e-12:
+<span class="ln">444</span>        ce.senv0 = -1.0e-12
+<span class="ln">445</span>    comp_mod.senv = hs[m] - hstot
+<span class="ln">446</span>    senv1 = comp_mod.senv
+<span class="ln">447</span>    if comp_mod.senv == ce.senv0:
+<span class="ln">448</span>        return m, lnew, qdt, qdp, vel  # GOTO 599
+<span class="ln">449</span>    jend = 11
+<span class="ln">450</span>    if nml.lexcom:
+<span class="ln">451</span>        jend = 15
+<span class="ln">452</span>
+<span class="ln">453</span>    if ce.senv0 &lt; comp_mod.senv:
+<span class="ln">454</span>        # A deeper fitting point: drop the shells beyond it.
+<span class="ln">455</span>        hsend = hstot + ce.senv0
+<span class="ln">456</span>        i = 0
+<span class="ln">457</span>        for ii in range(m - 1, 0, -1):  # loop 575
+<span class="ln">458</span>            if hs[ii] &lt; hsend:
+<span class="ln">459</span>                i = ii
+<span class="ln">460</span>                break  # to label 580
+<span class="ln">461</span>        else:
+<span class="ln">462</span>            iounits_mod.write(ishort,
+<span class="ln">463</span>                              f&quot;     ERROR IN SUBROUTINE STARIN\n     DESIRED&quot;
+<span class="ln">464</span>                              f&quot; ENVELOPE MASS{ce.senv0:22.13E} TOO LARGE\n&quot;
+<span class="ln">465</span>                              f&quot;     ENVELOPE MASS NOT CHANGED&quot;)  # format 576
+<span class="ln">466</span>            return m, lnew, qdt, qdp, vel  # GOTO 599
+<span class="ln">467</span>        # label 580
+<span class="ln">468</span>        m = i + 1
+<span class="ln">469</span>        comp_mod.senv = ce.senv0
+<span class="ln">470</span>        fs = (hsend - hs[i]) / (hs[i + 1] - hs[i])
+<span class="ln">471</span>        hs[m] = hsend
+<span class="ln">472</span>        hd[m] = hd[i] + fs * (hd[i + 1] - hd[i])
+<span class="ln">473</span>        hl[m] = hl[i] + fs * (hl[i + 1] - hl[i])
+<span class="ln">474</span>        hp[m] = hp[i] + fs * (hp[i + 1] - hp[i])
+<span class="ln">475</span>        hr[m] = hr[i] + fs * (hr[i + 1] - hr[i])
+<span class="ln">476</span>        ht[m] = ht[i] + fs * (ht[i + 1] - ht[i])
+<span class="ln">477</span>        for j in range(1, jend + 1):  # loop 585
+<span class="ln">478</span>            hcomp[j, m] = hcomp[j, i]
+<span class="ln">479</span>        comp_mod.xnew = hcomp[1, m]
+<span class="ln">480</span>        comp_mod.znew = hcomp[3, m]
+<span class="ln">481</span>        if nml.lrot:
+<span class="ln">482</span>            omega[m] = omega[i] + fs * (omega[i + 1] - omega[i])
+<span class="ln">483</span>        if lc[i] and lc[i + 1]:
+<span class="ln">484</span>            lc[m] = True
+<span class="ln">485</span>        elif not lc[i] and not lc[i + 1]:
+<span class="ln">486</span>            lc[m] = False
+<span class="ln">487</span>        else:
+<span class="ln">488</span>            # Between a convective and a radiative shell: let the physics
+<span class="ln">489</span>            # decide. (Since 09c3b9b EQSTAT is always called; it used to be
+<span class="ln">490</span>            # called only with the MHD equation of state.)
+<span class="ln">491</span>            lderiv = False
+<span class="ln">492</span>            latmo = True
+<span class="ln">493</span>            ksaha = 0
+<span class="ln">494</span>            x = hcomp[1, m]
+<span class="ln">495</span>            z = hcomp[3, m]
+<span class="ln">496</span>            pl = hp[m]
+<span class="ln">497</span>            tl = ht[m]
+<span class="ln">498</span>            dl = hd[m]
+<span class="ln">499</span>            b = hl[m]
+<span class="ln">500</span>            rl = hr[m]
+<span class="ln">501</span>            sl = hs[m]
+<span class="ln">502</span>            fpl = 1.0
+<span class="ln">503</span>            ftl = 1.0
+<span class="ln">504</span>            if nml.ldh:
+<span class="ln">505</span>                _set_debhu(hcomp, m)
+<span class="ln">506</span>            fxion = np.zeros(4)
+<span class="ln">507</span>            (t, p, dl, d, beta, betai, beta14, rmu, amu, emu, eta, qdt, qdp,
+<span class="ln">508</span>             qcp, dela, qdtt, qdtp, qat, qap, qcpt, qcpp, ksaha) = eqstat(
+<span class="ln">509</span>                tl, 0.0, pl, 0.0, dl, 0.0, x, z, 0.0, 0.0, 0.0, fxion, 0.0,
+<span class="ln">510</span>                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+<span class="ln">511</span>                0.0, lderiv, latmo, ksaha)
+<span class="ln">512</span>            o, ol, qod, qot = getopac(dl, tl, x, z, 0.0, 0.0, 0.0, 0.0, fxion)
+<span class="ln">513</span>            dpmix_mod.iovim = -1
+<span class="ln">514</span>            (dele, delr, qact, qacp, qacr, vel, lconv) = tpgrad(
+<span class="ln">515</span>                tl, t, pl, p, d, rl, sl, b, o, qdt, qdp, qot, qod, qcp, 0.0,
+<span class="ln">516</span>                0.0, dela, qdtt, qdtp, qat, qap, 0.0, 0.0, 0.0, qcpt, qcpp,
+<span class="ln">517</span>                vel, lderiv, False, fpl, ftl, teffl, cmixl)
+<span class="ln">518</span>            hd[m] = dl
+<span class="ln">519</span>            lc[m] = lconv
+<span class="ln">520</span>    else:
+<span class="ln">521</span>        # A shallower fitting point: integrate an envelope from the surface
+<span class="ln">522</span>        # at fixed steps HPTTOL(8), and take its points down to SENV0.
+<span class="ln">523</span>        mm = m
+<span class="ln">524</span>        emax0 = nml.envmax
+<span class="ln">525</span>        emin0 = nml.envmin
+<span class="ln">526</span>        ebeg0 = nml.envbeg
+<span class="ln">527</span>        nml.envmax = nml.hpttol[8]
+<span class="ln">528</span>        nml.envmin = nml.hpttol[8]
+<span class="ln">529</span>        nml.envbeg = nml.hpttol[8]
+<span class="ln">530</span>        lsbc0 = False
+<span class="ln">531</span>        lprt = True
+<span class="ln">532</span>        katm = 0
+<span class="ln">533</span>        kenv = 0
+<span class="ln">534</span>        ksaha = 0
+<span class="ln">535</span>        b = math.exp(c.cln * bl)
+<span class="ln">536</span>        rl = 0.5 * (bl + c.clsunl - 4.0 * teffl - c.c4pil - c.csigl)
+<span class="ln">537</span>        gl = c.cgl + comp_mod.stotal - rl - rl
+<span class="ln">538</span>        x = hcomp[1, m]
+<span class="ln">539</span>        z = hcomp[3, m]
+<span class="ln">540</span>        fpl = 1.0
+<span class="ln">541</span>        ftl = 1.0
+<span class="ln">542</span>        ixx = 0
+<span class="ln">543</span>        plim = hp[m]
+<span class="ln">544</span>        lpulpt = False
+<span class="ln">545</span>        if nml.ldh:
+<span class="ln">546</span>            _set_debhu(hcomp, m)
+<span class="ln">547</span>        idum = 0
+<span class="ln">548</span>        # G Somers 10/14: for spotted stars, the ambient temperature.
+<span class="ln">549</span>        if jenv == m and nml.spotf != 0.0 and nml.spotx != 1.0:
+<span class="ln">550</span>            ateffl = teffl - 0.25 * math.log10(
+<span class="ln">551</span>                nml.spotf * nml.spotx**4.0 + 1.0 - nml.spotf)
+<span class="ln">552</span>        else:
+<span class="ln">553</span>            ateffl = teffl
+<span class="ln">554</span>        dum1 = np.zeros(5)
+<span class="ln">555</span>        dum2 = np.zeros(4)
+<span class="ln">556</span>        dum3 = np.zeros(4)
+<span class="ln">557</span>        dum4 = np.zeros(4)
+<span class="ln">558</span>        rl, idum, katm, kenv, ksaha = envint(
+<span class="ln">559</span>            b, fpl, ftl, gl, hstot, ixx, lprt, lsbc0, plim, rl, ateffl, x, z,
+<span class="ln">560</span>            dum1, idum, katm, kenv, ksaha, dum2, dum3, dum4, lpulpt, cmixl)
+<span class="ln">561</span>        nml.envmax = emax0
+<span class="ln">562</span>        nml.envmin = emin0
+<span class="ln">563</span>        nml.envbeg = ebeg0
+<span class="ln">564</span>        comp_mod.senv = ce.senv0
+<span class="ln">565</span>        if m + es.numenv &gt;= JSON:
+<span class="ln">566</span>            raise SystemExit(9999)
+<span class="ln">567</span>        # Shift the envelope to match the last interior point, dropping its
+<span class="ln">568</span>        # first point.
+<span class="ln">569</span>        dp = hp[m] - es.envp[1]
+<span class="ln">570</span>        dd = hd[m] - es.envd[1]
+<span class="ln">571</span>        dt = ht[m] - es.envt[1]
+<span class="ln">572</span>        dr = hr[m] - es.envr[1]
+<span class="ln">573</span>        for j in range(1, es.numenv):
+<span class="ln">574</span>            es.envd[j] = es.envd[j + 1] + dd
+<span class="ln">575</span>            es.envp[j] = es.envp[j + 1] + dp
+<span class="ln">576</span>            es.envr[j] = es.envr[j + 1] + dr
+<span class="ln">577</span>            es.envs[j] = es.envs[j + 1]
+<span class="ln">578</span>            es.envt[j] = es.envt[j + 1] + dt
+<span class="ln">579</span>            es.envx[j] = es.envx[j + 1]
+<span class="ln">580</span>            es.envz[j] = es.envz[j + 1]
+<span class="ln">581</span>        es.numenv = es.numenv - 1
+<span class="ln">582</span>        senv = comp_mod.senv
+<span class="ln">583</span>        stotal = comp_mod.stotal
+<span class="ln">584</span>        reached = False
+<span class="ln">585</span>        for j in range(m + 1, m + es.numenv + 1):
+<span class="ln">586</span>            jm = j - m
+<span class="ln">587</span>            hl[j] = hl[m]
+<span class="ln">588</span>            if es.envs[jm] &lt;= senv:
+<span class="ln">589</span>                hd[j] = es.envd[jm]
+<span class="ln">590</span>                hp[j] = es.envp[jm]
+<span class="ln">591</span>                hr[j] = es.envr[jm]
+<span class="ln">592</span>                hs[j] = es.envs[jm] + stotal
+<span class="ln">593</span>                ht[j] = es.envt[jm]
+<span class="ln">594</span>                hcomp[1, j] = es.envx[jm]
+<span class="ln">595</span>                hcomp[3, j] = es.envz[jm]
+<span class="ln">596</span>                for k in range(4, jend + 1):
+<span class="ln">597</span>                    hcomp[k, j] = hcomp[k, m]
+<span class="ln">598</span>                hcomp[2, j] = 1.0 - hcomp[1, j] - hcomp[3, j] - hcomp[4, j]
+<span class="ln">599</span>                lc[j] = es.lcenv[jm]
+<span class="ln">600</span>            else:
+<span class="ln">601</span>                # The last new point, interpolated to the fitting mass.
+<span class="ln">602</span>                if jm == 1:
+<span class="ln">603</span>                    x0 = hs[m]
+<span class="ln">604</span>                    x1 = stotal + senv
+<span class="ln">605</span>                    x2 = es.envs[jm] + stotal
+<span class="ln">606</span>                    if x2 - x0 &lt; 1.0e-14:
+<span class="ln">607</span>                        raise SystemExit(9998)
+<span class="ln">608</span>                    fx = (x1 - x0) / (x2 - x0)
+<span class="ln">609</span>                    hd[j] = hd[m] + fx * (es.envd[jm] - hd[m])
+<span class="ln">610</span>                    hp[j] = hp[m] + fx * (es.envp[jm] - hp[m])
+<span class="ln">611</span>                    hr[j] = hr[m] + fx * (es.envr[jm] - hr[m])
+<span class="ln">612</span>                    hs[j] = x1
+<span class="ln">613</span>                    ht[j] = ht[m] + fx * (es.envt[jm] - ht[m])
+<span class="ln">614</span>                    # Question (see the page): the sign is reversed here.
+<span class="ln">615</span>                    hcomp[1, j] = hcomp[1, m] + fx * (hcomp[1, m]
+<span class="ln">616</span>                                                      - es.envx[jm])
+<span class="ln">617</span>                    hcomp[3, j] = hcomp[3, m] + fx * (hcomp[3, m]
+<span class="ln">618</span>                                                      - es.envz[jm])
+<span class="ln">619</span>                    for k in range(4, jend + 1):
+<span class="ln">620</span>                        hcomp[k, j] = hcomp[k, m]
+<span class="ln">621</span>                    hcomp[2, j] = (1.0 - hcomp[1, j] - hcomp[3, j]
+<span class="ln">622</span>                                   - hcomp[4, j])
+<span class="ln">623</span>                    lc[j] = bool(es.lcenv[jm] or lc[m])
+<span class="ln">624</span>                else:
+<span class="ln">625</span>                    x0 = es.envs[jm - 1] + stotal
+<span class="ln">626</span>                    x1 = stotal + senv
+<span class="ln">627</span>                    x2 = es.envs[jm] + stotal
+<span class="ln">628</span>                    if x2 - x0 &lt; 1.0e-14:
+<span class="ln">629</span>                        raise SystemExit(9998)
+<span class="ln">630</span>                    fx = (x1 - x0) / (x2 - x0)
+<span class="ln">631</span>                    hd[j] = es.envd[jm - 1] + fx * (es.envd[jm]
+<span class="ln">632</span>                                                    - es.envd[jm - 1])
+<span class="ln">633</span>                    hp[j] = es.envp[jm - 1] + fx * (es.envp[jm]
+<span class="ln">634</span>                                                    - es.envp[jm - 1])
+<span class="ln">635</span>                    hr[j] = es.envr[jm - 1] + fx * (es.envr[jm]
+<span class="ln">636</span>                                                    - es.envr[jm - 1])
+<span class="ln">637</span>                    hs[j] = x1
+<span class="ln">638</span>                    ht[j] = es.envt[jm - 1] + fx * (es.envt[jm]
+<span class="ln">639</span>                                                    - es.envt[jm - 1])
+<span class="ln">640</span>                    hcomp[1, j] = es.envx[jm - 1] + fx * (es.envx[jm]
+<span class="ln">641</span>                                                          - es.envx[jm - 1])
+<span class="ln">642</span>                    hcomp[3, j] = es.envz[jm - 1] + fx * (es.envz[jm]
+<span class="ln">643</span>                                                          - es.envz[jm - 1])
+<span class="ln">644</span>                    for k in range(4, jend + 1):
+<span class="ln">645</span>                        hcomp[k, j] = hcomp[k, m]
+<span class="ln">646</span>                    hcomp[2, j] = (1.0 - hcomp[1, j] - hcomp[3, j]
+<span class="ln">647</span>                                   - hcomp[4, j])
+<span class="ln">648</span>                    lc[j] = bool(es.lcenv[jm] or es.lcenv[jm - 1])
+<span class="ln">649</span>                m = j
+<span class="ln">650</span>                reached = True
+<span class="ln">651</span>                break  # GOTO 587
+<span class="ln">652</span>        if not reached:
+<span class="ln">653</span>            m = m + es.numenv
+<span class="ln">654</span>        # label 587: the new shells rotate at the old surface rate.
+<span class="ln">655</span>        if nml.lrot:
+<span class="ln">656</span>            for j in range(mm + 1, m + 1):
+<span class="ln">657</span>                omega[j] = omega[mm]
+<span class="ln">658</span>                hjm[j] = c.cc23 * omega[mm] * 10.0**(2.0 * hr[j])
+<span class="ln">659</span>        print(&quot; NEW INTERIOR POINTS FROM CHANGE IN ENVELOPE MASS\n&quot;
+<span class="ln">660</span>              &quot; J,LOG RHO, LOG L, LOG P, LOG R, LOG M, LOG T, CONV T/F&quot;)
+<span class="ln">661</span>        for j in range(mm, m + 1):  # format 911
+<span class="ln">662</span>            print(f&quot;{j:5d}&quot; + &quot;&quot;.join(
+<span class="ln">663</span>                f&quot;{q:16.8E}&quot; for q in (hd[j], hl[j], hp[j], hr[j],
+<span class="ln">664</span>                                       hs[j] - stotal, ht[j]))
+<span class="ln">665</span>                + f&quot; {&#x27;T&#x27; if lc[j] else &#x27;F&#x27;}&quot;)
+<span class="ln">666</span>    lnew = True
+<span class="ln">667</span>    iounits_mod.write(ishort,
+<span class="ln">668</span>                      f&quot;     ***** NEW ENVELOPE MASS CALCULATED *****\n&quot;
+<span class="ln">669</span>                      f&quot;        OLD SENV {senv1:22.13E}  NEW SENV&quot;
+<span class="ln">670</span>                      f&quot;{comp_mod.senv:22.13E}&quot;)  # format 597
+<span class="ln">671</span>    return m, lnew, qdt, qdp, vel</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "38 of them" (COMMON blocks): STARIN declares 36. <strong>Fix:</strong> 36.</li>
+<li><strong>Unclear.</strong> Step 6 calls <code>SENV0</code> "the log envelope mass". It is $\log_{10}(m_\mathrm{fit}/M_\star)$ (<code>SENV = HS(M) - HSTOT</code>), a small negative number; <code>-1.0D-12</code> is a fitting point a fraction $\approx 2\times10^{-12}$ of the mass below the surface. <strong>Fix:</strong> say so.</li>
+<li><strong>Missing.</strong> Step 9: <code>AMUENV</code> is $\sum_k X_k/A_k$ over all 12 elements, H and He included (the inverse mean atomic weight per ion, as CHECKC's comment says), while STARIN's comment calls it "mean atomic weight of surface Z". <strong>Fix:</strong> write the equation, and add a question on the comment.</li>
+<li><strong>Missing (apparent bug).</strong> Core extension with <code>MCORE = 1</code> (for example the default <code>FCORE = 1.0</code>, which gives <code>INT(0)+1 = 1</code>): after the shift, <code>HT(2) = HT(1)</code> and <code>HP(2) = HP(1)</code>, so <code>DEL = (HT(2)-HT(1))/(HP(2)-HP(1))</code> is 0/0. <strong>Fix:</strong> new question.</li>
+<li><strong>Missing.</strong> Question 3 (<code>HD</code> not shifted) understates it: every density above the new core stays at its old index, and PHYSIC then reads <code>HD</code>. <strong>Fix:</strong> say that the whole density profile is misaligned by <code>MCORE</code> shells.</li>
+<li><strong>Missing.</strong> <code>FCORE</code> is overwritten with <code>MCORE*HPTTOL(2)</code> (a log offset, no longer a factor) in COMMON <code>CORE</code>. Minor; mention in step 4.</li>
+</ol>
+<p>Revised: 36 COMMON blocks; <code>SENV0</code> explained; <code>AMUENV</code> equation and question 10; 0/0 with <code>MCORE = 1</code> (question 11); question 3 extended; <code>FCORE</code> overwrite in step 4.</p></div></details>
+</main></body></html>

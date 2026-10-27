@@ -1,0 +1,367 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>mixcom.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ mixcom.f</span></header><main>
+<h1>mixcom.f</h1>
+<p class='muted'>184 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/mixcom.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>mixcom.py</code>, 130 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Solves the diffusion equation for composition across one unstable region, on the equally spaced grid in the coordinate $\chi$ that <a href="../yrec-map/mixgrid.f.html#def-MIXGRID">MIXGRID</a> and <a href="../yrec-map/getgrid.f.html#def-GETGRID">GETGRID</a> have set up, and applies the change to the model.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> <code>DT</code> (s); <code>ECOD2</code> and <code>EM</code> on the equal grid, from <code>MIXGRID</code>; the shell masses <code>HS2</code>; the region <code>IBEG..IEND</code>; the convection flags <code>LCZ</code>; <code>LOK</code>; the species range <code>JBEG..JEND</code>; and the grid itself in <code>EGRID_MOD</code> (<code>CHI</code> at the model points, <code>ECHI</code> at the grid points, <code>DCHI</code>, <code>NTOT</code>).</li>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/ndifcom.f.html#def-NDIFCOM">NDIFCOM</a>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/osplin.f.html#def-OSPLIN">OSPLIN</a> (interpolation, both ways), <a href="../yrec-map/ccoeft.f.html#def-CCOEFT">CCOEFT</a> (the tridiagonal coefficients, in <code>TRIDI_MOD</code>) and <a href="../yrec-map/ctridi.f.html#def-CTRIDI">CTRIDI</a> (the solve, result <code>U</code> in <code>TRIDI_MOD</code>).</li>
+<li><strong>Output:</strong> <code>HCOMP</code>, in place.</li>
+<li><strong>Modules:</strong> <code>EGRID_MOD</code> (shared with GETGRID, MIXGRID, ROTGRID, EQ2MOD, CHECKJ, SECULR), <code>SPLIN_MOD</code> (scratch arrays shared with MIXGRID, ROTGRID, EQ2MOD), <code>TRIDI_MOD</code> (with CCOEFT, CTRIDI, DCOEFT, GETQUA, TRIDIA), and <code>DIMENSIONS_MOD</code> (<code>JSON</code>).</li>
+</ul>
+<p><strong>The method.</strong> For each species $k$ in <code>JBEG..JEND</code> (except ⁴He, row 2, which follows from closure) that varies by more than $10^{-14}$ over the region:</p>
+<ol>
+<li>Interpolate $X_k$ from the model points ($\chi$ = <code>CHI</code>) to the grid points (<code>ECHI</code>) with <code>OSPLIN</code>.</li>
+<li>
+<p>Solve, implicitly, with $\Delta\chi$ = <code>DCHI</code>, $\Delta M_i$ = <code>EM(I)</code> and $\mathcal{D}$ = <code>ECOD2</code> (<code>COD2</code> times $\rho r^2\, d\chi/dr$, see <code>MIXGRID</code>):
+$$X_i^{n+1} - \frac{\Delta t}{\Delta\chi\,\Delta M_i}\left[\mathcal{D}_{i+1}\,(X^{n+1}_{i+1} - X^{n+1}_i) - \mathcal{D}_i\,(X^{n+1}_i - X^{n+1}_{i-1})\right] = X_i^n,$$
+with no flux through the outer edges (<code>CCOEFT</code>, <code>CTRIDI</code>).</p>
+</li>
+<li>
+<p>Interpolate the <em>change</em> $X^{n+1}-X^n$ back to the model points and add it (the comment explains: extrapolating the new abundances past the last grid points "can lead to serious errors").</p>
+</li>
+<li>A convection zone adjoining the region below or above takes the abundance of the region's edge point.</li>
+</ol>
+<p>Finally, before the last iteration (<code>LOK = F</code>), $Y = 1 - X - Z - X_{^3\mathrm{He}}$ over the region and the adjoining convection zones.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>I1</code> not set.</strong> If the region's top point <code>IEND</code> is not convective, or is the last point <code>M</code>, <code>I1</code> is never assigned in this call: it keeps its value from an earlier call (<code>SAVE</code>), or is undefined on the first. <code>I1</code> bounds the loops that sum the species mass, update the upper convection zone and recompute helium. Should there be <code>ELSE I1 = IEND</code>, as there is <code>I0 = IBEG</code> for the bottom?</li>
+<li><strong>The conservation check is off.</strong> <code>DCOMP</code>, <code>DCOMP2</code>, <code>SUMSPEC</code> and <code>SUMSPEC2</code> are computed but only used in a commented-out check that would rescale the species to conserve its mass. Is mass conservation verified elsewhere?</li>
+<li><strong>Helium on the final call.</strong> Helium is recomputed only when <code>LOK</code> is false. On SECULR's final call (<code>JBEG = 5</code>) $X$, $Z$ and ³He do not change, so the closure holds. But <a href="../yrec-map/bursmix.f.html#def-BURSMIX">BURSMIX</a> passes rows 4 to 11 (or 15), so ³He is mixed; if <code>LOK</code> is true there, $Y$ is not recomputed and $X+Y+Z+X_{^3\mathrm{He}}$ may drift from 1. Is it restored elsewhere?</li>
+<li><strong>The inner convection zone's change.</strong> <code>DCOMP2</code> adds <code>YVAL(1)*HS2(I)</code> for the inner zone, but the zone's abundance is set to that of <code>IBEG</code>, not changed by <code>YVAL(1)</code>. (It matters only for the disabled check.)</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MIXCOM'>MIXCOM</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MIXCOM'><h3><span class='kind'>subroutine</span>MIXCOM</h3>
+<p class='muted'>lines 2–184 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/mixcom.f#L2-L184'>GitHub</a></p>
+<pre>SUBROUTINE MIXCOM(DT,ECOD2,EM,HS2,IBEG,IEND,LCZ,LOK,M,HCOMP,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/egrid_mod.f.html#def-EGRID_MOD'>EGRID_MOD</a>, <a href='../yrec-map/splin_mod.f.html#def-SPLIN_MOD'>SPLIN_MOD</a>, <a href='../yrec-map/tridi_mod.f.html#def-TRIDI_MOD'>TRIDI_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/ccoeft.f.html#def-CCOEFT'>CCOEFT</a> <span class='muted'>(ccoeft.f)</span></li>
+<li><a href='../yrec-map/ctridi.f.html#def-CTRIDI'>CTRIDI</a> <span class='muted'>(ctridi.f)</span></li>
+<li><a href='../yrec-map/osplin.f.html#def-OSPLIN'>OSPLIN</a> <span class='muted'>(osplin.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/ndifcom.f.html#def-NDIFCOM'>NDIFCOM</a> <span class='muted'>(ndifcom.f)</span> ×2</li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE MIXCOM(DT,ECOD2,EM,HS2,IBEG,IEND,LCZ,LOK,M,HCOMP,
+<span class="ln">3</span>     *           JBEG,JEND)
+<span class="ln">4</span>C 10/15/26 MHP via Claude
+<span class="ln">5</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">6</span>C PARAMETER(JSON=5000) here.
+<span class="ln">7</span>      USE DIMENSIONS_MOD
+<span class="ln">8</span>C 10/14/26 MHP via Claude
+<span class="ln">9</span>C code changed to convert COMMON/TRIDI/ into TRIDI_MOD.
+<span class="ln">10</span>      USE TRIDI_MOD
+<span class="ln">11</span>C 10/14/26 MHP via Claude
+<span class="ln">12</span>C code changed to convert COMMON/SPLIN/ into SPLIN_MOD.
+<span class="ln">13</span>      USE SPLIN_MOD
+<span class="ln">14</span>C 10/14/26 MHP via Claude
+<span class="ln">15</span>C code changed to convert COMMON/EGRID/ into EGRID_MOD.
+<span class="ln">16</span>      USE EGRID_MOD
+<span class="ln">17</span>C 10/20/26 MHP via Claude
+<span class="ln">18</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">19</span>C explicit declarations.
+<span class="ln">20</span>      IMPLICIT NONE
+<span class="ln">21</span>      REAL*8 DCOMP,DCOMP2,DT,ECOD2,ECOMP,EM,HCOMP,HS2,SUMSPEC,SUMSPEC2,
+<span class="ln">22</span>     *       TEST
+<span class="ln">23</span>      INTEGER I,I0,I1,IBEG,ID,IEND,II,J,JBEG,JEND,M,N,NSPEC,NTAB
+<span class="ln">24</span>      LOGICAL*4 LCZ,LOK
+<span class="ln">25</span>      DIMENSION ECOD2(JSON),EM(JSON),HCOMP(15,JSON),HS2(JSON),LCZ(JSON)
+<span class="ln">26</span>      DIMENSION ECOMP(JSON),ID(15)
+<span class="ln">27</span>      SAVE
+<span class="ln">28</span>C  DIFCOM CALCULATES THE DIFFUSION OF COMPOSITION DUE TO ANGULAR MOMENTUM
+<span class="ln">29</span>C  TRANSPORT.  THIS IS DONE BY TRANSFORMING TO AN EQUALLY SPACED GRID
+<span class="ln">30</span>C  WHICH WAS PREVIOUSLY DEFINED AND THEN TRANSFORMING BACK.
+<span class="ln">31</span>C
+<span class="ln">32</span>C  INPUT VARIABLES:
+<span class="ln">33</span>C  DT : DIFFUSION TIMESTEP(SEC).
+<span class="ln">34</span>C  ECOD2 : DIFFUSION COEFFICIENTS FOR COMPOSITION TRANSPORT AT THE EQUALLY
+<span class="ln">35</span>C          SPACED GRID POINTS.
+<span class="ln">36</span>C  EM : MASSES OF THE EQUALLY SPACED GRID POINTS(GM).
+<span class="ln">37</span>C     NOTE: FOR CONVECTIVE BOUNDARIES THE MASS OF THE LAST GRID POINT IS
+<span class="ln">38</span>C           THE MASS OF THE ENTIRE CONVECTION ZONE.
+<span class="ln">39</span>C  HCOMP : ARRAY OF MASS FRACTION OF ALL OF THE SPECIES AT THE ORIGINAL
+<span class="ln">40</span>C          MODEL POINTS.
+<span class="ln">41</span>C  HS2 : MASSES OF THE ORIGINAL MODEL POINTS(UNLOGGED).
+<span class="ln">42</span>C  IBEG,IEND :THE FIRST/LAST UNSTABLE POINTS IN THE REGION.
+<span class="ln">43</span>C     NOTE: FOR CONVECTIVE BOUNDARIES THESE ARE ONLY THE FIRST CONVECTIVE
+<span class="ln">44</span>C           POINTS ADJACENT TO AN UNSTABLE RADIATIVE REGION.
+<span class="ln">45</span>C  LCZ : FLAG WHICH TELLS WHICH OF THE ORIGINAL MODEL POINTS ARE
+<span class="ln">46</span>C        CONVECTIVE FOR ANGULAR MOMENTUM TRANSPORT PURPOSES(I.E. INCLUDES
+<span class="ln">47</span>C        OVERSHOOT REGIONS). LCZ=T IF CONVECTIVE.
+<span class="ln">48</span>C  M : NUMBER OF MODEL POINTS.
+<span class="ln">49</span>C
+<span class="ln">50</span>C  OUTPUT VARIABLES:
+<span class="ln">51</span>C  HCOMP IS UPDATED IN DIFCOM TO GIVE THE NEW RUN OF COMPOSITION AFTER
+<span class="ln">52</span>C  ANGULAR MOMENTUM TRANSPORT.
+<span class="ln">53</span>C
+<span class="ln">54</span>C  BEFORE THE LAST ITERATION(LOK=F),ONLY DIFFUSION OF H,HE4,HE3 CALCULATED
+<span class="ln">55</span>C  TO CALCULATE CHANGE IN MU GRADIENTS CAUSED BY DIFFUSION.
+<span class="ln">56</span>C  THIS ROUTINE WILL THEREFORE BE CALLED EITHER TO MIX THE OTHER SPECIES
+<span class="ln">57</span>C  OR JUST THE FIRST 4 DEPENDING ON LOK.
+<span class="ln">58</span>C  DETERMINE WHICH SPECIES VARY OVER THE UNSTABLE REGION.
+<span class="ln">59</span>      NSPEC = 0
+<span class="ln">60</span>      DO J = JBEG, JEND
+<span class="ln">61</span>         TEST = HCOMP(J,IBEG)
+<span class="ln">62</span>C  ABUNDANCE 2(HE4) IS DEFINED AS 1-X-Z-HE3 SO IT IS NOT SOLVED FOR.
+<span class="ln">63</span>         IF(J.NE.2)THEN
+<span class="ln">64</span>            DO I = IBEG+1,IEND
+<span class="ln">65</span>               IF(DABS(HCOMP(J,I)-TEST).GT.1.0D-14) THEN
+<span class="ln">66</span>                  NSPEC = NSPEC + 1
+<span class="ln">67</span>                  ID(NSPEC) = J
+<span class="ln">68</span>                  GOTO 20
+<span class="ln">69</span>               ENDIF
+<span class="ln">70</span>            END DO
+<span class="ln">71</span>         ENDIF
+<span class="ln">72</span>   20    CONTINUE
+<span class="ln">73</span>      END DO
+<span class="ln">74</span>      IF(NSPEC.EQ.0) GOTO 200
+<span class="ln">75</span>C  NOW SOLVE FOR DIFFUSION OF ALL SPECIES THAT VARY OVER THE
+<span class="ln">76</span>C  UNSTABLE REGION USING THE SAME DIFFUSION COEFFICIENTS.
+<span class="ln">77</span>      NTAB = IEND - IBEG + 1
+<span class="ln">78</span>C  FIND RUN OF COMPOSITION AT THE EQUALLY SPACED GRID POINTS AT THE
+<span class="ln">79</span>C  START OF THE DIFFUSION TIMESTEP.  THIS IS DONE USING AN OSCULATORY
+<span class="ln">80</span>C  SPLINE.
+<span class="ln">81</span>      DO N = 1,NSPEC
+<span class="ln">82</span>         DO I = 1,NTAB
+<span class="ln">83</span>            II = I + IBEG - 1
+<span class="ln">84</span>            XTAB(I) = CHI(I)
+<span class="ln">85</span>            YTAB(I) = HCOMP(ID(N),II)
+<span class="ln">86</span>         END DO
+<span class="ln">87</span>         CALL <a href="../yrec-map/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(ECHI,ECOMP,XTAB,YTAB,NTAB,NTOT)
+<span class="ln">88</span>C  SET UP DIFFUSION EQUATION ARRAYS TO SOLVE FOR COMP AT END OF TSTEP
+<span class="ln">89</span>         CALL <a href="../yrec-map/ccoeft.f.html#def-CCOEFT" title="CCOEFT in ccoeft.f">CCOEFT</a>(ECOD2,DCHI,DT,ECOMP,EM,NTOT)
+<span class="ln">90</span>C  SOLVE MATRIX FOR THE RUN OF COMP AT TIME N+1 AT THE NEW GRID.
+<span class="ln">91</span>         CALL <a href="../yrec-map/ctridi.f.html#def-CTRIDI" title="CTRIDI in ctridi.f">CTRIDI</a>(NTOT)
+<span class="ln">92</span>C  TRANSFORM BACK TO THE ORIGINAL GRID AND UPDATE HCOMP IN THE
+<span class="ln">93</span>C  DIFFUSED REGION. U IS THE NEW RUN OF COMPOSITION IN THE REGION AT THE
+<span class="ln">94</span>C  EQUALLY SPACED GRID POINTS.
+<span class="ln">95</span>C  FOR THE BOUNDARY POINTS IN THE MODEL,EXTRAPOLATING U PAST THE
+<span class="ln">96</span>C  LAST EQUALLY SPACED GRID POINTS CAN LEAD TO SERIOUS ERRORS.
+<span class="ln">97</span>C  THEREFORE ADD THE *CHANGE* IN COMPOSITION AT THE EQUALLY SPACED GRID
+<span class="ln">98</span>C  POINTS TO HCOMP AND DO NOT REPLACE HCOMP WITH U.
+<span class="ln">99</span>         DCOMP = 0.0D0
+<span class="ln">100</span>         DO I = 1,NTOT
+<span class="ln">101</span>            XTAB(I) = ECHI(I)
+<span class="ln">102</span>            YTAB(I) = U(I)-ECOMP(I)
+<span class="ln">103</span>            DCOMP = DCOMP + YTAB(I)*EM(I)
+<span class="ln">104</span>         END DO
+<span class="ln">105</span>         DO I = 1,NTAB
+<span class="ln">106</span>            XVAL(I) = CHI(I)
+<span class="ln">107</span>         END DO
+<span class="ln">108</span>C  USE YVAL AS DUMMY ARRAY FOR THE NEW RUN OF COMP AT THE ORIGINAL
+<span class="ln">109</span>C  POINT GRID.
+<span class="ln">110</span>         CALL <a href="../yrec-map/osplin.f.html#def-OSPLIN" title="OSPLIN in osplin.f">OSPLIN</a>(XVAL,YVAL,XTAB,YTAB,NTOT,NTAB)
+<span class="ln">111</span>C CHECK FOR LOWER CONVECTION ZONE
+<span class="ln">112</span>         IF(LCZ(IBEG).AND.IBEG.GT.1)THEN
+<span class="ln">113</span>            DO I = IBEG-1,1,-1
+<span class="ln">114</span>               IF(.NOT.LCZ(I))THEN
+<span class="ln">115</span>                  I0 = I + 1
+<span class="ln">116</span>                  GOTO 90
+<span class="ln">117</span>               ENDIF
+<span class="ln">118</span>            END DO
+<span class="ln">119</span>            I0 = 1
+<span class="ln">120</span>   90       CONTINUE
+<span class="ln">121</span>         ELSE
+<span class="ln">122</span>            I0 = IBEG
+<span class="ln">123</span>         ENDIF
+<span class="ln">124</span>C CHECK FOR UPPER CONVECTION ZONE.
+<span class="ln">125</span>         IF(LCZ(IEND).AND.IEND.LT.M)THEN
+<span class="ln">126</span>            DO I = IEND+1,M
+<span class="ln">127</span>               IF(.NOT.LCZ(I))THEN
+<span class="ln">128</span>                  I1 = I - 1
+<span class="ln">129</span>                  GOTO 97
+<span class="ln">130</span>               ENDIF
+<span class="ln">131</span>            END DO
+<span class="ln">132</span>            I1 = M
+<span class="ln">133</span>   97       CONTINUE
+<span class="ln">134</span>         ENDIF
+<span class="ln">135</span>         DCOMP2 = 0.0D0
+<span class="ln">136</span>C COMPUTE SUM OF SPECIES MASS
+<span class="ln">137</span>         SUMSPEC = 0.0D0
+<span class="ln">138</span>         DO I = I0,I1
+<span class="ln">139</span>            SUMSPEC = SUMSPEC + HS2(I)*HCOMP(ID(N),I)
+<span class="ln">140</span>         END DO
+<span class="ln">141</span>C UPDATE COMPOSITION ARRAY.
+<span class="ln">142</span>         SUMSPEC2 = 0.0D0
+<span class="ln">143</span>         DO I = 1,NTAB
+<span class="ln">144</span>            J = IBEG+I-1
+<span class="ln">145</span>            HCOMP(ID(N),J) = HCOMP(ID(N),J)+YVAL(I)
+<span class="ln">146</span>            DCOMP2 = DCOMP2 + YVAL(I)*HS2(J)
+<span class="ln">147</span>            SUMSPEC2 = SUMSPEC2 + HS2(J)*HCOMP(ID(N),J)
+<span class="ln">148</span>         END DO
+<span class="ln">149</span>C UPDATE INNER CZ COMPOSITION IF APPLICABLE.
+<span class="ln">150</span>         IF(I0.LT.IBEG)THEN
+<span class="ln">151</span>            DO I = IBEG-1,I0,-1
+<span class="ln">152</span>               HCOMP(ID(N),I)=HCOMP(ID(N),IBEG)
+<span class="ln">153</span>               SUMSPEC2 = SUMSPEC2 + HS2(I)*HCOMP(ID(N),I)
+<span class="ln">154</span>               DCOMP2 = DCOMP2 + YVAL(1)*HS2(I)
+<span class="ln">155</span>            END DO
+<span class="ln">156</span>         ENDIF
+<span class="ln">157</span>C UPDATE OUTER CZ COMPOSITION IF APPLICABLE.
+<span class="ln">158</span>         IF(IEND.LT.I1)THEN
+<span class="ln">159</span>            DO I = IEND+1,I1
+<span class="ln">160</span>               HCOMP(ID(N),I)=HCOMP(ID(N),IEND)
+<span class="ln">161</span>               SUMSPEC2 = SUMSPEC2 + HS2(I)*HCOMP(ID(N),I)
+<span class="ln">162</span>               DCOMP2 = DCOMP2 + YVAL(NTAB)*HS2(I)
+<span class="ln">163</span>            END DO
+<span class="ln">164</span>         ENDIF
+<span class="ln">165</span>C CHECK FOR CONSERVATION OF SPECIES
+<span class="ln">166</span>c         TEST = ABS(SUMSPEC-SUMSPEC2)
+<span class="ln">167</span>c         WRITE(*,911)ID(N),DCOMP,DCOMP2,SUMSPEC
+<span class="ln">168</span>c 911     FORMAT(I5,1P3E10.2)
+<span class="ln">169</span>c         IF(TEST.GT.1.0D-10*SUMSPEC)THEN
+<span class="ln">170</span>c            RATIO = SUMSPEC/SUMSPEC2
+<span class="ln">171</span>c            DO I = I0,I1
+<span class="ln">172</span>c               HCOMP(ID(N),I)=RATIO*HCOMP(ID(N),I)
+<span class="ln">173</span>c            END DO
+<span class="ln">174</span>c         ENDIF
+<span class="ln">175</span>      END DO
+<span class="ln">176</span>C  ADJUST HE4 FOR CHANGES IN X, Z, AND HE3.
+<span class="ln">177</span>      IF(.NOT.LOK)THEN
+<span class="ln">178</span>         DO I = I0,I1
+<span class="ln">179</span>            HCOMP(2,I) = 1.0D0 - HCOMP(1,I) - HCOMP(3,I) - HCOMP(4,I)
+<span class="ln">180</span>         END DO
+<span class="ln">181</span>      ENDIF
+<span class="ln">182</span>  200 CONTINUE
+<span class="ln">183</span>      RETURN
+<span class="ln">184</span>      END</pre></details>
+<details class='py' id='py-mixcom'><summary>Python version: mixcom</summary><pre class='doc'>Diffuse each species in rows jbeg..jend (helium, row 2, by closure)
+that varies over the region ibeg..iend: interpolate it to the equal
+grid in chi, solve the implicit diffusion equation there, interpolate
+the change back and add it; adjoining convection zones take the edge
+abundance. Before the last iteration (lok False), Y = 1 - X - Z - He3.
+
+Translates: mixcom.f#MIXCOM (09c3b9b)
+
+Arguments: the step dt (s); ecod2 and em on the equal grid (from
+MIXGRID); the shell masses hs2; the region ibeg..iend; the convective
+flags lcz; lok; m shells; the model hcomp[k, j]; the rows jbeg..jend.
+The grid is in egrid_mod (chi, echi, dchi, ntot). Arrays have index 0
+unused.
+
+Sets in place: hcomp. Returns nothing.</pre><pre class='src'><span class="ln">25</span>def mixcom(dt, ecod2, em, hs2, ibeg, iend, lcz, lok, m, hcomp, jbeg, jend):
+<span class="ln">26</span>    &quot;&quot;&quot;Diffuse each species in rows jbeg..jend (helium, row 2, by closure)
+<span class="ln">27</span>    that varies over the region ibeg..iend: interpolate it to the equal
+<span class="ln">28</span>    grid in chi, solve the implicit diffusion equation there, interpolate
+<span class="ln">29</span>    the change back and add it; adjoining convection zones take the edge
+<span class="ln">30</span>    abundance. Before the last iteration (lok False), Y = 1 - X - Z - He3.
+<span class="ln">31</span>
+<span class="ln">32</span>    Translates: mixcom.f#MIXCOM (09c3b9b)
+<span class="ln">33</span>
+<span class="ln">34</span>    Arguments: the step dt (s); ecod2 and em on the equal grid (from
+<span class="ln">35</span>    MIXGRID); the shell masses hs2; the region ibeg..iend; the convective
+<span class="ln">36</span>    flags lcz; lok; m shells; the model hcomp[k, j]; the rows jbeg..jend.
+<span class="ln">37</span>    The grid is in egrid_mod (chi, echi, dchi, ntot). Arrays have index 0
+<span class="ln">38</span>    unused.
+<span class="ln">39</span>
+<span class="ln">40</span>    Sets in place: hcomp. Returns nothing.
+<span class="ln">41</span>    &quot;&quot;&quot;
+<span class="ln">42</span>    global i0, i1
+<span class="ln">43</span>    chi = egrid_mod.chi
+<span class="ln">44</span>    echi = egrid_mod.echi
+<span class="ln">45</span>    xval = splin_mod.xval
+<span class="ln">46</span>    yval = splin_mod.yval
+<span class="ln">47</span>    xtab = splin_mod.xtab
+<span class="ln">48</span>    ytab = splin_mod.ytab
+<span class="ln">49</span>    u = tridi_mod.u
+<span class="ln">50</span>    # Which species vary over the unstable region.
+<span class="ln">51</span>    nspec = 0
+<span class="ln">52</span>    for j in range(jbeg, jend + 1):
+<span class="ln">53</span>        test = hcomp[j, ibeg]
+<span class="ln">54</span>        # Row 2 (He4) is 1 - X - Z - He3, not solved for.
+<span class="ln">55</span>        if j != 2:
+<span class="ln">56</span>            for i in range(ibeg + 1, iend + 1):
+<span class="ln">57</span>                if abs(hcomp[j, i] - test) &gt; 1.0e-14:
+<span class="ln">58</span>                    nspec += 1
+<span class="ln">59</span>                    id_[nspec] = j
+<span class="ln">60</span>                    break                                # GOTO 20
+<span class="ln">61</span>    if nspec == 0:
+<span class="ln">62</span>        return                                           # GOTO 200
+<span class="ln">63</span>    ntab = iend - ibeg + 1
+<span class="ln">64</span>    ntot = egrid_mod.ntot
+<span class="ln">65</span>    for n in range(1, nspec + 1):
+<span class="ln">66</span>        # The composition at the equal grid points at the start of the step.
+<span class="ln">67</span>        for i in range(1, ntab + 1):
+<span class="ln">68</span>            ii = i + ibeg - 1
+<span class="ln">69</span>            xtab[i] = chi[i]
+<span class="ln">70</span>            ytab[i] = hcomp[id_[n], ii]
+<span class="ln">71</span>        osplin(echi, ecomp, xtab, ytab, ntab, ntot)
+<span class="ln">72</span>        # The implicit diffusion equation, solved for u (in tridi_mod).
+<span class="ln">73</span>        ccoeft(ecod2, egrid_mod.dchi, dt, ecomp, em, ntot)
+<span class="ln">74</span>        ctridi(ntot)
+<span class="ln">75</span>        # The change, not the new abundance, is interpolated back.
+<span class="ln">76</span>        dcomp = 0.0
+<span class="ln">77</span>        for i in range(1, ntot + 1):
+<span class="ln">78</span>            xtab[i] = echi[i]
+<span class="ln">79</span>            ytab[i] = u[i] - ecomp[i]
+<span class="ln">80</span>            dcomp = dcomp + ytab[i] * em[i]
+<span class="ln">81</span>        for i in range(1, ntab + 1):
+<span class="ln">82</span>            xval[i] = chi[i]
+<span class="ln">83</span>        osplin(xval, yval, xtab, ytab, ntot, ntab)
+<span class="ln">84</span>        # A lower convection zone.
+<span class="ln">85</span>        if lcz[ibeg] and ibeg &gt; 1:
+<span class="ln">86</span>            for i in range(ibeg - 1, 0, -1):
+<span class="ln">87</span>                if not lcz[i]:
+<span class="ln">88</span>                    i0 = i + 1
+<span class="ln">89</span>                    break                                # GOTO 90
+<span class="ln">90</span>            else:
+<span class="ln">91</span>                i0 = 1
+<span class="ln">92</span>        else:
+<span class="ln">93</span>            i0 = ibeg
+<span class="ln">94</span>        # An upper convection zone.
+<span class="ln">95</span>        if lcz[iend] and iend &lt; m:
+<span class="ln">96</span>            for i in range(iend + 1, m + 1):
+<span class="ln">97</span>                if not lcz[i]:
+<span class="ln">98</span>                    i1 = i - 1
+<span class="ln">99</span>                    break                                # GOTO 97
+<span class="ln">100</span>            else:
+<span class="ln">101</span>                i1 = m
+<span class="ln">102</span>        # Question (see the page): the sums below feed only a disabled check.
+<span class="ln">103</span>        dcomp2 = 0.0
+<span class="ln">104</span>        sumspec = 0.0
+<span class="ln">105</span>        for i in range(i0, i1 + 1):
+<span class="ln">106</span>            sumspec = sumspec + hs2[i] * hcomp[id_[n], i]
+<span class="ln">107</span>        # Update the composition.
+<span class="ln">108</span>        sumspec2 = 0.0
+<span class="ln">109</span>        for i in range(1, ntab + 1):
+<span class="ln">110</span>            j = ibeg + i - 1
+<span class="ln">111</span>            hcomp[id_[n], j] = hcomp[id_[n], j] + yval[i]
+<span class="ln">112</span>            dcomp2 = dcomp2 + yval[i] * hs2[j]
+<span class="ln">113</span>            sumspec2 = sumspec2 + hs2[j] * hcomp[id_[n], j]
+<span class="ln">114</span>        # The inner convection zone, if any.
+<span class="ln">115</span>        if i0 &lt; ibeg:
+<span class="ln">116</span>            for i in range(ibeg - 1, i0 - 1, -1):
+<span class="ln">117</span>                hcomp[id_[n], i] = hcomp[id_[n], ibeg]
+<span class="ln">118</span>                sumspec2 = sumspec2 + hs2[i] * hcomp[id_[n], i]
+<span class="ln">119</span>                dcomp2 = dcomp2 + yval[1] * hs2[i]
+<span class="ln">120</span>        # The outer convection zone, if any.
+<span class="ln">121</span>        if iend &lt; i1:
+<span class="ln">122</span>            for i in range(iend + 1, i1 + 1):
+<span class="ln">123</span>                hcomp[id_[n], i] = hcomp[id_[n], iend]
+<span class="ln">124</span>                sumspec2 = sumspec2 + hs2[i] * hcomp[id_[n], i]
+<span class="ln">125</span>                dcomp2 = dcomp2 + yval[ntab] * hs2[i]
+<span class="ln">126</span>        # The conservation check (rescaling to sumspec) is commented out.
+<span class="ln">127</span>    # He4 adjusted for the changes in X, Z and He3.
+<span class="ln">128</span>    if not lok:
+<span class="ln">129</span>        for i in range(i0, i1 + 1):
+<span class="ln">130</span>            hcomp[2, i] = 1.0 - hcomp[1, i] - hcomp[3, i] - hcomp[4, i]</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "$\mathcal{D}$ = <code>ECOD2</code> (a coefficient that includes $4\pi\rho r^2\, d\chi/dr$)": MIXGRID multiplies <code>COD2</code> by $\rho r^2\, d\chi/dr$, without $4\pi$. Fix: correct.</li>
+<li><strong>Wrong.</strong> Question 3 says that on the final call "heavier species (including $Z$) are mixed". The callers pass <code>JBEG = 5</code> on SECULR's final call (rows 5–11 or 5–15, not $Z$, row 3) and <code>JBEG = 4</code> in BURSMIX. Fix: rewrite the question: on SECULR's final call $X$, $Z$ and ³He do not change, so closure holds; in BURSMIX ³He (row 4) is mixed, and $Y$ is recomputed only if <code>LOK</code> is false.</li>
+<li><strong>Missing.</strong> Question 1: <code>I1</code> is also not set when <code>IEND = M</code>. Fix: add.</li>
+</ol>
+<p>Revised: <code>ECOD2</code> corrected; questions 1 and 3 rewritten.</p></div></details>
+</main></body></html>

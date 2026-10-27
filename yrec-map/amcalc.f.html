@@ -1,0 +1,199 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>amcalc.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ amcalc.f</span></header><main>
+<h1>amcalc.f</h1>
+<p class='muted'>89 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/amcalc.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>amcalc.py</code>, 47 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file computes the structure-dependent factor of the magnetic-braking torque, "according to the Matt et al. (2012) formulation" (comment by G. Somers, 6/16). The factor scales the angular-momentum loss of the wind with the star's mass, radius, luminosity, photospheric pressure and, optionally, its convective overturn time.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>SMASS</code> (the star's mass in solar masses: <a href="../yrec-map/mdot.f.html#def-MDOT">MDOT</a> updates it as <code>SMASS + DELM/CMSUN</code>, and COWIND's header says "stellar mass (solar units)"), <code>BL</code> ($\log L/L_\odot$) and <code>TEFFL</code> ($\log T_\mathrm{eff}$); the exponents <code>EXM</code>, <code>EXR</code>, <code>EXL</code>, <code>EXPR</code>, <code>EXTAU</code>, the solar normalizations <code>PMMSOLP</code> and <code>PMMSOLTAU</code> and the switch <code>LROSSBY</code>, all namelist parameters in <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD">NMLPAR_MOD</a> (set in <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a>); the photospheric pressure <code>PPHOT</code>, <code>PPHOT0</code>, the overturn time <code>TAUCZ</code>, <code>TAUCZ0</code> and <code>FRACSTEP</code> in <a href="../yrec-map/ovrtrn_mod.f.html#def-OVRTRN_MOD">OVRTRN_MOD</a>.</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/mwind.f.html#def-MWIND">MWIND</a> and <a href="../yrec-map/mcowind.f.html#def-MCOWIND">MCOWIND</a>.</li>
+<li><strong>Output:</strong> the argument <code>STRUCTFACTOR</code>, which MWIND and MCOWIND multiply with <code>CONSTFACTOR</code> and the time step to get the spin-down.</li>
+<li><strong>Modules:</strong> <a href="../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD">CONSTANTS_MOD</a> (<code>CLSUNL</code>, <code>C4PIL</code>, <code>CSIGL</code>, <code>CLN</code>, <code>CRSUN</code>), <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD">NMLPAR_MOD</a> and <a href="../yrec-map/ovrtrn_mod.f.html#def-OVRTRN_MOD">OVRTRN_MOD</a>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>
+<p>The radius from the Stefan–Boltzmann law, in cgs units:
+$$\log R = \tfrac12\left(\log L - \log 4\pi - \log\sigma - 4\log T_\mathrm{eff}\right),$$
+with $\log L$ = <code>BL + CLSUNL</code>; then $R/R_\odot$ (<code>RRAD</code>).</p>
+</li>
+<li>
+<p>$L/L_\odot = 10^{\mathtt{BL}}$.</p>
+</li>
+<li>
+<p>The photospheric pressure, interpolated within the step between its values at the start (<code>PPHOT0</code>) and end (<code>PPHOT</code>) of the step, both $\log P$, and normalized to the solar value:
+$$\frac{P_\mathrm{phot}}{P_{\mathrm{phot},\odot}} = \frac{10^{\,p_0 + f\,(p - p_0)}}{10^{\,p_\odot}},$$
+with $f$ = <code>FRACSTEP</code>.</p>
+</li>
+<li>
+<p>If <code>LROSSBY</code>, the overturn time likewise, $\tau/\tau_\odot = [\tau_0 + f(\tau - \tau_0)]/\tau_\odot$; otherwise 1.</p>
+</li>
+<li>The factor:
+$$\mathtt{STRUCTFACTOR} = M^{a_M}\,\left(\frac{R}{R_\odot}\right)^{a_R}\left(\frac{L}{L_\odot}\right)^{a_L}\left(\frac{P_\mathrm{phot}}{P_{\mathrm{phot},\odot}}\right)^{a_P}\left(\frac{\tau}{\tau_\odot}\right)^{a_\tau}.$$</li>
+</ol>
+<p><strong>Design.</strong> The radius comes from $L$ and $T_\mathrm{eff}$, not from the model's outer radius. The mass is used as given, with no solar normalization in this routine.</p>
+<p><strong>KC's changes.</strong> 2025-05-30: the elements of <code>/PMMWIND/</code> reordered (reals first, then logicals and the character <code>AWIND</code>); the old order is kept as a comment. Since then <code>/PMMWIND/</code> is gone, its members moved to <code>NMLPAR_MOD</code>.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> <code>STRUCTFACTOR</code> is now an output argument (<code>/CWIND/</code> retired); COMMON blocks to modules, <code>IMPLICIT NONE</code>; the unused constants and <code>AWIND</code> are gone, which settles the former question on them.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><p>None.</p></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+AMCALC
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-AMCALC'>AMCALC</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-AMCALC'><h3><span class='kind'>subroutine</span>AMCALC</h3>
+<p class='muted'>lines 5–89 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/amcalc.f#L5-L89'>GitHub</a></p>
+<pre>SUBROUTINE AMCALC(SMASS,BL,TEFFL,STRUCTFACTOR)</pre>
+<div class='notes'><p>Sets <code>STRUCTFACTOR</code>, the product of $M$, $R/R_\odot$, $L/L_\odot$, $P_\mathrm{phot}/P_{\mathrm{phot},\odot}$ and optionally $\tau/\tau_\odot$, each to its exponent from <code>NMLPAR_MOD</code> (Matt et al. 2012), and returns it in <code>STRUCTFACTOR</code>.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+AMCALC
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/ovrtrn_mod.f.html#def-OVRTRN_MOD'>OVRTRN_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/mcowind.f.html#def-MCOWIND'>MCOWIND</a> <span class='muted'>(mcowind.f)</span></li>
+<li><a href='../yrec-map/mwind.f.html#def-MWIND'>MWIND</a> <span class='muted'>(mwind.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">5</span>      SUBROUTINE AMCALC(SMASS,BL,TEFFL,STRUCTFACTOR)
+<span class="ln">6</span>C 10/14/26 MHP via Claude
+<span class="ln">7</span>C code changed to convert COMMON/OVRTRN/ into OVRTRN_MOD.
+<span class="ln">8</span>      USE OVRTRN_MOD
+<span class="ln">9</span>C 10/14/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">11</span>      USE NMLPAR_MOD
+<span class="ln">12</span>C 10/14/26 MHP via Claude
+<span class="ln">13</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">14</span>      USE CONSTANTS_MOD
+<span class="ln">15</span>C 10/20/26 MHP via Claude
+<span class="ln">16</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">17</span>C explicit declarations.
+<span class="ln">18</span>      IMPLICIT NONE
+<span class="ln">19</span>      REAL*8 BL,RL,RLUM,RMASS,RPHOT,RRAD,RTAU,RTOT,SMASS,STRUCTFACTOR,
+<span class="ln">20</span>     *       TEFFL
+<span class="ln">21</span>
+<span class="ln">22</span>
+<span class="ln">23</span>C 9/25/26 MHP via Claude
+<span class="ln">24</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">25</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">26</span>C 9/24/26 MHP via Claude
+<span class="ln">27</span>C code changed to remove dead CMIXL from COMMON/CONST3/; it is now
+<span class="ln">28</span>C passed as an explicit argument where actually used
+<span class="ln">29</span>C MHP 8/17 ADDED EXCEN, C_2 TO COMMON BLOCK FOR MATT ET AL. 2012 CENT. TERM
+<span class="ln">30</span>C 10/12/26 MHP via Claude
+<span class="ln">31</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">32</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">33</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">34</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">35</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">36</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">37</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">38</span>C
+<span class="ln">39</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">40</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">41</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">42</span>C 10/13/26 MHP via Claude
+<span class="ln">43</span>C code changed to retire COMMON/CWIND/.  Its namelist members moved to the
+<span class="ln">44</span>C consolidated block earlier, leaving two.  C_2 is a constant, set once in
+<span class="ln">45</span>C parmin.f, so it is now the last member of COMMON/CONSTANTS/ -- appended
+<span class="ln">46</span>C there rather than inserted, and added to every declaration so the block
+<span class="ln">47</span>C keeps one size; parmin.f DATA-initializes CLSUN and CRSUN, so a short
+<span class="ln">48</span>C declaration anywhere would be the OP95INTERP hazard again.  It may
+<span class="ln">49</span>C eventually become a namelist variable.  STRUCTFACTOR, the loss-law
+<span class="ln">50</span>C prefactor, is computed by AMCALC and read by its own two callers,
+<span class="ln">51</span>C mwind.f and mcowind.f, so it is now an AMCALC output argument.
+<span class="ln">52</span>C      COMMON/CWIND/WMAX,EXMD,EXW,EXTAU,EXR,EXM,CONSTFACTOR,STRUCTFACTOR,LJDOT0
+<span class="ln">53</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">54</span>C       COMMON/PMMWIND/AWIND,LMWIND,LROSSBY,LBSCALE,PMMA,PMMB,PMMC,PMMD,PMMM,
+<span class="ln">55</span>C      *         PMMJD,PMMMD,PMMSOLP,PMMSOLW,PMMSOLTAU
+<span class="ln">56</span>C 10/12/26 MHP via Claude
+<span class="ln">57</span>C code changed to remove the trailing CHARACTER member AWIND from
+<span class="ln">58</span>C COMMON/PMMWIND/.  Character data does not belong in a COMMON block, and
+<span class="ln">59</span>C this file never referenced AWIND.  It is now a local of parmin.f, the
+<span class="ln">60</span>C only routine that reads it.  Being last, its removal moves no other
+<span class="ln">61</span>C member, and the block shrinks identically in all five files.
+<span class="ln">62</span>      SAVE
+<span class="ln">63</span>
+<span class="ln">64</span>C G Somers, 6/16
+<span class="ln">65</span>C THIS SHORT SUBROUTINE WILL USE THE DELIVERED STRUCTURAL VARIABLES TO DETERMINE
+<span class="ln">66</span>C THE STRENGTH OF THE TORQUE, ACCORDING TO THE MATT ET AL. (2012) FORMULATION.
+<span class="ln">67</span>C
+<span class="ln">68</span>C COLLECT THE RELEVANT STRUCTURE VARIABLES, AND
+<span class="ln">69</span>C     MASS
+<span class="ln">70</span>      RMASS = SMASS
+<span class="ln">71</span>C     RADIUS
+<span class="ln">72</span>      RL = 0.5D0*(BL+CLSUNL-C4PIL-CSIGL-4.D0*TEFFL)
+<span class="ln">73</span>      RTOT  = DEXP(CLN*RL)
+<span class="ln">74</span>      RRAD = RTOT/CRSUN
+<span class="ln">75</span>C     LUMINOSITY
+<span class="ln">76</span>      RLUM = 10.**BL
+<span class="ln">77</span>C     PHOTOSPHERIC PRESSURE
+<span class="ln">78</span>      RPHOT = 10.**(PPHOT0+FRACSTEP*(PPHOT-PPHOT0))/(10.**PMMSOLP)
+<span class="ln">79</span>C     CONVECTIVE OVERTURN TIMESCALE
+<span class="ln">80</span>      IF(LROSSBY)THEN
+<span class="ln">81</span>         RTAU = (TAUCZ0+FRACSTEP*(TAUCZ-TAUCZ0))/PMMSOLTAU
+<span class="ln">82</span>      ELSE
+<span class="ln">83</span>         RTAU = 1.
+<span class="ln">84</span>      ENDIF
+<span class="ln">85</span>C     COMBINE THEM ALL
+<span class="ln">86</span>      STRUCTFACTOR = RMASS**EXM * RRAD**EXR * RLUM**EXL * RPHOT**EXPR
+<span class="ln">87</span>     *               * RTAU**EXTAU
+<span class="ln">88</span>      RETURN
+<span class="ln">89</span>      END</pre></details>
+<details class='py' id='py-amcalc'><summary>Python version: amcalc</summary><pre class='doc'>Compute the structure factor of the wind torque: the mass, R/Rsun,
+L/Lsun, the photospheric pressure over the solar one and, if LROSSBY,
+the convective overturn time over the solar one, each raised to its
+exponent from nmlpar_mod.
+
+Translates: amcalc.f#AMCALC (09c3b9b)
+
+Arguments: smass (mass, solar units), bl (log L/Lsun), teffl
+(log Teff); structfactor is output only (the value passed is unused).
+
+Returns structfactor.</pre><pre class='src'><span class="ln">11</span>def amcalc(smass, bl, teffl, structfactor):
+<span class="ln">12</span>    &quot;&quot;&quot;Compute the structure factor of the wind torque: the mass, R/Rsun,
+<span class="ln">13</span>    L/Lsun, the photospheric pressure over the solar one and, if LROSSBY,
+<span class="ln">14</span>    the convective overturn time over the solar one, each raised to its
+<span class="ln">15</span>    exponent from nmlpar_mod.
+<span class="ln">16</span>
+<span class="ln">17</span>    Translates: amcalc.f#AMCALC (09c3b9b)
+<span class="ln">18</span>
+<span class="ln">19</span>    Arguments: smass (mass, solar units), bl (log L/Lsun), teffl
+<span class="ln">20</span>    (log Teff); structfactor is output only (the value passed is unused).
+<span class="ln">21</span>
+<span class="ln">22</span>    Returns structfactor.
+<span class="ln">23</span>    &quot;&quot;&quot;
+<span class="ln">24</span>    # Mass
+<span class="ln">25</span>    rmass = smass
+<span class="ln">26</span>    # Radius, from L and Teff (Stefan-Boltzmann), in solar units
+<span class="ln">27</span>    rl = 0.5 * (bl + constants_mod.clsunl - constants_mod.c4pil
+<span class="ln">28</span>                - constants_mod.csigl - 4.0 * teffl)
+<span class="ln">29</span>    rtot = math.exp(constants_mod.cln * rl)
+<span class="ln">30</span>    rrad = rtot / constants_mod.crsun
+<span class="ln">31</span>    # Luminosity
+<span class="ln">32</span>    rlum = 10.0 ** bl
+<span class="ln">33</span>    # Photospheric pressure, interpolated within the step
+<span class="ln">34</span>    rphot = (10.0 ** (ovrtrn_mod.pphot0 + ovrtrn_mod.fracstep
+<span class="ln">35</span>                      * (ovrtrn_mod.pphot - ovrtrn_mod.pphot0))
+<span class="ln">36</span>             / 10.0 ** nmlpar_mod.pmmsolp)
+<span class="ln">37</span>    # Convective overturn timescale
+<span class="ln">38</span>    if nmlpar_mod.lrossby:
+<span class="ln">39</span>        rtau = (ovrtrn_mod.taucz0 + ovrtrn_mod.fracstep
+<span class="ln">40</span>                * (ovrtrn_mod.taucz - ovrtrn_mod.taucz0)) / nmlpar_mod.pmmsoltau
+<span class="ln">41</span>    else:
+<span class="ln">42</span>        rtau = 1.0
+<span class="ln">43</span>    # Combine them all
+<span class="ln">44</span>    structfactor = (rmass ** nmlpar_mod.exm * rrad ** nmlpar_mod.exr
+<span class="ln">45</span>                    * rlum ** nmlpar_mod.exl * rphot ** nmlpar_mod.expr
+<span class="ln">46</span>                    * rtau ** nmlpar_mod.extau)
+<span class="ln">47</span>    return structfactor</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Settled. Question 1 (units of <code>SMASS</code>): <a href="../yrec-map/mdot.f.html#def-MDOT">MDOT</a> updates it as <code>SMASS + DELM/CMSUN</code>, and COWIND's header says "stellar mass (solar units)". Fix: state it; drop the question.</li>
+<li>Wrong question. Question 2 (mixed precision of <code>10.**BL</code>): <code>10.</code> is exact in single precision and is promoted to double before the power, so nothing is lost. Fix: drop it.</li>
+</ol>
+<p>Revised: <code>SMASS</code> in solar masses stated; questions 1 and 2 dropped.</p></div></details>
+</main></body></html>

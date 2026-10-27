@@ -1,0 +1,2265 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>parmin.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ parmin.f</span></header><main>
+<h1>parmin.f</h1>
+<p class='muted'>1508 lines · 2 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/parmin.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>parmin.py</code>, 883 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>PARMIN</code> reads a run's parameters and sets up its input and output. It holds the defaults of a few user parameters (most defaults are now initializers in the modules), reads the two namelist files (<code>CONTROL</code>, usually <code>yrec8.nml1</code>, and <code>PHYSICS</code>, usually <code>yrec8.nml2</code>), expands placeholders in file names, derives some parameters from others, opens most output files and several tables, writes the run's settings to the <code>.short</code> file, and interprets the "run cards" (the sequence of evolve and rescale steps). It is the code's single place of configuration.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the two namelist files, named on the command line (<code>GETARG(1)</code> and <code>GETARG(2)</code>; JVS 02/11) or defaulting to <code>yrec8.nml1</code> and <code>yrec8.nml2</code>; the code's version and git hash, <code>YRECVER</code> and <code>GITHASH</code> (arguments, from <a href="../yrec-map/version.f.html#def-SETVERSION">SETVERSION</a> through the main program; formerly <code>/VERSION/</code>); the environment variables <code>YREC_INPUT</code>, <code>YREC_START</code> and <code>YREC_OUTPUT</code>, if set.</li>
+<li><strong>Who calls it:</strong> the main program in <a href="../yrec-map/main.f.html">main.f</a>, once, first.</li>
+<li><strong>What it calls:</strong> <a href="#def-EXPAND_VALUE">EXPAND_VALUE</a> (in this file), the shell through <code>system</code> (<code>mkdir -p</code> for the output folder), and <a href="../yrec-map/remap.f.html#def-REMAP">REMAP</a>, which maps the newer, "more intuitively named" parameters (MHP 6/14, 10/14: <code>TIME_…</code>, <code>TOL_…</code>, <code>FLAG_…</code>) onto the older vectors <code>ATIME</code>, <code>HPTTOL</code> and the like.</li>
+<li><strong>Outputs:</strong></li>
+<li><strong>Arguments:</strong> 12 table file names (<code>FALEX06</code>, <code>FALLARD</code>, <code>FATM</code>, <code>FFERMI</code>, <code>FLIV95</code>, <code>FPATM</code>, <code>FPENV</code>, <code>FPMOD</code>, <code>FPUREZ</code>, <code>FSCVH</code>, <code>FSCVHE</code>, <code>FSCVZ</code>), which the main program passes on to <a href="../yrec-map/setups.f.html#def-SETUPS">SETUPS</a> and other set-up routines. Since MHP 8/25, file names travel as arguments rather than in COMMON blocks, "as character strings in common blocks can cause problems".</li>
+<li><strong>Modules:</strong> 11, almost all of them for the run's parameters. The namelists read straight into module variables: <code>NMLPAR_MOD</code> holds those the physics routines read, <code>NMLBYPASS_MOD</code> those that only set others (the cross sections, the <code>TIME_…</code> and <code>TOL_…</code> parameters for <code>REMAP</code>, the wind-law indices), and <code>CONSTANTS_MOD</code> (<code>CLSUN</code>, <code>CRSUN</code>, and <code>CLN</code>, <code>CC13</code>, <code>CC23</code>, <code>C_2</code> set here) and <code>INTPAR_MOD</code> (<code>STOLR0</code>, <code>IMAX</code>, <code>NUSE</code>) a few more. The others: <code>IOUNITS_MOD</code> (every unit number), <code>RUNLOOP_MOD</code> (the run cards: <code>RESCAL</code>, <code>IRESCA</code>, <code>LENDAG</code>, <code>LSETDT</code>), <code>COMP_MOD</code> (<code>ZENV</code>), <code>CCOUT_MOD</code> (<code>LPHHD</code>), <code>ACDPTH_MOD</code> (<code>LACOUT</code>), <code>LABEL_MOD</code> and <code>NEWOPAC_MOD</code>. The site's <code>modules.html</code> lists every module and its users.</li>
+<li><strong>Files opened:</strong> the <code>.short</code> diagnostic file (<code>ISHORT</code>, unit 20), the stored models (<code>ISTOR</code>, with a header if <code>LSTORE</code>), the first model (<code>IFIRST</code>, read), the last model (<code>ILAST</code>), the per-shell file (<code>IMODPT</code>), and as switched on: the track, solar neutrinos, debugging, Milne variables (appended), pulsation files, the conductive opacities, the OPAL 2006 EOS table, the acoustic-depth file (<code>…calcad</code>, named after the <code>.short</code> file) and, always, the sound-speed file <code>FSOUND</code> (default <code>Csound.dat</code>, unit <code>ISOUND</code>), which WRTMOD writes when <code>LSOUND</code> is on. Before that it creates the output folder, the path of <code>FTRACK</code> up to its last <code>/</code>.</li>
+<li><strong>Unit numbers:</strong> fixed here, from <code>IOWR = 6</code> (the screen or status file) to 90 (<code>IALEX06</code>); for example the OPAL EOS table is 49, and <code>ISOUND</code> is 500.</li>
+</ul>
+<p><strong>What it does, in order.</strong></p>
+<ol>
+<li><strong>Defaults.</strong> Most are now initializers in the modules (<code>NMLPAR_MOD</code>, <code>NMLBYPASS_MOD</code>, <code>CONSTANTS_MOD</code>, <code>INTPAR_MOD</code>); <code>PARMIN</code>'s own <code>DATA</code> keep those of the run cards, the mixture table, <code>ALFA</code>, <code>FK</code>, <code>WMAX_SUN</code>, <code>AWIND</code>, <code>FSOUND</code> and blank file names. Among the defaults, as their comments state: the cross sections of Solar Fusion II (Adelberger et al. 2011) and their derivatives (<code>S0_…</code>, <code>S0P_…</code>, <code>S0PP_…</code>); Li and Be destruction cross sections (Fowler et al. 1967, Rolfs &amp; Kavanagh 1986, Fowler 1988); the GS98 CNO fractions and $Z/X = 0.02292$ and the Lodders et al. (2021) isotope ratios and light-element abundances; alternative mixtures <code>AAG21</code>, <code>M22P</code>, <code>M22M</code> (Asplund et al. 2021; Magg et al., given as 2021 in the comment); a G&amp;N93 mixture <code>VNEW</code> for the envelope; $L_\odot = 3.8515\times10^{33}$ erg s⁻¹ and $R_\odot = 6.9598\times10^{10}$ cm; the burning cutoffs <code>TCUT</code>. The mixing length has no default any more: the old <code>CMIXL</code> $=1.4$ never reached the run, which takes <code>CMIXL = CMIXLA(NK)</code> in the main program for each run card.</li>
+<li><strong>Namelists.</strong> Both files are read and <code>REMAP</code> is called. Then <code>EXPAND_VALUE</code> expands a leading placeholder in each file name, and the output folder is created.</li>
+<li><strong>Derived settings.</strong></li>
+<li>Li/Be cross sections given by the user (<code>LXLI6</code> and so on) become scale factors relative to the defaults, e.g. <code>SLI6 = XSLI6/5.5D3</code>.</li>
+<li>Semiconvection together with any overshoot stops the run.</li>
+<li><strong>Rotation</strong> (<code>LROT</code>): <code>WALPCZ</code> is limited to $[-2, 0]$; <code>LSOLID</code> forces <code>IMPJMOD = 1</code>. For the old wind law (<code>LMWIND</code> false), from the index $\alpha$ (<code>ALFA</code>), as the comments derive:
+$$\dot J = f_K\, 2.036\times10^{33}\,(1.452\times10^{9})^{\alpha}\left(\frac{\dot M}{10^{-14}}\right)^{1-2\alpha/3}\Omega^{1+4\alpha/3}\left(\frac{R}{R_\odot}\right)^{2-\alpha}\left(\frac{M}{M_\odot}\right)^{-\alpha/3}.$$
+     For the Matt et al. law (<code>LMWIND</code>), the indices $a, b, c, d, m$ (<code>PMMA</code>…<code>PMMM</code>), preset by <code>AWIND</code> ('K97': Krishnamurthi 1997, $m = \alpha/3$; 'V13': van Saders &amp; Pinsonneault 2013, $m = 0.22$; 'CUS': from the namelist), give the exponents of $\dot J$, each quantity relative to the Sun:
+$$a_\Omega = 1 + a - 2am + 4mb,\quad a_R = 2 + 5m - 4mc,\quad a_M = -m,\quad a_L = 1 - 2m,\quad a_P = 2md,\quad e_\mathrm{cen} = md,$$
+     with $a_\tau = 0$ (the $\tau_\mathrm{cz}$ term is now applied in <a href="../yrec-map/mwind.f.html#def-MWIND">MWIND</a>), $c_2 = 0.0506$, <code>CONSTFACTOR</code> $= f_K\,J_\odot/\Omega_\odot^{a_\Omega}$, and, if <code>WMAX_SUN</code> $&lt; 1000$, the saturation threshold $\Omega_\mathrm{sat} = $ <code>WMAX_SUN</code> $\times\,\Omega_\odot$.</li>
+<li><strong>Composition changes:</strong> a single species to rescale (<code>LNEWCP</code>, <code>ANEWCP</code>), a CNO mixture (<code>ISETMIX</code>, <code>AMIX</code>, with checks on a custom one) and isotope ratios (<code>ISETISO</code>, <code>AISO</code>), all applied later to the starting model by <a href="../yrec-map/starin.f.html#def-STARIN">STARIN</a>.</li>
+<li><strong>Settling switches:</strong> <code>LDIFZ</code> turns on <code>LDIFY</code> and <code>LTHOUL</code>; <code>LDIFLI</code> turns on <code>LNEWDIF</code>, <code>LDIFY</code>, <code>LDIFZ</code>, <code>LTHOUL</code>, turns off <code>LTHOULFIT</code>, and sets <code>ILAMBDA = 4</code>.</li>
+<li><strong>Summary.</strong> A line of tolerances and rotation settings is written first, right after the semiconvection check. After the derived settings, the <code>PHYSICS</code> and <code>CONTROL</code> namelists are written to <code>ISHORT</code> as read, and the output-only namelist <code>DERIVED</code> with the values derived above (the wind-law exponents, the settling switches, the mixture, <code>LREL</code>, …). Then the mixing lengths are checked: each <code>CMIXLA</code> entry the run uses (only <code>CMIXLA(1)</code> under solar calibration, <code>LCALS</code>, otherwise the first <code>NUMRUN</code>, at most 50) must be positive, or the run stops. Then the atmosphere choice (<code>KTTAU</code> 0–5), and the run's description with the version line (<code># YREC v…</code>, also written at the head of the <code>.store</code> file and the track).</li>
+<li><strong>Run cards</strong> (<code>NUMRUN</code> cards, at most 50): <code>KINDRN = 1</code> evolves <code>NMODLS</code> models (to an age, a central D, X or Y, or with a fixed time step); <code>2</code> rescales the model (mass, $X$, $Z$, core mass) and relaxes it; <code>3</code> rescales and evolves.</li>
+</ol>
+<p><strong>Design.</strong> <code>PARMIN</code> is a 1,508-line routine that is mostly comments, declarations and data. A parameter now lives in one place, the module variable the namelist reads into. A few namelist entries are still unused (see question 3).</p>
+<p><strong>KC's changes.</strong> 2025-05-30: the elements of <code>/NULOSS/</code>, <code>/OPALEOS/</code>, <code>/NEWPARAM/</code>, <code>/ACDPTH/</code>, <code>/PMMWIND/</code> and <code>/MAG/</code> reordered (logical and character variables moved to the end; the same order is used in every routine that shares them), and <code>/MASSCHG3/</code> commented out (see question 3). These blocks have since become modules or been removed.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> The namelists read into modules (<code>NMLPAR_MOD</code>, <code>NMLBYPASS_MOD</code>), where most defaults now are; the removed options are gone (the MHD and OPAL 1995/2001 equations of state, the OPAL92, Kurucz 1990, LAOL89 and Alexander 1995 opacities, Monte Carlo, isochrones), and with them 15 file-name arguments; <code>YRECVER</code> and <code>GITHASH</code> are new arguments, printed and written as a version line; file names may start with a placeholder (<code>EXPAND_VALUE</code>, new), and the output folder is created; the sound-speed file is opened here; the hand-written summary tables are replaced by namelist echoes after <code>ISHORT</code> is opened, with a new <code>DERIVED</code> namelist; <code>TENV</code> is no longer set (ENVINT computes it); the default <code>CMIXL</code> is removed and <code>CMIXLA</code> is checked; <code>PMMM = 0.22</code> and <code>C_2 = 0.0506</code> are now double-precision constants; <code>LPMM</code>, <code>PMMWMAX</code>, <code>ZOPAL952</code> and <code>ZALEX2</code> are no longer namelist entries. Settled: the namelist dump before <code>OPEN(ISHORT)</code>, the printing slip in <code>TRIDT</code>, <code>TRIDL</code> and the stale "standard" values (old questions 1, 3, 4), and part of old question 6 (the unused entries; <code>LSOLWIND</code> now reaches MDOT).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>ZENV</code> set from every run card.</strong> The last line of the card loop, <code>IF(RESCAL(3,NKIND).GE.0.0D0) ZENV=RESCAL(3,NKIND)</code>, runs for every card, including evolve cards, where <code>RESCAL</code> is never set (zero), and for rescale cards with the default <code>RSCLZ = 0</code> ("0 = use current value"). So <code>ZENV</code> is usually set to 0 here. Is it always reset later (for example <code>ZENV = ZNEW</code> in <code>STARIN</code>), or is this a bug?</li>
+<li><strong>Rescale-and-evolve message.</strong> Card type 3 with a previous model prints format 451 ("rescale the previous run's last model"); its own format 551 is commented out.</li>
+<li><strong>Unused namelist entries.</strong> <code>DTDIF</code>, <code>DTWIND</code>, <code>HPTTOL</code> and <code>ATIME</code> are superseded by <code>REMAP</code>'s new parameters when those are used. Can the old entries be removed, or kept with a warning? (<code>LSOLWIND</code> now reaches <a href="../yrec-map/mdot.f.html#def-MDOT">MDOT</a> through <code>NMLPAR_MOD</code>, but MDOT's scaled solar wind stays inert: its constants <code>DMSUN</code>, <code>DMWSUN</code>, <code>DMWMAX</code> are zero, and a guard skips the branch; MDOT's page.)</li>
+<li><strong><code>GETARG</code>.</strong> It is a compiler extension; Fortran 2003 has <code>GET_COMMAND_ARGUMENT</code>. Minor.</li>
+<li><strong>The mixtures' names.</strong> The comment cites <code>'M22M'</code> and <code>'M22P'</code> as "Magg et al. 2021 (met, phot) A&amp;A 661,140", while the names suggest 2022, and the comment's list of supported mixtures writes <code>M22M',M22P'</code> with a quote missing. Which year is right?</li>
+<li><strong>The exponent of $R$ in the Matt et al. law.</strong> The comment's derivation gives $\dot J \propto R^{2+5m+4mbc}$, but the code (after JvS 09/25, "removed typo") uses $a_R = 2 + 5m - 4mc$. For 'V13' ($c = 0$) the two agree. For 'K97' ($b = 1$, $c = 2$, $m = \alpha/3$) the code gives $2 - 3m = 2 - \alpha$, the exponent of the old law, while the comment would give $2 + 13m$. The code looks right and the comment stale; confirm, and update the comment?</li>
+<li><strong>The output folder.</strong> The loop that finds the last <code>/</code> in <code>FTRACK</code> leaves <code>LAST_SLASH_IDX</code> unset when there is none (a saved local, so it keeps a value from before, or its initial one), and <code>mkdir -p</code> runs even when <code>LTRACK</code> is off and no track is written. Should a name without a folder mean the current folder, explicitly? <code>system</code> and <code>getenv</code> are compiler extensions too (see question 4).</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+PARMIN
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+9/22/26 MHP via Claude
+code changed to remove the MHD equation of state
+9/23/26 MHP via Claude
+code changed to remove the OPAL92 opacity tables
+9/23/26 MHP via Claude
+code changed to remove the Kurucz 1990 opacity tables
+9/23/26 MHP via Claude
+code changed to remove the LAOL89 opacity tables
+9/24/26 MHP via Claude
+code changed to remove the Alexander 1995 opacity tables</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-PARMIN'>PARMIN</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+<li><a href='#def-EXPAND_VALUE'>EXPAND_VALUE</a> <span class='muted'>subroutine · Replace any defined &quot;{YREC_XXX}&quot; placeholder string in the passed</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-PARMIN'><h3><span class='kind'>subroutine</span>PARMIN</h3>
+<p class='muted'>lines 16–1456 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/parmin.f#L16-L1456'>GitHub</a></p>
+<pre>SUBROUTINE PARMIN(FALEX06,FALLARD,FATM,FFERMI,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+PARMIN
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+9/22/26 MHP via Claude
+code changed to remove the MHD equation of state
+9/23/26 MHP via Claude
+code changed to remove the OPAL92 opacity tables
+9/23/26 MHP via Claude
+code changed to remove the Kurucz 1990 opacity tables
+9/23/26 MHP via Claude
+code changed to remove the LAOL89 opacity tables
+9/24/26 MHP via Claude
+code changed to remove the Alexander 1995 opacity tables</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/acdpth_mod.f.html#def-ACDPTH_MOD'>ACDPTH_MOD</a>, <a href='../yrec-map/ccout_mod.f.html#def-CCOUT_MOD'>CCOUT_MOD</a>, <a href='../yrec-map/comp_mod.f.html#def-COMP_MOD'>COMP_MOD</a>, <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/intpar_mod.f.html#def-INTPAR_MOD'>INTPAR_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/label_mod.f.html#def-LABEL_MOD'>LABEL_MOD</a>, <a href='../yrec-map/newopac_mod.f.html#def-NEWOPAC_MOD'>NEWOPAC_MOD</a>, <a href='../yrec-map/nmlbypass_mod.f.html#def-NMLBYPASS_MOD'>NMLBYPASS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/runloop_mod.f.html#def-RUNLOOP_MOD'>RUNLOOP_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='#def-EXPAND_VALUE'>EXPAND_VALUE</a> ×23</li>
+<li><a href='../yrec-map/remap.f.html#def-REMAP'>REMAP</a> <span class='muted'>(remap.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span></li>
+</ul>
+<details><summary>External calls (2)</summary><p><code>GETARG</code> ×2, <code>SYSTEM</code></p></details>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">16</span>      SUBROUTINE PARMIN(FALEX06,FALLARD,FATM,FFERMI,
+<span class="ln">17</span>     * FLIV95,FPATM,FPENV,FPMOD,FPUREZ,FSCVH,
+<span class="ln">18</span>     * FSCVHE,FSCVZ,YRECVER,GITHASH)
+<span class="ln">19</span>C 10/14/26 MHP via Claude
+<span class="ln">20</span>C code changed to convert COMMON/NEWOPAC/ into NEWOPAC_MOD.
+<span class="ln">21</span>      USE NEWOPAC_MOD
+<span class="ln">22</span>C 10/14/26 MHP via Claude
+<span class="ln">23</span>C code changed to convert COMMON/LABEL/ into LABEL_MOD.
+<span class="ln">24</span>      USE LABEL_MOD
+<span class="ln">25</span>C 10/14/26 MHP via Claude
+<span class="ln">26</span>C code changed to convert COMMON/ACDPTH/ into ACDPTH_MOD.
+<span class="ln">27</span>      USE ACDPTH_MOD
+<span class="ln">28</span>C 10/14/26 MHP via Claude
+<span class="ln">29</span>C code changed to convert COMMON/COMP/ into COMP_MOD.
+<span class="ln">30</span>      USE COMP_MOD
+<span class="ln">31</span>C 10/14/26 MHP via Claude
+<span class="ln">32</span>C code changed to convert COMMON/CCOUT/ into CCOUT_MOD.
+<span class="ln">33</span>      USE CCOUT_MOD
+<span class="ln">34</span>C 10/14/26 MHP via Claude
+<span class="ln">35</span>C code changed to convert COMMON/NMLBYPASS/ into NMLBYPASS_MOD.
+<span class="ln">36</span>      USE NMLBYPASS_MOD
+<span class="ln">37</span>C 10/14/26 MHP via Claude
+<span class="ln">38</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">39</span>      USE NMLPAR_MOD
+<span class="ln">40</span>C 10/14/26 MHP via Claude
+<span class="ln">41</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">42</span>      USE CONSTANTS_MOD
+<span class="ln">43</span>C 10/14/26 MHP via Claude
+<span class="ln">44</span>C code changed to convert COMMON/INTPAR/ into INTPAR_MOD.
+<span class="ln">45</span>      USE INTPAR_MOD
+<span class="ln">46</span>C 10/14/26 MHP via Claude
+<span class="ln">47</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">48</span>      USE IOUNITS_MOD
+<span class="ln">49</span>C 10/14/26 MHP via Claude
+<span class="ln">50</span>C code changed to convert COMMON/RUNLOOP/ into RUNLOOP_MOD.  A blanket
+<span class="ln">51</span>C USE imports exactly the names the COMMON declaration made global here,
+<span class="ln">52</span>C so it cannot change meaning.  See runloop_mod.f for the block history
+<span class="ln">53</span>C and for why the module declares the types the implicit rules supplied.
+<span class="ln">54</span>      USE RUNLOOP_MOD
+<span class="ln">55</span>C 10/20/26 MHP via Claude
+<span class="ln">56</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">57</span>C explicit declarations.
+<span class="ln">58</span>      IMPLICIT NONE
+<span class="ln">59</span>      REAL*8 ALFA,FK,RSCLCM,RSCLM,RSCLX,RSCLZ,SUM_FRAC,WMAX_SUN
+<span class="ln">60</span>      INTEGER KINDRN,NCMXCK,NKIND
+<span class="ln">61</span>      LOGICAL*4 LCMXBAD
+<span class="ln">62</span>
+<span class="ln">63</span>C PARAMETERS NT AND NG FOR TABULATED SURFACE PRESSURES.
+<span class="ln">64</span>C JNT 6/2014 ADD NTC AND NGC FOR KURUCZ/CASTELLI SURFACE PRESSURES
+<span class="ln">65</span>C PARAMETERS NTA AND NGA FOR TABULATED ALLARD MODEL SURFACE PRESSURES.
+<span class="ln">66</span>
+<span class="ln">67</span>      CHARACTER*10 YRECVER
+<span class="ln">68</span>      CHARACTER*20 GITHASH
+<span class="ln">69</span>      CHARACTER*256 VERFMT
+<span class="ln">70</span>      CHARACTER*256 FPUREZ
+<span class="ln">71</span>      CHARACTER*256 DESCRIP(2)
+<span class="ln">72</span>      CHARACTER*3 ANEWCP,ATMP,AID(12)
+<span class="ln">73</span>C MHP 10/24 MIXTURE TYPE FOR NEW HEAVY ELEMENT MIXTURE MACHINERY
+<span class="ln">74</span>      CHARACTER*8 AMIX,AISO,AMIXT(4)
+<span class="ln">75</span>      REAL*8 ZXMIXT(4),FRAC_CT(4),FRAC_NT(4),FRAC_OT(4)
+<span class="ln">76</span>      DIMENSION KINDRN(50),RSCLM(50),RSCLX(50),RSCLZ(50),
+<span class="ln">77</span>     1          RSCLCM(50)
+<span class="ln">78</span>C 9/25/26 MHP via Claude
+<span class="ln">79</span>C code changed to remove the LISO isochrone-output option
+<span class="ln">80</span>      CHARACTER*256 FATM
+<span class="ln">81</span>      CHARACTER*256 FSTCH
+<span class="ln">82</span>      CHARACTER*256 FALLARD,FSCVH,FSCVHE,FSCVZ
+<span class="ln">83</span>      CHARACTER*256 FLAST, FFIRST, FFERMI,
+<span class="ln">84</span>     1    FDEBUG, FTRACK, FSHORT, FMILNE, FMODPT,
+<span class="ln">85</span>     2    FSTOR, FPMOD, FPENV, FPATM,
+<span class="ln">86</span>     3    FSNU, FSCOMP
+<span class="ln">87</span>C 9/25/26 MHP via Claude
+<span class="ln">88</span>C code changed to add FSOUND, the Csound.dat sound-speed-profile
+<span class="ln">89</span>C output filename, to the file-name-managed unit system
+<span class="ln">90</span>      CHARACTER*256 FSOUND
+<span class="ln">91</span>C 9/24/26 MHP via Claude
+<span class="ln">92</span>C code changed to remove the Monte Carlo option
+<span class="ln">93</span>C JVS 02/11 PARAMETERS for command line yrec input file specification
+<span class="ln">94</span>C      and extra acoustic depth (calcad.f) output files
+<span class="ln">95</span>C       CHARACTER*256 FCLCD, YREC1, YREC2, FACAT, FJLAST,FJVS, FJENT, FJDEL
+<span class="ln">96</span>      CHARACTER*256 FCLCD, YREC1, YREC2
+<span class="ln">97</span>      !CHARACTER*256 FJLAST
+<span class="ln">98</span>      CHARACTER*256 CMD  ! Shell command composition for system() call
+<span class="ln">99</span>      INTEGER  I, LAST_SLASH_IDX
+<span class="ln">100</span>C 9/25/26 MHP via Claude
+<span class="ln">101</span>C code changed to remove dead IACAT, IJVS, IJENT, IJDEL unit
+<span class="ln">102</span>C reservations
+<span class="ln">103</span>C 10/14/26 MHP via Claude
+<span class="ln">104</span>C code changed to drop ICLCD and IJLAST from this declaration.  Both are
+<span class="ln">105</span>C IOUNITS members, and redundantly typing a COMMON member is legal while
+<span class="ln">106</span>C doing the same to a USE-associated name is rejected:
+<span class="ln">107</span>C &quot;Symbol &#x27;iclcd&#x27; conflicts with symbol from module &#x27;iounits_mod&#x27;&quot;.
+<span class="ln">108</span>C IOUNITS_MOD supplies both types.  MRK is a genuine local and stays.
+<span class="ln">109</span>      INTEGER MRK
+<span class="ln">110</span>C 10/12/26 MHP via Claude
+<span class="ln">111</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">112</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">113</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">114</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">115</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">116</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">117</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">118</span>C
+<span class="ln">119</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">120</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">121</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">122</span>C 9/25/26 MHP via Claude
+<span class="ln">123</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">124</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">125</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">126</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">127</span>C COMMON/IOUNITS/
+<span class="ln">128</span>C 9/25/26 MHP via Claude
+<span class="ln">129</span>C code changed to add ISOUND (Csound.dat unit) to COMMON/IOUNITS/
+<span class="ln">130</span>C 9/24/26 MHP via Claude
+<span class="ln">131</span>C code changed to remove dead ILLDAT, IKUR from COMMON/LUNUM/
+<span class="ln">132</span>C 9/24/26 MHP via Claude
+<span class="ln">133</span>C code changed to remove dead IDYN from COMMON/LUNUM/
+<span class="ln">134</span>C 9/25/26 MHP via Claude
+<span class="ln">135</span>C code changed to remove dead COMMON/LUNUM/ISCOMP (declared,
+<span class="ln">136</span>C assigned a unit number, but never opened or read anywhere)
+<span class="ln">137</span>C MHP 8/25 Removed file names from common block
+<span class="ln">138</span>C      COMMON/LUFNM/ FLAST, FFIRST, FRUN, FSTAND, FFERMI,
+<span class="ln">139</span>C     1    FDEBUG, FTRACK, FSHORT, FMILNE, FMODPT,
+<span class="ln">140</span>C     2    FSTOR, FPMOD, FPENV, FPATM, FDYN,
+<span class="ln">141</span>C     3    FLLDAT, FSNU, FSCOMP, FKUR,
+<span class="ln">142</span>C     4    FMHD1, FMHD2, FMHD3, FMHD4, FMHD5, FMHD6, FMHD7, FMHD8
+<span class="ln">143</span>C 9/24/26 MHP via Claude
+<span class="ln">144</span>C code changed to remove the Monte Carlo option
+<span class="ln">145</span>C 10/12/26 MHP via Claude
+<span class="ln">146</span>C code changed to drop COMMON/DESC/, which was declared in parmin.f alone.
+<span class="ln">147</span>C DESCRIP is now simply a local, kept by the blanket SAVE, and remains a
+<span class="ln">148</span>C CONTROL namelist variable.  Character data does not belong in a COMMON
+<span class="ln">149</span>C block.
+<span class="ln">150</span>C 10/11/26 MHP via Claude
+<span class="ln">151</span>C code changed to remove LSCRIB from COMMON/CCOUT/: it was declared
+<span class="ln">152</span>C positionally in all 17 files sharing this block but never read or
+<span class="ln">153</span>C written in executable code anywhere, and no namelist file sets it.
+<span class="ln">154</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CENV/ declaration
+<span class="ln">155</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">156</span>C 9/25/26 MHP via Claude
+<span class="ln">157</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">158</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">159</span>C 9/24/26 MHP via Claude
+<span class="ln">160</span>C code changed to remove dead CMIXL from COMMON/CONST3/; it is now
+<span class="ln">161</span>C passed as an explicit argument where actually used
+<span class="ln">162</span>C 10/13/26 MHP via Claude
+<span class="ln">163</span>C code changed to drop COMMON/CTLIM/; TENV is now derived in envint.f,
+<span class="ln">164</span>C its only reader, from TENV0 and TENV1.
+<span class="ln">165</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CTOL/ declaration
+<span class="ln">166</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">167</span>C 7/91 LSEMIC (SEMI-CONVECTION) ADDED TO COMMON BLOCK.
+<span class="ln">168</span>C 10/13/26 MHP via Claude: removed the unused COMMON/DPMIX/ declaration
+<span class="ln">169</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">170</span>C MHP 10/24 ADDED NEW CONTROLS FOR ALTERING THE CNO MASS FRACTIONS
+<span class="ln">171</span>C ISOTOPIC RATIOS(C,N,O) AND D/HE3/LI/BE/B ABUNDANCES.
+<span class="ln">172</span>C THESE CONTROLS ONLY ALTER THE MIXTURE IN THE STARTING MODEL AND ONLY
+<span class="ln">173</span>C IF THE MODEL IS CHEMICALLY UNEVOLVED. POSTPROCESSING TOOLS SHOULD BE USED FOR THE
+<span class="ln">174</span>C CORE HE BURNING PHASE.
+<span class="ln">175</span>c      COMMON/NEWCMP/XNEWCP,INEWCP,LNEWCP,LREL,ANEWCP
+<span class="ln">176</span>C 10/12/26 MHP via Claude
+<span class="ln">177</span>C code changed to remove COMMON/OPTAB/ entirely.  Once OPTOL moved to the
+<span class="ln">178</span>C consolidated namelist block, every remaining member was write-only:
+<span class="ln">179</span>C ZSI appeared only in a DATA statement in parmin.f, and IDT and IDD were
+<span class="ln">180</span>C assigned the constants 15 and 5 in coefft.f, envint.f, physic.f and
+<span class="ln">181</span>C starin.f and read nowhere in the code.  They are leftovers from the
+<span class="ln">182</span>C removed opacity-table interpolation schemes.
+<span class="ln">183</span>C MHP 10/24 ADDED STOP CRITERIA FOR CENTRAL H,D,AND HE4
+<span class="ln">184</span>C DBG 7/92 COMMON BLOCK ADDED TO COMPUTE DEBYE-HUCKEL CORRECTION.
+<span class="ln">185</span>C 10/13/26 MHP via Claude: removed the unused COMMON/DEBHU/ declaration
+<span class="ln">186</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">187</span>C MHP 10/90 DIFFERENT FC FOR DIFFERENT MECHANISMS INTRODUCED.
+<span class="ln">188</span>C ALSO OPTION FOR SMOOTHING VELOCITIES FOR LENGTH SCALE CALCULATIONS.
+<span class="ln">189</span>C MHP 5/90 ADD COMMON BLOCK FOR GRAVITATIONAL SETTLING.
+<span class="ln">190</span>C MHP 5/90 ADD COMMON BLOCK FOR NEW TREATMENT OF
+<span class="ln">191</span>C ENTROPY TERM(LNEWS),AND THE CALCULATION
+<span class="ln">192</span>C OF SOLAR NEUTRINOS(LSNU).ALSO ALLOWS A FOURTH LEVEL OF ITERATION(NITER4).
+<span class="ln">193</span>C MHP 7/91 ADDED COMMON BLOCK FOR NUMERICAL PARAMETERS IN KEMCOM.
+<span class="ln">194</span>C YCK &gt;&gt;&gt; OPAL95
+<span class="ln">195</span>      CHARACTER*256 FLIV95
+<span class="ln">196</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">197</span>C &lt;&lt;&lt; YCK
+<span class="ln">198</span>C MHP 6/90 ADDITIONAL COMMON BLOCK FOR SETTLING.
+<span class="ln">199</span>C GES 6/15 NEW COMMON BLOCK FOR LIGHT DIFFUSION AND NEW DIFF ROUTINE.
+<span class="ln">200</span>C DBG PULSE
+<span class="ln">201</span>C 10/13/26 MHP via Claude
+<span class="ln">202</span>C code changed to drop COMMON/PULSE/, declared here but never used.
+<span class="ln">203</span>C DBG PULSE OUT 7/92
+<span class="ln">204</span>C VARIABLES USED TO CONTROL OUTPUT OF PULSATION MODELS.  MODEL
+<span class="ln">205</span>C OUTPUT AFTER HAS TRAVELED POMAX IN HR DIAGRAM
+<span class="ln">206</span>C LPOUT AND POMAX ADDED TO CONTROL COMMON BLOCK, REST IN PHYSICS
+<span class="ln">207</span>C 10/13/26 MHP via Claude: removed the unused COMMON/ATMOS/ declaration
+<span class="ln">208</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">209</span>C 10/13/26 MHP via Claude: removed the unused COMMON/ATMOS2/ declaration
+<span class="ln">210</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">211</span>C JMH
+<span class="ln">212</span>C JNT 6/14 SAME AS ATMOS2 BUT FOR KURUCZ/CASTELLI2004 ATMOSPHERES
+<span class="ln">213</span>C 10/13/26 MHP via Claude: removed the unused COMMON/ATMOS2C/ declaration
+<span class="ln">214</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">215</span>C 9/06 GN --- New neutrino loss common block
+<span class="ln">216</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">217</span>C       COMMON/NULOSS/LNULOS1,DSNUDT,DSNUDD
+<span class="ln">218</span>C 10/13/26 MHP via Claude
+<span class="ln">219</span>C code changed to remove COMMON/NULOSS/: engeb.f assigns DSNUDT and
+<span class="ln">220</span>C DSNUDD and nothing reads them, in engeb.f or anywhere else, so they are
+<span class="ln">221</span>C now plain locals there.  parmin.f declared the block without using it.
+<span class="ln">222</span>C MHP 1/93 ADD OPTION TO AUTOMATICALLY CALIBRATE SOLAR MODEL.
+<span class="ln">223</span>C      COMMON/CALS2/TOLL,TOLR,LCALS
+<span class="ln">224</span>C MHP 6/13 ADD OPTION TO CALIBRATE SOLAR Z/X, SOLAR Z/X, SOLAR AGE
+<span class="ln">225</span>C DBG 7/92 ADDED DEBYE HUCKEL PARAMETERS TO NAMELIST, ETADH0, ETADH1
+<span class="ln">226</span>
+<span class="ln">227</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CALSTAR/ declaration
+<span class="ln">228</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">229</span>C OPAL eos
+<span class="ln">230</span>      CHARACTER*256 FcondOpacP,FOPALE06
+<span class="ln">231</span>C MHP 8/25 Remove file names from common blocks
+<span class="ln">232</span>C 9/24/26 MHP via Claude
+<span class="ln">233</span>C code changed to remove the OPAL 1995/2001 equations of state
+<span class="ln">234</span>C OPACITY COMMON BLOCKS - modified 3/09
+<span class="ln">235</span>C 9/23/26 MHP via Claude
+<span class="ln">236</span>C code changed to remove the OPAL92 opacity tables
+<span class="ln">237</span>C 9/23/26 MHP via Claude
+<span class="ln">238</span>C code changed to remove the Kurucz 1990 opacity tables
+<span class="ln">239</span>C 9/23/26 MHP via Claude
+<span class="ln">240</span>C code changed to remove the LAOL89 opacity tables
+<span class="ln">241</span>C 9/24/26 MHP via Claude
+<span class="ln">242</span>C code changed to remove the Alexander 1995 opacity tables
+<span class="ln">243</span>C 9/24/26 MHP via Claude
+<span class="ln">244</span>C code changed to remove dead opacity-table Z-value inputs
+<span class="ln">245</span>C 9/24/26 MHP via Claude
+<span class="ln">246</span>C code changed to merge COMMON /MISCOPAC/ and COMMON/NWLAOL/ into
+<span class="ln">247</span>C COMMON /NEWOPAC/
+<span class="ln">248</span>      CHARACTER*256 FALEX06
+<span class="ln">249</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CROSS/ declaration
+<span class="ln">250</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">251</span>C 10/12/26 MHP via Claude
+<span class="ln">252</span>C code changed to merge COMMON/NEWPARAM/, COMMON/NEWCROSS/ and
+<span class="ln">253</span>C COMMON/XSECT/ into a single COMMON/NMLBYPASS/, declared here, in
+<span class="ln">254</span>C remap.f and in starin.f.
+<span class="ln">255</span>C
+<span class="ln">256</span>C These are namelist variables that exist only to set other quantities,
+<span class="ln">257</span>C or that are reserved for future development; none is read by the wider
+<span class="ln">258</span>C code.  Keeping them in their own block keeps them OUT of the single
+<span class="ln">259</span>C consolidated namelist block being built, so that block holds only
+<span class="ln">260</span>C variables the physics routines actually consume.  starin.f declares it
+<span class="ln">261</span>C although it uses none of them yet, so the isotope and cross-section
+<span class="ln">262</span>C machinery there can reach them without reopening this layout.
+<span class="ln">263</span>C
+<span class="ln">264</span>C Member order is NEWPARAM, then NEWCROSS, then XSECT, and the three
+<span class="ln">265</span>C declarations are generated from one list so all files agree.
+<span class="ln">266</span>C 10/13/26 MHP via Claude: removed the unused COMMON/SCVEOS/ declaration
+<span class="ln">267</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">268</span>C 10/13/26 MHP via Claude: removed the unused COMMON/DISK/ declaration
+<span class="ln">269</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">270</span>C MHP 3/99 ADDED FLAG TO TREAT THE ENTIRE STAR AS &#x27;CONVECTIVE&#x27;
+<span class="ln">271</span>C FOR ANGULAR MOMENTUM PURPOSES.
+<span class="ln">272</span>C JNT 2025/09/04 ADD IMPJMOD TO SOLID
+<span class="ln">273</span>C FROM JNT 05/15 add IMPJMOD (impose J model) which controls angular momentum 
+<span class="ln">274</span>C     coupling (0=no effect, 1=solid body rotation, 2= solid body core decoupled from surface cz
+<span class="ln">275</span>C     decoupled from surface cz, 3=solid body core coupled to surface cz)
+<span class="ln">276</span>C MHP 10/01 ADDED COMMON BLOCK FOR MASS LOSS/ACCRETION
+<span class="ln">277</span>C mhp 8/10 added option to scale mass loss rate by rotation; requires rotating model
+<span class="ln">278</span>C MHP 2/12 MOVED INTO PMM TORQUE MODEL, RETAINED MDOT SWITCH
+<span class="ln">279</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">280</span>C      COMMON/MASSCHG3/LSOLWIND,DMSUN,DMWSUN,DMWMAX
+<span class="ln">281</span>C      COMMON/MASSCHG3/DMSUN,DMWSUN,DMWMAX,LSOLWIND
+<span class="ln">282</span>CFD 10/09 ADDED COMMON BLOCK FOR EXTRA MIXING. IT MIMIC SOME MIXING BY AFFECTING
+<span class="ln">283</span>C        THE SETTLING COEFFICIENT DIRECTLY (in setup_grsett.f)
+<span class="ln">284</span>C JVS 02/11 Acoustic depth calc common block
+<span class="ln">285</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">286</span>C       COMMON/ACDPTH/TAUCZN,DELADJ(JSON),TAUHE, TNORM, TCZ, WHE, ICLCD,
+<span class="ln">287</span>C 9/25/26 MHP via Claude
+<span class="ln">288</span>C code changed to remove dead IACAT, IJVS, IJENT, IJDEL unit
+<span class="ln">289</span>C reservations from COMMON/ACDPTH/ (declared but never opened anywhere)
+<span class="ln">290</span>C      *LCLCD, AGEOUT(5), IACAT, IJLAST, LJLAST, LJWRT, LADON,LAOLY, IJVS,
+<span class="ln">291</span>C JVS END
+<span class="ln">292</span>C JVS 04/14 Common block for additional timestep governors
+<span class="ln">293</span>C MHP 02/12 NEW PARAMETERIZATION OF ANGULAR MOMENTUM AND MASS LOSS
+<span class="ln">294</span>C FROM MAGNETIZED SOLAR-LIKE WINDS
+<span class="ln">295</span>      CHARACTER*3 AWIND
+<span class="ln">296</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">297</span>C       COMMON/PMMWIND/AWIND,LMWIND,LROSSBY,LBSCALE,PMMA,PMMB,PMMC,PMMD,PMMM,
+<span class="ln">298</span>C      *         PMMJD,PMMMD,PMMSOLP,PMMSOLW,PMMSOLTAU	
+<span class="ln">299</span>C 10/12/26 MHP via Claude
+<span class="ln">300</span>C code changed to remove the trailing CHARACTER member AWIND from
+<span class="ln">301</span>C COMMON/PMMWIND/.  Character data does not belong in a COMMON block, and
+<span class="ln">302</span>C AWIND is referenced in executable code only here, where it selects the
+<span class="ln">303</span>C wind law (&#x27;K97&#x27;/&#x27;V13&#x27;) below; the other four files declaring this block
+<span class="ln">304</span>C never used it.  AWIND stays a PHYSICS namelist variable and is now a
+<span class="ln">305</span>C local, kept across calls by the blanket SAVE.  Being last, its removal
+<span class="ln">306</span>C moves no other member.
+<span class="ln">307</span>C MHP 8/17 ADDED EXCEN, C_2 TO COMMON BLOCK FOR MATT ET AL. 2012 CENT. TERM
+<span class="ln">308</span>C 10/13/26 MHP via Claude
+<span class="ln">309</span>C code changed to retire COMMON/CWIND/.  Its namelist members moved to the
+<span class="ln">310</span>C consolidated block earlier, leaving two.  C_2 is a constant, set once in
+<span class="ln">311</span>C parmin.f, so it is now the last member of COMMON/CONSTANTS/ -- appended
+<span class="ln">312</span>C there rather than inserted, and added to every declaration so the block
+<span class="ln">313</span>C keeps one size; parmin.f DATA-initializes CLSUN and CRSUN, so a short
+<span class="ln">314</span>C declaration anywhere would be the OP95INTERP hazard again.  It may
+<span class="ln">315</span>C eventually become a namelist variable.  STRUCTFACTOR, the loss-law
+<span class="ln">316</span>C prefactor, is computed by AMCALC and read by its own two callers,
+<span class="ln">317</span>C mwind.f and mcowind.f, so it is now an AMCALC output argument.
+<span class="ln">318</span>C CREATE A NEW COMMON BLOCK FOR OVERTURN TIMESCALE THINGS (PPHOT,TAUCZ,LNEWTCZ)
+<span class="ln">319</span>C 10/13/26 MHP via Claude: removed the unused COMMON/OVRTRN/ declaration
+<span class="ln">320</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">321</span>C MHP 02/12 PERMIT CONSTANT DIFFUSION COEFFICIENT
+<span class="ln">322</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">323</span>C       COMMON/MAG/LCODM,CODM
+<span class="ln">324</span>C
+<span class="ln">325</span>C G Somers 6/14 ALLOW VARIABLE LI/BE DESTRUCTION CROSS SECTIONS
+<span class="ln">326</span>C G Somers END
+<span class="ln">327</span>C 10/13/26 MHP via Claude
+<span class="ln">328</span>C code changed to replace COMMON/VERSION/ with explicit arguments.  These
+<span class="ln">329</span>C are CHARACTER, which does not belong in a COMMON block; SETVERSION sets
+<span class="ln">330</span>C them and parmin.f is the only reader, so main.f now holds them and
+<span class="ln">331</span>C passes them to both.
+<span class="ln">332</span>      SAVE
+<span class="ln">333</span>C
+<span class="ln">334</span>C SPLIT NAMELIST INTO TWO: CONTROL and PHYSICS
+<span class="ln">335</span>      NAMELIST /CONTROL/
+<span class="ln">336</span>     *   CMIXLA, CALSOLAGE, CALSOLZX,
+<span class="ln">337</span>     *   DESCRIP,
+<span class="ln">338</span>     *   ENDAGE,
+<span class="ln">339</span>     *   FPUREZ,
+<span class="ln">340</span>     *   FLAST, FFIRST, FFERMI, FDEBUG, FTRACK, FSHORT, FSTCH,
+<span class="ln">341</span>     *   FMILNE, FMODPT, FSTOR, FPMOD, FPATM, FPENV,
+<span class="ln">342</span>     *   FSNU, FSCOMP, FATM, FSOUND,
+<span class="ln">343</span>     *   FALLARD, FSCVH, FSCVHE, FSCVZ, FLIV95,
+<span class="ln">344</span>     *   IPVER, ITRVER,
+<span class="ln">345</span>     *   KINDRN,
+<span class="ln">346</span>     *   LDEBUG, LCORR, LMILNE, LTRACK, LSTORE, LFIRST,
+<span class="ln">347</span>     *   LSTPCH, LSTCH,
+<span class="ln">348</span>C G Somers 11/14
+<span class="ln">349</span>     *   LSTATM,LSTENV,LSTMOD,LSTPHYS,LSTROT,
+<span class="ln">350</span>C G Somers END
+<span class="ln">351</span>     *   LPULSE, LZRAMP, LTEFF, LCALST, LPUREZ,
+<span class="ln">352</span>C MHP 9/24 add LCALSOLZX to namelist
+<span class="ln">353</span>C 9/25/26 MHP via Claude
+<span class="ln">354</span>C code changed to remove the LISO isochrone-output option
+<span class="ln">355</span>     *   LRWSH, LSENV0A, LPOUT,LCALS,LCALSOLZX,
+<span class="ln">356</span>     *   LOPAL95,
+<span class="ln">357</span>     *   NPOINT,
+<span class="ln">358</span>     *   NPENV, NPRTMOD, NPRTPT, NUMRUN, NMODLS,
+<span class="ln">359</span>     *   POA, POB, POC, POMAX,
+<span class="ln">360</span>     *   RSCLM, RSCLX, RSCLZ, RSCLCM, RSCLZC, RSCLZM1, RSCLZM2,
+<span class="ln">361</span>     *   SETDT, SENV0A,STEFF,SR,
+<span class="ln">362</span>     *   TOLR, TOLL,TOLZ,
+<span class="ln">363</span>     *   XENV0A, XLS, XLSTOL,
+<span class="ln">364</span>     *   ZENV0A,
+<span class="ln">365</span>C 9/24/26 MHP via Claude
+<span class="ln">366</span>C code changed to remove dead opacity-table Z-value inputs
+<span class="ln">367</span>     *   ZOPAL951,
+<span class="ln">368</span>C 9/24/26 MHP via Claude
+<span class="ln">369</span>C code changed to remove the OPAL 1995/2001 equations of state
+<span class="ln">370</span>     *     FcondOpacP,FOPALE06,FALEX06,LALEX06,
+<span class="ln">371</span>C MHP 10/24 ADDED END_DCEN,END_XCEN,END_YCEN VECTORS TO NML1, USED IN MAIN
+<span class="ln">372</span>C MHP 10/24 ADDED HEAVY ELEMENT MIXTURE CONTROLS TO NML1,USED IN STARIN
+<span class="ln">373</span>     * END_DCEN,END_XCEN,END_YCEN,ISETMIX,ISETISO,
+<span class="ln">374</span>     * AMIX,AISO,FRAC_C,FRAC_N,FRAC_O,R12_13,R14_15,R16_17,R16_18,ZXMIX,
+<span class="ln">375</span>     * XH2_INI,XHE3_INI,XLI6_INI,XLI7_INI,XBE9_INI,XB10_INI,XB11_INI
+<span class="ln">376</span>C
+<span class="ln">377</span>      NAMELIST /PHYSICS/
+<span class="ln">378</span>     *   ATMMIN, ATMBEG, ATMERR, ATMMAX, ATMD0, ANEWCP, ATMP, ACFPFT,
+<span class="ln">379</span>     *   ATIME, ALPHAC, ALPHAE, ALFA, ALPHAM, ATMSTP, ABSTOL, BETAC,
+<span class="ln">380</span>     *   CMIN, CLSUN, CRSUN,
+<span class="ln">381</span>     *   DPENV, DTDIF, DTWIND, DJOK, DT_GS,
+<span class="ln">382</span>     *   ENVERR, ENVMAX, ENVMIN, ENVBEG, ENVSTP,ETADH0,ETADH1,
+<span class="ln">383</span>     *   FCORR0, FCORRI, FK,  FW, FC, FO, FMU, FES,
+<span class="ln">384</span>     *   FCORE, FGSF, FSS, FESC, FSSC, FGSFC, FGRY, FGRZ,
+<span class="ln">385</span>     *   GRTOL,
+<span class="ln">386</span>     *   HTOLER, HPTTOL,
+<span class="ln">387</span>     *   ITFP1, ITFP2, IMAX, ITDIF1, ITDIF2, IES, IGSF, IMU, ILAMBDA,
+<span class="ln">388</span>     *   KTTAU, KEMMAX,
+<span class="ln">389</span>     *   LVFC, LDIFAD, LNOJ, LNEWDIF, LDIFY, LDIFZ, LDIFLI, LSNU, LDH,
+<span class="ln">390</span>     *   LNEWCP, LKUTHE, LOVSTC, LOVSTE, LOVSTM, LOVMAX,
+<span class="ln">391</span>     *   LEXCOM, LROT, LNEW0, LINSTB, LWNEW, LJDOT0, LPTIME,LADOV,LTRIST,
+<span class="ln">392</span>     *   LENVG, LNULOS1, LTHOUL, LTHOULFIT,
+<span class="ln">393</span>     *   LCORE, LSEMIC, LNEWS,
+<span class="ln">394</span>     *   MCORE,
+<span class="ln">395</span>     *   NITER1, NITER2, NITER3, NITER4, NUSE, NITER_GS,
+<span class="ln">396</span>     *   OPTOL,
+<span class="ln">397</span>     *   RCRIT, RELTOL,
+<span class="ln">398</span>     *   STOLR0,
+<span class="ln">399</span>     *   TCUT, TSCUT, TENV0, TENV1, TGCUT, TRIDT, TRIDL,
+<span class="ln">400</span>     *   TOLLAOL,
+<span class="ln">401</span>     *   VNEW,
+<span class="ln">402</span>     *   WALPCZ, WNEW, WEAKSCREENING,
+<span class="ln">403</span>     *   XNEWCP, XMIN,
+<span class="ln">404</span>     *   YMIN, TMOLMIN,TMOLMAX,
+<span class="ln">405</span>     *   SSTANDARD,LSCV,
+<span class="ln">406</span>     *   LDISK,TDISK,PDISK,WMAX,LSOLID,IMPJMOD, !JNT 09/2025 FOR 05/15
+<span class="ln">407</span>     *   DMDT0,FCZDMDT,FTOTDMDT,COMPACC,CREIM,LREIMER,LMDOT,
+<span class="ln">408</span>     *   LcondOpacP,LOPALE06,LNumDeriv,
+<span class="ln">409</span>     *   ALATM_FeH,ALATM_Alpha,LALTPTau100,! For new Allard Atmospheres
+<span class="ln">410</span>     *   CSTMIXING, CSTDIFFMIX,      !CFD oct2009 To mimic mixing(reduce settling)
+<span class="ln">411</span>C 10/8/26 MHP via Claude
+<span class="ln">412</span>C code changed to remove LPMM: confirmed unused (not in any COMMON
+<span class="ln">413</span>C block, no conditional anywhere in the code references it, and its
+<span class="ln">414</span>C own DATA default was already commented out), so it had zero effect
+<span class="ln">415</span>C on any run. The PMMA/PMMB/PMMC/PMMD/PMMM/PMMJD/PMMMD
+<span class="ln">416</span>C parameters below remain live, used under the LMWIND option.
+<span class="ln">417</span>C 10/11/26 MHP via Claude
+<span class="ln">418</span>C code changed to remove PMMWMAX: like LPMM, it was in no COMMON
+<span class="ln">419</span>C block, had no DATA default, and was referenced nowhere in the code,
+<span class="ln">420</span>C so setting it had no effect. No namelist file sets it.
+<span class="ln">421</span>     *   LSOLWIND,LMWIND,LROSSBY,LBSCALE,
+<span class="ln">422</span>     *   AWIND,PMMA,PMMB,PMMC,PMMD,PMMM,PMMJD,PMMMD,
+<span class="ln">423</span>C MHP 8/17 ADDED WMAX_SUN
+<span class="ln">424</span>     *   PMMSOLP,PMMSOLW,PMMSOLTAU,LCODM,CODM,WMAX_SUN,
+<span class="ln">425</span>C G Somers 6/14
+<span class="ln">426</span>     *   XSLI6,XSLI7,XSBE91,XSBE92,XSBE93,
+<span class="ln">427</span>     *   LXLI6,LXLI7,LXBE91,LXBE92,LXBE93,
+<span class="ln">428</span>     *   SLI6,SLI7,SBE91,SBE92,SBE93,LNEWNUC,
+<span class="ln">429</span>     *   SPOTF, SPOTX, LSDEPTH,
+<span class="ln">430</span>C G Somers END
+<span class="ln">431</span>C MHP 09/14 ADDED CROSS SECTIONS
+<span class="ln">432</span>     *   S0_1_1,S0_3_3,S0_3_4,S0_1_12,S0_1_13,S0_1_14,S0_1_16,
+<span class="ln">433</span>     *   S0_PEP,S0_1_BE7E,S0_1_BE7P,S0_HEP,S0_1_15_C12ALP,S0_1_15_O16,
+<span class="ln">434</span>     *   S0P_1_1,S0P_3_3,S0P_3_4,S0P_1_12,S0P_1_13,S0P_1_14,
+<span class="ln">435</span>     *   S0P_1_16,S0PP_1_12,S0PP_1_13,S0PP_1_16,S0P_1_BE7P,S0PP_1_BE7P,
+<span class="ln">436</span>     *   FLAG_DX,FLAG_DW,FLAG_DZ,LSTRUCT_TIME,
+<span class="ln">437</span>     *   TIME_CORE_MIN,TIME_DL,TIME_DP,TIME_DR,TIME_DT,TIME_DW_GLOBAL,
+<span class="ln">438</span>     *   TIME_DW_MIX,TIME_DX_CORE_FRAC,TIME_DX_CORE_TOT,TIME_DX_SHELL,
+<span class="ln">439</span>     *   TIME_DX_TOTAL,TIME_DY_CORE_FRAC,TIME_DY_CORE_TOT,TIME_DY_SHELL,
+<span class="ln">440</span>     *   TIME_DY_TOTAL,TOL_CZBASE_FINE_WIDTH,TOL_DL_MAX,TOL_DM_MAX,
+<span class="ln">441</span>     *   TOL_DM_MIN,TOL_DP_CORE_MAX,TOL_DP_CZBASE_MAX,TOL_DP_ENV_MAX,
+<span class="ln">442</span>     *   TOL_DX_MAX,TOL_DZ_MAX,TIME_MAX_DT_FRAC,LNEWVARS,
+<span class="ln">443</span>C G Somers 3/17 USE NEW OVERTURN TIMESCALE CALC?
+<span class="ln">444</span>     *   LNEWTCZ, LCALCENV
+<span class="ln">445</span>C
+<span class="ln">446</span>C 10/8/26 MHP via Claude
+<span class="ln">447</span>C code added: an output-only NAMELIST (never READ, only WRITTEN) for
+<span class="ln">448</span>C variables that are derived/overridden after PHYSICS and CONTROL are
+<span class="ln">449</span>C read in, so their effective (post-derivation) values can be echoed
+<span class="ln">450</span>C to .short alongside the raw namelists, without a hand-written
+<span class="ln">451</span>C FORMAT per variable. Excludes purely incidental I/O bookkeeping
+<span class="ln">452</span>C (e.g. CMD, FCLCD, ICLCD, MRK, LAST_SLASH_IDX).
+<span class="ln">453</span>      NAMELIST /DERIVED/
+<span class="ln">454</span>     *   CLN, CC13, CC23,
+<span class="ln">455</span>     *   CONSTFACTOR, EXCEN, EXL, EXM, EXMD, EXPR, EXR, EXTAU, EXW, WMAX,
+<span class="ln">456</span>     *   LDIFY, LDIFZ, LTHOUL, LTHOULFIT, LNEW0, LNEWDIF, ILAMBDA,
+<span class="ln">457</span>     *   SLI6, SLI7, SBE91, SBE92, SBE93, FRAC_C, FRAC_N, FRAC_O,
+<span class="ln">458</span>     *   ZXMIX, SUM_FRAC, LISOTOPE, LMIXTURE, INEWCP,
+<span class="ln">459</span>C 10/13/26 MHP via Claude
+<span class="ln">460</span>C code changed to drop CMIXL from the output-only DERIVED namelist.  The
+<span class="ln">461</span>C mixing length actually used is the scalar CMIXL that main.f reads out of
+<span class="ln">462</span>C the per-run vector CMIXLA at CMIXL = CMIXLA(NK), then passes on as an
+<span class="ln">463</span>C explicit argument.  PARMIN is called once, before the run loop, so it
+<span class="ln">464</span>C has no NK and cannot know that value: its own CMIXL never leaves this
+<span class="ln">465</span>C routine and keeps its DATA default, so the echo reported 1.4 no matter
+<span class="ln">466</span>C what the namelist asked for -- 1.4 against an actual 1.797279, for
+<span class="ln">467</span>C instance.  CMIXLA is echoed with the CONTROL namelist, with the real
+<span class="ln">468</span>C per-run values, so nothing is lost by removing this line.
+<span class="ln">469</span>     *   LREL, KTTAU0, LTTAU
+<span class="ln">470</span>C
+<span class="ln">471</span>C DBG DATA CARDS FOR THE RUN PARAMETERS
+<span class="ln">472</span>C 9/24/26 MHP via Claude
+<span class="ln">473</span>C code changed to remove the Monte Carlo option
+<span class="ln">474</span>c Changed slightly 3He-3He on 9/25/97 to take account of the S&#x27;.
+<span class="ln">475</span>c  Previously (6/16/97) used S at Gamow Peak. Agrees with Workshop paper.
+<span class="ln">476</span>c
+<span class="ln">477</span>C MHP 7/93 VARIABLE FC OPTION
+<span class="ln">478</span>C MHP 9/94 COMBINED DIFFUSION/ADVECTION OPTION
+<span class="ln">479</span>C MHP 9/93
+<span class="ln">480</span>      DATA KINDRN/50*1/
+<span class="ln">481</span>C MHP 10/24 ADDED NEW DEFAULTS FOR END CONDITIONS ON CENTRAL D,X,Y
+<span class="ln">482</span>      DATA RSCLM, RSCLX, RSCLZ, RSCLCM/50*0.0, 50*0.0, 50*0.0, 50*0.0/
+<span class="ln">483</span>      DATA AID/&#x27;HE3&#x27;,&#x27;C12&#x27;,&#x27;C13&#x27;,&#x27;N14&#x27;,&#x27;N15&#x27;,&#x27;O16&#x27;,&#x27;O17&#x27;,&#x27;O18&#x27;,&#x27;H2 &#x27;,
+<span class="ln">484</span>     *&#x27;LI6&#x27;,&#x27;LI7&#x27;,&#x27;BE9&#x27;/
+<span class="ln">485</span>C 10/14/26 MHP via Claude
+<span class="ln">486</span>C code changed to move DATA STOLR0,IMAX,NUSE/1.0D-3,11,7/ into
+<span class="ln">487</span>C INTPAR_MOD as initializers.  DATA on a USE-associated name is rejected,
+<span class="ln">488</span>C so the defaults had to move with the block.  Same effect: all three are
+<span class="ln">489</span>C PHYSICS namelist variables, and the module initializer is applied once
+<span class="ln">490</span>C at load time, before PARMIN runs and before the namelist read.
+<span class="ln">491</span>      DATA ANEWCP/&#x27;   &#x27;/
+<span class="ln">492</span>C 10/8/26 MHP via Claude
+<span class="ln">493</span>C code changed to add a blank default for ATMP: it had no DATA
+<span class="ln">494</span>C statement anywhere, so its storage was zero-initialized to NUL
+<span class="ln">495</span>C bytes rather than blanks. Harmless as long as nothing echoed it
+<span class="ln">496</span>C (IF(ATMP.EQ.&#x27;ABS&#x27;) at line ~1173 just evaluates false either way,
+<span class="ln">497</span>C matching the LREL=.TRUE. default), but the new NML=PHYSICS echo
+<span class="ln">498</span>C writes it out verbatim, and raw NUL bytes turned .short into a
+<span class="ln">499</span>C binary-looking file. Blank matches the &quot;not &#x27;ABS&#x27;&quot; default.
+<span class="ln">500</span>      DATA ATMP/&#x27;   &#x27;/
+<span class="ln">501</span>C MHP 10/24 ADDED NEW MIXTURE CONTROL ISETISO CONTROLS CNO ISOTOPE RATIOS AND
+<span class="ln">502</span>C LIGHT ELEMENT ABUNDANCES D,HE3,LI6,LI7,BE9,B10,B11 (1=USED)
+<span class="ln">503</span>C ISETMIX CONTROLS C+N+O MASS FRACTIONS (1=USED)
+<span class="ln">504</span>C AMIX AND AISO ARE STRINGS IDENTIFYING EITHER A PRESET MIXTURE OR A CUSTOM ONE (&#x27;CUS&#x27;)
+<span class="ln">505</span>C SUPPORTED AMIX AT PRESENT ARE &#x27;GS98&#x27;,&#x27;AAG21&#x27;,M22M&#x27;,&#x27;M22P&#x27;. SUPPORTED AISO IS &#x27;L21&#x27;.
+<span class="ln">506</span>C FOR A CUSTOM MIXTURE YOU CAN ENTER INDIVIDUAL VALUES.
+<span class="ln">507</span>C TO BE ADDED - AMIX FROM ATOMIC OPACITY TABLES (INEWMIX=2) AND OTHER MIXTURES/ISOTOPES
+<span class="ln">508</span>      DATA AMIX, AISO/&#x27;GS98&#x27;, &#x27;L21&#x27;/
+<span class="ln">509</span>C     L21 DEFAULT ISOTOPE DATA LODDERS ET AL. 2021 SSRV 217,44
+<span class="ln">510</span>C     GS98 DEFAULT CNO FRACTIONS OF METALS GREVESSE&amp;sAUVAL 1998 SSRV 85,161
+<span class="ln">511</span>C MHP 10/24 DATA FOR CNO FRACTIONS AND Z/X OF DIFFERNT SOLAR MIXTURES.
+<span class="ln">512</span>C     AMIXT IS THE LIST OF IDS,EACH OF WHICH HAS A ZX AND CNO FRACS
+<span class="ln">513</span>C     ENTRY 1 =GS98(IN PARMIN),2=ASPLUND ET AL. 2021 A&amp;A 653,141
+<span class="ln">514</span>C     3,4=MAGG ET AL. 2021 (MET,PHOT) A&amp;A 661,140
+<span class="ln">515</span>      DATA AMIXT,ZXMIXT,FRAC_CT,FRAC_NT,FRAC_OT/&#x27;GS98&#x27;,&#x27;AAG21&#x27;,
+<span class="ln">516</span>     *     &#x27;M22P&#x27;,&#x27;M22M&#x27;,0.02292D0,0.0187D0,0.0225D0,0.0226D0,
+<span class="ln">517</span>     * 0.172148D0,0.184156D0,0.19239D0,0.191425D0,
+<span class="ln">518</span>     * 0.050426D0,0.050344D0,0.059012D0,0.058716D0,
+<span class="ln">519</span>     * 0.468195D0,0.416592D0,0.415631D0,0.413545D0/
+<span class="ln">520</span>C      ATIME(13) was orginally = 1.5.
+<span class="ln">521</span>C JVS 04/14
+<span class="ln">522</span>C 10/15/26 MHP via Claude
+<span class="ln">523</span>C code changed to remove DATA CMIXL/1.4D0/.  PARMIN&#x27;s own CMIXL is a local
+<span class="ln">524</span>C that nothing reads -- ifort reports it as unused -- and it has been dead
+<span class="ln">525</span>C since CMIXL was dropped from the output-only DERIVED namelist on
+<span class="ln">526</span>C 10/13/26.  The mixing length the code actually uses is the scalar
+<span class="ln">527</span>C main.f:382 takes from the per-run vector as CMIXL = CMIXLA(NK), so a
+<span class="ln">528</span>C default here could never reach the run; keeping one would only suggest
+<span class="ln">529</span>C otherwise.  An illegal CMIXLA is now trapped below instead.
+<span class="ln">530</span>C       DATA DPENV,LNSTDMX,LOVSTC,ALPHAC,LOVSTE,ALPHAE, LOVSTM, ALPHAM
+<span class="ln">531</span>C      */1.0D0,.FALSE.,.FALSE., 0.0D0, .FALSE.,0.0D0, .FALSE., 0.0/
+<span class="ln">532</span>C JVS 07/13
+<span class="ln">533</span>C END JVS
+<span class="ln">534</span>      DATA ALFA, FK/1.5D0, 1.0D0/
+<span class="ln">535</span>C MHP 8/17 INITIALIZED WMAX_SUN
+<span class="ln">536</span>      DATA WMAX_SUN/1000.0/
+<span class="ln">537</span>C DBG PULSE DATA CARD FOR PULSATION
+<span class="ln">538</span>C 10/14/26 MHP via Claude
+<span class="ln">539</span>C code changed to move DATA CLSUN,CRSUN/3.8515D33,6.9598D10/ into
+<span class="ln">540</span>C CONSTANTS_MOD as initializers, since DATA on a USE-associated name is
+<span class="ln">541</span>C rejected.  Same effect: both are PHYSICS namelist variables, and the
+<span class="ln">542</span>C module initializer is applied at load time, before this routine runs
+<span class="ln">543</span>C and before the namelist read.  CLSUNL and CRSUNL are derived from them
+<span class="ln">544</span>C later, in setups.f.
+<span class="ln">545</span>C DBG If LCORE is TRUE then calculate shells interior to start up
+<span class="ln">546</span>C     model&#x27;s inner most shell.
+<span class="ln">547</span>C MHP 5/90 NEW DATA STATEMENTS FOR NEW PARAMETERS
+<span class="ln">548</span>C DBGLAOL
+<span class="ln">549</span>C DBG 11/11/91
+<span class="ln">550</span>C 9/25/26 MHP via Claude
+<span class="ln">551</span>C code changed to add a default for FSOUND matching the previous
+<span class="ln">552</span>C hardcoded Csound.dat behavior; overridable via the CONTROL namelist
+<span class="ln">553</span>      DATA FSOUND/&#x27;Csound.dat&#x27;/
+<span class="ln">554</span>C 10/8/26 MHP via Claude
+<span class="ln">555</span>C code changed to add blank defaults for the remaining CONTROL/PHYSICS
+<span class="ln">556</span>C CHARACTER namelist variables that had none. Each is always set by
+<span class="ln">557</span>C every current test&#x27;s namelist anyway, but with no DATA default their
+<span class="ln">558</span>C storage zero-initializes to NUL bytes rather than blanks; harmless
+<span class="ln">559</span>C as long as nothing echoed them, but the new NML=CONTROL/PHYSICS echo
+<span class="ln">560</span>C (see above) writes every member verbatim, and raw NULs turn .short
+<span class="ln">561</span>C into a binary-looking file for any run that leaves one of these
+<span class="ln">562</span>C unset (as FDEBUG and FSTCH, both legacy/unused outputs, always are).
+<span class="ln">563</span>C A single blank is padded to each variable&#x27;s full declared length by
+<span class="ln">564</span>C the compiler, same as ANEWCP&#x27;s existing default above. FALEX06,
+<span class="ln">565</span>C FALLARD, FATM, FFERMI, FLIV95, FPATM, FPENV, FPMOD, FPUREZ, FSCVH,
+<span class="ln">566</span>C FSCVHE, FSCVZ are PARMIN&#x27;s own dummy arguments (not local variables,
+<span class="ln">567</span>C can&#x27;t take a DATA default here) but are always explicitly set by
+<span class="ln">568</span>C every current test&#x27;s namelist, so are not at risk in practice.
+<span class="ln">569</span>      DATA DESCRIP/2*&#x27; &#x27;/
+<span class="ln">570</span>      DATA FDEBUG,FFIRST,FLAST/3*&#x27; &#x27;/
+<span class="ln">571</span>      DATA FMILNE,FMODPT,FOPALE06,FSCOMP/4*&#x27; &#x27;/
+<span class="ln">572</span>      DATA FSHORT,FSNU,FSTCH,FSTOR,FTRACK,FcondOpacP/6*&#x27; &#x27;/
+<span class="ln">573</span>C 3/92 DBG
+<span class="ln">574</span>C DBG PULSE OUT 7/92
+<span class="ln">575</span>C MHP 06/13 ADDED FLAG TO CALIBRATE TO SOLAR Z/X, SOLAR Z/X, SOLAR AGE
+<span class="ln">576</span>C      DATA TOLL,TOLR,LCALS/1.0D-5,1.0D-4,.FALSE./
+<span class="ln">577</span>C DBG 4/94 ZRAMP STUFF
+<span class="ln">578</span>C DBG 12/94 CALIBRATED STELLAR MODEL STUFF
+<span class="ln">579</span>C LLP &gt;&gt;&gt; OPAL 2006 EOS, Potekhin Conductive Opacities,
+<span class="ln">580</span>C         Use Numerical Derivitives switches
+<span class="ln">581</span>C 9/24/26 MHP via Claude
+<span class="ln">582</span>C code changed to remove the OPAL 1995/2001 equations of state
+<span class="ln">583</span>C MHP 8/25 Removed hard coded defaults
+<span class="ln">584</span>C     Alex low T opacity
+<span class="ln">585</span>C      DATA OPECALEX/&#x27;OPACALEXANDER.X00&#x27;,
+<span class="ln">586</span>C     +              &#x27;OPACALEXANDER.X01&#x27;,
+<span class="ln">587</span>C     +              &#x27;OPACALEXANDER.X02&#x27;,
+<span class="ln">588</span>C     +              &#x27;OPACALEXANDER.X035&#x27;,
+<span class="ln">589</span>C     +              &#x27;OPACALEXANDER.X05&#x27;,
+<span class="ln">590</span>C     +              &#x27;OPACALEXANDER.X07&#x27;,
+<span class="ln">591</span>C     +              &#x27;OPACALEXANDER.X08&#x27;/
+<span class="ln">592</span>
+<span class="ln">593</span>C DBG 1/96 THE ARRAY V, READ IN VIA RDLAOL, CONTAINED THE MASS FRACTIONS
+<span class="ln">594</span>C OF THE ENVELOPE ELEMENTS. IT WAS USED IN STARIN TO DEFINE FXENV,
+<span class="ln">595</span>C WHICH ARE THE NUMBER FRACTION OF THE ENVELOPE ELEMENTS. FXENV WAS
+<span class="ln">596</span>C THEN UPDATED IN EQSTAT AND EQSAHA. HERE WE DEFINE VNEW PASSED
+<span class="ln">597</span>C IN A COMMON BLOCK VNEWCB. IT IS IDENTICAL TO V EXCEPT THAT THE NUMBERS
+<span class="ln">598</span>C ARE DEFINED HERE EXPLICITY FOR A G&amp;N93 SOLAR MIXTURE. YOU CAN
+<span class="ln">599</span>C CHANGE THEM VIA THE PHYSICS NAMELIST. V IS SET EQUAL TO VNEW IN
+<span class="ln">600</span>C  STARIN EXCEPT WHEN LLAOL=T (TO MAINTAIN BACKWARD COMPATIBILITY.
+<span class="ln">601</span>C            Na          Al          Mg          Fe
+<span class="ln">602</span>C            Si          C           H           O
+<span class="ln">603</span>C            N           Ar          Ne          He
+<span class="ln">604</span>C MHP 5/97 OPTION FOR SAUMON, CHABRIER, AND VAN HORN EOS ADDED
+<span class="ln">605</span>C MHP 3/99 OPTION FOR SB ROTATION ENFORCED IN THE ENTIRE STAR AT
+<span class="ln">606</span>C ALL TIMES
+<span class="ln">607</span>C JNT 09/2025 FOR 05/15 IMPJMOD default set to 0
+<span class="ln">608</span>C mhp 8/10 added scaled solar wind mass loss option
+<span class="ln">609</span>C      DATA LSOLWIND,DMSUN,DMWSUN,DMWMAX/.FALSE.,-2.0D-14,2.863E-6,9.054E-5/
+<span class="ln">610</span>C 3/09 Alexander 2006 opacity table options and opacity ramp options
+<span class="ln">611</span>CFD 10/09 Mimic mixing options - acting on setling and differential settling
+<span class="ln">612</span>C JVS 02/11 Initialize acoustic depth common block values appropriately
+<span class="ln">613</span>C JVS end
+<span class="ln">614</span>C MHP 02/12 NEW PARAMETERIZATION OF ANGULAR MOMENTUM AND MASS LOSS
+<span class="ln">615</span>C FROM MAGNETIZED SOLAR-LIKE WINDS
+<span class="ln">616</span>C      DATA LPMM,PMMA,PMMB,PMMC,PMMM,PMMJD,PMMMD,PMMWMAX,
+<span class="ln">617</span>C     *     PMMSOLP,PMMSOLW,PMMSOLTAU
+<span class="ln">618</span>C     *   /.FALSE.,2.0D0,1.0D0,0.0D0,0.22D0,1.32E30,1.27E12,
+<span class="ln">619</span>C     *     2.836E-5,4.9304D0,2.836E-6,1.065E6/
+<span class="ln">620</span>C G Somers 6/16 NEW PARAMETERIZATION OF ANGULAR MOMENTUM AND MASS LOSS FROM
+<span class="ln">621</span>C SOLAR WINDS. FOLLOW MATT ET AL (2012) FORMULATION, BUT DEFAULT TO KAWALER
+<span class="ln">622</span>C TYPE LAW.
+<span class="ln">623</span>C MHP 8/17 CHANGED DEFAULT FOR PMMA TO 2 FROM 0
+<span class="ln">624</span>      DATA AWIND/&#x27;K97&#x27;/
+<span class="ln">625</span>C MHP 02/12 PERMIT CONSTANT DIFFUSION COEFFICIENT
+<span class="ln">626</span>C
+<span class="ln">627</span>C G Somers 06/14 ALLOW NEW LI DESTRUCTION CROSS SECTIONS
+<span class="ln">628</span>C           NEW VALUES SHOULD BE IN UNITS OF keV b.
+<span class="ln">629</span>C           DEFAULT LI6 = 5,500 keV b FROM FOWLER ET AL. 1967
+<span class="ln">630</span>C           DEFAULT LI7 = 52 keV b FROM ROLFS &amp; KAVANAGH 1986
+<span class="ln">631</span>C           DEFAULT BE9(P,G)B10 (BE91) = 1.1 keV b INFERRED FROM FOWLER 1988
+<span class="ln">632</span>C               THEY DON&#x27;T SHOW THIS REACTION, SO THIS IS APPROXIMATE.
+<span class="ln">633</span>C           DEFAULT BE9(P,D)2HE4 (BE92) = 15,000 keV b FROM FOWLER ET AL. 1967
+<span class="ln">634</span>C           DEFAULT BE9(P,A)LI6 (BE93) = 15,000 keV b FROM FOWLER ET AL. 1967
+<span class="ln">635</span>C G Somers END
+<span class="ln">636</span>C MHP 8/14 DEFAULT CROSS-SECTIONS ARE TAKEN FROM THE SOLAR FUSION II PAPER
+<span class="ln">637</span>C REFERENCE ADELBERGER ET AL. 2011. UNITS ARE KeV b
+<span class="ln">638</span>C NOTE: PEP IS THE PROPORTIONALITY CONSTANT RELATIVE TO PP
+<span class="ln">639</span>C NOTE: BE7+E- IS THE PROPORTIONALITY CONSTANT IN THE LINEAR TERM
+<span class="ln">640</span>C THE CODE USES T9, NOT T6, SO ANY EXPRESSION IN TERMS OF T/10^6 K
+<span class="ln">641</span>C NEEDS TO BE DIVIDED BY 1000^0.5 (FOR BOTH PEP AND BE7+E-)
+<span class="ln">642</span>C REFERENCE FIRST DERRIVATIVES OF CROSS-SECTIONS (ADELBERGER ET AL. 2011)
+<span class="ln">643</span>C UNITS ARE b
+<span class="ln">644</span>C REFERENCE SECOND DERIVATIVES OF CROSS SECTIONS (ADELBERGER ET AL. 2011)
+<span class="ln">645</span>C DEFAULT TO YES FOR NEW TAUCZ CALCULATION
+<span class="ln">646</span>C
+<span class="ln">647</span>C THIS SUBROUTINE READS ALL USER DEFINED QUANTITIES FROM THE
+<span class="ln">648</span>C FILES yrec8.nml1 and yrec8.nml2
+<span class="ln">649</span>C VALUES FOR LOGICAL UNITS USED IN READS AND WRITES SET IN DATA
+<span class="ln">650</span>C STATEMENT; THEY CAN BE CHANGED IN THE NAMELIST IF NEEDED.
+<span class="ln">651</span>C LOGICAL UNIT 5 = READ FROM SCREEN
+<span class="ln">652</span>C LOGICAL UNIT 6 = WRITE TO SCREEN: FOR BATCH USE STATUS FILE INSTEAD
+<span class="ln">653</span>C SPECIFY ALL LOGICAL UNIT NUMBERS HERE:
+<span class="ln">654</span>C OUTPUT: STATUS FILE
+<span class="ln">655</span>      IOWR = 6
+<span class="ln">656</span>C OUTPUT: LAST MODEL (TEXT)
+<span class="ln">657</span>      ILAST = 11
+<span class="ln">658</span>C INPUT: FIRST MODEL (TEXT)
+<span class="ln">659</span>      IFIRST = 12
+<span class="ln">660</span>C INPUT: PHYSICS NAMELIST
+<span class="ln">661</span>      IRUN = 13
+<span class="ln">662</span>C INPUT: CONTROL NAMELIST
+<span class="ln">663</span>      ISTAND = 14
+<span class="ln">664</span>C INPUT: FERMI TABLES
+<span class="ln">665</span>      IFERMI = 15
+<span class="ln">666</span>C OUTPUT: RESERVED for DEBUGGING
+<span class="ln">667</span>      IDEBUG = 18
+<span class="ln">668</span>C OUTPUT: TRACK
+<span class="ln">669</span>      ITRACK = 19
+<span class="ln">670</span>C OUTPUT: ALL DIAGNOSTIC INFO
+<span class="ln">671</span>      ISHORT = 20
+<span class="ln">672</span>C OUTPUT: MILNE INVARIANT VARIABLES
+<span class="ln">673</span>      IMILNE = 21
+<span class="ln">674</span>C OUTPUT: SHELL BY SHELL INFO ON MODELS
+<span class="ln">675</span>      IMODPT = 22
+<span class="ln">676</span>C OUTPUT: SAVED MODELS, CAN BE USED AS STARTING MODEL
+<span class="ln">677</span>      ISTOR = 23
+<span class="ln">678</span>C OUTPUT: FOR PULSATION CODE, INTERIOR
+<span class="ln">679</span>      IOPMOD = 24
+<span class="ln">680</span>C OUTPUT: FOR PULSATION CODE, ENVELOPE
+<span class="ln">681</span>      IOPENV = 25
+<span class="ln">682</span>C OUTPUT: FOR PULSATION CODE, ATMOSPHERE
+<span class="ln">683</span>      IOPATM = 26
+<span class="ln">684</span>C 9/25/26 MHP via Claude
+<span class="ln">685</span>C code changed to remove dead ILSTBN, ISTOBN, IFSTBN unit reservations
+<span class="ln">686</span>C (assigned here but never opened, read, or written anywhere; not even
+<span class="ln">687</span>C shared via a common block)
+<span class="ln">688</span>C OUTPUT: SOUND SPEED PROFILE (WRITTEN BY WRTMOD WHEN LSOUND IS TRUE)
+<span class="ln">689</span>      ISOUND = 500
+<span class="ln">690</span>C 9/24/26 MHP via Claude
+<span class="ln">691</span>C code changed to remove the Monte Carlo option
+<span class="ln">692</span>C 9/23/26 MHP via Claude
+<span class="ln">693</span>C code changed to remove the OPAL92 opacity tables
+<span class="ln">694</span>C YCK INPUT: OPAL95 OPACITY TABLE
+<span class="ln">695</span>      ILIV95 = 48
+<span class="ln">696</span>C OUTPUT: SNU FLUXES
+<span class="ln">697</span>      ISNU = 33
+<span class="ln">698</span>C 9/25/26 MHP via Claude
+<span class="ln">699</span>C code changed to remove dead COMMON/LUNUM/ISCOMP unit reservation
+<span class="ln">700</span>C 9/23/26 MHP via Claude
+<span class="ln">701</span>C code changed to remove the Kurucz 1990 opacity tables
+<span class="ln">702</span>C 9/25/26 MHP via Claude
+<span class="ln">703</span>C code changed to remove the LISO isochrone-output option
+<span class="ln">704</span>C INPUT: KURUCZ ATMOSPHER TABLE
+<span class="ln">705</span>      IOATM = 38
+<span class="ln">706</span>C 9/24/26 MHP via Claude
+<span class="ln">707</span>C code changed to remove the Alexander 1995 opacity tables
+<span class="ln">708</span>C INPUT: OPAL EQUATION OF STATE
+<span class="ln">709</span>      IOPALE = 49
+<span class="ln">710</span>C 9/23/26 MHP via Claude
+<span class="ln">711</span>C code changed to remove the LAOL89 opacity tables
+<span class="ln">712</span>C INPUT: LAOL OPACITIES FOR PURE CN IN DENSE GRID FORMAT
+<span class="ln">713</span>      IOPUREZ = 62
+<span class="ln">714</span>C DBG 4/94
+<span class="ln">715</span>C     INPUT:
+<span class="ln">716</span>C DBG 8/95 SECOND OPOACITY TABLES FOR ZRAMP AND Z DIFFUSION
+<span class="ln">717</span>C 9/23/26 MHP via Claude
+<span class="ln">718</span>C code changed to remove the OPAL92 opacity tables
+<span class="ln">719</span>C 9/23/26 MHP via Claude
+<span class="ln">720</span>C code changed to remove the Kurucz 1990 opacity tables
+<span class="ln">721</span>C MHP 6/97 ADDED OPTION FOR ALLARD MODEL ATMOSPHERES
+<span class="ln">722</span>      IOATMA = 66
+<span class="ln">723</span>C 9/24/26 MHP via Claude
+<span class="ln">724</span>C code changed to remove the Monte Carlo option
+<span class="ln">725</span>C INPUT FILES FOR THE SCV EOS
+<span class="ln">726</span>      ISCVH=72
+<span class="ln">727</span>      ISCVHE=73
+<span class="ln">728</span>      ISCVZ=74
+<span class="ln">729</span>C Input files for Potekhin conductive opacities. LLP 7/8/06
+<span class="ln">730</span>      IcondOpacP = 75
+<span class="ln">731</span>C      FcondOpacP = &#x27;condall.d&#x27;
+<span class="ln">732</span>C Default FeH and Alpha for new Allard Atmospheres
+<span class="ln">733</span>      ALATM_FeH = 0D0
+<span class="ln">734</span>      ALATM_Alpha = 0D0
+<span class="ln">735</span>      LALTPTAU100 = .FALSE.
+<span class="ln">736</span>C 3/09 Input file for 2006 Alexander opacities
+<span class="ln">737</span>      IALEX06 = 90
+<span class="ln">738</span>
+<span class="ln">739</span>      print *,&#x27;&#x27;
+<span class="ln">740</span>      print *,&#x27;Yale Rotating Evolution Code - YREC, v&#x27;,YRECVER(1:LEN_TRIM(YRECVER)),&#x27; (&#x27;,GITHASH(1:LEN_TRIM(GITHASH)),&#x27;)&#x27;
+<span class="ln">741</span>
+<span class="ln">742</span>C JVS 02/11 Altered the yrec8 input format so that files can be entered
+<span class="ln">743</span>C on the command line, with the *.nml1 as the first argument, and *.nml2 as
+<span class="ln">744</span>C the second. Defaults to yrec8.nml1 and yrec8.nml2 if none are provided.
+<span class="ln">745</span>c      OPEN(UNIT=ISTAND, FILE=&#x27;yrec8.nml1&#x27;, STATUS=&#x27;OLD&#x27;)
+<span class="ln">746</span>c      OPEN(UNIT=IRUN, FILE=&#x27;yrec8.nml2&#x27;, STATUS=&#x27;OLD&#x27;)
+<span class="ln">747</span>c      READ(UNIT=ISTAND, NML=CONTROL)
+<span class="ln">748</span>c      READ(UNIT=IRUN, NML=PHYSICS)
+<span class="ln">749</span>c      CLOSE(ISTAND)
+<span class="ln">750</span>c      CLOSE(IRUN)
+<span class="ln">751</span>
+<span class="ln">752</span>C Dynamically create format string so version info is nicely spaced
+<span class="ln">753</span>      WRITE(VERFMT, 315) LEN_TRIM(YRECVER), LEN_TRIM(GITHASH)
+<span class="ln">754</span>  315 FORMAT(&#x27;(&#x27;&#x27;# YREC v&#x27;&#x27;, A&#x27;, I2.2, &#x27;, &#x27;&#x27; (&#x27;&#x27;, A&#x27;, I2.2,
+<span class="ln">755</span>     *       &#x27;, &#x27;&#x27;)&#x27;&#x27;)&#x27;)
+<span class="ln">756</span>
+<span class="ln">757</span>      CALL GETARG(1, YREC1)
+<span class="ln">758</span>      IF (YREC1(1:2) .EQ. &#x27; &#x27;) YREC1 = &#x27;yrec8.nml1&#x27;
+<span class="ln">759</span>      print *, &#x27; &#x27;
+<span class="ln">760</span>      write(*,*) &#x27;CONTROL namelist :  &#x27;,YREC1(1:LEN_TRIM(YREC1))
+<span class="ln">761</span>
+<span class="ln">762</span>      CALL GETARG(2, YREC2)
+<span class="ln">763</span>      IF (YREC2(1:2) .EQ. &#x27; &#x27;) YREC2 = &#x27;yrec8.nml2&#x27;
+<span class="ln">764</span>      write(*,*) &#x27;PHYSICS namelist :  &#x27;,YREC2(1:LEN_TRIM(YREC2))
+<span class="ln">765</span>
+<span class="ln">766</span>      OPEN(UNIT=ISTAND, FILE=YREC1, STATUS=&#x27;OLD&#x27;)
+<span class="ln">767</span>      OPEN(UNIT=IRUN, FILE=YREC2, STATUS=&#x27;OLD&#x27;)
+<span class="ln">768</span>      READ(UNIT=ISTAND, NML=CONTROL)
+<span class="ln">769</span>      READ(UNIT=IRUN, NML=PHYSICS)
+<span class="ln">770</span>      CLOSE(ISTAND)
+<span class="ln">771</span>      CLOSE(IRUN)
+<span class="ln">772</span>C MHP 8/14 SUBROUTINE TO CONVERT MORE USER-FRIENDLY INPUT VARIABLES
+<span class="ln">773</span>C INTO THE VECTORS USED IN THE CODE (SUPERCEDES OLDER INPUTS)
+<span class="ln">774</span>      CALL <a href="../yrec-map/remap.f.html#def-REMAP" title="REMAP in remap.f">REMAP</a>
+<span class="ln">775</span>C MHP 06/13 Added memory of whether the choice of atmospheres has
+<span class="ln">776</span>C been changed during the run, and what the original setting was
+<span class="ln">777</span>      KTTAU0 = KTTAU
+<span class="ln">778</span>      LTTAU = .FALSE.
+<span class="ln">779</span>C 9/25/26 MHP via Claude
+<span class="ln">780</span>C 10/8/26 MHP via Claude
+<span class="ln">781</span>C code changed to resolve the fort.20 live issue noted above (now
+<span class="ln">782</span>C removed): the namelist echo belongs after ISHORT is OPENed, not
+<span class="ln">783</span>C here. Moved to just past OPEN(ISHORT,...), alongside the rest of
+<span class="ln">784</span>C the run-parameter echo -- see the NML=PHYSICS/CONTROL/DERIVED
+<span class="ln">785</span>C writes there.
+<span class="ln">786</span>
+<span class="ln">787</span>C Post-process all CONTROL namelist vars that hold path values.
+<span class="ln">788</span>C Expand any placeholders found in the string with the value taken from a
+<span class="ln">789</span>C corresponding environment variable, if one is defined.
+<span class="ln">790</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FALEX06)
+<span class="ln">791</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FALLARD)
+<span class="ln">792</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FATM)
+<span class="ln">793</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FcondOpacP)
+<span class="ln">794</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FFERMI)
+<span class="ln">795</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FFIRST)
+<span class="ln">796</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FLAST)
+<span class="ln">797</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FLIV95)
+<span class="ln">798</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FMODPT)
+<span class="ln">799</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FOPALE06)
+<span class="ln">800</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FPATM)
+<span class="ln">801</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FPENV)
+<span class="ln">802</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FPMOD)
+<span class="ln">803</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FPUREZ)
+<span class="ln">804</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FSCOMP)
+<span class="ln">805</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FSCVH)
+<span class="ln">806</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FSCVHE)
+<span class="ln">807</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FSCVZ)
+<span class="ln">808</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FSHORT)
+<span class="ln">809</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FSNU)
+<span class="ln">810</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FSOUND)
+<span class="ln">811</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FSTOR)
+<span class="ln">812</span>      CALL <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">EXPAND_VALUE</a>(FTRACK)
+<span class="ln">813</span>
+<span class="ln">814</span>C Create output directory as specified in the FTRACK value of CONTROL
+<span class="ln">815</span>C namelist if it doesn&#x27;t already exist.
+<span class="ln">816</span>      ! find index of last &#x27;/&#x27; char. Use that to snip out the directory name.
+<span class="ln">817</span>      DO I = LEN_TRIM(FTRACK), 1, -1
+<span class="ln">818</span>          IF (FTRACK(I:I) .EQ. &#x27;/&#x27;) THEN
+<span class="ln">819</span>              LAST_SLASH_IDX = I
+<span class="ln">820</span>              GOTO 1250
+<span class="ln">821</span>          ENDIF
+<span class="ln">822</span>      END DO
+<span class="ln">823</span>1250  CONTINUE
+<span class="ln">824</span>      CMD = &#x27;mkdir -p &quot;&#x27; // FTRACK(1:LAST_SLASH_IDX) // &#x27;&quot;&#x27;
+<span class="ln">825</span>      print *,&quot;OUTPUT placed in :  &quot;,FTRACK(1:LAST_SLASH_IDX)
+<span class="ln">826</span>      print *, &#x27;&#x27;
+<span class="ln">827</span>      CALL system(CMD)
+<span class="ln">828</span>
+<span class="ln">829</span>
+<span class="ln">830</span>C JVS 02/11 Acoustic depth/ Asteroseismic glitch output. Puts output
+<span class="ln">831</span>C in the same directory as all other output, and names it with the
+<span class="ln">832</span>C same conventions
+<span class="ln">833</span>      IF (LACOUT) THEN
+<span class="ln">834</span>            ICLCD = 91
+<span class="ln">835</span>            MRK=INDEX(FSHORT,&#x27;short&#x27;)
+<span class="ln">836</span>            FCLCD=FSHORT(1:MRK-1)//&#x27;calcad&#x27;
+<span class="ln">837</span>            OPEN(UNIT=ICLCD, FILE=FCLCD, STATUS=&#x27;UNKNOWN&#x27;)
+<span class="ln">838</span>            WRITE(ICLCD,*) &#x27;Acoustic depth calculation output file&#x27;
+<span class="ln">839</span>            WRITE(ICLCD,*) &#x27;age (Gyr),radius(cm),1/sound speed(s/cm),radius (CZ), 1/cs (CZ)
+<span class="ln">840</span>     *       delad,gamma1,P, T, X&#x27;
+<span class="ln">841</span>
+<span class="ln">842</span>
+<span class="ln">843</span>C 9/25/26 MHP via Claude
+<span class="ln">844</span>C code changed to remove dead IACAT, IJVS, IJENT, IJDEL unit
+<span class="ln">845</span>C reservations (all were declared but never opened anywhere)
+<span class="ln">846</span>C            IJLAST = 93
+<span class="ln">847</span>C            FJLAST=FSHORT(1:MRK-1)//&#x27;jlast&#x27;
+<span class="ln">848</span>C            OPEN(UNIT=IJLAST, FILE=FJLAST, STATUS=&#x27;UNKNOWN&#x27;)
+<span class="ln">849</span>      ENDIF
+<span class="ln">850</span>
+<span class="ln">851</span>
+<span class="ln">852</span>C JVS END
+<span class="ln">853</span>C
+<span class="ln">854</span>C G Somers 6/14, DEFINE SCALING COEFFICIENT FOR LI/BE CROSS SECTIONS
+<span class="ln">855</span>C          DEFAULT LI6 = 5.5 MeV b FROM FOWLER ET AL. 1967
+<span class="ln">856</span>C          DEFAULT LI7 = 52 keV b FROM ROLFS &amp; KAVANAGH 1986
+<span class="ln">857</span>C           DEFAULT BE9(P,G)B10 (BE91) = 1.1 keV b INFERRED FROM FOWLER 1988
+<span class="ln">858</span>C           DEFAULT BE9(P,D)2HE4 (BE92) = 15,000 keV b FROM FOWLER ET AL. 1967
+<span class="ln">859</span>C           DEFAULT BE9(P,A)LI6 (BE93) = 15,000 keV b FROM FOWLER ET AL. 1967
+<span class="ln">860</span>      IF (LXLI6) THEN
+<span class="ln">861</span>          SLI6 = XSLI6/5.5D3
+<span class="ln">862</span>      ENDIF
+<span class="ln">863</span>      IF (LXLI7) THEN
+<span class="ln">864</span>          SLI7 = XSLI7/5.2D1
+<span class="ln">865</span>      ENDIF
+<span class="ln">866</span>      IF (LXBE91) THEN
+<span class="ln">867</span>          SBE91 = XSBE91/1.1D0
+<span class="ln">868</span>      ENDIF
+<span class="ln">869</span>      IF (LXBE92) THEN
+<span class="ln">870</span>          SBE92 = XSBE92/1.5D4
+<span class="ln">871</span>      ENDIF
+<span class="ln">872</span>      IF (LXBE93) THEN
+<span class="ln">873</span>          SBE93 = XSBE93/1.5D4
+<span class="ln">874</span>      ENDIF
+<span class="ln">875</span>C G Somers END
+<span class="ln">876</span>C MHP 8/25 open relevant table as well as ensuring that only one is selected
+<span class="ln">877</span>C 9/24/26 MHP via Claude
+<span class="ln">878</span>C code changed to remove the OPAL 1995/2001 equations of state
+<span class="ln">879</span>      IF (LOPALE06) THEN
+<span class="ln">880</span>         OPEN(IOPALE, FILE=FOPALE06,STATUS=&#x27;OLD&#x27;)
+<span class="ln">881</span>      ENDIF
+<span class="ln">882</span>C 9/23/26 MHP via Claude
+<span class="ln">883</span>C code changed to remove the Kurucz 1990 opacity tables
+<span class="ln">884</span>C 9/24/26 MHP via Claude
+<span class="ln">885</span>C code changed to remove the Alexander 1995 opacity tables
+<span class="ln">886</span>
+<span class="ln">887</span>      OPEN(ISTOR,FILE=FSTOR,FORM=&#x27;FORMATTED&#x27;,STATUS=&#x27;UNKNOWN&#x27;)
+<span class="ln">888</span>      REWIND(ISTOR)
+<span class="ln">889</span>C G Somers 11/14 write the new header for the .store file, if LSTORE = TRUE.
+<span class="ln">890</span>      IF(LSTORE)THEN
+<span class="ln">891</span>C JvS 08/25 Added stitched interior and envelope option      
+<span class="ln">892</span>         IF(LSTCH)THEN
+<span class="ln">893</span>            LPHHD = .TRUE.
+<span class="ln">894</span>         ELSE
+<span class="ln">895</span>            WRITE(ISTOR,VERFMT) YRECVER, GITHASH
+<span class="ln">896</span>            WRITE(ISTOR,1012)
+<span class="ln">897</span>         ENDIF   
+<span class="ln">898</span>      ENDIF
+<span class="ln">899</span> 1012 FORMAT(&#x27;# Header Key&#x27;,/,&#x27;# ModType    ModNum    #Shells    &#x27;,
+<span class="ln">900</span>     1 &#x27;M/Msun    log(Teff)    log(L/Lsun)    log(M/gram)    Age/Gyr&#x27;,
+<span class="ln">901</span>     1 &#x27;    Timestep/yr    log(M_inner/gram)    log(M_outer/gram)&#x27;,/,
+<span class="ln">902</span>     1 &#x27;# JCORE  JENV  CMIXL  EOS  ATM  ALOK HIK  LPUREZ  COMPMIX&#x27;,
+<span class="ln">903</span>     1 &#x27;  LEXCOM  LDIFY  LDIFZ  LSEMIC  LOVSTC  LOVSTE  LOVSTM&#x27;,
+<span class="ln">904</span>     1 &#x27;  LROT  LINSTB  LJDOT0  LDISK  TDISK  PDISK  WMAX  LSTORE&#x27;,
+<span class="ln">905</span>     1 &#x27;  LSTATM  LSTENV  LSTMOD  LSTPHYS  LSTROT&#x27;,/,&#x27;# PPI_lum&#x27;,
+<span class="ln">906</span>     1 &#x27;    PPII_lum    PPIII_lum    CNO_lum    3He_lum    &#x27;,
+<span class="ln">907</span>     1 &#x27;OldNeu_lum    Grav_lum&#x27;,/,&#x27;# ENV1-3   log(Teff)&#x27;,
+<span class="ln">908</span>     1 &#x27;    log(L/Lsun)    P_base    T_base    R_base    MatrixElements&#x27;
+<span class="ln">909</span>     1 ,/)
+<span class="ln">910</span>C 1013 FORMAT(&#x27;# JCORE  JENV  CMIXL  EOS  ATM  ALOK HIK  LPUREZ  COMPMIX&#x27;,
+<span class="ln">911</span>C     1 &#x27;  LEXCOM  LDIFY  LDIFZ  LSEMIC  LOVSTC  LOVSTE  LOVSTM&#x27;,
+<span class="ln">912</span>C     1 &#x27;  LROT  LINSTB  LJDOT0  LDISK  TDISK  PDISK  WMAX  LSTORE&#x27;,
+<span class="ln">913</span>C     1 &#x27;  LSTATM  LSTENV  LSTMOD  LSTPHYS  LSTROT&#x27;
+<span class="ln">914</span>C     1 ,/)
+<span class="ln">915</span>C 1014     FORMAT(
+<span class="ln">916</span>C     1&#x27;MODEL SHELL MASS RADIUS LUMINOSITY PRESSURE TEMPERATURE DENSITY OMEGA &#x27;,
+<span class="ln">917</span>C     1&#x27;CONVECTIVE INTERIOR_PT H1 He4 METALS He3 C12 C13 N14 N15 O16 O17 O18 H2 Li6 Li7 &#x27;,
+<span class="ln">918</span>C     1&#x27;Be9 OPACITY GRAV DELR DEL DELAD V_CONV GAM1 HII HEII HEIII BETA &#x27;,
+<span class="ln">919</span>C     1&#x27;ETA PPI PPII PPIII CNO TRIPLE_ALPHA E_NUC E_NEU E_GRAV CP DLNRHODLNT A RP/RE FP &#x27;,
+<span class="ln">920</span>C     1&#x27;FT J/M MOMENT DEL_KE V_ES V_GSF V_SS VTOT &#x27;)
+<span class="ln">921</span>C G Somers END
+<span class="ln">922</span>
+<span class="ln">923</span>      OPEN(ISHORT,FILE=FSHORT,FORM=&#x27;FORMATTED&#x27;,STATUS=&#x27;UNKNOWN&#x27;)
+<span class="ln">924</span>      REWIND(ISHORT)
+<span class="ln">925</span>C 9/25/26 MHP via Claude
+<span class="ln">926</span>C code changed to open the sound-speed-profile output (previously
+<span class="ln">927</span>C hardcoded to unit 500/&#x27;Csound.dat&#x27; in wrtmod.f) here instead, using
+<span class="ln">928</span>C the managed ISOUND unit and FSOUND filename. Opened unconditionally
+<span class="ln">929</span>C since LSOUND is only known at runtime, well after PARMIN returns.
+<span class="ln">930</span>C Rewound explicitly so every run starts with a clean file even if
+<span class="ln">931</span>C LSOUND never becomes true this run (STATUS=&#x27;UNKNOWN&#x27; alone does not
+<span class="ln">932</span>C truncate/reposition an existing file on OPEN, so without this a
+<span class="ln">933</span>C stale file from an earlier LSOUND-triggering run would otherwise be
+<span class="ln">934</span>C left in place, opened but unwritten, and could be mistaken for
+<span class="ln">935</span>C fresh output).
+<span class="ln">936</span>      OPEN(ISOUND,FILE=FSOUND,FORM=&#x27;FORMATTED&#x27;,STATUS=&#x27;UNKNOWN&#x27;)
+<span class="ln">937</span>      REWIND(ISOUND)
+<span class="ln">938</span>      IF (LTRACK) THEN
+<span class="ln">939</span>          OPEN(UNIT=ITRACK,FILE=FTRACK, FORM=&#x27;FORMATTED&#x27;,
+<span class="ln">940</span>     *        STATUS=&#x27;UNKNOWN&#x27;)
+<span class="ln">941</span>          REWIND(ITRACK)
+<span class="ln">942</span>      ENDIF
+<span class="ln">943</span>
+<span class="ln">944</span>C SNU OUTPUT
+<span class="ln">945</span>      IF(LSNU) THEN
+<span class="ln">946</span>          OPEN(UNIT=ISNU,FILE=FSNU, FORM=&#x27;FORMATTED&#x27;,
+<span class="ln">947</span>     *        STATUS=&#x27;UNKNOWN&#x27;)
+<span class="ln">948</span>          REWIND(ISNU)
+<span class="ln">949</span>      ENDIF
+<span class="ln">950</span>      IF(LDEBUG) THEN
+<span class="ln">951</span>            OPEN(IDEBUG,FILE=FDEBUG,FORM=&#x27;FORMATTED&#x27;,
+<span class="ln">952</span>     *         STATUS=&#x27;UNKNOWN&#x27;)
+<span class="ln">953</span>      END IF
+<span class="ln">954</span>C     MHP Moved opening of FMILNE here, no need to do elsewhere
+<span class="ln">955</span>      IF(LMILNE)THEN
+<span class="ln">956</span>         OPEN(UNIT=IMILNE,FILE=FMILNE,FORM=&#x27;FORMATTED&#x27;,
+<span class="ln">957</span>     *     STATUS=&#x27;UNKNOWN&#x27;,ACCESS=&#x27;APPEND&#x27;)
+<span class="ln">958</span>      ENDIF
+<span class="ln">959</span>C     MHP 10/02 LBNIN never set, ignore loop
+<span class="ln">960</span>C      IF (.NOT.LBNIN) THEN
+<span class="ln">961</span>         OPEN(UNIT=IFIRST,FILE=FFIRST,FORM=&#x27;FORMATTED&#x27;,STATUS=&#x27;OLD&#x27;)
+<span class="ln">962</span>C      END IF
+<span class="ln">963</span>      OPEN(UNIT=ILAST,FILE=FLAST,FORM=&#x27;FORMATTED&#x27;,STATUS=&#x27;UNKNOWN&#x27;)
+<span class="ln">964</span>      OPEN(UNIT=IMODPT,FILE=FMODPT,FORM=&#x27;FORMATTED&#x27;,STATUS=&#x27;UNKNOWN&#x27;)
+<span class="ln">965</span>C     OPEN ALL PULSE FILES
+<span class="ln">966</span>      IF(LPULSE) THEN
+<span class="ln">967</span>      OPEN(IOPMOD, FILE=FPMOD,STATUS=&#x27;UNKNOWN&#x27;,FORM=&#x27;FORMATTED&#x27;)
+<span class="ln">968</span>      OPEN(IOPENV, FILE=FPENV,STATUS=&#x27;UNKNOWN&#x27;,FORM=&#x27;FORMATTED&#x27;)
+<span class="ln">969</span>      OPEN(IOPATM, FILE=FPATM,STATUS=&#x27;UNKNOWN&#x27;,FORM=&#x27;FORMATTED&#x27;)
+<span class="ln">970</span>      END IF
+<span class="ln">971</span>C 9/24/26 MHP via Claude
+<span class="ln">972</span>C code changed to remove the Monte Carlo option
+<span class="ln">973</span>C     MHP 8/25 Moved opening of conductive opacity and EoS tables here, to avoid complicated passages of declared variables.
+<span class="ln">974</span>      IF(LcondOpacP)then
+<span class="ln">975</span>         open(IcondOpacP,file=FcondOpacP,status=&#x27;OLD&#x27;)
+<span class="ln">976</span>      ENDIF
+<span class="ln">977</span>C 9/25/26 MHP via Claude
+<span class="ln">978</span>C code changed to remove the LISO isochrone-output option
+<span class="ln">979</span>      IF(LSEMIC)THEN
+<span class="ln">980</span>         IF(LOVSTC.OR.LOVSTE.OR.LOVSTM)THEN
+<span class="ln">981</span>            WRITE(ISHORT,2)LSEMIC,LOVSTE,LOVSTC,LOVSTM
+<span class="ln">982</span>    2       FORMAT(1X,&#x27;ERROR IN SUBROUTINE PARMIN&#x27;/&#x27;SEMI-CONVECTION&#x27;,
+<span class="ln">983</span>     * &#x27; AND OVERSHOOT FLAGS BOTH TURNED ON&#x27;/&#x27;FLAGS LSEMIC&#x27;,L2,
+<span class="ln">984</span>     * &#x27; OVERSHOOT - CORE,ENVELOPE,INTERMEDIATE-&#x27;,3L2/&#x27;RUN STOPPED&#x27;)
+<span class="ln">985</span>            STOP
+<span class="ln">986</span>         ENDIF
+<span class="ln">987</span>      ENDIF
+<span class="ln">988</span>      WRITE(ISHORT,1)(HPTTOL(I),I=1,12),ALPHAE,ALPHAC,LINSTB,LJDOT0,
+<span class="ln">989</span>     *              ALFA,FK,FW,FC,FO,FMU,RCRIT
+<span class="ln">990</span>    1 FORMAT(1X,&#x27;PT TOL&#x27;,12F6.3/1X,&#x27;O.S.ENV&#x27;,F6.3,&#x27; O.S.CORE&#x27;,F6.3,
+<span class="ln">991</span>     *       &#x27; LINSTB &#x27;,L1,&#x27; LJDOT &#x27;,L1,&#x27; WIND IND.&#x27;,F6.3,&#x27; FK&#x27;,
+<span class="ln">992</span>     *       1PE8.2/1X,&#x27; FV&#x27;,0PF5.2,&#x27; FC&#x27;,F5.2,&#x27; COUPLING&#x27;
+<span class="ln">993</span>     *       ,F6.3, &#x27; F MU&#x27;,F5.2,&#x27; RCRIT&#x27;,F9.1)
+<span class="ln">994</span>C 10/13/26 MHP via Claude
+<span class="ln">995</span>C code changed to remove the TENV derivation: it existed only to populate
+<span class="ln">996</span>C COMMON/CTLIM/ for envint.f, which now derives it itself.
+<span class="ln">997</span>      IF(LROT) THEN
+<span class="ln">998</span>         LNEW0 = .TRUE.
+<span class="ln">999</span>         IF(WALPCZ.LT.-2.0D0) WALPCZ = -2.0D0
+<span class="ln">1000</span>         IF(WALPCZ.GT.0.0D0) WALPCZ = 0.0D0
+<span class="ln">1001</span>C JNT 09/2025 LSOLID OVERWRITES IMPJMOD
+<span class="ln">1002</span>         IF(LSOLID) IMPJMOD = 1
+<span class="ln">1003</span>CCCCCC OLD OR NEW WINDLAW.
+<span class="ln">1004</span>         IF(.NOT.LMWIND)THEN
+<span class="ln">1005</span>CCCCCC INSTRUCTIONS FOR THE OLD WINDLAW
+<span class="ln">1006</span>CCCCCC
+<span class="ln">1007</span>CCCCCC SET UP COEFFICIENTS FOR ANGULAR MOMENTUM LOSS VIA WINDS.
+<span class="ln">1008</span>CCCCCC GIVEN THE INDEX ALFA, THE FORMULA FOR JDOT IS
+<span class="ln">1009</span>CCCCCC JDOT = FK*2.036D33*1.452D9**ALFA*(MDOT/1.0D-14)**(1-2ALFA/3)
+<span class="ln">1010</span>CCCCCC *OMEGA**(1+4ALFA/3)*(R/RSUN)**(2-ALFA)*(M/MSUN)**-ALFA/3
+<span class="ln">1011</span>CCCCCC EXMD = EXPONENT OF MDOT TERM; EXW SAME FOR OMEGA;EXR FOR R;EXM FOR M.
+<span class="ln">1012</span>CCCCCC FK IS A FUDGE FACTOR,SET TO 1 TO REPRODUCE THE OBSERVED SOLAR ANGULAR
+<span class="ln">1013</span>CCCCCC MOMENTUM LOSS.
+<span class="ln">1014</span>            CC13 = 1.0D0/3.0D0
+<span class="ln">1015</span>            CC23 = 2.0D0/3.0D0
+<span class="ln">1016</span>            CONSTFACTOR = FK*2.036D33*1.452D9**ALFA
+<span class="ln">1017</span>            EXMD = 1.0D0 - CC23*ALFA
+<span class="ln">1018</span>            EXW = 1.0D0 + 2.0D0*CC23*ALFA
+<span class="ln">1019</span>            EXR = 2.0D0 - ALFA
+<span class="ln">1020</span>            EXM = -CC13*ALFA
+<span class="ln">1021</span>C
+<span class="ln">1022</span>C INSTRUCTIONS FOR THE NEW WINDLAW
+<span class="ln">1023</span>C
+<span class="ln">1024</span>C SET UP INDICES FOR LOSS LAW IN TERMS OF PMM A, B, C, M.
+<span class="ln">1025</span>C INCLUDE A PMMD AS WELL, FOR TURNING TAUCZ and CENTRIFUG DEPENDENCE ON/OFF.
+<span class="ln">1026</span>C EXCEN = EXPONENT FOR CENTRIFUGAL TERM, {K2^2/(K2^2+0.5*W^2 R^3/GM)}^PMMM
+<span class="ln">1027</span>C
+<span class="ln">1028</span>C AWIND = &#x27;K97&#x27; ENFORCES KRISHNAMURTHI (1997) WIND LAW.
+<span class="ln">1029</span>C AWIND = &#x27;V13&#x27; ENFORCES VAN SADERS + PINSONNEAULT (2013) WIND LAW, AS ADAPTED
+<span class="ln">1030</span>C         FROM MATT ET AL. (2008,2012).
+<span class="ln">1031</span>C AWIND = &#x27;CUS&#x27; ADOPTS THE M-D VALUES GIVEN IN THE NAMELIST.
+<span class="ln">1032</span>C
+<span class="ln">1033</span>C
+<span class="ln">1034</span>C THEN CONVERT THE PMM VALUES INTO EXPONENTS FOR THE TORQUE CALCULATION.
+<span class="ln">1035</span>C BASIC EQUATIONS, WHERE EVERY TERM IS SCALED TO SOLAR, ARE:
+<span class="ln">1036</span>C
+<span class="ln">1037</span>C Jdot = w * Bmag^4m * Mdot^1-2m * R^5m+2 * M^-m * Fcen^md
+<span class="ln">1038</span>C Bmag = Pphot^0.5 * (w * R^c)^b * Tcz^d
+<span class="ln">1039</span>C GM/R * Mdot = (Lx/Lbol * Lbol)^a -&gt; Mdot = R * M^-1 * Lbol * w^a
+<span class="ln">1040</span>C ...where Lx/Lbol is assumed to scale with w to the power of a.
+<span class="ln">1041</span>C
+<span class="ln">1042</span>C THIS GIVES:
+<span class="ln">1043</span>C JDOT ~ w ^ 1+a-2ma+4mb
+<span class="ln">1044</span>C      ~ Tcz ^ 4md
+<span class="ln">1045</span>C      ~ R ^ 3+3m+4mbc
+<span class="ln">1046</span>C      ~ M ^ m-1
+<span class="ln">1047</span>C      ~ Lbol ^ 1-2m
+<span class="ln">1048</span>C      ~ Pphot ^ 2m
+<span class="ln">1049</span>C      ~ Fcen ^ md
+<span class="ln">1050</span>C
+<span class="ln">1051</span>C For moment, ignore GM/R term in Mdot. This makes:
+<span class="ln">1052</span>C JDOT ~ R ^ 2+5m+4mbc
+<span class="ln">1053</span>C JDOT ~ M ^ -m
+<span class="ln">1054</span>C
+<span class="ln">1055</span>         ELSE
+<span class="ln">1056</span>            IF(AWIND.EQ.&#x27;K97&#x27;)THEN
+<span class="ln">1057</span>               PMMM = ALFA/3.0
+<span class="ln">1058</span>C MHP 8/17 CORRECT DEFAULT FOR A = 2, NOT 0
+<span class="ln">1059</span>               PMMA = 2.0
+<span class="ln">1060</span>               PMMB = 1.0
+<span class="ln">1061</span>               PMMC = 2.0
+<span class="ln">1062</span>               PMMD = 0.0
+<span class="ln">1063</span>               LBSCALE = .FALSE.
+<span class="ln">1064</span>            ELSEIF(AWIND.EQ.&#x27;V13&#x27;)THEN
+<span class="ln">1065</span>               PMMM = 0.22D0
+<span class="ln">1066</span>               PMMA = 2.0
+<span class="ln">1067</span>               PMMB = 1.0
+<span class="ln">1068</span>               PMMC = 0.0
+<span class="ln">1069</span>               PMMD = 1.0
+<span class="ln">1070</span>               LBSCALE = .TRUE.
+<span class="ln">1071</span>            ENDIF
+<span class="ln">1072</span>            EXW   = 1.0D0 + PMMA - 2.0D0*PMMA*PMMM + 4.0D0*PMMM*PMMB
+<span class="ln">1073</span>C G Somers 8/17 ZERO&#x27;D OUT EXTAU. TAUCZ TERM NOW COMPUTED IN
+<span class="ln">1074</span>C MWIND/MCOWIND, NOT IN AMCALC.
+<span class="ln">1075</span>C            EXTAU = 4.0D0*PMMM
+<span class="ln">1076</span>            EXTAU = 0.0
+<span class="ln">1077</span>C JvS 09/25 REMOVED TYPO IN EXR = 2.0D0+5.0D0*PMMM-4.0D0*PMMM*PMMB*PMMC
+<span class="ln">1078</span>            EXR   = 2.0D0+5.0D0*PMMM-4.0D0*PMMM*PMMC
+<span class="ln">1079</span>            EXM   = -PMMM
+<span class="ln">1080</span>            EXL   = 1.0D0 - 2.0D0*PMMM
+<span class="ln">1081</span>C G Somers 11/17, ADDED PMMD TO SWTICH OFF IN K97 FORM.
+<span class="ln">1082</span>            EXPR  = 2.0D0*PMMM*PMMD
+<span class="ln">1083</span>            EXCEN = PMMM*PMMD
+<span class="ln">1084</span>C INITIALIZE CONSTANT FACTOR FOR CENTRIFUGAL TERM
+<span class="ln">1085</span>            C_2 = 0.0506D0
+<span class="ln">1086</span>C SET THE CONSTANT FACTOR
+<span class="ln">1087</span>            CONSTFACTOR = FK*PMMJD/PMMSOLW**EXW
+<span class="ln">1088</span>C IF RELEVANT RESET THE SATURATION THRESHOLD IN
+<span class="ln">1089</span>C TERMS OF THE SOLAR ROTATION RATE.  WMAX_SUN&lt;1000
+<span class="ln">1090</span>C INDICATES SATURATION (AT THE SUN), SO
+<span class="ln">1091</span>C WSAT = WMAX_SUN*PMMSOLW
+<span class="ln">1092</span>            IF(WMAX_SUN.LT.1.0E3)THEN
+<span class="ln">1093</span>               WMAX = WMAX_SUN*PMMSOLW
+<span class="ln">1094</span>            ENDIF
+<span class="ln">1095</span>         ENDIF
+<span class="ln">1096</span>      ENDIF
+<span class="ln">1097</span>C     WINDLAW END
+<span class="ln">1098</span>C
+<span class="ln">1099</span>      CLN = DLOG(10.0D0)
+<span class="ln">1100</span>      IF(LNEWCP) THEN
+<span class="ln">1101</span>       LREL = .TRUE.
+<span class="ln">1102</span>       IF(ATMP.EQ.&#x27;ABS&#x27;) LREL = .FALSE.
+<span class="ln">1103</span>C DECIDE WHICH ELEMENT IN ARRAY HCOMP TO BE RESCALED
+<span class="ln">1104</span>C USING CHARACTER ARRAY AID AND INPUT CHARACTER VARIABLE ANEWCP
+<span class="ln">1105</span>       DO 10 I = 1,12
+<span class="ln">1106</span>          IF(ANEWCP.EQ.AID(I)) THEN
+<span class="ln">1107</span>C INEWCP IS THE INDEX OF THE ELEMENT BEING ALTERED
+<span class="ln">1108</span>            INEWCP = I + 3
+<span class="ln">1109</span>            GOTO 30
+<span class="ln">1110</span>          ENDIF
+<span class="ln">1111</span>   10    CONTINUE
+<span class="ln">1112</span>C ANEWCP NOT A RECOGNIZED ELEMENT
+<span class="ln">1113</span>       LNEWCP = .FALSE.
+<span class="ln">1114</span>       WRITE(ISHORT,20) ANEWCP
+<span class="ln">1115</span>   20    FORMAT(1X,&#x27;VARIABLE&#x27;,A4,1X,&#x27;NOT A RECOGNIZED ELEMENT&#x27;/1X,
+<span class="ln">1116</span>     *   &#x27;RESCALING NOT PERFORMED&#x27;)
+<span class="ln">1117</span>   30    CONTINUE
+<span class="ln">1118</span>      ENDIF
+<span class="ln">1119</span>      LMIXTURE = .FALSE.
+<span class="ln">1120</span>      LISOTOPE = .FALSE.
+<span class="ln">1121</span>      IF(ISETMIX.EQ.1)THEN
+<span class="ln">1122</span>C IF DEFAULT MIX (GS98) CNOFRACS ARE ALREADY SET.
+<span class="ln">1123</span>C         IF(AMIX.EQ.&#x27;GS98&#x27;)THEN
+<span class="ln">1124</span>C            LMIXTURE = .TRUE.
+<span class="ln">1125</span>C            GOTO 606
+<span class="ln">1126</span>C         ENDIF
+<span class="ln">1127</span>C FOR A CUSTOM MIX,DISABLE IF THE SUM OF CNO MASS FRACTIONS EXCEEDS ONE
+<span class="ln">1128</span>C OR IF ANY MASS FRACTION IS NEGATIVE
+<span class="ln">1129</span>         IF(AMIX.EQ.&#x27;CUS&#x27;)THEN
+<span class="ln">1130</span>            IF(FRAC_C.LT.0.0D0.OR.FRAC_N.LT.0.0D0.OR.FRAC_O.LT.0.0D0)THEN
+<span class="ln">1131</span>               WRITE(*,591)FRAC_C,FRAC_N,FRAC_O
+<span class="ln">1132</span>               WRITE(ISHORT,591)FRAC_C,FRAC_N,FRAC_O
+<span class="ln">1133</span> 591           FORMAT(&#x27;NEGATIVE INPUT CNO FRACTION &#x27;,3E12.4,
+<span class="ln">1134</span>     *             &#x27; MIX NOT MODIFIED&#x27;)
+<span class="ln">1135</span>               GOTO 602
+<span class="ln">1136</span>            ENDIF
+<span class="ln">1137</span>            SUM_FRAC=FRAC_C+FRAC_N+FRAC_O
+<span class="ln">1138</span>            IF(SUM_FRAC.GE.1.0D0)THEN
+<span class="ln">1139</span>               WRITE(*,598)FRAC_C,FRAC_N,FRAC_O
+<span class="ln">1140</span>               WRITE(ISHORT,598)FRAC_C,FRAC_N,FRAC_O
+<span class="ln">1141</span> 598           FORMAT(&#x27;INPUT CNO FRACTION &#x27;,3E12.4,
+<span class="ln">1142</span>     *             &#x27; EXCEEDS 1. MIX NOT MODIFIED&#x27;)
+<span class="ln">1143</span>               GOTO 602
+<span class="ln">1144</span>            ENDIF
+<span class="ln">1145</span>C VALID MIXTURE, USE CUSTOM ENTRIES FROM .NML1
+<span class="ln">1146</span>            LMIXTURE = .TRUE.
+<span class="ln">1147</span>            GOTO 606
+<span class="ln">1148</span>         ENDIF
+<span class="ln">1149</span>C SEARCH THROUGH OTHER VALID MIXTURE ENTRIES;IF FOUND,ASSIGN
+<span class="ln">1150</span>C         DO I = 2,4
+<span class="ln">1151</span>         DO I = 1,4
+<span class="ln">1152</span>            IF(AMIX.EQ.AMIXT(I))THEN
+<span class="ln">1153</span>               ZXMIX = ZXMIXT(I)
+<span class="ln">1154</span>               FRAC_C = FRAC_CT(I)
+<span class="ln">1155</span>               FRAC_N = FRAC_NT(I)
+<span class="ln">1156</span>               FRAC_O = FRAC_OT(I)
+<span class="ln">1157</span>               LMIXTURE = .TRUE.
+<span class="ln">1158</span>               GOTO 606
+<span class="ln">1159</span>            ENDIF
+<span class="ln">1160</span>         END DO
+<span class="ln">1161</span>C     NO VALID MIX SPECIFIED
+<span class="ln">1162</span>         WRITE(*,589)AMIX
+<span class="ln">1163</span>         WRITE(ISHORT,589)AMIX
+<span class="ln">1164</span> 589     FORMAT(&#x27;DESIRED CNO MIXTURE &#x27;,A8,&#x27; NOT FOUND. MIX NOT ALTERED.&#x27;)
+<span class="ln">1165</span>      ENDIF
+<span class="ln">1166</span> 606  IF(LMIXTURE)THEN
+<span class="ln">1167</span>         WRITE(*,604)AMIX,FRAC_C,FRAC_N,FRAC_O
+<span class="ln">1168</span>         WRITE(ISHORT,604)AMIX,FRAC_C,FRAC_N,FRAC_O
+<span class="ln">1169</span> 604     FORMAT(&#x27;CNO MIXTURE &#x27;,A8,&#x27; C &#x27;,E12.4,&#x27; N &#x27;,E12.4,&#x27; O &#x27;,
+<span class="ln">1170</span>     *        E12.4,&#x27; APPLIED TO STARTING MODEL.&#x27;)
+<span class="ln">1171</span>      ENDIF
+<span class="ln">1172</span>C     CHECK IF ISOTOPE RATIOS NEED TO BE ALTERED
+<span class="ln">1173</span> 602  IF(ISETISO.EQ.1)THEN
+<span class="ln">1174</span>C FOR A CUSTOM MIX,DISABLE IF THE SUM OF CNO MASS FRACTIONS EXCEEDS ONE
+<span class="ln">1175</span>C OR IF ANY MASS FRACTION IS NEGATIVE
+<span class="ln">1176</span>         IF(AISO.EQ.&#x27;CUS&#x27;)THEN
+<span class="ln">1177</span>            IF(R12_13.LT.0.0D0 .OR. R14_15.LT.0.0D0 .OR. R16_17.LT.0.0D0
+<span class="ln">1178</span>     * .OR. R16_18.LT.0.0D0 .OR. XH2_INI.LT.0.0D0 .OR. XHE3_INI.LT.0.0D0
+<span class="ln">1179</span>     * .OR. XLI6_INI.LT.0.0D0 .OR. XLI7_INI.LT.0.0D0 .OR.
+<span class="ln">1180</span>     * XBE9_INI.LT.0.0D0.OR.XB10_INI.LT.0.0D0 .OR.XB11_INI.LT.0.0D0)THEN
+<span class="ln">1181</span>               WRITE(*,596)R12_13,R14_15,R16_17,R16_18,
+<span class="ln">1182</span>     * XH2_INI,XHE3_INI,XLI6_INI,XLI7_INI,XBE9_INI,XB10_INI,XB11_INI
+<span class="ln">1183</span>               WRITE(ISHORT,596)R12_13,R14_15,R16_17,R16_18,
+<span class="ln">1184</span>     * XH2_INI,XHE3_INI,XLI6_INI,XLI7_INI,XBE9_INI,XB10_INI,XB11_INI
+<span class="ln">1185</span> 596           FORMAT(&#x27;NEGATIVE INPUT ISOTOPE RATIO OR LIGHT ELEMENT&#x27;
+<span class="ln">1186</span>     *  &#x27; MASS FRACTION &#x27;,11E12.4,
+<span class="ln">1187</span>     *             &#x27; MIX NOT MODIFIED&#x27;)
+<span class="ln">1188</span>               GOTO 603
+<span class="ln">1189</span>            ENDIF
+<span class="ln">1190</span>            SUM_FRAC= XH2_INI+XHE3_INI+XLI6_INI+XLI7_INI+XBE9_INI+
+<span class="ln">1191</span>     *                XB10_INI+XB11_INI
+<span class="ln">1192</span>            IF(SUM_FRAC.GE.1.0D0)THEN
+<span class="ln">1193</span>               WRITE(*,595)XH2_INI,XHE3_INI,XLI6_INI,XLI7_INI,XBE9_INI,
+<span class="ln">1194</span>     * XB10_INI,XB11_INI
+<span class="ln">1195</span>               WRITE(ISHORT,595)XH2_INI,XHE3_INI,XLI6_INI,XLI7_INI,
+<span class="ln">1196</span>     * XBE9_INI,XB10_INI,XB11_INI
+<span class="ln">1197</span> 595           FORMAT(&#x27;SUM OF LIGHT ELEMENT MASS FRACTIONS EXCEEDS 1&#x27;,
+<span class="ln">1198</span>     * 11E12.4,&#x27; MIX NOT MODIFIED&#x27;)
+<span class="ln">1199</span>               GOTO 603
+<span class="ln">1200</span>            ENDIF
+<span class="ln">1201</span>C     CURRENTLY THERE ARE ONLY 2 VALID OPTIONS - THE DEFAULT (L21) OR
+<span class="ln">1202</span>C A CUSTOM MIXTURE (CUS) - IF NEITHER IS TRUE, EXIT
+<span class="ln">1203</span>         ELSE IF(AISO.NE.&#x27;L21&#x27;)THEN
+<span class="ln">1204</span>            GOTO 603
+<span class="ln">1205</span>         ENDIF
+<span class="ln">1206</span>C     PASSED ALL CHECKS - EITHER THE DEFAULT OR THE CUSTOM SETTINGS WILL BE APPLIED
+<span class="ln">1207</span>         LISOTOPE = .TRUE.
+<span class="ln">1208</span>      ENDIF
+<span class="ln">1209</span>      IF(LISOTOPE)THEN
+<span class="ln">1210</span>         WRITE(*,605)AISO,R12_13,R16_18,
+<span class="ln">1211</span>     * XH2_INI,XHE3_INI,XLI6_INI,XLI7_INI,XBE9_INI
+<span class="ln">1212</span>         WRITE(ISHORT,605)AISO,R12_13,R16_18,
+<span class="ln">1213</span>     * XH2_INI,XHE3_INI,XLI6_INI,XLI7_INI,XBE9_INI
+<span class="ln">1214</span> 605     FORMAT(&#x27;ISOTOPE AND LIGHT ELEMENT MIXTURE &#x27;,A8,&#x27; C12/C13 &#x27;,
+<span class="ln">1215</span>     *   E12.4,&#x27; O16/O18 &#x27;,E12.4,&#x27; H2 &#x27;,E12.4,&#x27; HE3 &#x27;,E12.4,&#x27; LI6 &#x27;,
+<span class="ln">1216</span>     *   E12.4,&#x27; LI7 &#x27;,E12.4,&#x27; BE9 &#x27;,E12.4,&#x27; APPLIED TO STARTING MODEL.&#x27;)
+<span class="ln">1217</span>      ENDIF
+<span class="ln">1218</span>C DBG 12/95 ENSURE CORRECT PARAMETERS FOR Z DIFFUSION
+<span class="ln">1219</span> 603  IF (LDIFZ) THEN
+<span class="ln">1220</span>           LDIFY=.TRUE.
+<span class="ln">1221</span>         LTHOUL=.TRUE.
+<span class="ln">1222</span>      END IF
+<span class="ln">1223</span>
+<span class="ln">1224</span>C G SOMERS 04/15; ENSURE CORRECT PARAMETERS FOR LIGHT ELEMENT DIFFUSION.
+<span class="ln">1225</span>      IF(LDIFLI)THEN
+<span class="ln">1226</span>          LNEWDIF=.TRUE.
+<span class="ln">1227</span>          LDIFY=.TRUE.
+<span class="ln">1228</span>          LDIFZ=.TRUE.
+<span class="ln">1229</span>          LTHOUL=.TRUE.
+<span class="ln">1230</span>          LTHOULFIT=.FALSE.
+<span class="ln">1231</span>          ILAMBDA=4
+<span class="ln">1232</span>      ENDIF
+<span class="ln">1233</span>
+<span class="ln">1234</span>C     WRITE OUT RUN PARAMETERS.
+<span class="ln">1235</span>C 10/8/26 MHP via Claude
+<span class="ln">1236</span>C code changed to replace the hand-written STANDARD/CURRENT echo
+<span class="ln">1237</span>C tables (which only covered a subset of namelist variables, had
+<span class="ln">1238</span>C truncated arrays for ATIME/HPTTOL, and had a broken arg list on the
+<span class="ln">1239</span>C old TRIDT/TRIDL line -- WRITE(ISHORT,45) TRIDT,TRIDL/TRIDT/TRIDL was
+<span class="ln">1240</span>C parsed as two items, not four, despite FORMAT 45&#x27;s four-column
+<span class="ln">1241</span>C header) with a complete, always-in-sync echo of the actual PHYSICS
+<span class="ln">1242</span>C and CONTROL namelists, plus a DERIVED namelist (declared above) for
+<span class="ln">1243</span>C the handful of values that are only meaningful after post-namelist-
+<span class="ln">1244</span>C read derivation/overrides (e.g. CMIXL, LREL, the LDIFLI-forced
+<span class="ln">1245</span>C cascade). The NPOINT/NPENV/NPRTMOD/NPRTPT sentinel-default logic
+<span class="ln">1246</span>C below is functional, not echo, and is preserved unchanged.
+<span class="ln">1247</span>      IF(NPOINT.LE.0) NPOINT = 9999
+<span class="ln">1248</span>      IF(NPENV.LE.0) NPENV = 9999
+<span class="ln">1249</span>      IF(NPRTMOD.LE.0) NPRTMOD = 9999
+<span class="ln">1250</span>      IF(NPRTPT.LE.0) NPRTPT = 9999
+<span class="ln">1251</span>      WRITE(ISHORT,NML=PHYSICS)
+<span class="ln">1252</span>      WRITE(ISHORT,NML=CONTROL)
+<span class="ln">1253</span>      WRITE(ISHORT,NML=DERIVED)
+<span class="ln">1254</span>C 10/15/26 MHP via Claude
+<span class="ln">1255</span>C code changed to trap an illegal convective mixing length before the run
+<span class="ln">1256</span>C starts.  CMIXLA is the per-run vector the mixing length is taken from --
+<span class="ln">1257</span>C main.f:382 sets CMIXL = CMIXLA(NK) for each kind card -- and nothing
+<span class="ln">1258</span>C validated it anywhere.  It has no default, so an entry the namelist
+<span class="ln">1259</span>C never sets is zero, and a zero or negative mixing length is unphysical:
+<span class="ln">1260</span>C the run fails further in, where the cause is no longer apparent.
+<span class="ln">1261</span>C
+<span class="ln">1262</span>C Only the entries that will actually be used are checked.  Under solar
+<span class="ln">1263</span>C calibration just CMIXLA(1) comes from the namelist: SETCAL sets
+<span class="ln">1264</span>C NUMRUN = 48 and fills entries 2..48 from CMIXLA(1), so checking the
+<span class="ln">1265</span>C whole vector here would report entries the user never supplied.  The
+<span class="ln">1266</span>C bound is MIN(NUMRUN,50) because CMIXLA is dimensioned 50 while NUMRUN
+<span class="ln">1267</span>C is read from the namelist and is not itself range-checked.
+<span class="ln">1268</span>C
+<span class="ln">1269</span>C Placed after the namelist echo, unlike the LSEMIC/overshoot trap above,
+<span class="ln">1270</span>C so that the .short file carries the inputs that caused the stop as well
+<span class="ln">1271</span>C as the diagnosis.
+<span class="ln">1272</span>      IF(LCALS)THEN
+<span class="ln">1273</span>         NCMXCK = 1
+<span class="ln">1274</span>      ELSE
+<span class="ln">1275</span>         NCMXCK = MIN(NUMRUN,50)
+<span class="ln">1276</span>      ENDIF
+<span class="ln">1277</span>      LCMXBAD = .FALSE.
+<span class="ln">1278</span>      DO I = 1,NCMXCK
+<span class="ln">1279</span>         IF(CMIXLA(I).LE.0.0D0)THEN
+<span class="ln">1280</span>            LCMXBAD = .TRUE.
+<span class="ln">1281</span>            WRITE(ISHORT,8801)I,CMIXLA(I)
+<span class="ln">1282</span>            WRITE(*,8801)I,CMIXLA(I)
+<span class="ln">1283</span>         ENDIF
+<span class="ln">1284</span>      END DO
+<span class="ln">1285</span> 8801 FORMAT(1X,&#x27;ERROR IN SUBROUTINE PARMIN&#x27;/&#x27;ILLEGAL MIXING LENGTH:&#x27;,
+<span class="ln">1286</span>     * &#x27; CMIXLA(&#x27;,I2,&#x27;) =&#x27;,1PE12.4,&#x27; - MUST BE POSITIVE&#x27;)
+<span class="ln">1287</span>      IF(LCMXBAD)THEN
+<span class="ln">1288</span>         IF(LCALS)THEN
+<span class="ln">1289</span>            WRITE(ISHORT,8802)
+<span class="ln">1290</span>            WRITE(*,8802)
+<span class="ln">1291</span>         ELSE
+<span class="ln">1292</span>            WRITE(ISHORT,8803)NCMXCK
+<span class="ln">1293</span>            WRITE(*,8803)NCMXCK
+<span class="ln">1294</span>         ENDIF
+<span class="ln">1295</span>         STOP
+<span class="ln">1296</span>      ENDIF
+<span class="ln">1297</span> 8802 FORMAT(&#x27;SOLAR CALIBRATION IS ON, SO ONLY CMIXLA(1) IS READ FROM&#x27;,
+<span class="ln">1298</span>     * &#x27; THE NAMELIST&#x27;/&#x27;RUN STOPPED&#x27;)
+<span class="ln">1299</span> 8803 FORMAT(&#x27;CMIXLA MUST BE SET FOR EACH OF THE&#x27;,I3,&#x27; KIND CARDS&#x27;/
+<span class="ln">1300</span>     * &#x27;RUN STOPPED&#x27;)
+<span class="ln">1301</span>      IF(KTTAU .EQ. 0) THEN
+<span class="ln">1302</span>           WRITE(ISHORT, 197)
+<span class="ln">1303</span>      ELSE IF (KTTAU .EQ. 1) THEN
+<span class="ln">1304</span>           WRITE(ISHORT, 198)
+<span class="ln">1305</span>      ELSE IF (KTTAU .EQ. 2) THEN
+<span class="ln">1306</span>           WRITE(ISHORT, 1999)
+<span class="ln">1307</span>      ELSE IF (KTTAU .EQ. 3) THEN
+<span class="ln">1308</span>           WRITE(ISHORT, 1888)
+<span class="ln">1309</span>      ELSE IF (KTTAU .EQ. 4) THEN
+<span class="ln">1310</span>           WRITE(ISHORT, 1889)
+<span class="ln">1311</span>C JNT 6/14 ADD FOR NEW KURUCZ/CASTELLI ATMOSPHERE TABLES
+<span class="ln">1312</span>      ELSE IF (KTTAU .EQ. 5) THEN
+<span class="ln">1313</span>           WRITE(ISHORT, 1887)
+<span class="ln">1314</span>      END IF
+<span class="ln">1315</span>  197 FORMAT(&#x27; USING EDDINGTON T-TAU RELATION.&#x27;)
+<span class="ln">1316</span>  198 FORMAT(&#x27; USING KRISHNA-SWAMY T-TAU RELATION.&#x27;)
+<span class="ln">1317</span> 1999 FORMAT(&#x27; USING HARVARD-SMITHSONIAN REFERENCE ATMOSPHERE&#x27;)
+<span class="ln">1318</span> 1888 FORMAT(&#x27; USING KURUCZ ATMOSPHERE TABLE&#x27;)
+<span class="ln">1319</span> 1889 FORMAT(&#x27; USING ALLARD ATMOSPHERE TABLE&#x27;)
+<span class="ln">1320</span> 1887 FORMAT(&#x27; USING KURUCZ/CASTELLI ATMOSPHERE TABLE&#x27;)
+<span class="ln">1321</span>
+<span class="ln">1322</span>C DBG PULSE
+<span class="ln">1323</span>      IF (LPULSE) THEN
+<span class="ln">1324</span>          WRITE(ISHORT,196)
+<span class="ln">1325</span>  196     FORMAT(/,&#x27; CALCULATE PULSATION OUTPUT ON LAST MODEL&#x27;)
+<span class="ln">1326</span>      END IF
+<span class="ln">1327</span>      IF (LPUREZ) THEN
+<span class="ln">1328</span>          WRITE(ISHORT,*) &#x27; USING PURE C AND N OPACITY TABLES&#x27;
+<span class="ln">1329</span>      END IF
+<span class="ln">1330</span>
+<span class="ln">1331</span>      WRITE(IMODPT,310) DESCRIP(1),  DESCRIP(2)
+<span class="ln">1332</span>
+<span class="ln">1333</span>      WRITE(ISHORT,314)
+<span class="ln">1334</span>      WRITE(ISHORT,VERFMT) YRECVER, GITHASH
+<span class="ln">1335</span>      WRITE(ISHORT,310) DESCRIP(1),  DESCRIP(2)
+<span class="ln">1336</span>  310    FORMAT(&#x27;# DESCRIPTION OF RUN:&#x27;,A80,/, &#x27;#&#x27;,9X,&#x27;  &#x27;,8X,&#x27;: &#x27;,
+<span class="ln">1337</span>     *          A80,/,&#x27;#&#x27;, 100(&#x27;=&#x27;))
+<span class="ln">1338</span>
+<span class="ln">1339</span>      IF(LTRACK) THEN
+<span class="ln">1340</span>
+<span class="ln">1341</span>         WRITE(ITRACK,314)
+<span class="ln">1342</span>  314    FORMAT(&#x27;#&#x27;,/,&#x27;#&#x27;,100(&#x27;=&#x27;))
+<span class="ln">1343</span>         WRITE(ITRACK,VERFMT) YRECVER, GITHASH
+<span class="ln">1344</span>         WRITE(ITRACK,320) DESCRIP(1), DESCRIP(2)
+<span class="ln">1345</span>  320    FORMAT(&#x27;# DESCRIPTION OF RUN:&#x27;,A80,/, &#x27;#&#x27;,9X,&#x27;  &#x27;,8X,&#x27;: &#x27;,
+<span class="ln">1346</span>     *          A80,/,&#x27;#&#x27;, 100(&#x27;=&#x27;))
+<span class="ln">1347</span>
+<span class="ln">1348</span>      ENDIF
+<span class="ln">1349</span>      WRITE(ISHORT,323)
+<span class="ln">1350</span> 323  FORMAT(&#x27; USING OSCILATORY SPLINE INTERPOLATION IN HPOINT&#x27;)
+<span class="ln">1351</span>
+<span class="ln">1352</span>C     INTERPRET RUN FROM SEQUENCE OF &quot;KIND&quot; CARDS
+<span class="ln">1353</span>
+<span class="ln">1354</span>      WRITE(ISHORT,200)
+<span class="ln">1355</span>  200 FORMAT(/35X,&#x27;RUN CARDS&#x27;/)
+<span class="ln">1356</span>
+<span class="ln">1357</span>      LFIRST(1) = .TRUE.
+<span class="ln">1358</span>
+<span class="ln">1359</span>C     RUN LOOP
+<span class="ln">1360</span>      DO 1000 NKIND=1, NUMRUN
+<span class="ln">1361</span>C READ IN NMODLS AND MODEL SOURCE(MEMORY OR FIRST MODEL)-SAME FOR ALL
+<span class="ln">1362</span>       IRESCA(NKIND) = KINDRN(NKIND)
+<span class="ln">1363</span>       IF(KINDRN(NKIND).EQ.1) THEN
+<span class="ln">1364</span>C EVOLVE CARD
+<span class="ln">1365</span>C MHP 10/24 GENERALIZE STOP CONDITIONS
+<span class="ln">1366</span>C          LENDAG(NKIND) = ENDAGE(NKIND).GT.0D0
+<span class="ln">1367</span>            IF(ENDAGE(NKIND).GT.0.0D0 .OR. END_DCEN(NKIND).GT.0.0D0
+<span class="ln">1368</span>     * .OR. END_XCEN(NKIND).GT.0.0D0 .OR. END_YCEN(NKIND).GT.0.0D0)THEN
+<span class="ln">1369</span>               LENDAG(NKIND)=.TRUE.
+<span class="ln">1370</span>            ELSE
+<span class="ln">1371</span>               LENDAG(NKIND)=.FALSE.
+<span class="ln">1372</span>            ENDIF
+<span class="ln">1373</span>          LSETDT(NKIND) = SETDT(NKIND).GT.0D0
+<span class="ln">1374</span>            IF (NMODLS(NKIND).GT.0) THEN
+<span class="ln">1375</span>          IF (LFIRST(NKIND)) THEN
+<span class="ln">1376</span>             WRITE(IOWR,350) NKIND,NMODLS(NKIND)
+<span class="ln">1377</span>             WRITE(ISHORT,350) NKIND,NMODLS(NKIND)
+<span class="ln">1378</span>  350          FORMAT(/1X,&#x27;RUN #&#x27;,I3,&#x27;   EVOLVE &#x27;,I5,
+<span class="ln">1379</span>     1         &#x27; MODELS, STARTING&#x27;,
+<span class="ln">1380</span>     2         &#x27; WITH THE INPUT &quot;FIRST MODEL&quot;.&#x27;)
+<span class="ln">1381</span>          ELSE
+<span class="ln">1382</span>             WRITE(IOWR,351) NKIND, NMODLS(NKIND)
+<span class="ln">1383</span>             WRITE(ISHORT,351) NKIND, NMODLS(NKIND)
+<span class="ln">1384</span>  351          FORMAT(/1X,&#x27;RUN #&#x27;,I3,&#x27;   EVOLVE &#x27;,I5,
+<span class="ln">1385</span>     1         &#x27; MODELS, STARTING&#x27;,
+<span class="ln">1386</span>     1         &#x27; WITH THE PREVIOUS RUN&#x27;&#x27;S LAST MODEL.&#x27;)
+<span class="ln">1387</span>          END IF
+<span class="ln">1388</span>C GENERALIZE STOP CONDITIONS
+<span class="ln">1389</span>          IF(LENDAG(NKIND).OR.LSETDT(NKIND)) THEN
+<span class="ln">1390</span>             WRITE(IOWR,370)LENDAG(NKIND),LSETDT(NKIND),
+<span class="ln">1391</span>     *              ENDAGE(NKIND), SETDT(NKIND),END_DCEN(NKIND),
+<span class="ln">1392</span>     *         END_XCEN(NKIND),END_YCEN(NKIND)
+<span class="ln">1393</span>             WRITE(ISHORT,370)LENDAG(NKIND),LSETDT(NKIND),
+<span class="ln">1394</span>     *         ENDAGE(NKIND), SETDT(NKIND),END_DCEN(NKIND),
+<span class="ln">1395</span>     *         END_XCEN(NKIND),END_YCEN(NKIND)
+<span class="ln">1396</span>  370          FORMAT(1X,&#x27;EVOLVE TO AGE &#x27;,L1,&#x27; SET DELT &#x27;,
+<span class="ln">1397</span>     *              L1,&#x27; FINAL AGE &#x27;, E9.2,&#x27; FIXED TSTEP &#x27;,E9.2,
+<span class="ln">1398</span>     *  &#x27; CENTRAL D &#x27;,E10.4,&#x27; CENTRAL X &#x27;,E12.4,&#x27; CENTRAL Y &#x27;,E12.4)
+<span class="ln">1399</span>          ENDIF
+<span class="ln">1400</span>            END IF
+<span class="ln">1401</span>       ELSE IF(KINDRN(NKIND).EQ.2) THEN
+<span class="ln">1402</span>C RESCALE CARD:  RESCALE STARTING MODEL
+<span class="ln">1403</span>C QUANTITIES TO BE RESCALED STORED IN ARRAY RESCALE(4,50)
+<span class="ln">1404</span>C WHERE THE ELEMENTS MASS,X,Z,CORE MASS ARE STORED IN ORDER
+<span class="ln">1405</span>          RESCAL(1,NKIND) = RSCLM(NKIND)
+<span class="ln">1406</span>          RESCAL(2,NKIND) = RSCLX(NKIND)
+<span class="ln">1407</span>          RESCAL(3,NKIND) = RSCLZ(NKIND)
+<span class="ln">1408</span>          RESCAL(4,NKIND) = RSCLCM(NKIND)
+<span class="ln">1409</span>            IF (NMODLS(NKIND) .GT. 0) THEN
+<span class="ln">1410</span>          IF (LFIRST(NKIND)) THEN
+<span class="ln">1411</span>             WRITE(IOWR,450) NKIND
+<span class="ln">1412</span>             WRITE(ISHORT,450) NKIND
+<span class="ln">1413</span>  450          FORMAT(/1X,&#x27;RUN #&#x27;,I3,
+<span class="ln">1414</span>     1         &#x27;   RESCALE THE INPUT MODEL: &quot;FIRST MODEL&quot;.&#x27;)
+<span class="ln">1415</span>          ELSE
+<span class="ln">1416</span>             WRITE(IOWR,451) NKIND
+<span class="ln">1417</span>             WRITE(ISHORT,451) NKIND
+<span class="ln">1418</span>  451          FORMAT(/1X,&#x27;RUN #&#x27;,I3,
+<span class="ln">1419</span>     1         &#x27;   RESCALE THE PREVIOUS RUN&#x27;&#x27;S LAST MODEL.&#x27;)
+<span class="ln">1420</span>          END IF
+<span class="ln">1421</span>          WRITE(IOWR,452) NMODLS(NKIND),(RESCAL(I,NKIND),I = 1,4)
+<span class="ln">1422</span>          WRITE(ISHORT,452) NMODLS(NKIND),
+<span class="ln">1423</span>     1      (RESCAL(I,NKIND),I = 1,4)
+<span class="ln">1424</span>  452       FORMAT(1X,&#x27;RELAX RESCALED MODEL&#x27;,I3,
+<span class="ln">1425</span>     *      &#x27; TIMES. RESCALE THE FOLLOW&#x27;,
+<span class="ln">1426</span>     *      &#x27;ING(0=USE CURRENT VALUE):&#x27;/1X,&#x27;MASS &#x27;,
+<span class="ln">1427</span>     *      F9.6,3X,&#x27;X&#x27;,F9.6,3X,&#x27;Z&#x27;,
+<span class="ln">1428</span>     *      F9.6,3X,&#x27;CORE MASS&#x27;,F9.6)
+<span class="ln">1429</span>            END IF
+<span class="ln">1430</span>         ELSE IF(KINDRN(NKIND).EQ.3) THEN
+<span class="ln">1431</span>C RESCALE AND EVOLVE CARD:  RESCALE STARTING MODEL
+<span class="ln">1432</span>C QUANTITIES TO BE RESCALED STORED IN ARRAY RESCALE(4,50)
+<span class="ln">1433</span>C WHERE THE ELEMENTS MASS,X,Z,CORE MASS ARE STORED IN ORDER
+<span class="ln">1434</span>            RESCAL(1,NKIND) = RSCLM(NKIND)
+<span class="ln">1435</span>            RESCAL(2,NKIND) = RSCLX(NKIND)
+<span class="ln">1436</span>            RESCAL(3,NKIND) = RSCLZ(NKIND)
+<span class="ln">1437</span>            RESCAL(4,NKIND) = RSCLCM(NKIND)
+<span class="ln">1438</span>            IF (LFIRST(NKIND)) THEN
+<span class="ln">1439</span>               WRITE(IOWR,550) NKIND
+<span class="ln">1440</span>               WRITE(ISHORT,550) NKIND
+<span class="ln">1441</span>  550          FORMAT(/1X,&#x27;RUN #&#x27;,I3,
+<span class="ln">1442</span>     1         &#x27;   RESCALE &amp; EVOLVE THE INPUT MODEL: &quot;FIRST MODEL&quot;.&#x27;)
+<span class="ln">1443</span>            ELSE
+<span class="ln">1444</span>               WRITE(IOWR,451) NKIND
+<span class="ln">1445</span>               WRITE(ISHORT,451) NKIND
+<span class="ln">1446</span>C   551          FORMAT(/1X,&#x27;RUN #&#x27;,I3,
+<span class="ln">1447</span>C      1         &#x27;   RESCALE &amp; EVOLVE THE PREVIOUS RUN&#x27;&#x27;S LAST MODEL.&#x27;)
+<span class="ln">1448</span>            END IF
+<span class="ln">1449</span>            WRITE(IOWR,452) NMODLS(NKIND),(RESCAL(I,NKIND),I = 1,4)
+<span class="ln">1450</span>            WRITE(ISHORT,452) NMODLS(NKIND),
+<span class="ln">1451</span>     1      (RESCAL(I,NKIND),I = 1,4)
+<span class="ln">1452</span>       END IF
+<span class="ln">1453</span>         IF(RESCAL(3,NKIND).GE.0.0D0)  ZENV=RESCAL(3,NKIND)
+<span class="ln">1454</span> 1000 CONTINUE
+<span class="ln">1455</span>      RETURN
+<span class="ln">1456</span>      END</pre></details>
+<details class='py' id='py-parmin'><summary>Python version: parmin</summary><pre class='doc'>Read the run&#x27;s parameters from the CONTROL and PHYSICS namelists into
+the modules, set the unit numbers, expand the file names&#x27; placeholders,
+open the output files and some tables, derive settings (wind law,
+mixtures, settling switches), write the settings to the .short file,
+and interpret the run cards.
+
+Translates: parmin.f#PARMIN (09c3b9b)
+
+Arguments: the 12 table file names (set from the CONTROL namelist; any
+value), and yrecver, githash, the code&#x27;s version and git hash.
+
+Returns (falex06, fallard, fatm, ffermi, fliv95, fpatm, fpenv, fpmod,
+fpurez, fscvh, fscvhe, fscvz): the file names as read and expanded.</pre><pre class='src'><span class="ln">350</span>def parmin(falex06, fallard, fatm, ffermi, fliv95, fpatm, fpenv, fpmod,
+<span class="ln">351</span>           fpurez, fscvh, fscvhe, fscvz, yrecver, githash):
+<span class="ln">352</span>    &quot;&quot;&quot;Read the run&#x27;s parameters from the CONTROL and PHYSICS namelists into
+<span class="ln">353</span>    the modules, set the unit numbers, expand the file names&#x27; placeholders,
+<span class="ln">354</span>    open the output files and some tables, derive settings (wind law,
+<span class="ln">355</span>    mixtures, settling switches), write the settings to the .short file,
+<span class="ln">356</span>    and interpret the run cards.
+<span class="ln">357</span>
+<span class="ln">358</span>    Translates: parmin.f#PARMIN (09c3b9b)
+<span class="ln">359</span>
+<span class="ln">360</span>    Arguments: the 12 table file names (set from the CONTROL namelist; any
+<span class="ln">361</span>    value), and yrecver, githash, the code&#x27;s version and git hash.
+<span class="ln">362</span>
+<span class="ln">363</span>    Returns (falex06, fallard, fatm, ffermi, fliv95, fpatm, fpenv, fpmod,
+<span class="ln">364</span>    fpurez, fscvh, fscvhe, fscvz): the file names as read and expanded.
+<span class="ln">365</span>    &quot;&quot;&quot;
+<span class="ln">366</span>    global anewcp, atmp, sum_frac, last_slash_idx, mrk, ncmxck, lcmxbad
+<span class="ln">367</span>    global yrec1, yrec2, cmd, fcalcad
+<span class="ln">368</span>    me = _this
+<span class="ln">369</span>    io = iounits_mod
+<span class="ln">370</span>    nml = nmlpar_mod
+<span class="ln">371</span>    byp = nmlbypass_mod
+<span class="ln">372</span>    c = constants_mod
+<span class="ln">373</span>    args = SimpleNamespace(falex06=falex06, fallard=fallard, fatm=fatm,
+<span class="ln">374</span>                           ffermi=ffermi, fliv95=fliv95, fpatm=fpatm,
+<span class="ln">375</span>                           fpenv=fpenv, fpmod=fpmod, fpurez=fpurez,
+<span class="ln">376</span>                           fscvh=fscvh, fscvhe=fscvhe, fscvz=fscvz)
+<span class="ln">377</span>    owners = _owners(args)
+<span class="ln">378</span>
+<span class="ln">379</span>    # All logical unit numbers.
+<span class="ln">380</span>    io.iowr = 6          # output: status file (the screen)
+<span class="ln">381</span>    io.ilast = 11        # output: last model
+<span class="ln">382</span>    io.ifirst = 12       # input: first model
+<span class="ln">383</span>    io.irun = 13         # input: PHYSICS namelist
+<span class="ln">384</span>    io.istand = 14       # input: CONTROL namelist
+<span class="ln">385</span>    io.ifermi = 15       # input: Fermi tables
+<span class="ln">386</span>    io.idebug = 18       # output: debugging
+<span class="ln">387</span>    io.itrack = 19       # output: track
+<span class="ln">388</span>    io.ishort = 20       # output: all diagnostic information
+<span class="ln">389</span>    io.imilne = 21       # output: Milne invariant variables
+<span class="ln">390</span>    io.imodpt = 22       # output: shell by shell information
+<span class="ln">391</span>    io.istor = 23        # output: saved models
+<span class="ln">392</span>    io.iopmod = 24       # output: pulsation, interior
+<span class="ln">393</span>    io.iopenv = 25       # output: pulsation, envelope
+<span class="ln">394</span>    io.iopatm = 26       # output: pulsation, atmosphere
+<span class="ln">395</span>    io.isound = 500      # output: sound-speed profile (WRTMOD, LSOUND)
+<span class="ln">396</span>    io.iliv95 = 48       # input: OPAL95 opacity table
+<span class="ln">397</span>    io.isnu = 33         # output: neutrino fluxes
+<span class="ln">398</span>    io.ioatm = 38        # input: Kurucz atmosphere table
+<span class="ln">399</span>    io.iopale = 49       # input: OPAL equation of state
+<span class="ln">400</span>    io.iopurez = 62      # input: pure C and N opacities
+<span class="ln">401</span>    io.ioatma = 66       # input: Allard model atmospheres
+<span class="ln">402</span>    io.iscvh = 72        # input: SCV EOS tables
+<span class="ln">403</span>    io.iscvhe = 73
+<span class="ln">404</span>    io.iscvz = 74
+<span class="ln">405</span>    io.icondopacp = 75   # input: Potekhin conductive opacities
+<span class="ln">406</span>    # Default [Fe/H] and alpha for the new Allard atmospheres.
+<span class="ln">407</span>    nml.alatm_feh = 0.0
+<span class="ln">408</span>    nml.alatm_alpha = 0.0
+<span class="ln">409</span>    nml.laltptau100 = False
+<span class="ln">410</span>    io.ialex06 = 90      # input: Alexander 2006 opacities
+<span class="ln">411</span>
+<span class="ln">412</span>    print(&#x27; &#x27;)
+<span class="ln">413</span>    print(f&quot; Yale Rotating Evolution Code - YREC, v{yrecver.rstrip()} &quot;
+<span class="ln">414</span>          f&quot;({githash.rstrip()})&quot;)
+<span class="ln">415</span>    # VERFMT, the version line (format built at run time, 315).
+<span class="ln">416</span>    verline = f&quot;# YREC v{yrecver.rstrip()} ({githash.rstrip()})&quot;
+<span class="ln">417</span>
+<span class="ln">418</span>    # JVS 02/11: the namelist files from the command line, or the defaults.
+<span class="ln">419</span>    # Question (see the page): GETARG is a compiler extension.
+<span class="ln">420</span>    yrec1 = sys.argv[1] if len(sys.argv) &gt; 1 else &#x27;&#x27;
+<span class="ln">421</span>    if yrec1[:2].strip() == &#x27;&#x27;:
+<span class="ln">422</span>        yrec1 = &#x27;yrec8.nml1&#x27;
+<span class="ln">423</span>    print(&#x27; &#x27;)
+<span class="ln">424</span>    print(f&quot; CONTROL namelist :  {yrec1.rstrip()}&quot;)
+<span class="ln">425</span>    yrec2 = sys.argv[2] if len(sys.argv) &gt; 2 else &#x27;&#x27;
+<span class="ln">426</span>    if yrec2[:2].strip() == &#x27;&#x27;:
+<span class="ln">427</span>        yrec2 = &#x27;yrec8.nml2&#x27;
+<span class="ln">428</span>    print(f&quot; PHYSICS namelist :  {yrec2.rstrip()}&quot;)
+<span class="ln">429</span>    # OPEN, READ(NML=...) and CLOSE of ISTAND and IRUN.
+<span class="ln">430</span>    _read_namelist(yrec1, &#x27;CONTROL&#x27;, _CONTROL, owners)
+<span class="ln">431</span>    _read_namelist(yrec2, &#x27;PHYSICS&#x27;, _PHYSICS, owners)
+<span class="ln">432</span>    # MHP 8/14: map the newer inputs onto the vectors the code uses.
+<span class="ln">433</span>    remap()
+<span class="ln">434</span>    # MHP 06/13: remember the original atmosphere choice.
+<span class="ln">435</span>    nml.kttau0 = nml.kttau
+<span class="ln">436</span>    nml.lttau = False
+<span class="ln">437</span>
+<span class="ln">438</span>    # Expand a leading placeholder in every file name.
+<span class="ln">439</span>    for where, name in ((&#x27;arg&#x27;, &#x27;falex06&#x27;), (&#x27;arg&#x27;, &#x27;fallard&#x27;),
+<span class="ln">440</span>                        (&#x27;arg&#x27;, &#x27;fatm&#x27;), (&#x27;loc&#x27;, &#x27;fcondopacp&#x27;),
+<span class="ln">441</span>                        (&#x27;arg&#x27;, &#x27;ffermi&#x27;), (&#x27;loc&#x27;, &#x27;ffirst&#x27;),
+<span class="ln">442</span>                        (&#x27;loc&#x27;, &#x27;flast&#x27;), (&#x27;arg&#x27;, &#x27;fliv95&#x27;),
+<span class="ln">443</span>                        (&#x27;loc&#x27;, &#x27;fmodpt&#x27;), (&#x27;loc&#x27;, &#x27;fopale06&#x27;),
+<span class="ln">444</span>                        (&#x27;arg&#x27;, &#x27;fpatm&#x27;), (&#x27;arg&#x27;, &#x27;fpenv&#x27;), (&#x27;arg&#x27;, &#x27;fpmod&#x27;),
+<span class="ln">445</span>                        (&#x27;arg&#x27;, &#x27;fpurez&#x27;), (&#x27;loc&#x27;, &#x27;fscomp&#x27;),
+<span class="ln">446</span>                        (&#x27;arg&#x27;, &#x27;fscvh&#x27;), (&#x27;arg&#x27;, &#x27;fscvhe&#x27;),
+<span class="ln">447</span>                        (&#x27;arg&#x27;, &#x27;fscvz&#x27;), (&#x27;loc&#x27;, &#x27;fshort&#x27;),
+<span class="ln">448</span>                        (&#x27;loc&#x27;, &#x27;fsnu&#x27;), (&#x27;loc&#x27;, &#x27;fsound&#x27;), (&#x27;loc&#x27;, &#x27;fstor&#x27;),
+<span class="ln">449</span>                        (&#x27;loc&#x27;, &#x27;ftrack&#x27;)):
+<span class="ln">450</span>        owner = owners[where]
+<span class="ln">451</span>        setattr(owner, name, <a href="#def-EXPAND_VALUE" title="EXPAND_VALUE in parmin.f">expand_value</a>(getattr(owner, name)))
+<span class="ln">452</span>
+<span class="ln">453</span>    # Create the output folder, FTRACK up to its last &#x27;/&#x27;.
+<span class="ln">454</span>    for i in range(len(me.ftrack.rstrip()), 0, -1):
+<span class="ln">455</span>        if me.ftrack[i - 1] == &#x27;/&#x27;:
+<span class="ln">456</span>            last_slash_idx = i
+<span class="ln">457</span>            break
+<span class="ln">458</span>    # label 1250. Question (see the page): no &#x27;/&#x27; leaves LAST_SLASH_IDX unset.
+<span class="ln">459</span>    cmd = &#x27;mkdir -p &quot;&#x27; + me.ftrack[:last_slash_idx] + &#x27;&quot;&#x27;
+<span class="ln">460</span>    print(f&quot; OUTPUT placed in :  {me.ftrack[:last_slash_idx]}&quot;)
+<span class="ln">461</span>    print(&#x27; &#x27;)
+<span class="ln">462</span>    os.system(cmd)
+<span class="ln">463</span>
+<span class="ln">464</span>    # JVS 02/11: the acoustic-depth output, named after the .short file.
+<span class="ln">465</span>    if acdpth_mod.lacout:
+<span class="ln">466</span>        io.iclcd = 91
+<span class="ln">467</span>        mrk = me.fshort.find(&#x27;short&#x27;) + 1      # INDEX: 0 if absent
+<span class="ln">468</span>        # Possible bug (update-findings.md): no &#x27;short&#x27; in FSHORT gives
+<span class="ln">469</span>        # plain &#x27;calcad&#x27; in the current folder.
+<span class="ln">470</span>        fcalcad = me.fshort[:max(mrk - 1, 0)] + &#x27;calcad&#x27;
+<span class="ln">471</span>        io.open(io.iclcd, fcalcad, status=&#x27;UNKNOWN&#x27;)
+<span class="ln">472</span>        io.write(io.iclcd, &#x27; Acoustic depth calculation output file&#x27;)
+<span class="ln">473</span>        # The second string continues onto a continuation line in the
+<span class="ln">474</span>        # Fortran; its blanks are kept as in the source.
+<span class="ln">475</span>        io.write(io.iclcd, &#x27; age (Gyr),radius(cm),1/sound speed(s/cm),&#x27;
+<span class="ln">476</span>                 &#x27;radius (CZ), 1/cs (CZ)       delad,gamma1,P, T, X&#x27;)
+<span class="ln">477</span>
+<span class="ln">478</span>    # G Somers 6/14: Li/Be cross sections given by the user, as factors on
+<span class="ln">479</span>    # the defaults (Li6 5.5 MeV b; Li7 52 keV b; Be9 1.1, 15000, 15000 keV b).
+<span class="ln">480</span>    if byp.lxli6:
+<span class="ln">481</span>        nml.sli6 = byp.xsli6 / 5.5e3
+<span class="ln">482</span>    if byp.lxli7:
+<span class="ln">483</span>        nml.sli7 = byp.xsli7 / 5.2e1
+<span class="ln">484</span>    if byp.lxbe91:
+<span class="ln">485</span>        nml.sbe91 = byp.xsbe91 / 1.1
+<span class="ln">486</span>    if byp.lxbe92:
+<span class="ln">487</span>        nml.sbe92 = byp.xsbe92 / 1.5e4
+<span class="ln">488</span>    if byp.lxbe93:
+<span class="ln">489</span>        nml.sbe93 = byp.xsbe93 / 1.5e4
+<span class="ln">490</span>    # The OPAL 2006 EOS table.
+<span class="ln">491</span>    if nml.lopale06:
+<span class="ln">492</span>        io.open(io.iopale, me.fopale06, status=&#x27;OLD&#x27;)
+<span class="ln">493</span>
+<span class="ln">494</span>    # The stored models, with their header if LSTORE.
+<span class="ln">495</span>    io.open(io.istor, me.fstor, status=&#x27;UNKNOWN&#x27;)
+<span class="ln">496</span>    io.rewind(io.istor)
+<span class="ln">497</span>    if nml.lstore:
+<span class="ln">498</span>        # JvS 08/25: stitched interior and envelope option.
+<span class="ln">499</span>        if nml.lstch:
+<span class="ln">500</span>            ccout_mod.lphhd = True
+<span class="ln">501</span>        else:
+<span class="ln">502</span>            io.write(io.istor, verline)
+<span class="ln">503</span>            io.write(io.istor, _STORE_KEY)       # format 1012
+<span class="ln">504</span>
+<span class="ln">505</span>    io.open(io.ishort, me.fshort, status=&#x27;UNKNOWN&#x27;)
+<span class="ln">506</span>    io.rewind(io.ishort)
+<span class="ln">507</span>    # The sound-speed profile, opened always (LSOUND is known only later).
+<span class="ln">508</span>    io.open(io.isound, me.fsound, status=&#x27;UNKNOWN&#x27;)
+<span class="ln">509</span>    io.rewind(io.isound)
+<span class="ln">510</span>    if nml.ltrack:
+<span class="ln">511</span>        io.open(io.itrack, me.ftrack, status=&#x27;UNKNOWN&#x27;)
+<span class="ln">512</span>        io.rewind(io.itrack)
+<span class="ln">513</span>    if nml.lsnu:
+<span class="ln">514</span>        io.open(io.isnu, me.fsnu, status=&#x27;UNKNOWN&#x27;)
+<span class="ln">515</span>        io.rewind(io.isnu)
+<span class="ln">516</span>    if nml.ldebug:
+<span class="ln">517</span>        io.open(io.idebug, me.fdebug, status=&#x27;UNKNOWN&#x27;)
+<span class="ln">518</span>    if nml.lmilne:
+<span class="ln">519</span>        io.open(io.imilne, me.fmilne, status=&#x27;UNKNOWN&#x27;, access=&#x27;APPEND&#x27;)
+<span class="ln">520</span>    io.open(io.ifirst, me.ffirst, status=&#x27;OLD&#x27;)
+<span class="ln">521</span>    io.open(io.ilast, me.flast, status=&#x27;UNKNOWN&#x27;)
+<span class="ln">522</span>    io.open(io.imodpt, me.fmodpt, status=&#x27;UNKNOWN&#x27;)
+<span class="ln">523</span>    if nml.lpulse:
+<span class="ln">524</span>        io.open(io.iopmod, args.fpmod, status=&#x27;UNKNOWN&#x27;)
+<span class="ln">525</span>        io.open(io.iopenv, args.fpenv, status=&#x27;UNKNOWN&#x27;)
+<span class="ln">526</span>        io.open(io.iopatm, args.fpatm, status=&#x27;UNKNOWN&#x27;)
+<span class="ln">527</span>    if nml.lcondopacp:
+<span class="ln">528</span>        io.open(io.icondopacp, me.fcondopacp, status=&#x27;OLD&#x27;)
+<span class="ln">529</span>
+<span class="ln">530</span>    # Semiconvection with any overshoot stops the run.
+<span class="ln">531</span>    if nml.lsemic:
+<span class="ln">532</span>        if nml.lovstc or nml.lovste or nml.lovstm:
+<span class="ln">533</span>            io.write(io.ishort,
+<span class="ln">534</span>                     f&quot; ERROR IN SUBROUTINE PARMIN\nSEMI-CONVECTION AND &quot;
+<span class="ln">535</span>                     f&quot;OVERSHOOT FLAGS BOTH TURNED ON\nFLAGS LSEMIC &quot;
+<span class="ln">536</span>                     f&quot;{_l(nml.lsemic)} OVERSHOOT - CORE,ENVELOPE,&quot;
+<span class="ln">537</span>                     f&quot;INTERMEDIATE- {_l(nml.lovste)} {_l(nml.lovstc)} &quot;
+<span class="ln">538</span>                     f&quot;{_l(nml.lovstm)}\nRUN STOPPED&quot;)          # format 2
+<span class="ln">539</span>            raise SystemExit
+<span class="ln">540</span>    io.write(io.ishort,
+<span class="ln">541</span>             &quot; PT TOL&quot; + &#x27;&#x27;.join(f&quot;{nml.hpttol[i]:6.3f}&quot; for i in range(1, 13))
+<span class="ln">542</span>             + f&quot;\n O.S.ENV{nml.alphae:6.3f} O.S.CORE{nml.alphac:6.3f}&quot;
+<span class="ln">543</span>             f&quot; LINSTB {_l(nml.linstb)} LJDOT {_l(nml.ljdot0)} WIND IND.&quot;
+<span class="ln">544</span>             f&quot;{me.alfa:6.3f} FK{me.fk:8.2E}\n  FV{nml.fw:5.2f} FC&quot;
+<span class="ln">545</span>             f&quot;{nml.fc:5.2f} COUPLING{byp.fo:6.3f} F MU{nml.fmu:5.2f}&quot;
+<span class="ln">546</span>             f&quot; RCRIT{nml.rcrit:9.1f}&quot;)                        # format 1
+<span class="ln">547</span>
+<span class="ln">548</span>    if nml.lrot:
+<span class="ln">549</span>        nml.lnew0 = True
+<span class="ln">550</span>        if nml.walpcz &lt; -2.0:
+<span class="ln">551</span>            nml.walpcz = -2.0
+<span class="ln">552</span>        if nml.walpcz &gt; 0.0:
+<span class="ln">553</span>            nml.walpcz = 0.0
+<span class="ln">554</span>        # JNT 09/2025: LSOLID overrides IMPJMOD.
+<span class="ln">555</span>        if nml.lsolid:
+<span class="ln">556</span>            nml.impjmod = 1
+<span class="ln">557</span>        if not nml.lmwind:
+<span class="ln">558</span>            # The old wind law:
+<span class="ln">559</span>            # JDOT = FK*2.036D33*1.452D9**ALFA*(MDOT/1.0D-14)**(1-2ALFA/3)
+<span class="ln">560</span>            #        *OMEGA**(1+4ALFA/3)*(R/RSUN)**(2-ALFA)*(M/MSUN)**-ALFA/3
+<span class="ln">561</span>            c.cc13 = 1.0 / 3.0
+<span class="ln">562</span>            c.cc23 = 2.0 / 3.0
+<span class="ln">563</span>            nml.constfactor = me.fk * 2.036e33 * 1.452e9**me.alfa
+<span class="ln">564</span>            nml.exmd = 1.0 - c.cc23 * me.alfa
+<span class="ln">565</span>            nml.exw = 1.0 + 2.0 * c.cc23 * me.alfa
+<span class="ln">566</span>            nml.exr = 2.0 - me.alfa
+<span class="ln">567</span>            nml.exm = -c.cc13 * me.alfa
+<span class="ln">568</span>        else:
+<span class="ln">569</span>            # The Matt et al. law: the indices a, b, c, d, m, preset by
+<span class="ln">570</span>            # AWIND (&#x27;CUS&#x27; keeps the namelist&#x27;s), give the exponents.
+<span class="ln">571</span>            if me.awind == &#x27;K97&#x27;:
+<span class="ln">572</span>                byp.pmmm = me.alfa / 3.0
+<span class="ln">573</span>                # MHP 8/17: the default for A is 2, not 0.
+<span class="ln">574</span>                byp.pmma = 2.0
+<span class="ln">575</span>                byp.pmmb = 1.0
+<span class="ln">576</span>                byp.pmmc = 2.0
+<span class="ln">577</span>                byp.pmmd = 0.0
+<span class="ln">578</span>                nml.lbscale = False
+<span class="ln">579</span>            elif me.awind == &#x27;V13&#x27;:
+<span class="ln">580</span>                byp.pmmm = 0.22
+<span class="ln">581</span>                byp.pmma = 2.0
+<span class="ln">582</span>                byp.pmmb = 1.0
+<span class="ln">583</span>                byp.pmmc = 0.0
+<span class="ln">584</span>                byp.pmmd = 1.0
+<span class="ln">585</span>                nml.lbscale = True
+<span class="ln">586</span>            nml.exw = (1.0 + byp.pmma - 2.0 * byp.pmma * byp.pmmm
+<span class="ln">587</span>                       + 4.0 * byp.pmmm * byp.pmmb)
+<span class="ln">588</span>            # G Somers 8/17: the tau_cz term is now in MWIND/MCOWIND.
+<span class="ln">589</span>            nml.extau = 0.0
+<span class="ln">590</span>            # JvS 09/25 &quot;removed typo&quot;. Question (see the page): the
+<span class="ln">591</span>            # comment&#x27;s derivation gives another exponent.
+<span class="ln">592</span>            nml.exr = 2.0 + 5.0 * byp.pmmm - 4.0 * byp.pmmm * byp.pmmc
+<span class="ln">593</span>            nml.exm = -byp.pmmm
+<span class="ln">594</span>            nml.exl = 1.0 - 2.0 * byp.pmmm
+<span class="ln">595</span>            nml.expr = 2.0 * byp.pmmm * byp.pmmd
+<span class="ln">596</span>            nml.excen = byp.pmmm * byp.pmmd
+<span class="ln">597</span>            # The constant factor of the centrifugal term.
+<span class="ln">598</span>            c.c_2 = 0.0506
+<span class="ln">599</span>            nml.constfactor = me.fk * byp.pmmjd / nml.pmmsolw**nml.exw
+<span class="ln">600</span>            # WMAX_SUN &lt; 1000: saturation, at WMAX_SUN times the solar rate.
+<span class="ln">601</span>            if me.wmax_sun &lt; 1.0e3:
+<span class="ln">602</span>                nml.wmax = me.wmax_sun * nml.pmmsolw
+<span class="ln">603</span>    # Wind law end.
+<span class="ln">604</span>    c.cln = math.log(10.0)
+<span class="ln">605</span>
+<span class="ln">606</span>    # A single species to rescale in the starting model.
+<span class="ln">607</span>    if nml.lnewcp:
+<span class="ln">608</span>        nml.lrel = True
+<span class="ln">609</span>        if atmp.rstrip() == &#x27;ABS&#x27;:
+<span class="ln">610</span>            nml.lrel = False
+<span class="ln">611</span>        for i in range(1, 13):
+<span class="ln">612</span>            if anewcp.rstrip() == aid[i]:
+<span class="ln">613</span>                # INEWCP, the index of the element in HCOMP.
+<span class="ln">614</span>                nml.inewcp = i + 3
+<span class="ln">615</span>                break
+<span class="ln">616</span>        else:
+<span class="ln">617</span>            # ANEWCP is not a recognized element (format 20).
+<span class="ln">618</span>            nml.lnewcp = False
+<span class="ln">619</span>            io.write(io.ishort, f&quot; VARIABLE{anewcp:&gt;4} NOT A RECOGNIZED &quot;
+<span class="ln">620</span>                     f&quot;ELEMENT\n RESCALING NOT PERFORMED&quot;)
+<span class="ln">621</span>        # label 30
+<span class="ln">622</span>
+<span class="ln">623</span>    # MHP 10/24: the CNO mixture (ISETMIX) and the isotope ratios and
+<span class="ln">624</span>    # light-element abundances (ISETISO) of the starting model.
+<span class="ln">625</span>    nml.lmixture = False
+<span class="ln">626</span>    nml.lisotope = False
+<span class="ln">627</span>    to_606 = True        # False where the Fortran jumps to label 602
+<span class="ln">628</span>    if byp.isetmix == 1:
+<span class="ln">629</span>        if me.amix.rstrip() == &#x27;CUS&#x27;:
+<span class="ln">630</span>            # A custom mixture: no negative fraction, sum below one.
+<span class="ln">631</span>            if nml.frac_c &lt; 0.0 or nml.frac_n &lt; 0.0 or nml.frac_o &lt; 0.0:
+<span class="ln">632</span>                _both(f&quot;NEGATIVE INPUT CNO FRACTION {nml.frac_c:12.4E}&quot;
+<span class="ln">633</span>                      f&quot;{nml.frac_n:12.4E}{nml.frac_o:12.4E}&quot;
+<span class="ln">634</span>                      &quot; MIX NOT MODIFIED&quot;)                       # 591
+<span class="ln">635</span>                to_606 = False
+<span class="ln">636</span>            else:
+<span class="ln">637</span>                sum_frac = nml.frac_c + nml.frac_n + nml.frac_o
+<span class="ln">638</span>                if sum_frac &gt;= 1.0:
+<span class="ln">639</span>                    _both(f&quot;INPUT CNO FRACTION {nml.frac_c:12.4E}&quot;
+<span class="ln">640</span>                          f&quot;{nml.frac_n:12.4E}{nml.frac_o:12.4E}&quot;
+<span class="ln">641</span>                          &quot; EXCEEDS 1. MIX NOT MODIFIED&quot;)        # 598
+<span class="ln">642</span>                    to_606 = False
+<span class="ln">643</span>                else:
+<span class="ln">644</span>                    nml.lmixture = True
+<span class="ln">645</span>        else:
+<span class="ln">646</span>            # A preset mixture, if its name is known.
+<span class="ln">647</span>            for i in range(1, 5):
+<span class="ln">648</span>                if me.amix.rstrip() == amixt[i]:
+<span class="ln">649</span>                    byp.zxmix = zxmixt[i]
+<span class="ln">650</span>                    nml.frac_c = frac_ct[i]
+<span class="ln">651</span>                    nml.frac_n = frac_nt[i]
+<span class="ln">652</span>                    nml.frac_o = frac_ot[i]
+<span class="ln">653</span>                    nml.lmixture = True
+<span class="ln">654</span>                    break
+<span class="ln">655</span>            else:
+<span class="ln">656</span>                _both(f&quot;DESIRED CNO MIXTURE {me.amix:8} NOT FOUND.&quot;
+<span class="ln">657</span>                      &quot; MIX NOT ALTERED.&quot;)                       # 589
+<span class="ln">658</span>    # label 606
+<span class="ln">659</span>    if to_606 and nml.lmixture:
+<span class="ln">660</span>        _both(f&quot;CNO MIXTURE {me.amix:8} C {nml.frac_c:12.4E} N &quot;
+<span class="ln">661</span>              f&quot;{nml.frac_n:12.4E} O {nml.frac_o:12.4E} APPLIED TO &quot;
+<span class="ln">662</span>              &quot;STARTING MODEL.&quot;)                                 # 604
+<span class="ln">663</span>    # label 602: the isotope ratios.
+<span class="ln">664</span>    to_605 = True        # False where the Fortran jumps to label 603
+<span class="ln">665</span>    if byp.isetiso == 1:
+<span class="ln">666</span>        if me.aiso.rstrip() == &#x27;CUS&#x27;:
+<span class="ln">667</span>            ratios = (nml.r12_13, byp.r14_15, byp.r16_17, nml.r16_18)
+<span class="ln">668</span>            light = (nml.xh2_ini, nml.xhe3_ini, nml.xli6_ini, nml.xli7_ini,
+<span class="ln">669</span>                     nml.xbe9_ini, byp.xb10_ini, byp.xb11_ini)
+<span class="ln">670</span>            if any(v &lt; 0.0 for v in ratios + light):
+<span class="ln">671</span>                _both(&quot;NEGATIVE INPUT ISOTOPE RATIO OR LIGHT ELEMENT MASS &quot;
+<span class="ln">672</span>                      &quot;FRACTION &quot; + &#x27;&#x27;.join(f&quot;{v:12.4E}&quot;
+<span class="ln">673</span>                                            for v in ratios + light)
+<span class="ln">674</span>                      + &quot; MIX NOT MODIFIED&quot;)                     # 596
+<span class="ln">675</span>                to_605 = False
+<span class="ln">676</span>            else:
+<span class="ln">677</span>                sum_frac = (nml.xh2_ini + nml.xhe3_ini + nml.xli6_ini
+<span class="ln">678</span>                            + nml.xli7_ini + nml.xbe9_ini + byp.xb10_ini
+<span class="ln">679</span>                            + byp.xb11_ini)
+<span class="ln">680</span>                if sum_frac &gt;= 1.0:
+<span class="ln">681</span>                    _both(&quot;SUM OF LIGHT ELEMENT MASS FRACTIONS EXCEEDS 1&quot;
+<span class="ln">682</span>                          + &#x27;&#x27;.join(f&quot;{v:12.4E}&quot; for v in light)
+<span class="ln">683</span>                          + &quot; MIX NOT MODIFIED&quot;)                 # 595
+<span class="ln">684</span>                    to_605 = False
+<span class="ln">685</span>        elif me.aiso.rstrip() != &#x27;L21&#x27;:
+<span class="ln">686</span>            # Only the default (L21) or a custom set are valid.
+<span class="ln">687</span>            to_605 = False
+<span class="ln">688</span>        if to_605:
+<span class="ln">689</span>            nml.lisotope = True
+<span class="ln">690</span>    if to_605 and nml.lisotope:
+<span class="ln">691</span>        _both(f&quot;ISOTOPE AND LIGHT ELEMENT MIXTURE {me.aiso:8} C12/C13 &quot;
+<span class="ln">692</span>              f&quot;{nml.r12_13:12.4E} O16/O18 {nml.r16_18:12.4E} H2 &quot;
+<span class="ln">693</span>              f&quot;{nml.xh2_ini:12.4E} HE3 {nml.xhe3_ini:12.4E} LI6 &quot;
+<span class="ln">694</span>              f&quot;{nml.xli6_ini:12.4E} LI7 {nml.xli7_ini:12.4E} BE9 &quot;
+<span class="ln">695</span>              f&quot;{nml.xbe9_ini:12.4E} APPLIED TO STARTING MODEL.&quot;)  # 605
+<span class="ln">696</span>    # label 603: the settling switches. DBG 12/95: Z diffusion needs Y
+<span class="ln">697</span>    # diffusion and Thoul&#x27;s coefficients.
+<span class="ln">698</span>    if nml.ldifz:
+<span class="ln">699</span>        nml.ldify = True
+<span class="ln">700</span>        nml.lthoul = True
+<span class="ln">701</span>    # G Somers 04/15: light-element diffusion.
+<span class="ln">702</span>    if nml.ldifli:
+<span class="ln">703</span>        nml.lnewdif = True
+<span class="ln">704</span>        nml.ldify = True
+<span class="ln">705</span>        nml.ldifz = True
+<span class="ln">706</span>        nml.lthoul = True
+<span class="ln">707</span>        nml.lthoulfit = False
+<span class="ln">708</span>        nml.ilambda = 4
+<span class="ln">709</span>
+<span class="ln">710</span>    # The run&#x27;s parameters: the namelists as read, and the derived values.
+<span class="ln">711</span>    if nml.npoint &lt;= 0:
+<span class="ln">712</span>        nml.npoint = 9999
+<span class="ln">713</span>    if byp.npenv &lt;= 0:
+<span class="ln">714</span>        byp.npenv = 9999
+<span class="ln">715</span>    if nml.nprtmod &lt;= 0:
+<span class="ln">716</span>        nml.nprtmod = 9999
+<span class="ln">717</span>    if nml.nprtpt &lt;= 0:
+<span class="ln">718</span>        nml.nprtpt = 9999
+<span class="ln">719</span>    _write_namelist(io.ishort, &#x27;PHYSICS&#x27;, _PHYSICS, owners)
+<span class="ln">720</span>    _write_namelist(io.ishort, &#x27;CONTROL&#x27;, _CONTROL, owners)
+<span class="ln">721</span>    _write_namelist(io.ishort, &#x27;DERIVED&#x27;, _DERIVED, owners)
+<span class="ln">722</span>
+<span class="ln">723</span>    # 10/15/26: every mixing length the run uses must be positive. Under
+<span class="ln">724</span>    # solar calibration only CMIXLA(1) comes from the namelist.
+<span class="ln">725</span>    if nml.lcals:
+<span class="ln">726</span>        ncmxck = 1
+<span class="ln">727</span>    else:
+<span class="ln">728</span>        ncmxck = min(nml.numrun, 50)
+<span class="ln">729</span>    lcmxbad = False
+<span class="ln">730</span>    for i in range(1, ncmxck + 1):
+<span class="ln">731</span>        if nml.cmixla[i] &lt;= 0.0:
+<span class="ln">732</span>            lcmxbad = True
+<span class="ln">733</span>            text = (f&quot; ERROR IN SUBROUTINE PARMIN\nILLEGAL MIXING LENGTH: &quot;
+<span class="ln">734</span>                    f&quot;CMIXLA({i:2d}) ={nml.cmixla[i]:12.4E} - MUST BE &quot;
+<span class="ln">735</span>                    &quot;POSITIVE&quot;)                                  # 8801
+<span class="ln">736</span>            io.write(io.ishort, text)
+<span class="ln">737</span>            print(text)
+<span class="ln">738</span>    if lcmxbad:
+<span class="ln">739</span>        if nml.lcals:
+<span class="ln">740</span>            text = (&quot;SOLAR CALIBRATION IS ON, SO ONLY CMIXLA(1) IS READ FROM&quot;
+<span class="ln">741</span>                    &quot; THE NAMELIST\nRUN STOPPED&quot;)                # 8802
+<span class="ln">742</span>        else:
+<span class="ln">743</span>            text = (f&quot;CMIXLA MUST BE SET FOR EACH OF THE{ncmxck:3d} KIND &quot;
+<span class="ln">744</span>                    &quot;CARDS\nRUN STOPPED&quot;)                        # 8803
+<span class="ln">745</span>        io.write(io.ishort, text)
+<span class="ln">746</span>        print(text)
+<span class="ln">747</span>        raise SystemExit
+<span class="ln">748</span>
+<span class="ln">749</span>    if nml.kttau in _KTTAU_TEXT:
+<span class="ln">750</span>        io.write(io.ishort, _KTTAU_TEXT[nml.kttau])
+<span class="ln">751</span>    if nml.lpulse:
+<span class="ln">752</span>        io.write(io.ishort, &quot;\n CALCULATE PULSATION OUTPUT ON LAST MODEL&quot;)
+<span class="ln">753</span>    if nml.lpurez:
+<span class="ln">754</span>        io.write(io.ishort, &#x27;  USING PURE C AND N OPACITY TABLES&#x27;)
+<span class="ln">755</span>
+<span class="ln">756</span>    # The run&#x27;s description (formats 310, 314, 320).
+<span class="ln">757</span>    rule = &#x27;#&#x27; + &#x27;=&#x27; * 100
+<span class="ln">758</span>    description = (f&quot;# DESCRIPTION OF RUN:{descrip[1]:&lt;80.80}\n#&quot;
+<span class="ln">759</span>                   + &#x27; &#x27; * 9 + &#x27;  &#x27; + &#x27; &#x27; * 8
+<span class="ln">760</span>                   + f&quot;: {descrip[2]:&lt;80.80}\n{rule}&quot;)
+<span class="ln">761</span>    io.write(io.imodpt, description)
+<span class="ln">762</span>    io.write(io.ishort, &quot;#\n&quot; + rule)
+<span class="ln">763</span>    io.write(io.ishort, verline)
+<span class="ln">764</span>    io.write(io.ishort, description)
+<span class="ln">765</span>    if nml.ltrack:
+<span class="ln">766</span>        io.write(io.itrack, &quot;#\n&quot; + rule)
+<span class="ln">767</span>        io.write(io.itrack, verline)
+<span class="ln">768</span>        io.write(io.itrack, description)
+<span class="ln">769</span>    io.write(io.ishort, &quot; USING OSCILATORY SPLINE INTERPOLATION IN HPOINT&quot;)
+<span class="ln">770</span>
+<span class="ln">771</span>    # Interpret the run from the sequence of &quot;kind&quot; cards.
+<span class="ln">772</span>    io.write(io.ishort, &quot;\n&quot; + &#x27; &#x27; * 35 + &quot;RUN CARDS\n&quot;)
+<span class="ln">773</span>    nml.lfirst[1] = True
+<span class="ln">774</span>    rl = runloop_mod
+<span class="ln">775</span>    for nkind in range(1, nml.numrun + 1):
+<span class="ln">776</span>        rl.iresca[nkind] = kindrn[nkind]
+<span class="ln">777</span>        if kindrn[nkind] == 1:
+<span class="ln">778</span>            # Evolve card. MHP 10/24: stop at an age, or at a central D, X
+<span class="ln">779</span>            # or Y.
+<span class="ln">780</span>            if (nml.endage[nkind] &gt; 0.0 or nml.end_dcen[nkind] &gt; 0.0
+<span class="ln">781</span>                    or nml.end_xcen[nkind] &gt; 0.0
+<span class="ln">782</span>                    or nml.end_ycen[nkind] &gt; 0.0):
+<span class="ln">783</span>                rl.lendag[nkind] = True
+<span class="ln">784</span>            else:
+<span class="ln">785</span>                rl.lendag[nkind] = False
+<span class="ln">786</span>            rl.lsetdt[nkind] = nml.setdt[nkind] &gt; 0.0
+<span class="ln">787</span>            if nml.nmodls[nkind] &gt; 0:
+<span class="ln">788</span>                if nml.lfirst[nkind]:
+<span class="ln">789</span>                    _screen_and_short(
+<span class="ln">790</span>                        f&quot;\n RUN #{nkind:3d}   EVOLVE {nml.nmodls[nkind]:5d}&quot;
+<span class="ln">791</span>                        &#x27; MODELS, STARTING WITH THE INPUT &quot;FIRST MODEL&quot;.&#x27;)
+<span class="ln">792</span>                else:
+<span class="ln">793</span>                    _screen_and_short(
+<span class="ln">794</span>                        f&quot;\n RUN #{nkind:3d}   EVOLVE {nml.nmodls[nkind]:5d}&quot;
+<span class="ln">795</span>                        &quot; MODELS, STARTING WITH THE PREVIOUS RUN&#x27;S LAST &quot;
+<span class="ln">796</span>                        &quot;MODEL.&quot;)
+<span class="ln">797</span>                if rl.lendag[nkind] or rl.lsetdt[nkind]:
+<span class="ln">798</span>                    _screen_and_short(
+<span class="ln">799</span>                        f&quot; EVOLVE TO AGE {_l(rl.lendag[nkind])} SET DELT &quot;
+<span class="ln">800</span>                        f&quot;{_l(rl.lsetdt[nkind])} FINAL AGE &quot;
+<span class="ln">801</span>                        f&quot;{nml.endage[nkind]:9.2E} FIXED TSTEP &quot;
+<span class="ln">802</span>                        f&quot;{nml.setdt[nkind]:9.2E} CENTRAL D &quot;
+<span class="ln">803</span>                        f&quot;{nml.end_dcen[nkind]:10.4E} CENTRAL X &quot;
+<span class="ln">804</span>                        f&quot;{nml.end_xcen[nkind]:12.4E} CENTRAL Y &quot;
+<span class="ln">805</span>                        f&quot;{nml.end_ycen[nkind]:12.4E}&quot;)          # 370
+<span class="ln">806</span>        elif kindrn[nkind] == 2:
+<span class="ln">807</span>            # Rescale card: mass, X, Z and core mass, in RESCAL(1..4, card).
+<span class="ln">808</span>            rl.rescal[1, nkind] = rsclm[nkind]
+<span class="ln">809</span>            rl.rescal[2, nkind] = rsclx[nkind]
+<span class="ln">810</span>            rl.rescal[3, nkind] = rsclz[nkind]
+<span class="ln">811</span>            rl.rescal[4, nkind] = rsclcm[nkind]
+<span class="ln">812</span>            if nml.nmodls[nkind] &gt; 0:
+<span class="ln">813</span>                if nml.lfirst[nkind]:
+<span class="ln">814</span>                    _screen_and_short(f&quot;\n RUN #{nkind:3d}   RESCALE THE &quot;
+<span class="ln">815</span>                                      &#x27;INPUT MODEL: &quot;FIRST MODEL&quot;.&#x27;)  # 450
+<span class="ln">816</span>                else:
+<span class="ln">817</span>                    _screen_and_short(f&quot;\n RUN #{nkind:3d}   RESCALE THE &quot;
+<span class="ln">818</span>                                      &quot;PREVIOUS RUN&#x27;S LAST MODEL.&quot;)   # 451
+<span class="ln">819</span>                _screen_and_short(_relax_text(nml.nmodls[nkind], nkind))
+<span class="ln">820</span>        elif kindrn[nkind] == 3:
+<span class="ln">821</span>            # Rescale-and-evolve card.
+<span class="ln">822</span>            rl.rescal[1, nkind] = rsclm[nkind]
+<span class="ln">823</span>            rl.rescal[2, nkind] = rsclx[nkind]
+<span class="ln">824</span>            rl.rescal[3, nkind] = rsclz[nkind]
+<span class="ln">825</span>            rl.rescal[4, nkind] = rsclcm[nkind]
+<span class="ln">826</span>            if nml.lfirst[nkind]:
+<span class="ln">827</span>                _screen_and_short(f&quot;\n RUN #{nkind:3d}   RESCALE &amp; EVOLVE &quot;
+<span class="ln">828</span>                                  &#x27;THE INPUT MODEL: &quot;FIRST MODEL&quot;.&#x27;)  # 550
+<span class="ln">829</span>            else:
+<span class="ln">830</span>                # Question (see the page): format 451, its own 551 is
+<span class="ln">831</span>                # commented out.
+<span class="ln">832</span>                _screen_and_short(f&quot;\n RUN #{nkind:3d}   RESCALE THE &quot;
+<span class="ln">833</span>                                  &quot;PREVIOUS RUN&#x27;S LAST MODEL.&quot;)
+<span class="ln">834</span>            _screen_and_short(_relax_text(nml.nmodls[nkind], nkind))
+<span class="ln">835</span>        # Question (see the page): runs for every card, evolve cards too.
+<span class="ln">836</span>        if rl.rescal[3, nkind] &gt;= 0.0:
+<span class="ln">837</span>            comp_mod.zenv = rl.rescal[3, nkind]
+<span class="ln">838</span>    # label 1000
+<span class="ln">839</span>    a = args
+<span class="ln">840</span>    return (a.falex06, a.fallard, a.fatm, a.ffermi, a.fliv95, a.fpatm,
+<span class="ln">841</span>            a.fpenv, a.fpmod, a.fpurez, a.fscvh, a.fscvhe, a.fscvz)</pre></details>
+</section>
+<section class='def' id='def-EXPAND_VALUE'><h3><span class='kind'>subroutine</span>EXPAND_VALUE</h3>
+<p class='muted'>lines 1461–1508 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/parmin.f#L1461-L1508'>GitHub</a></p>
+<pre>SUBROUTINE EXPAND_VALUE(NML_VAR)</pre>
+<div class='notes'><p>Replaces a placeholder at the start of a file name, <code>{YREC_INPUT}</code>, <code>{YREC_START}</code> or <code>{YREC_OUTPUT}</code>, by the value of the environment variable of that name, or, if it is not set, by a default: <code>../../input</code>, <code>../../startmodels</code> or <code>output</code>. A placeholder elsewhere in the name is left as it is.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>Replace any defined &quot;{YREC_XXX}&quot; placeholder string in the passed
+variable with the value of the corresponding environment variable.</pre></details>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='#def-PARMIN'>PARMIN</a> ×23</li>
+</ul>
+<details><summary>External calls (1)</summary><p><code>GETENV</code></p></details>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">1461</span>      SUBROUTINE EXPAND_VALUE(NML_VAR)
+<span class="ln">1462</span>C 10/20/26 MHP via Claude
+<span class="ln">1463</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">1464</span>C explicit declarations.
+<span class="ln">1465</span>      IMPLICIT NONE
+<span class="ln">1466</span>      INTEGER I,NUM_ENVVARS
+<span class="ln">1467</span>      PARAMETER (NUM_ENVVARS=3) ! Number of possible env. vars.
+<span class="ln">1468</span>      CHARACTER*256 NML_VAR
+<span class="ln">1469</span>      CHARACTER*256 TEMP
+<span class="ln">1470</span>      CHARACTER*256 PHOLDERS(NUM_ENVVARS)
+<span class="ln">1471</span>      CHARACTER*256 DEFAULTS(NUM_ENVVARS)
+<span class="ln">1472</span>      CHARACTER*256 PHOLDER
+<span class="ln">1473</span>      INTEGER STLEN1, STLEN2, PH_LEN, DEF_LEN
+<span class="ln">1474</span>C Each placeholder (env var name enclosed in curly braces) to be
+<span class="ln">1475</span>C supported for expansion in namelists, along with default value in the
+<span class="ln">1476</span>C case where the var is not defined in the execution environment.
+<span class="ln">1477</span>C The number of assignment pairs here must match the value of the
+<span class="ln">1478</span>C parameter NUM_ENVVARS, above.
+<span class="ln">1479</span>      PHOLDERS(1) = &quot;{YREC_INPUT}&quot;
+<span class="ln">1480</span>      DEFAULTS(1) = &quot;../../input&quot;
+<span class="ln">1481</span>
+<span class="ln">1482</span>      PHOLDERS(2) = &quot;{YREC_START}&quot;
+<span class="ln">1483</span>      DEFAULTS(2) = &quot;../../startmodels&quot;
+<span class="ln">1484</span>
+<span class="ln">1485</span>      PHOLDERS(3) = &quot;{YREC_OUTPUT}&quot;
+<span class="ln">1486</span>      DEFAULTS(3) = &quot;output&quot;
+<span class="ln">1487</span>
+<span class="ln">1488</span>      DO 5000 i=1, NUM_ENVVARS
+<span class="ln">1489</span>        PH_LEN = LEN_TRIM(PHOLDERS(i))
+<span class="ln">1490</span>        DEF_LEN = LEN_TRIM(DEFAULTS(i))
+<span class="ln">1491</span>        PHOLDER = PHOLDERS(i)(1:PH_LEN)
+<span class="ln">1492</span>
+<span class="ln">1493</span>        IF (NML_VAR(1:PH_LEN) .EQ. PHOLDER) THEN  ! If placeholder
+<span class="ln">1494</span>            CALL getenv(PHOLDER(2:PH_LEN-1), TEMP)
+<span class="ln">1495</span>            STLEN1 = LEN_TRIM(TEMP)
+<span class="ln">1496</span>            STLEN2 = LEN_TRIM(NML_VAR)
+<span class="ln">1497</span>            IF (STLEN1 .NE. 0) THEN     ! If env var set
+<span class="ln">1498</span>                TEMP(STLEN1+1:STLEN1+STLEN2-PH_LEN) = NML_VAR(PH_LEN+1:STLEN2)
+<span class="ln">1499</span>                !print *,&quot;Override: &quot;,TEMP(1:LEN_TRIM(TEMP))
+<span class="ln">1500</span>            ELSE                        ! No env var. Use default path.
+<span class="ln">1501</span>                TEMP(1:DEF_LEN) = DEFAULTS(i)(1:LEN_TRIM(DEFAULTS(i)))
+<span class="ln">1502</span>                TEMP(DEF_LEN+1:DEF_LEN+STLEN2) = NML_VAR(PH_LEN+1:STLEN2)
+<span class="ln">1503</span>                !print *,&quot;default: &quot;,TEMP(1:LEN_TRIM(TEMP))
+<span class="ln">1504</span>            END IF
+<span class="ln">1505</span>            NML_VAR = TEMP
+<span class="ln">1506</span>        END IF
+<span class="ln">1507</span>5000  CONTINUE
+<span class="ln">1508</span>      END</pre></details>
+<details class='py' id='py-expand_value'><summary>Python version: expand_value</summary><pre class='doc'>Replace a placeholder at the start of a file name, {YREC_INPUT},
+{YREC_START} or {YREC_OUTPUT}, by the environment variable of that
+name, or by its default if it is not set.
+
+Translates: parmin.f#EXPAND_VALUE (09c3b9b)
+
+Arguments: nml_var, the file name.
+
+Returns nml_var, expanded.</pre><pre class='src'><span class="ln">859</span>def expand_value(nml_var):
+<span class="ln">860</span>    &quot;&quot;&quot;Replace a placeholder at the start of a file name, {YREC_INPUT},
+<span class="ln">861</span>    {YREC_START} or {YREC_OUTPUT}, by the environment variable of that
+<span class="ln">862</span>    name, or by its default if it is not set.
+<span class="ln">863</span>
+<span class="ln">864</span>    Translates: parmin.f#EXPAND_VALUE (09c3b9b)
+<span class="ln">865</span>
+<span class="ln">866</span>    Arguments: nml_var, the file name.
+<span class="ln">867</span>
+<span class="ln">868</span>    Returns nml_var, expanded.
+<span class="ln">869</span>    &quot;&quot;&quot;
+<span class="ln">870</span>    for i in range(len(_PHOLDERS)):
+<span class="ln">871</span>        pholder = _PHOLDERS[i]
+<span class="ln">872</span>        ph_len = len(pholder)
+<span class="ln">873</span>        if nml_var[:ph_len] == pholder:
+<span class="ln">874</span>            temp = os.environ.get(pholder[1:ph_len - 1], &#x27;&#x27;).rstrip()
+<span class="ln">875</span>            if len(temp) != 0:
+<span class="ln">876</span>                # The environment variable is set.
+<span class="ln">877</span>                temp = temp + nml_var.rstrip()[ph_len:]
+<span class="ln">878</span>            else:
+<span class="ln">879</span>                # Not set: use the default path.
+<span class="ln">880</span>                temp = _DEFAULTS[i] + nml_var.rstrip()[ph_len:]
+<span class="ln">881</span>            nml_var = temp
+<span class="ln">882</span>    # label 5000
+<span class="ln">883</span>    return nml_var</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_l'><summary>Python version: _l</summary><pre class='doc'>A logical in an L format: T or F.</pre><pre class='src'><span class="ln">222</span>def _l(flag):
+<span class="ln">223</span>    &quot;&quot;&quot;A logical in an L format: T or F.&quot;&quot;&quot;
+<span class="ln">224</span>    return &#x27;T&#x27; if flag else &#x27;F&#x27;</pre></details>
+<details class='py' id='py-_owners'><summary>Python version: _owners</summary><pre class='src'><span class="ln">227</span>def _owners(args):
+<span class="ln">228</span>    return {&#x27;nml&#x27;: nmlpar_mod, &#x27;byp&#x27;: nmlbypass_mod, &#x27;con&#x27;: constants_mod,
+<span class="ln">229</span>            &#x27;ipar&#x27;: intpar_mod, &#x27;loc&#x27;: _this, &#x27;arg&#x27;: args}</pre></details>
+<details class='py' id='py-_value'><summary>Python version: _value</summary><pre class='doc'>Convert one namelist value to the type of the variable it sets.</pre><pre class='src'><span class="ln">232</span>def _value(token, like):
+<span class="ln">233</span>    &quot;&quot;&quot;Convert one namelist value to the type of the variable it sets.&quot;&quot;&quot;
+<span class="ln">234</span>    if isinstance(like, (bool, np.bool_)):
+<span class="ln">235</span>        t = token.upper().lstrip(&#x27;.&#x27;)
+<span class="ln">236</span>        return t.startswith(&#x27;T&#x27;)
+<span class="ln">237</span>    if isinstance(like, str):
+<span class="ln">238</span>        if token[:1] in &quot;&#x27;\&quot;&quot;:
+<span class="ln">239</span>            return token[1:-1].replace(token[0] * 2, token[0])
+<span class="ln">240</span>        return token
+<span class="ln">241</span>    number = token.replace(&#x27;d&#x27;, &#x27;e&#x27;).replace(&#x27;D&#x27;, &#x27;E&#x27;)
+<span class="ln">242</span>    if isinstance(like, (int, np.integer)):
+<span class="ln">243</span>        return int(float(number))
+<span class="ln">244</span>    return float(number)</pre></details>
+<details class='py' id='py-_fortran_order'><summary>Python version: _fortran_order</summary><pre class='doc'>The indices of an array (index 0 unused) from `start` on, in
+Fortran&#x27;s order: the first index varies fastest.</pre><pre class='src'><span class="ln">247</span>def _fortran_order(shape, start):
+<span class="ln">248</span>    &quot;&quot;&quot;The indices of an array (index 0 unused) from `start` on, in
+<span class="ln">249</span>    Fortran&#x27;s order: the first index varies fastest.&quot;&quot;&quot;
+<span class="ln">250</span>    idx = list(start)
+<span class="ln">251</span>    while True:
+<span class="ln">252</span>        yield tuple(idx)
+<span class="ln">253</span>        for d in range(len(idx)):
+<span class="ln">254</span>            idx[d] += 1
+<span class="ln">255</span>            if idx[d] &lt; shape[d]:
+<span class="ln">256</span>                break
+<span class="ln">257</span>            idx[d] = 1
+<span class="ln">258</span>        else:
+<span class="ln">259</span>            return</pre></details>
+<details class='py' id='py-_read_namelist'><summary>Python version: _read_namelist</summary><pre class='doc'>READ(UNIT, NML=group): a minimal reader for the namelist files YREC
+uses (name = values, name(i) = values, repeat counts r*v, quoted
+strings, logicals, D exponents, &#x27;!&#x27; comments). Each value is stored
+where its variable lives.</pre><pre class='src'><span class="ln">262</span>def _read_namelist(path, group, members, owners):
+<span class="ln">263</span>    &quot;&quot;&quot;READ(UNIT, NML=group): a minimal reader for the namelist files YREC
+<span class="ln">264</span>    uses (name = values, name(i) = values, repeat counts r*v, quoted
+<span class="ln">265</span>    strings, logicals, D exponents, &#x27;!&#x27; comments). Each value is stored
+<span class="ln">266</span>    where its variable lives.&quot;&quot;&quot;
+<span class="ln">267</span>    table = {name: (owners[where], name) for where, name in members}
+<span class="ln">268</span>    with open(path) as f:
+<span class="ln">269</span>        # Drop &#x27;!&#x27; comments, outside quoted strings.
+<span class="ln">270</span>        text = &#x27;&#x27;.join(re.sub(r&quot;^((?:[^&#x27;\&quot;!]|&#x27;[^&#x27;]*&#x27;|\&quot;[^\&quot;]*\&quot;)*)!.*&quot;,
+<span class="ln">271</span>                              r&quot;\1&quot;, line) for line in f)
+<span class="ln">272</span>    start = re.search(r&#x27;[&amp;$]&#x27; + group + r&#x27;\b&#x27;, text, re.IGNORECASE)
+<span class="ln">273</span>    if start is None:
+<span class="ln">274</span>        raise SystemExit(f&quot;namelist /{group}/ not found in {path}&quot;)
+<span class="ln">275</span>    body = text[start.end():]
+<span class="ln">276</span>    tokens = re.findall(r&quot;&#x27;(?:[^&#x27;]|&#x27;&#x27;)*&#x27;|\&quot;(?:[^\&quot;]|\&quot;\&quot;)*\&quot;|&quot;
+<span class="ln">277</span>                        r&quot;[A-Za-z_]\w*\s*(?:\([^)]*\))?\s*=|/|&quot;
+<span class="ln">278</span>                        r&quot;[&amp;$]END\b|[^\s,&#x27;\&quot;/=]+&quot;, body, re.IGNORECASE)
+<span class="ln">279</span>    target = None
+<span class="ln">280</span>    for tok in tokens:
+<span class="ln">281</span>        if tok == &#x27;/&#x27; or tok.upper().lstrip(&#x27;&amp;$&#x27;) == &#x27;END&#x27;:
+<span class="ln">282</span>            break
+<span class="ln">283</span>        if tok.endswith(&#x27;=&#x27;):
+<span class="ln">284</span>            m = re.match(r&#x27;(\w+)\s*(?:\(([^)]*)\))?&#x27;, tok)
+<span class="ln">285</span>            owner, attr = table[m.group(1).lower()]
+<span class="ln">286</span>            current = getattr(owner, attr)
+<span class="ln">287</span>            if m.group(2):
+<span class="ln">288</span>                first = tuple(int(i) for i in m.group(2).split(&#x27;,&#x27;))
+<span class="ln">289</span>            else:
+<span class="ln">290</span>                first = None
+<span class="ln">291</span>            if isinstance(current, np.ndarray):
+<span class="ln">292</span>                place = _fortran_order(current.shape,
+<span class="ln">293</span>                                       first or (1,) * current.ndim)
+<span class="ln">294</span>            elif isinstance(current, list):
+<span class="ln">295</span>                place = iter(range(first[0] if first else 1, len(current)))
+<span class="ln">296</span>            else:
+<span class="ln">297</span>                place = None
+<span class="ln">298</span>            target = (owner, attr, current, place)
+<span class="ln">299</span>            continue
+<span class="ln">300</span>        owner, attr, current, place = target
+<span class="ln">301</span>        count, _, item = tok.rpartition(&#x27;*&#x27;) if re.match(r&#x27;\d+\*&#x27;, tok) \
+<span class="ln">302</span>            else (&#x27;1&#x27;, &#x27;&#x27;, tok)
+<span class="ln">303</span>        for _ in range(int(count)):
+<span class="ln">304</span>            if place is None:
+<span class="ln">305</span>                setattr(owner, attr, _value(item, current))
+<span class="ln">306</span>            else:
+<span class="ln">307</span>                where = next(place)
+<span class="ln">308</span>                like = current[where]
+<span class="ln">309</span>                current[where] = _value(item, like)</pre></details>
+<details class='py' id='py-_format_value'><summary>Python version: _format_value</summary><pre class='src'><span class="ln">312</span>def _format_value(v):
+<span class="ln">313</span>    if isinstance(v, (bool, np.bool_)):
+<span class="ln">314</span>        return _l(v)
+<span class="ln">315</span>    if isinstance(v, str):
+<span class="ln">316</span>        return &quot;&#x27;&quot; + v + &quot;&#x27;&quot;
+<span class="ln">317</span>    return repr(v.item() if isinstance(v, np.generic) else v)</pre></details>
+<details class='py' id='py-_write_namelist'><summary>Python version: _write_namelist</summary><pre class='doc'>WRITE(UNIT, NML=group): every member with its value (the layout
+approximates the compiler&#x27;s).</pre><pre class='src'><span class="ln">320</span>def _write_namelist(unit, group, members, owners):
+<span class="ln">321</span>    &quot;&quot;&quot;WRITE(UNIT, NML=group): every member with its value (the layout
+<span class="ln">322</span>    approximates the compiler&#x27;s).&quot;&quot;&quot;
+<span class="ln">323</span>    lines = [f&quot;&amp;{group}&quot;]
+<span class="ln">324</span>    for where, name in members:
+<span class="ln">325</span>        v = getattr(owners[where], name)
+<span class="ln">326</span>        if isinstance(v, np.ndarray):
+<span class="ln">327</span>            sub = v[(slice(1, None),) * v.ndim].ravel(order=&#x27;F&#x27;)
+<span class="ln">328</span>            text = &#x27;, &#x27;.join(_format_value(x) for x in sub)
+<span class="ln">329</span>        elif isinstance(v, list):
+<span class="ln">330</span>            text = &#x27;, &#x27;.join(_format_value(x) for x in v[1:])
+<span class="ln">331</span>        else:
+<span class="ln">332</span>            text = _format_value(v)
+<span class="ln">333</span>        lines.append(f&quot; {name.upper()}={text},&quot;)
+<span class="ln">334</span>    lines.append(&quot;/&quot;)
+<span class="ln">335</span>    iounits_mod.write(unit, &quot;\n&quot;.join(lines))</pre></details>
+<details class='py' id='py-_both'><summary>Python version: _both</summary><pre class='doc'>WRITE(*, fmt) and WRITE(ISHORT, fmt) of the same record.</pre><pre class='src'><span class="ln">338</span>def _both(text):
+<span class="ln">339</span>    &quot;&quot;&quot;WRITE(*, fmt) and WRITE(ISHORT, fmt) of the same record.&quot;&quot;&quot;
+<span class="ln">340</span>    print(text)
+<span class="ln">341</span>    iounits_mod.write(iounits_mod.ishort, text)</pre></details>
+<details class='py' id='py-_screen_and_short'><summary>Python version: _screen_and_short</summary><pre class='doc'>WRITE(IOWR, fmt) and WRITE(ISHORT, fmt) of the same record.</pre><pre class='src'><span class="ln">344</span>def _screen_and_short(text):
+<span class="ln">345</span>    &quot;&quot;&quot;WRITE(IOWR, fmt) and WRITE(ISHORT, fmt) of the same record.&quot;&quot;&quot;
+<span class="ln">346</span>    iounits_mod.write(iounits_mod.iowr, text)
+<span class="ln">347</span>    iounits_mod.write(iounits_mod.ishort, text)</pre></details>
+<details class='py' id='py-_relax_text'><summary>Python version: _relax_text</summary><pre class='doc'>Format 452: the rescaling of a rescale card.</pre><pre class='src'><span class="ln">844</span>def _relax_text(nmodls, nkind):
+<span class="ln">845</span>    &quot;&quot;&quot;Format 452: the rescaling of a rescale card.&quot;&quot;&quot;
+<span class="ln">846</span>    r = runloop_mod.rescal
+<span class="ln">847</span>    return (f&quot; RELAX RESCALED MODEL{nmodls:3d} TIMES. RESCALE THE FOLLOWING&quot;
+<span class="ln">848</span>            f&quot;(0=USE CURRENT VALUE):\n MASS {r[1, nkind]:9.6f}   X&quot;
+<span class="ln">849</span>            f&quot;{r[2, nkind]:9.6f}   Z{r[3, nkind]:9.6f}   CORE MASS&quot;
+<span class="ln">850</span>            f&quot;{r[4, nkind]:9.6f}&quot;)</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked: the unit numbers, the <code>DATA</code> values quoted ($L_\odot$, $R_\odot$, <code>CMIXL</code>, <code>ACFPFT</code>), the namelist dump at line 799 against the <code>OPEN</code> at 924, line 1458 (<code>ZENV</code>), line 1270 (<code>TRIDL</code>), the EOS and opacity priorities, <code>TENV</code>, <code>WALPCZ</code>, <code>IMPJMOD</code>, the settling switches, both wind laws' exponents against lines 1000–1086.</p>
+<ol>
+<li><strong>Wrong.</strong> Question 6 lists <code>LSOLWIND</code> among locals "used nowhere else": MDOT reads <code>LSOLWIND</code> from <code>/MASSCHG3/</code>, which PARMIN no longer declares (commented out on 2025-05-30) and nothing else sets, so MDOT's scaled solar wind can no longer be switched on and its constants <code>DMSUN</code>, <code>DMWSUN</code>, <code>DMWMAX</code> are never set. Fix: say so in question 6; point to it from KC's changes.</li>
+<li><strong>Missing question.</strong> The comment derives $\dot J \propto R^{2+5m+4mbc}$; the code (JvS 09/25) uses $a_R = 2 + 5m - 4mc$. For K97 the code reproduces the old law's $2 - \alpha$, so the comment looks stale. Fix: add question 9.</li>
+<li><strong>Unclear (small).</strong> KC's reordering "probably for alignment": a guess, not in the code. Fix: drop it.</li>
+</ol>
+<p>Revised: question 6 corrected; question 9 added; "probably for alignment" dropped.</p></div></details>
+</main></body></html>

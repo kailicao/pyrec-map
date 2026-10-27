@@ -1,0 +1,705 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>liburn2.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ liburn2.f</span></header><main>
+<h1>liburn2.f</h1>
+<p class='muted'>352 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/liburn2.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>liburn2.py</code>, 291 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>LIBURN2</code> is a cheaper version of <a href="../yrec-map/liburn.f.html#def-LIBURN"><code>LIBURN</code></a>: it burns ⁶Li, ⁷Li and ⁹Be over a step in one go, with the rate taken at the geometric mean of its start and end values, without substeps, extrapolation or accretion.</p>
+<p><strong>How it fits.</strong> Called by <a href="../yrec-map/getw.f.html#def-GETW"><code>GETW</code></a> (rotating models, as an alternative to <code>LIBURN</code>) and <a href="../yrec-map/bursmix.f.html#def-BURSMIX"><code>BURSMIX</code></a>. Same arguments, and the same modules as <code>LIBURN</code> without <code>DEUTER_MOD</code> and <code>IOUNITS_MOD</code> (it neither accretes nor writes): <code>NEWRAT_MOD</code>, <code>OLDRAT_MOD</code> (rates from <a href="../yrec-map/lirate88.f.html#def-LIRATE88"><code>LIRATE88</code></a>), <code>SCRTCH_MOD</code>, <code>MDPHY_MOD</code>, <code>OLDMOD_MOD</code>, <code>LIOV_MOD</code>, <code>PREVCZ_MOD</code>, <code>NMLPAR_MOD</code> (<code>LOVSTE</code>, <code>LROT</code>, <code>LINSTB</code>), <code>CONSTANTS_MOD</code>, <code>DIMENSIONS_MOD</code>. No calls.</p>
+<p><strong>The method.</strong> The base of the convection zone is found as in <code>LIBURN</code>. Then, in each radiative point below both bases (skipping points where the ⁹Be rate, at the start or the end, is at most $10^{-32}$; destroying everything above $\log T = 7$), and in the convection zone as a whole,</p>
+<p>$$x \leftarrow x\,\exp\!\left(-\Delta t\,\sqrt{\lambda_0\lambda_1}\right),$$</p>
+<p>with $\lambda_0$, $\lambda_1$ the rates (mass-weighted means in the zone) at the start and end of the step; set to 0 when the exponent is 30 or more, or the result below $10^{-24}$. Points left by a retreating zone get the weighted rate of <code>LIBURN</code>'s step 4.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused argument <code>HD</code> removed.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (the namelist members of <code>/DPMIX/</code> and <code>/ROT/</code> to <code>NMLPAR_MOD</code>, <code>/CONST1/</code> to <code>CONSTANTS_MOD</code>; the unused <code>/LUOUT/</code> dropped), <code>JSON</code> from <code>DIMENSIONS_MOD</code>, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>No overflow guard.</strong> The last loop divides by <code>EXP(DLI6)</code>, <code>EXP(DLI7)</code>, <code>EXP(DBE9)</code> without the 30 cut or KC's <code>SAFEDIVEXP</code>, which <code>LIBURN</code> now uses. Should it get the same guard?</li>
+<li><strong>Exit from the last loop.</strong> A point below the ⁹Be rate threshold ends the routine (<code>GOTO 200</code>) rather than skipping that point (<code>LIBURN</code> does the same), while the radiative loop skips such points.</li>
+<li><strong>Same questions as <code>LIBURN</code></strong> on the <code>HRO</code> radius in the overshoot branch, the points newly in the zone, the units of the step, the sign of <code>FRAD</code> in the last loop (<code>LIBURN</code>, question 7) and the bottom point's adjusted rates left in <code>NEWRAT_MOD</code> (question 8).</li>
+<li><strong>Header.</strong> The banner comment still says "LIBURN".</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+LIBURN
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+11/91 HR ADDED TO CALL.
+SUBROUTINE LIBURN2(DELTS,HCOMP,HD,HR,HS1,HS2,HT,JNENV,JNENV0,M)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-LIBURN2'>LIBURN2</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-LIBURN2'><h3><span class='kind'>subroutine</span>LIBURN2</h3>
+<p class='muted'>lines 8–352 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/liburn2.f#L8-L352'>GitHub</a></p>
+<pre>SUBROUTINE LIBURN2(DELTS,HCOMP,HR,HS1,HS2,HT,JNENV,JNENV0,M)</pre>
+<div class='notes'><p>One-step burning with the geometric-mean rate (above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+LIBURN
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+11/91 HR ADDED TO CALL.
+SUBROUTINE LIBURN2(DELTS,HCOMP,HD,HR,HS1,HS2,HT,JNENV,JNENV0,M)  ! KC 2025-05-31</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/liov_mod.f.html#def-LIOV_MOD'>LIOV_MOD</a>, <a href='../yrec-map/mdphy_mod.f.html#def-MDPHY_MOD'>MDPHY_MOD</a>, <a href='../yrec-map/newrat_mod.f.html#def-NEWRAT_MOD'>NEWRAT_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/oldmod_mod.f.html#def-OLDMOD_MOD'>OLDMOD_MOD</a>, <a href='../yrec-map/oldrat_mod.f.html#def-OLDRAT_MOD'>OLDRAT_MOD</a>, <a href='../yrec-map/prevcz_mod.f.html#def-PREVCZ_MOD'>PREVCZ_MOD</a>, <a href='../yrec-map/scrtch_mod.f.html#def-SCRTCH_MOD'>SCRTCH_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/bursmix.f.html#def-BURSMIX'>BURSMIX</a> <span class='muted'>(bursmix.f)</span></li>
+<li><a href='../yrec-map/getw.f.html#def-GETW'>GETW</a> <span class='muted'>(getw.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">8</span>      SUBROUTINE LIBURN2(DELTS,HCOMP,HR,HS1,HS2,HT,JNENV,JNENV0,M)
+<span class="ln">9</span>C 10/15/26 MHP via Claude
+<span class="ln">10</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">11</span>C PARAMETER(JSON=5000) here.
+<span class="ln">12</span>      USE DIMENSIONS_MOD
+<span class="ln">13</span>C 10/14/26 MHP via Claude
+<span class="ln">14</span>C code changed to convert COMMON/SCRTCH/ into SCRTCH_MOD.
+<span class="ln">15</span>      USE SCRTCH_MOD
+<span class="ln">16</span>C 10/14/26 MHP via Claude
+<span class="ln">17</span>C code changed to convert COMMON/PREVCZ/ into PREVCZ_MOD.
+<span class="ln">18</span>      USE PREVCZ_MOD
+<span class="ln">19</span>C 10/14/26 MHP via Claude
+<span class="ln">20</span>C code changed to convert COMMON/OLDRAT/ into OLDRAT_MOD.
+<span class="ln">21</span>      USE OLDRAT_MOD
+<span class="ln">22</span>C 10/14/26 MHP via Claude
+<span class="ln">23</span>C code changed to convert COMMON/OLDMOD/ into OLDMOD_MOD.
+<span class="ln">24</span>      USE OLDMOD_MOD
+<span class="ln">25</span>C 10/14/26 MHP via Claude
+<span class="ln">26</span>C code changed to convert COMMON/NEWRAT/ into NEWRAT_MOD.
+<span class="ln">27</span>      USE NEWRAT_MOD
+<span class="ln">28</span>C 10/14/26 MHP via Claude
+<span class="ln">29</span>C code changed to convert COMMON/MDPHY/ into MDPHY_MOD.
+<span class="ln">30</span>      USE MDPHY_MOD
+<span class="ln">31</span>C 10/14/26 MHP via Claude
+<span class="ln">32</span>C code changed to convert COMMON/LIOV/ into LIOV_MOD.
+<span class="ln">33</span>      USE LIOV_MOD
+<span class="ln">34</span>C 10/14/26 MHP via Claude
+<span class="ln">35</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">36</span>      USE NMLPAR_MOD
+<span class="ln">37</span>C 10/14/26 MHP via Claude
+<span class="ln">38</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">39</span>      USE CONSTANTS_MOD
+<span class="ln">40</span>C 10/20/26 MHP via Claude
+<span class="ln">41</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">42</span>C explicit declarations.
+<span class="ln">43</span>      IMPLICIT NONE
+<span class="ln">44</span>      REAL*8 BBE9,BBE90,BLI6,BLI60,BLI7,BLI70,CZBE9,CZLI6,CZLI7,DBE9,
+<span class="ln">45</span>     *       DDJ,DDJM1,DELTS,DLI6,DLI7,DMASS,DR,FBE9,FBE90,FLI6,FLI60,
+<span class="ln">46</span>     *       FLI7,FLI70,FM,FM0,FRAD,FX,HCOMP,HR,HS1,HS2,HS2SAV,HSBEG,
+<span class="ln">47</span>     *       HSEND,HT,R,RATBE9,RATLI6,RATLI7,RBASE,ROS,TBE9,TLI6,TLI7
+<span class="ln">48</span>      INTEGER I,J,JENV,JENV0,JNENV,JNENV0,M,MAXJ,MINJ
+<span class="ln">49</span>
+<span class="ln">50</span>C 10/13/26 MHP via Claude: removed the unused COMMON/IOUNITS/ declaration
+<span class="ln">51</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">52</span>C 9/25/26 MHP via Claude
+<span class="ln">53</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">54</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">55</span>C MHP 10/91 COMMON BLOCK ADDED FOR OVERSHOOT.
+<span class="ln">56</span>C 10/12/26 MHP via Claude
+<span class="ln">57</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">58</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">59</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">60</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">61</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">62</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">63</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">64</span>C
+<span class="ln">65</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">66</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">67</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">68</span>C 10/13/26 MHP via Claude: removed the unused COMMON/DPMIX/ declaration
+<span class="ln">69</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">70</span>C MHP 11/91 COMMON BLOCK ADDED FOR OVERSHOOT.
+<span class="ln">71</span>C 11/91 COMMON BLOCK ADDED FOR THE EXACT LOCATION OF THE BASE OF THE
+<span class="ln">72</span>C SURFACE CZ AND THE INTEGRATED BURNING RATES THROUGHOUT IT. USED TO
+<span class="ln">73</span>C REMEMBER THE PREVIOUS &quot;END OF TIMESTEP VALUES&quot; FOR THE NEW
+<span class="ln">74</span>C &quot;BEGINNING OF TIMESTEP VALUES&quot;.
+<span class="ln">75</span>C       DIMENSION HCOMP(15,JSON),HD(JSON),HS2(JSON),HT(JSON),HS1(JSON)  ! KC 2025-05-31
+<span class="ln">76</span>      DIMENSION HCOMP(15,JSON),HS2(JSON),HT(JSON),HS1(JSON)
+<span class="ln">77</span>      DIMENSION RATLI6(JSON),RATLI7(JSON),RATBE9(JSON)
+<span class="ln">78</span>      DIMENSION HR(JSON)
+<span class="ln">79</span>C       DATA TLIM/6.0D0/
+<span class="ln">80</span>      SAVE
+<span class="ln">81</span>C DETERMINE LITHIUM AND BERYLLIUM BURNING.
+<span class="ln">82</span>C THE BURNING RATES DEPEND ON THE LOCAL T AND RHO, THE ABUNDANCE, AND
+<span class="ln">83</span>C IN THE CASE OF CONVECTION ZONES THE MIXING.
+<span class="ln">84</span>C
+<span class="ln">85</span>C IN RADIATIVE REGIONS BURNING IS DONE IMPLICITLY.
+<span class="ln">86</span>C IN CONVECTIVE REGIONS THE PROGRAM ITERATES BETWEEN BURNING AND MIXING
+<span class="ln">87</span>C TO CORRECT THE RATES FOR THE CHANGE IN ABUNDANCE AS A FUNCTION OF TIME.
+<span class="ln">88</span>C THE DEGREE OF LITHIUM BURNING IN A SURFACE CZ DEPENDS SENSITIVELY
+<span class="ln">89</span>C ON THE TEMPERATURE AT ITS BASE - SO ACCURATELY LOCATING IS IMPORTANT.
+<span class="ln">90</span>C DETERMINE THE TRUE LOCATION (FX) OF THE BASE OF THE CZ AT THE END
+<span class="ln">91</span>C OF THE TIMESTEP, AND THE LOCATION OF THE EDGE OF OVERSHOOT REGIONS
+<span class="ln">92</span>C IF APPLICABLE.
+<span class="ln">93</span>      IF(JNENV.GT.1.AND.JNENV.LT.M)THEN
+<span class="ln">94</span>         IF(LROT.AND.LINSTB)THEN
+<span class="ln">95</span>            DDJ = DELAM(JNENV) - DELRM(JNENV)
+<span class="ln">96</span>            DDJM1 = DELAM(JNENV-1) - DELRM(JNENV-1)
+<span class="ln">97</span>         ELSE
+<span class="ln">98</span>C EVALUATE DEL(AD) - DEL(RAD) AT THE LAST CONVECTIVE POINT AND THE ONE
+<span class="ln">99</span>C BELOW IT.
+<span class="ln">100</span>            DDJ = SDEL(3,JNENV)-SDEL(1,JNENV)
+<span class="ln">101</span>            DDJM1 = SDEL(3,JNENV-1)-SDEL(1,JNENV-1)
+<span class="ln">102</span>         ENDIF
+<span class="ln">103</span>C USE LINEAR INTERPOLATION TO FIND THE DISTANCE OF THE TRUE LOCATION
+<span class="ln">104</span>C OF THE BASE FROM THE ZONE MIDPOINT. IF FX IS NEGATIVE,THEN THE TRUE
+<span class="ln">105</span>C BASE IS HIGHER; IF IT IS POSITIVE, THE TRUE BASE IS LOWER.
+<span class="ln">106</span>         FX = MAX(-0.5D0,0.5D0-DDJM1/(DDJM1-DDJ))
+<span class="ln">107</span>         FX = MIN(0.5D0,FX)
+<span class="ln">108</span>         IF(.NOT.LOVSTE)THEN
+<span class="ln">109</span>            JENV = JNENV
+<span class="ln">110</span>            JENV0 = JNENV0
+<span class="ln">111</span>         ELSE
+<span class="ln">112</span>C STARTING CZ DEPTH
+<span class="ln">113</span>            IF(RBASE0.EQ.0.0D0)THEN
+<span class="ln">114</span>               RBASE0 = 0.5D0*(EXP(CLN*HRO(JNENV0))
+<span class="ln">115</span>     *                  +EXP(CLN*HRO(JNENV0-1)))
+<span class="ln">116</span>               ROS = RBASE0 - PSCAL0
+<span class="ln">117</span>               DO J = JNENV0-1,1,-1
+<span class="ln">118</span>                  R = EXP(CLN*HRO(J))
+<span class="ln">119</span>                  IF(R.LT.ROS)THEN
+<span class="ln">120</span>                     JENV0 = J + 1
+<span class="ln">121</span>                     GOTO 11
+<span class="ln">122</span>                  ENDIF
+<span class="ln">123</span>               END DO
+<span class="ln">124</span>               JENV0 = 1
+<span class="ln">125</span>   11          CONTINUE
+<span class="ln">126</span>            ELSE
+<span class="ln">127</span>               JENV0 = JENVOS
+<span class="ln">128</span>            ENDIF
+<span class="ln">129</span>C ENDING CZ DEPTH : DETERMINE OVERSHOOT FROM TRUE CZ BASE.
+<span class="ln">130</span>            DR = EXP(CLN*HR(JNENV))-EXP(CLN*HR(JNENV-1))
+<span class="ln">131</span>            RBASE = 0.5D0*(EXP(CLN*HR(JNENV))+EXP(CLN*HR(JNENV-1)))
+<span class="ln">132</span>     *              -FX*DR
+<span class="ln">133</span>            RBASE0 = RBASE
+<span class="ln">134</span>            ROS = RBASE - PSCAL1
+<span class="ln">135</span>            DO J = JNENV-1,1,-1
+<span class="ln">136</span>               R = EXP(CLN*HR(J))
+<span class="ln">137</span>               IF(R.LT.ROS)THEN
+<span class="ln">138</span>                  JENV = J + 1
+<span class="ln">139</span>                  DR = EXP(CLN*HRO(J+1))-R
+<span class="ln">140</span>                  FX = 0.5D0-((ROS-R)/DR)
+<span class="ln">141</span>                  FX = MAX(-0.5D0,FX)
+<span class="ln">142</span>                  FX = MIN(0.5D0,FX)
+<span class="ln">143</span>                  GOTO 12
+<span class="ln">144</span>               ENDIF
+<span class="ln">145</span>            END DO
+<span class="ln">146</span>            JENV = 1
+<span class="ln">147</span>   12       CONTINUE
+<span class="ln">148</span>         ENDIF
+<span class="ln">149</span>      ELSE
+<span class="ln">150</span>         JENV = JNENV
+<span class="ln">151</span>         JENV0 = JNENV0
+<span class="ln">152</span>      ENDIF
+<span class="ln">153</span>      JENVOS = JENV
+<span class="ln">154</span>C RADIATIVE INTERIOR.
+<span class="ln">155</span>      MINJ = MIN(JENV,JENV0)
+<span class="ln">156</span>      MAXJ = MAX(JENV,JENV0)
+<span class="ln">157</span>      DO I = 1,MINJ-1
+<span class="ln">158</span>         IF(RBE9(I).LE.1.0D-32 .OR. RBE90(I).LE.1.0D-32)GOTO 50
+<span class="ln">159</span>         IF(HCOMP(13,I).LT.1.0D-24.AND.HCOMP(14,I).LT.1.0D-24
+<span class="ln">160</span>     *   .AND.HCOMP(15,I).LT.1.0D-24)GOTO 50
+<span class="ln">161</span>         IF(HT(I).GT.7.0D0)THEN
+<span class="ln">162</span>            HCOMP(13,I) = 0.0D0
+<span class="ln">163</span>            HCOMP(14,I) = 0.0D0
+<span class="ln">164</span>            HCOMP(15,I) = 0.0D0
+<span class="ln">165</span>            GOTO 50
+<span class="ln">166</span>         ENDIF
+<span class="ln">167</span>         TLI6 = 0.5D0*(LOG(RLI6(I)) + LOG(RLI60(I)))
+<span class="ln">168</span>         TLI7 = 0.5D0*(LOG(RLI7(I)) + LOG(RLI70(I)))
+<span class="ln">169</span>         TBE9 = 0.5D0*(LOG(RBE9(I)) + LOG(RBE90(I)))
+<span class="ln">170</span>         RATLI6(I) = DELTS*EXP(TLI6)
+<span class="ln">171</span>         RATLI7(I) = DELTS*EXP(TLI7)
+<span class="ln">172</span>         RATBE9(I) = DELTS*EXP(TBE9)
+<span class="ln">173</span>C THE REACTION RATES ARE OF THE FORM
+<span class="ln">174</span>C    DLI/DT = F(RHO,T,X)*LI =&gt;DLN LI = DT*F(RHO,T,X)
+<span class="ln">175</span>C SOLVE FOR D LN (SPECIES)/DT AND ZERO OUT IF THE DEPLETION IS TOO HIGH.
+<span class="ln">176</span>         IF(RATLI6(I).LT.3.0D1)THEN
+<span class="ln">177</span>            HCOMP(13,I) = HCOMP(13,I)/EXP(RATLI6(I))
+<span class="ln">178</span>         ELSE
+<span class="ln">179</span>            HCOMP(13,I) = 0.0D0
+<span class="ln">180</span>         ENDIF
+<span class="ln">181</span>         IF(RATLI7(I).LT.3.0D1)THEN
+<span class="ln">182</span>            HCOMP(14,I) = HCOMP(14,I)/EXP(RATLI7(I))
+<span class="ln">183</span>         ELSE
+<span class="ln">184</span>            HCOMP(14,I) = 0.0D0
+<span class="ln">185</span>         ENDIF
+<span class="ln">186</span>         IF(RATBE9(I).LT.3.0D1)THEN
+<span class="ln">187</span>            HCOMP(15,I) = HCOMP(15,I)/EXP(RATBE9(I))
+<span class="ln">188</span>         ELSE
+<span class="ln">189</span>            HCOMP(15,I) = 0.0D0
+<span class="ln">190</span>         ENDIF
+<span class="ln">191</span>C WRITE NEW ABUNDANCES AND EXIT.
+<span class="ln">192</span>         IF(HCOMP(13,I).LT.1.0D-24)HCOMP(13,I)=0.0D0
+<span class="ln">193</span>         IF(HCOMP(14,I).LT.1.0D-24)HCOMP(14,I)=0.0D0
+<span class="ln">194</span>         IF(HCOMP(15,I).LT.1.0D-24)HCOMP(15,I)=0.0D0
+<span class="ln">195</span>   50    CONTINUE
+<span class="ln">196</span>      END DO
+<span class="ln">197</span>C CONVECTION ZONE.
+<span class="ln">198</span>C
+<span class="ln">199</span>C SKIP IF WHOLE CZ IS BELOW THE BURNING THRESHOLD.
+<span class="ln">200</span>      IF(RBE90(JENV0).LE.1.0D-32.OR.RBE9(JENV).LE.1.0D-32)GOTO 200
+<span class="ln">201</span>C FIND RATES AT THE BEGINNING OF THE TIMESTEP (USING THE DEPTH AT THE START).
+<span class="ln">202</span>      FLI60 = 0.0D0
+<span class="ln">203</span>      FLI70 = 0.0D0
+<span class="ln">204</span>      FBE90 = 0.0D0
+<span class="ln">205</span>      FM0 = 0.0D0
+<span class="ln">206</span>      DO 65 I = JENV0,M
+<span class="ln">207</span>         FLI60 = FLI60+HCOMP(13,I)*HS2(I)
+<span class="ln">208</span>         FLI70 = FLI70+HCOMP(14,I)*HS2(I)
+<span class="ln">209</span>         FBE90 = FBE90+HCOMP(15,I)*HS2(I)
+<span class="ln">210</span>         FM0 = FM0 + HS2(I)
+<span class="ln">211</span>   65 CONTINUE
+<span class="ln">212</span>C    67 CONTINUE
+<span class="ln">213</span>      FLI60 = FLI60/FM0
+<span class="ln">214</span>      FLI70 = FLI70/FM0
+<span class="ln">215</span>      FBE90 = FBE90/FM0
+<span class="ln">216</span>      IF(BLI6OLD.LE.0.0D0)THEN
+<span class="ln">217</span>C COMPUTE MASS-WEIGHTED AVERAGE RATES AT THE START OF THE STEP.
+<span class="ln">218</span>         BLI60 = 0.0D0
+<span class="ln">219</span>         BLI70 = 0.0D0
+<span class="ln">220</span>         BBE90 = 0.0D0
+<span class="ln">221</span>         DO 68 I = JENV0,M
+<span class="ln">222</span>            BLI60 = BLI60 + RLI60(I)*HS2(I)
+<span class="ln">223</span>            BLI70 = BLI70 + RLI70(I)*HS2(I)
+<span class="ln">224</span>            BBE90 = BBE90 + RBE90(I)*HS2(I)
+<span class="ln">225</span>   68    CONTINUE
+<span class="ln">226</span>         BLI60 = LOG(BLI60/FM0)
+<span class="ln">227</span>         BLI70 = LOG(BLI70/FM0)
+<span class="ln">228</span>         BBE90 = LOG(BBE90/FM0)
+<span class="ln">229</span>      ELSE
+<span class="ln">230</span>C USE THE RATE FROM THE END OF THE PREVIOUS TIMESTEP.
+<span class="ln">231</span>         BLI60 = BLI6OLD
+<span class="ln">232</span>         BLI70 = BLI7OLD
+<span class="ln">233</span>         BBE90 = BBE9OLD
+<span class="ln">234</span>      ENDIF
+<span class="ln">235</span>C USE THE LOCATION OF THE TRUE EDGE OF THE CONVECTION ZONE (FX, FOUND AT
+<span class="ln">236</span>C BEGINNING OF SR) TO ADJUST THE BURNING RATE AND MASS OF THE BOTTOM POINT
+<span class="ln">237</span>C SUCH THAT IT INCLUDES THE ENTIRE C.Z.
+<span class="ln">238</span>      HS2SAV = HS2(JENV)
+<span class="ln">239</span>      IF(JENV.GT.1.AND.JENV.LT.M)THEN
+<span class="ln">240</span>         HS2(JENV) = HS2(JENV)+FX*(HS1(JENV)-HS1(JENV-1))
+<span class="ln">241</span>         RLI6(JENV) = RLI6(JENV)+0.5D0*FX*(RLI6(JENV-1)-RLI6(JENV))
+<span class="ln">242</span>         RLI7(JENV) = RLI7(JENV)+0.5D0*FX*(RLI7(JENV-1)-RLI7(JENV))
+<span class="ln">243</span>         RBE9(JENV) = RBE9(JENV)+0.5D0*FX*(RBE9(JENV-1)-RBE9(JENV))
+<span class="ln">244</span>      ENDIF
+<span class="ln">245</span>C FIND RATES AT THE END OF THE TIMESTEP (USING THE DEPTH AT THE END).
+<span class="ln">246</span>C ALSO STORE INITIAL ABUNDANCES(FLI60,FLI70,FBE90).
+<span class="ln">247</span>C FM IS THE TOTAL MASS IN THE CZ.
+<span class="ln">248</span>      FLI6 = 0.0D0
+<span class="ln">249</span>      FLI7 = 0.0D0
+<span class="ln">250</span>      FBE9 = 0.0D0
+<span class="ln">251</span>      FM = 0.0D0
+<span class="ln">252</span>      BLI6 = 0.0D0
+<span class="ln">253</span>      BLI7 = 0.0D0
+<span class="ln">254</span>      BBE9 = 0.0D0
+<span class="ln">255</span>      DO 70 I = JENV,M
+<span class="ln">256</span>         BLI6 = BLI6 + RLI6(I)*HS2(I)
+<span class="ln">257</span>         BLI7 = BLI7 + RLI7(I)*HS2(I)
+<span class="ln">258</span>         BBE9 = BBE9 + RBE9(I)*HS2(I)
+<span class="ln">259</span>         FLI6 = FLI6+HCOMP(13,I)*HS2(I)
+<span class="ln">260</span>         FLI7 = FLI7+HCOMP(14,I)*HS2(I)
+<span class="ln">261</span>         FBE9 = FBE9+HCOMP(15,I)*HS2(I)
+<span class="ln">262</span>         FM = FM + HS2(I)
+<span class="ln">263</span>   70 CONTINUE
+<span class="ln">264</span>C    75 CONTINUE
+<span class="ln">265</span>      FLI6 = FLI6/FM
+<span class="ln">266</span>      FLI7 = FLI7/FM
+<span class="ln">267</span>      FBE9 = FBE9/FM
+<span class="ln">268</span>C MASS-WEIGHTED AVERAGE RATES AT THE END OF THE STEP.
+<span class="ln">269</span>      BLI6 = LOG(BLI6/FM)
+<span class="ln">270</span>      BLI7 = LOG(BLI7/FM)
+<span class="ln">271</span>      BBE9 = LOG(BBE9/FM)
+<span class="ln">272</span>C RESTORE ORIGINAL MASS TO BASE OF C.Z.
+<span class="ln">273</span>      HS2(JENV) = HS2SAV
+<span class="ln">274</span>C FOR THE STARTING ABUNDANCE, USE THE MIXED ABUNDANCE FOR THE
+<span class="ln">275</span>C DEEPER CZ.
+<span class="ln">276</span>      IF(JENV.LT.JENV0)THEN
+<span class="ln">277</span>         FLI60 = FLI6
+<span class="ln">278</span>         FLI70 = FLI7
+<span class="ln">279</span>         FBE90 = FBE9
+<span class="ln">280</span>      ENDIF
+<span class="ln">281</span>C INITIALIZE ABUNDANCES.
+<span class="ln">282</span>         FLI6 = FLI60
+<span class="ln">283</span>         FLI7 = FLI70
+<span class="ln">284</span>         FBE9 = FBE90
+<span class="ln">285</span>C TIME-AVERAGED RATES USING LINEAR INTERPOLATION IN THE LOG.
+<span class="ln">286</span>         CZLI6 = 0.5D0*(BLI6+BLI60)
+<span class="ln">287</span>         CZLI7 = 0.5D0*(BLI7+BLI70)
+<span class="ln">288</span>         CZBE9 = 0.5D0*(BBE9+BBE90)
+<span class="ln">289</span>         DLI6 = DELTS*EXP(CZLI6)
+<span class="ln">290</span>         DLI7 = DELTS*EXP(CZLI7)
+<span class="ln">291</span>         DBE9 = DELTS*EXP(CZBE9)
+<span class="ln">292</span>         IF(DLI6.LT.3.0D1 .AND. FLI6.GT.1.0D-24)THEN
+<span class="ln">293</span>            FLI6 = FLI6/EXP(DLI6)
+<span class="ln">294</span>         ELSE
+<span class="ln">295</span>            FLI6 = 0.0D0
+<span class="ln">296</span>         ENDIF
+<span class="ln">297</span>         IF(FLI6.LT.1.0D-24)FLI6 = 0.0D0
+<span class="ln">298</span>         IF(DLI7.LT.3.0D1 .AND. FLI7.GT.1.0D-24)THEN
+<span class="ln">299</span>            FLI7 = FLI7/EXP(DLI7)
+<span class="ln">300</span>         ELSE
+<span class="ln">301</span>            FLI7 = 0.0D0
+<span class="ln">302</span>         ENDIF
+<span class="ln">303</span>         IF(FLI7.LT.1.0D-24)FLI7 = 0.0D0
+<span class="ln">304</span>         IF(DBE9.LT.3.0D1 .AND. FBE9.GT.1.0D-24)THEN
+<span class="ln">305</span>            FBE9 = FBE9/EXP(DBE9)
+<span class="ln">306</span>         ELSE
+<span class="ln">307</span>            FBE9 = 0.0D0
+<span class="ln">308</span>         ENDIF
+<span class="ln">309</span>         IF(FBE9.LT.1.0D-24)FBE9 = 0.0D0
+<span class="ln">310</span>      DO I = MAXJ,M
+<span class="ln">311</span>         HCOMP(13,I) = FLI6
+<span class="ln">312</span>         HCOMP(14,I) = FLI7
+<span class="ln">313</span>         HCOMP(15,I) = FBE9
+<span class="ln">314</span>      END DO
+<span class="ln">315</span>C STORE ENDING RATE FOR USE AT THE BEGINNING OF THE NEXT STEP.
+<span class="ln">316</span>      BLI6OLD = BLI6
+<span class="ln">317</span>      BLI7OLD = BLI7
+<span class="ln">318</span>      BBE9OLD = BBE9
+<span class="ln">319</span>C NOW SOLVE FOR ABUNDANCES IN THE REGION WHICH BEGAN CONVECTIVE AND
+<span class="ln">320</span>C ENDED RADIATIVE.
+<span class="ln">321</span>      IF(JENV.LE.JENV0)GOTO 200
+<span class="ln">322</span>C FIND STARTING AND ENDING LOCATION IN MASS OF THE CZ BASE, AND
+<span class="ln">323</span>C ASSUME THAT THE FRACTION OF TIME SPENT IN THE CZ IS PROPORTIONAL TO
+<span class="ln">324</span>C THE LOCATION IN MASS (I.E. A POINT 1/3 FROM THE OLD TO THE NEW CZ
+<span class="ln">325</span>C BASE IN MASS SPENT 1/3 OF THE TIME IN THE CZ AND 2/3 OUT OF IT).
+<span class="ln">326</span>      IF(JENV0.GT.1)THEN
+<span class="ln">327</span>         HSBEG = 0.5D0*(HS1(JENV0)+HS1(JENV0-1))
+<span class="ln">328</span>      ELSE
+<span class="ln">329</span>         HSBEG = 0.0D0
+<span class="ln">330</span>      ENDIF
+<span class="ln">331</span>      HSEND = 0.5D0*(HS1(JENV)+HS1(JENV-1))
+<span class="ln">332</span>      DMASS = HSBEG - HSEND
+<span class="ln">333</span>      DO I = JENV0,JENV-1
+<span class="ln">334</span>C MHP 9/91 CHANGE TO AVOID DIVISION BY ZERO.
+<span class="ln">335</span>C SKIP IF SHELL TEMPERATURE DROPS BELOW BURNING THRESHOLD.
+<span class="ln">336</span>         IF(RBE9(I).LE.1.0D-32)GOTO 200
+<span class="ln">337</span>         FRAD = (HS1(I)-HSBEG)/DMASS
+<span class="ln">338</span>C USE FRAD*RADIATIVE RATE AND (1-FRAD)*CONVECTIVE RATE.
+<span class="ln">339</span>         DLI6 = DELTS*EXP(FRAD*LOG(RLI6(I))+(1.0D0-FRAD)*BLI60)
+<span class="ln">340</span>         DLI7 = DELTS*EXP(FRAD*LOG(RLI7(I))+(1.0D0-FRAD)*BLI70)
+<span class="ln">341</span>         DBE9 = DELTS*EXP(FRAD*LOG(RBE9(I))+(1.0D0-FRAD)*BBE90)
+<span class="ln">342</span>C***REMEMBER TO ADD FAILSAFES FOR LARGE DEPLETION***
+<span class="ln">343</span>         HCOMP(13,I) = HCOMP(13,I)/EXP(DLI6)
+<span class="ln">344</span>         IF(HCOMP(13,I).LT.1.0D-24)HCOMP(13,I)=0.0D0
+<span class="ln">345</span>         HCOMP(14,I) = HCOMP(14,I)/EXP(DLI7)
+<span class="ln">346</span>         IF(HCOMP(14,I).LT.1.0D-24)HCOMP(14,I)=0.0D0
+<span class="ln">347</span>         HCOMP(15,I) = HCOMP(15,I)/EXP(DBE9)
+<span class="ln">348</span>         IF(HCOMP(15,I).LT.1.0D-24)HCOMP(15,I)=0.0D0
+<span class="ln">349</span>      END DO
+<span class="ln">350</span> 200  CONTINUE
+<span class="ln">351</span>      RETURN
+<span class="ln">352</span>      END</pre></details>
+<details class='py' id='py-liburn2'><summary>Python version: liburn2</summary><pre class='doc'>Burn Li6, Li7 and Be9 over one step in one go (cheap LIBURN).
+
+The same as LIBURN without substeps, extrapolation or accretion: each
+radiative point, and the convection zone as a whole, decays with the
+geometric mean of the start and end rates. Points left behind by a
+retreating zone get LIBURN&#x27;s blended rate.
+
+Translates: liburn2.f#LIBURN2 (09c3b9b)
+
+Parameters
+----------
+delts : float
+    The time step.
+hcomp : ndarray, shape (16, JSON + 1)
+    Composition; rows 13, 14, 15 (Li6, Li7, Be9) updated in place.
+hr : ndarray
+    log r at each point.
+hs1, hs2 : ndarray
+    Mass inside each point, and each point&#x27;s mass (g). ``hs2[jenv]``
+    is changed and restored.
+ht : ndarray
+    log T at each point.
+jnenv, jnenv0 : int
+    The base of the surface convection zone at the end and the start
+    of the step.
+m : int
+    Number of points.
+
+Also changes ``newrat_mod`` (the bottom point&#x27;s rates) and
+``prevcz_mod`` (``rbase0``, ``bli6old``, ``bli7old``, ``bbe9old``,
+``jenvos``). Nothing is returned.</pre><pre class='src'><span class="ln">19</span>def liburn2(delts, hcomp, hr, hs1, hs2, ht, jnenv, jnenv0, m):
+<span class="ln">20</span>    &quot;&quot;&quot;Burn Li6, Li7 and Be9 over one step in one go (cheap LIBURN).
+<span class="ln">21</span>
+<span class="ln">22</span>    The same as LIBURN without substeps, extrapolation or accretion: each
+<span class="ln">23</span>    radiative point, and the convection zone as a whole, decays with the
+<span class="ln">24</span>    geometric mean of the start and end rates. Points left behind by a
+<span class="ln">25</span>    retreating zone get LIBURN&#x27;s blended rate.
+<span class="ln">26</span>
+<span class="ln">27</span>    Translates: liburn2.f#LIBURN2 (09c3b9b)
+<span class="ln">28</span>
+<span class="ln">29</span>    Parameters
+<span class="ln">30</span>    ----------
+<span class="ln">31</span>    delts : float
+<span class="ln">32</span>        The time step.
+<span class="ln">33</span>    hcomp : ndarray, shape (16, JSON + 1)
+<span class="ln">34</span>        Composition; rows 13, 14, 15 (Li6, Li7, Be9) updated in place.
+<span class="ln">35</span>    hr : ndarray
+<span class="ln">36</span>        log r at each point.
+<span class="ln">37</span>    hs1, hs2 : ndarray
+<span class="ln">38</span>        Mass inside each point, and each point&#x27;s mass (g). ``hs2[jenv]``
+<span class="ln">39</span>        is changed and restored.
+<span class="ln">40</span>    ht : ndarray
+<span class="ln">41</span>        log T at each point.
+<span class="ln">42</span>    jnenv, jnenv0 : int
+<span class="ln">43</span>        The base of the surface convection zone at the end and the start
+<span class="ln">44</span>        of the step.
+<span class="ln">45</span>    m : int
+<span class="ln">46</span>        Number of points.
+<span class="ln">47</span>
+<span class="ln">48</span>    Also changes ``newrat_mod`` (the bottom point&#x27;s rates) and
+<span class="ln">49</span>    ``prevcz_mod`` (``rbase0``, ``bli6old``, ``bli7old``, ``bbe9old``,
+<span class="ln">50</span>    ``jenvos``). Nothing is returned.
+<span class="ln">51</span>    &quot;&quot;&quot;
+<span class="ln">52</span>    json = dimensions_mod.json
+<span class="ln">53</span>    cln = constants_mod.cln
+<span class="ln">54</span>    rli6 = newrat_mod.rli6
+<span class="ln">55</span>    rli7 = newrat_mod.rli7
+<span class="ln">56</span>    rbe9 = newrat_mod.rbe9
+<span class="ln">57</span>    rli60 = oldrat_mod.rli60
+<span class="ln">58</span>    rli70 = oldrat_mod.rli70
+<span class="ln">59</span>    rbe90 = oldrat_mod.rbe90
+<span class="ln">60</span>    hro = oldmod_mod.hro
+<span class="ln">61</span>    sdel = scrtch_mod.sdel
+<span class="ln">62</span>
+<span class="ln">63</span>    # SAVE in the Fortran: no local is read before it is set in a call.
+<span class="ln">64</span>    ratli6 = np.zeros(json + 1)
+<span class="ln">65</span>    ratli7 = np.zeros(json + 1)
+<span class="ln">66</span>    ratbe9 = np.zeros(json + 1)
+<span class="ln">67</span>    fx = 0.0
+<span class="ln">68</span>
+<span class="ln">69</span>    # The base of the convection zone, as in LIBURN.
+<span class="ln">70</span>    if 1 &lt; jnenv &lt; m:
+<span class="ln">71</span>        if nmlpar_mod.lrot and nmlpar_mod.linstb:
+<span class="ln">72</span>            ddj = mdphy_mod.delam[jnenv] - mdphy_mod.delrm[jnenv]
+<span class="ln">73</span>            ddjm1 = mdphy_mod.delam[jnenv - 1] - mdphy_mod.delrm[jnenv - 1]
+<span class="ln">74</span>        else:
+<span class="ln">75</span>            ddj = sdel[3, jnenv] - sdel[1, jnenv]
+<span class="ln">76</span>            ddjm1 = sdel[3, jnenv - 1] - sdel[1, jnenv - 1]
+<span class="ln">77</span>        fx = max(-0.5, 0.5 - ddjm1 / (ddjm1 - ddj))
+<span class="ln">78</span>        fx = min(0.5, fx)
+<span class="ln">79</span>        if not nmlpar_mod.lovste:
+<span class="ln">80</span>            jenv = jnenv
+<span class="ln">81</span>            jenv0 = jnenv0
+<span class="ln">82</span>        else:
+<span class="ln">83</span>            if prevcz_mod.rbase0 == 0.0:
+<span class="ln">84</span>                prevcz_mod.rbase0 = 0.5 * (math.exp(cln * hro[jnenv0])
+<span class="ln">85</span>                                           + math.exp(cln * hro[jnenv0 - 1]))
+<span class="ln">86</span>                ros = prevcz_mod.rbase0 - liov_mod.pscal0
+<span class="ln">87</span>                jenv0 = 1
+<span class="ln">88</span>                for j in range(jnenv0 - 1, 0, -1):
+<span class="ln">89</span>                    r = math.exp(cln * hro[j])
+<span class="ln">90</span>                    if r &lt; ros:
+<span class="ln">91</span>                        jenv0 = j + 1
+<span class="ln">92</span>                        break  # to label 11
+<span class="ln">93</span>            else:
+<span class="ln">94</span>                jenv0 = prevcz_mod.jenvos
+<span class="ln">95</span>            dr = math.exp(cln * hr[jnenv]) - math.exp(cln * hr[jnenv - 1])
+<span class="ln">96</span>            rbase = (0.5 * (math.exp(cln * hr[jnenv])
+<span class="ln">97</span>                            + math.exp(cln * hr[jnenv - 1])) - fx * dr)
+<span class="ln">98</span>            prevcz_mod.rbase0 = rbase
+<span class="ln">99</span>            ros = rbase - liov_mod.pscal1
+<span class="ln">100</span>            jenv = 1
+<span class="ln">101</span>            for j in range(jnenv - 1, 0, -1):
+<span class="ln">102</span>                r = math.exp(cln * hr[j])
+<span class="ln">103</span>                if r &lt; ros:
+<span class="ln">104</span>                    jenv = j + 1
+<span class="ln">105</span>                    # Question (see the page): HRO, the old radius, here.
+<span class="ln">106</span>                    dr = math.exp(cln * hro[j + 1]) - r
+<span class="ln">107</span>                    fx = 0.5 - ((ros - r) / dr)
+<span class="ln">108</span>                    fx = max(-0.5, fx)
+<span class="ln">109</span>                    fx = min(0.5, fx)
+<span class="ln">110</span>                    break  # to label 12
+<span class="ln">111</span>    else:
+<span class="ln">112</span>        jenv = jnenv
+<span class="ln">113</span>        jenv0 = jnenv0
+<span class="ln">114</span>    prevcz_mod.jenvos = jenv
+<span class="ln">115</span>
+<span class="ln">116</span>    # The radiative interior, below both bases: skip, not leave, points
+<span class="ln">117</span>    # with a negligible Be9 rate (label 50 is inside the loop).
+<span class="ln">118</span>    minj = min(jenv, jenv0)
+<span class="ln">119</span>    maxj = max(jenv, jenv0)
+<span class="ln">120</span>    for i in range(1, minj):
+<span class="ln">121</span>        if rbe9[i] &lt;= 1.0e-32 or rbe90[i] &lt;= 1.0e-32:
+<span class="ln">122</span>            continue
+<span class="ln">123</span>        if (hcomp[13, i] &lt; 1.0e-24 and hcomp[14, i] &lt; 1.0e-24
+<span class="ln">124</span>                and hcomp[15, i] &lt; 1.0e-24):
+<span class="ln">125</span>            continue
+<span class="ln">126</span>        if ht[i] &gt; 7.0:
+<span class="ln">127</span>            hcomp[13, i] = 0.0
+<span class="ln">128</span>            hcomp[14, i] = 0.0
+<span class="ln">129</span>            hcomp[15, i] = 0.0
+<span class="ln">130</span>            continue
+<span class="ln">131</span>        # The geometric mean of the start and end rates.
+<span class="ln">132</span>        tli6 = 0.5 * (math.log(rli6[i]) + math.log(rli60[i]))
+<span class="ln">133</span>        tli7 = 0.5 * (math.log(rli7[i]) + math.log(rli70[i]))
+<span class="ln">134</span>        tbe9 = 0.5 * (math.log(rbe9[i]) + math.log(rbe90[i]))
+<span class="ln">135</span>        ratli6[i] = delts * math.exp(tli6)
+<span class="ln">136</span>        ratli7[i] = delts * math.exp(tli7)
+<span class="ln">137</span>        ratbe9[i] = delts * math.exp(tbe9)
+<span class="ln">138</span>        if ratli6[i] &lt; 3.0e1:
+<span class="ln">139</span>            hcomp[13, i] = hcomp[13, i] / math.exp(ratli6[i])
+<span class="ln">140</span>        else:
+<span class="ln">141</span>            hcomp[13, i] = 0.0
+<span class="ln">142</span>        if ratli7[i] &lt; 3.0e1:
+<span class="ln">143</span>            hcomp[14, i] = hcomp[14, i] / math.exp(ratli7[i])
+<span class="ln">144</span>        else:
+<span class="ln">145</span>            hcomp[14, i] = 0.0
+<span class="ln">146</span>        if ratbe9[i] &lt; 3.0e1:
+<span class="ln">147</span>            hcomp[15, i] = hcomp[15, i] / math.exp(ratbe9[i])
+<span class="ln">148</span>        else:
+<span class="ln">149</span>            hcomp[15, i] = 0.0
+<span class="ln">150</span>        if hcomp[13, i] &lt; 1.0e-24:
+<span class="ln">151</span>            hcomp[13, i] = 0.0
+<span class="ln">152</span>        if hcomp[14, i] &lt; 1.0e-24:
+<span class="ln">153</span>            hcomp[14, i] = 0.0
+<span class="ln">154</span>        if hcomp[15, i] &lt; 1.0e-24:
+<span class="ln">155</span>            hcomp[15, i] = 0.0
+<span class="ln">156</span>
+<span class="ln">157</span>    # The convection zone.
+<span class="ln">158</span>    if rbe90[jenv0] &lt;= 1.0e-32 or rbe9[jenv] &lt;= 1.0e-32:
+<span class="ln">159</span>        return  # label 200
+<span class="ln">160</span>
+<span class="ln">161</span>    # Mean abundances over the zone at the start of the step (loop 65).
+<span class="ln">162</span>    fli60 = 0.0
+<span class="ln">163</span>    fli70 = 0.0
+<span class="ln">164</span>    fbe90 = 0.0
+<span class="ln">165</span>    fm0 = 0.0
+<span class="ln">166</span>    for i in range(jenv0, m + 1):
+<span class="ln">167</span>        fli60 = fli60 + hcomp[13, i] * hs2[i]
+<span class="ln">168</span>        fli70 = fli70 + hcomp[14, i] * hs2[i]
+<span class="ln">169</span>        fbe90 = fbe90 + hcomp[15, i] * hs2[i]
+<span class="ln">170</span>        fm0 = fm0 + hs2[i]
+<span class="ln">171</span>    fli60 = fli60 / fm0
+<span class="ln">172</span>    fli70 = fli70 / fm0
+<span class="ln">173</span>    fbe90 = fbe90 / fm0
+<span class="ln">174</span>    if prevcz_mod.bli6old &lt;= 0.0:
+<span class="ln">175</span>        bli60 = 0.0
+<span class="ln">176</span>        bli70 = 0.0
+<span class="ln">177</span>        bbe90 = 0.0
+<span class="ln">178</span>        for i in range(jenv0, m + 1):  # loop 68
+<span class="ln">179</span>            bli60 = bli60 + rli60[i] * hs2[i]
+<span class="ln">180</span>            bli70 = bli70 + rli70[i] * hs2[i]
+<span class="ln">181</span>            bbe90 = bbe90 + rbe90[i] * hs2[i]
+<span class="ln">182</span>        bli60 = math.log(bli60 / fm0)
+<span class="ln">183</span>        bli70 = math.log(bli70 / fm0)
+<span class="ln">184</span>        bbe90 = math.log(bbe90 / fm0)
+<span class="ln">185</span>    else:
+<span class="ln">186</span>        bli60 = prevcz_mod.bli6old
+<span class="ln">187</span>        bli70 = prevcz_mod.bli7old
+<span class="ln">188</span>        bbe90 = prevcz_mod.bbe9old
+<span class="ln">189</span>
+<span class="ln">190</span>    # The bottom point&#x27;s mass and rates adjusted for the offset fx
+<span class="ln">191</span>    # (the rates are not restored; LIBURN&#x27;s question 8).
+<span class="ln">192</span>    hs2sav = hs2[jenv]
+<span class="ln">193</span>    if 1 &lt; jenv &lt; m:
+<span class="ln">194</span>        hs2[jenv] = hs2[jenv] + fx * (hs1[jenv] - hs1[jenv - 1])
+<span class="ln">195</span>        rli6[jenv] = rli6[jenv] + 0.5 * fx * (rli6[jenv - 1] - rli6[jenv])
+<span class="ln">196</span>        rli7[jenv] = rli7[jenv] + 0.5 * fx * (rli7[jenv - 1] - rli7[jenv])
+<span class="ln">197</span>        rbe9[jenv] = rbe9[jenv] + 0.5 * fx * (rbe9[jenv - 1] - rbe9[jenv])
+<span class="ln">198</span>
+<span class="ln">199</span>    # Mean abundances and rates over the zone at the end (loop 70).
+<span class="ln">200</span>    fli6 = 0.0
+<span class="ln">201</span>    fli7 = 0.0
+<span class="ln">202</span>    fbe9 = 0.0
+<span class="ln">203</span>    fm = 0.0
+<span class="ln">204</span>    bli6 = 0.0
+<span class="ln">205</span>    bli7 = 0.0
+<span class="ln">206</span>    bbe9 = 0.0
+<span class="ln">207</span>    for i in range(jenv, m + 1):
+<span class="ln">208</span>        bli6 = bli6 + rli6[i] * hs2[i]
+<span class="ln">209</span>        bli7 = bli7 + rli7[i] * hs2[i]
+<span class="ln">210</span>        bbe9 = bbe9 + rbe9[i] * hs2[i]
+<span class="ln">211</span>        fli6 = fli6 + hcomp[13, i] * hs2[i]
+<span class="ln">212</span>        fli7 = fli7 + hcomp[14, i] * hs2[i]
+<span class="ln">213</span>        fbe9 = fbe9 + hcomp[15, i] * hs2[i]
+<span class="ln">214</span>        fm = fm + hs2[i]
+<span class="ln">215</span>    fli6 = fli6 / fm
+<span class="ln">216</span>    fli7 = fli7 / fm
+<span class="ln">217</span>    fbe9 = fbe9 / fm
+<span class="ln">218</span>    bli6 = math.log(bli6 / fm)
+<span class="ln">219</span>    bli7 = math.log(bli7 / fm)
+<span class="ln">220</span>    bbe9 = math.log(bbe9 / fm)
+<span class="ln">221</span>    hs2[jenv] = hs2sav
+<span class="ln">222</span>
+<span class="ln">223</span>    # A deepened zone starts from the end-of-step mean.
+<span class="ln">224</span>    if jenv &lt; jenv0:
+<span class="ln">225</span>        fli60 = fli6
+<span class="ln">226</span>        fli70 = fli7
+<span class="ln">227</span>        fbe90 = fbe9
+<span class="ln">228</span>    fli6 = fli60
+<span class="ln">229</span>    fli7 = fli70
+<span class="ln">230</span>    fbe9 = fbe90
+<span class="ln">231</span>    # The geometric mean of the zone&#x27;s start and end rates.
+<span class="ln">232</span>    czli6 = 0.5 * (bli6 + bli60)
+<span class="ln">233</span>    czli7 = 0.5 * (bli7 + bli70)
+<span class="ln">234</span>    czbe9 = 0.5 * (bbe9 + bbe90)
+<span class="ln">235</span>    dli6 = delts * math.exp(czli6)
+<span class="ln">236</span>    dli7 = delts * math.exp(czli7)
+<span class="ln">237</span>    dbe9 = delts * math.exp(czbe9)
+<span class="ln">238</span>    if dli6 &lt; 3.0e1 and fli6 &gt; 1.0e-24:
+<span class="ln">239</span>        fli6 = fli6 / math.exp(dli6)
+<span class="ln">240</span>    else:
+<span class="ln">241</span>        fli6 = 0.0
+<span class="ln">242</span>    if fli6 &lt; 1.0e-24:
+<span class="ln">243</span>        fli6 = 0.0
+<span class="ln">244</span>    if dli7 &lt; 3.0e1 and fli7 &gt; 1.0e-24:
+<span class="ln">245</span>        fli7 = fli7 / math.exp(dli7)
+<span class="ln">246</span>    else:
+<span class="ln">247</span>        fli7 = 0.0
+<span class="ln">248</span>    if fli7 &lt; 1.0e-24:
+<span class="ln">249</span>        fli7 = 0.0
+<span class="ln">250</span>    if dbe9 &lt; 3.0e1 and fbe9 &gt; 1.0e-24:
+<span class="ln">251</span>        fbe9 = fbe9 / math.exp(dbe9)
+<span class="ln">252</span>    else:
+<span class="ln">253</span>        fbe9 = 0.0
+<span class="ln">254</span>    if fbe9 &lt; 1.0e-24:
+<span class="ln">255</span>        fbe9 = 0.0
+<span class="ln">256</span>    for i in range(maxj, m + 1):
+<span class="ln">257</span>        hcomp[13, i] = fli6
+<span class="ln">258</span>        hcomp[14, i] = fli7
+<span class="ln">259</span>        hcomp[15, i] = fbe9
+<span class="ln">260</span>    prevcz_mod.bli6old = bli6
+<span class="ln">261</span>    prevcz_mod.bli7old = bli7
+<span class="ln">262</span>    prevcz_mod.bbe9old = bbe9
+<span class="ln">263</span>
+<span class="ln">264</span>    # The region left by a retreating zone: burned once, blended rate.
+<span class="ln">265</span>    if jenv &lt;= jenv0:
+<span class="ln">266</span>        return  # label 200
+<span class="ln">267</span>    if jenv0 &gt; 1:
+<span class="ln">268</span>        hsbeg = 0.5 * (hs1[jenv0] + hs1[jenv0 - 1])
+<span class="ln">269</span>    else:
+<span class="ln">270</span>        hsbeg = 0.0
+<span class="ln">271</span>    hsend = 0.5 * (hs1[jenv] + hs1[jenv - 1])
+<span class="ln">272</span>    # Question (see LIBURN&#x27;s page, question 7): dmass &lt; 0, frad in (-1, 0).
+<span class="ln">273</span>    dmass = hsbeg - hsend
+<span class="ln">274</span>    for i in range(jenv0, jenv):
+<span class="ln">275</span>        # Question (see the page): ends the routine, not the point.
+<span class="ln">276</span>        if rbe9[i] &lt;= 1.0e-32:
+<span class="ln">277</span>            return  # label 200
+<span class="ln">278</span>        frad = (hs1[i] - hsbeg) / dmass
+<span class="ln">279</span>        dli6 = delts * math.exp(frad * math.log(rli6[i]) + (1.0 - frad) * bli60)
+<span class="ln">280</span>        dli7 = delts * math.exp(frad * math.log(rli7[i]) + (1.0 - frad) * bli70)
+<span class="ln">281</span>        dbe9 = delts * math.exp(frad * math.log(rbe9[i]) + (1.0 - frad) * bbe90)
+<span class="ln">282</span>        # Question (see the page): no overflow guard here.
+<span class="ln">283</span>        hcomp[13, i] = hcomp[13, i] / math.exp(dli6)
+<span class="ln">284</span>        if hcomp[13, i] &lt; 1.0e-24:
+<span class="ln">285</span>            hcomp[13, i] = 0.0
+<span class="ln">286</span>        hcomp[14, i] = hcomp[14, i] / math.exp(dli7)
+<span class="ln">287</span>        if hcomp[14, i] &lt; 1.0e-24:
+<span class="ln">288</span>            hcomp[14, i] = 0.0
+<span class="ln">289</span>        hcomp[15, i] = hcomp[15, i] / math.exp(dbe9)
+<span class="ln">290</span>        if hcomp[15, i] &lt; 1.0e-24:
+<span class="ln">291</span>            hcomp[15, i] = 0.0</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Unclear.</strong> "skipping points with a rate below $10^{-32}$": only the ⁹Be rate is tested. Fix.</li>
+<li><strong>Missing.</strong> The <code>FRAD</code> sign problem and the unrestored bottom-point rates (see <code>liburn.f</code>, findings 3–4) are in the same lines here (282–291, 203). Fix: add to question 3.</li>
+<li><strong>Unclear.</strong> Question 2 suggests a difference from <code>LIBURN</code>; <code>LIBURN</code> also leaves its last loop at such a point. Fix: say so.</li>
+</ol>
+<p>Checked otherwise: the geometric-mean rate (radiative and zone), the 30 cut, the callers and the COMMON blocks.</p>
+<p>Revised: findings 1–3 applied.</p></div></details>
+</main></body></html>

@@ -1,0 +1,91 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Hooks for user-defined physics · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ New structure (Fortran and Python) / Hooks for user-defined physics</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='fortran.html'>Language and style</a></li><li><a href='common-map.html'>The COMMON-block map</a></li><li><a href='kernels.html'>Kernels and settings</a></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><a href='timestep.html'>Time stepping</a></li><li><a href='composition.html'>Composition and settling</a></li><li><a href='rotation.html'>Rotation and mass loss</a></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><strong>Hooks for user-defined physics</strong></li></ul></nav>
+<h1>Hooks for user-defined physics</h1>
+<p><em>In Python: <code>pyrec.hooks</code>, under Python below.</em></p>
+<h2>6.5 Hooks for user-defined physics</h2>
+<p>KC's Research Directions name "hooks for user-defined physics". Today a user who adds physics edits YREC's routines and their shared data (COMMON blocks at <code>rp_1</code>, modules in the development branch), as each new option in the notes was added (the Matt et al. wind law beside the older one, the newer settling solver beside <code>GRSETT</code>, the spotted-star options). The design gives users three ways in, from the smallest to the largest:</p>
+<ol>
+<li><strong>A new member of a family.</strong> Every family of alternatives has an abstract base: <code>EosBase</code>, <code>OpacityTable</code>, <code>AtmosphereBase</code>, <code>SettlingBase</code>, <code>WindLaw</code>, <code>MassLossLaw</code>, <code>StepCriterion</code>, <code>ModelFile</code>, <code>CalibrBase</code>. A user extends the base in a module of their own, and one line of the family's factory function lets the configuration choose it. This is the guide's rule, "a new method is a new subclass, not another <code>if</code> branch".</li>
+<li><strong><code>UserPhysics</code>, for additions to the equations.</strong> <code>hooks.f90</code> defines a type whose procedures do nothing in the base type; a user extends it and overrides only what they need, and <code>Run</code> holds one instance (<code>class(UserPhysics), allocatable :: user</code>).</li>
+</ol>
+<pre><code class="language-fortran">type :: UserPhysics
+    !! Hooks for user physics. Each procedure is a hook for extended
+    !! types; the base type does nothing.
+contains
+    procedure :: extra_energy
+        !! (star, eps, deps_dlnrho, deps_dlnt) Added to the nuclear energy
+        !! [erg g-1 s-1], with derivatives for the Henyey matrix (COEFFT).
+    procedure :: extra_mixing
+        !! (star, d) Added to the diffusion coefficient [cm2 s-1] on each
+        !! interface (CompositionStep, RotationTransport).
+    procedure :: extra_torque
+        !! (star, dt, dj) Added change of j [cm2 s-1] (RotationStep).
+    procedure :: surface_flux_factor
+        !! (star, f) Factor on the surface flux, 1 here (SPOTS today).
+    procedure :: after_step
+        !! (star, ierr) Called after each converged model: checks, extra
+        !! output, or a stop (ierr &gt; 0).
+    procedure :: extra_columns
+        !! (star, names, values) Extra columns for the track file.
+end type
+</code></pre>
+<ol>
+<li><strong>Python, at the step level.</strong> With the in-process interface (<a href="fortran.html">Section 6.3</a>), <code>after_step</code> and <code>extra_columns</code> can be Python functions, called once per model through a <code>bind(C)</code> function pointer. Hooks called at every point of every Henyey iteration (<code>extra_energy</code>, <code>extra_mixing</code>) stay in Fortran, where a call costs nothing; from Python they would cost a call per point per iteration.</li>
+</ol>
+<p>The hooks are placed where the code already combines the same kind of term: <code>extra_energy</code> where <code>COEFFT</code> totals the energy sources, <code>extra_mixing</code> where <code>MIX</code> and <code>SECULR</code> build their diffusion coefficients, <code>extra_torque</code> beside the wind in <code>RotationStep</code>, and <code>surface_flux_factor</code> where <code>SurfaceBC</code> and the spotted-star options (<code>SPOTF</code>, <code>SPOTX</code>, formerly in <code>/SPOTS/</code>, now in <code>NMLPAR_MOD</code>) act today. The base type adds nothing, so a run without a user type gives today's results. MESA's <code>run_star_extras</code> serves the same purpose for its users, which makes the idea familiar to stellar modelers.</p>
+<h2>Python</h2>
+<p>The stubs of the new structure (signatures and docstrings, no bodies), each naming the routines it replaces in the current code.</p>
+<h3><code>pyrec/hooks/__init__.py</code></h3>
+<pre><code class="language-python">&quot;&quot;&quot;Hooks for user-defined physics.
+
+Users extend a family's base (EosBase, OpacityTable, AtmosphereBase,
+SettlingBase, WindLaw, MassLossLaw, StepCriterion, ModelFile, CalibrBase)
+or UserPhysics. In Python, every hook is Python; the per-point ones
+(``extra_energy``, ``extra_mixing``) take arrays over shells, so that they
+are called once per iteration, not once per point.
+
+Classes
+-------
+UserPhysics : Hooks that do nothing in the base class.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+import numpy as np
+
+
+class UserPhysics:
+    &quot;&quot;&quot;Hooks for user physics. Each method is a hook for derived classes; the base class does nothing.
+
+    Methods
+    -------
+    extra_energy, extra_mixing, extra_torque, surface_flux_factor, after_step, extra_columns.
+    &quot;&quot;&quot;
+
+    def extra_energy(self, star, eps: np.ndarray, deps_dlnrho: np.ndarray, deps_dlnt: np.ndarray) -&gt; None:
+        &quot;&quot;&quot;Add to the nuclear energy [erg g-1 s-1] on every shell, with derivatives for the Henyey matrix.&quot;&quot;&quot;
+        ...
+
+    def extra_mixing(self, star, d: np.ndarray) -&gt; None:
+        &quot;&quot;&quot;Add to the diffusion coefficient [cm2 s-1] on each interface.&quot;&quot;&quot;
+        ...
+
+    def extra_torque(self, star, dt: float, dj: np.ndarray) -&gt; None:
+        &quot;&quot;&quot;Add a change of j [cm2 s-1] (RotationStep).&quot;&quot;&quot;
+        ...
+
+    def surface_flux_factor(self, star) -&gt; float:
+        &quot;&quot;&quot;Factor on the surface flux; 1 here (SPOTF, SPOTX today).&quot;&quot;&quot;
+        ...
+
+    def after_step(self, star) -&gt; bool:
+        &quot;&quot;&quot;Called after each converged model: checks, extra output; True stops the track.&quot;&quot;&quot;
+        ...
+
+    def extra_columns(self, star) -&gt; dict[str, float]:
+        &quot;&quot;&quot;Extra columns for the track file.&quot;&quot;&quot;
+        ...
+</code></pre>
+
+</main></body></html>

@@ -1,0 +1,472 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>stitch.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ stitch.f</span></header><main>
+<h1>stitch.f</h1>
+<p class='muted'>246 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/stitch.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>stitch.py</code>, 210 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>STITCH</code> writes one model's full profile to the <code>.store</code> file, in an alternative format (JvS 08/25): the interior shells, then, if asked, the envelope and atmosphere "stitched" onto them, one line per point with 61 columns. Its comment lists the columns: model, shell, $\log m$ [g], $\log r$ [cm], $L/L_\odot$, $\log P$, $\log T$, $\log\rho$, $\Omega$ [rad/s], three flags for the point's kind, the 15 mass fractions, the opacity, gravity, the three temperature gradients, the convective velocity, $\Gamma_1$, ionisation fractions, $\beta$, $\eta$, the energy rates of each burning chain, neutrino and gravitational energy, $c_P$, $d\ln\rho/d\ln T$, and the rotation columns (51–61).</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the model through the arguments (and the mixing length <code>CMIXL</code>, passed on to <code>ENVINT</code>), and the per-shell physics left in modules by earlier routines: <a href="../yrec-map/scrtch_mod.f.html"><code>SCRTCH_MOD</code></a> (opacity <code>SO</code>, gradients <code>SDEL</code>, <code>SVEL</code>, ionisation <code>SFXION</code>, $\eta$ <code>SETA</code>, energy rates <code>SEG</code> and <code>SESUM</code>, <code>SCP</code>; filled by the physics routines such as <a href="../yrec-map/physic.f.html#def-PHYSIC">PHYSIC</a>), <a href="../yrec-map/sound_mod.f.html"><code>SOUND_MOD</code></a> (<code>GAM1</code>), <a href="../yrec-map/pulse1_mod.f.html"><code>PULSE1_MOD</code></a> (<code>PQDT</code>), <a href="../yrec-map/roten_mod.f.html"><code>ROTEN_MOD</code></a> (<code>DEROT</code>) and <a href="../yrec-map/temp2_mod.f.html"><code>TEMP2_MOD</code></a> (the circulation velocities <code>VES</code>, <code>VGSF</code>, <code>VSS</code>, written by <a href="../yrec-map/vcirc.f.html#def-VCIRC">VCIRC</a> among others).</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/putstore.f.html#def-PUTSTORE">PUTSTORE</a>, and <a href="../yrec-map/wrtout.f.html#def-WRTOUT">WRTOUT</a> every <code>NPRTMOD</code> models when <code>LSTCH</code> is set.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a>, to integrate the envelope (and atmosphere) again for output.</li>
+<li><strong>Output:</strong> lines on the unit <code>ISTOR</code> (<a href="../yrec-map/iounits_mod.f.html"><code>IOUNITS_MOD</code></a>).</li>
+<li><strong>Modules:</strong> besides those above, <a href="../yrec-map/envstruct_mod.f.html"><code>ENVSTRUCT_MOD</code></a> and <a href="../yrec-map/atmstruct_mod.f.html"><code>ATMSTRUCT_MOD</code></a> (the envelope's and atmosphere's points, filled by <code>ENVINT</code>), <a href="../yrec-map/nmlpar_mod.f.html"><code>NMLPAR_MOD</code></a> (the output steps <code>ATMSTP</code>, <code>ENVSTP</code>, the integration steps <code>ATMBEG</code> … <code>ENVMAX</code>, the switches <code>LSTENV</code>, <code>LSTATM</code>, the spot parameters and <code>LROT</code>), <a href="../yrec-map/constants_mod.f.html"><code>CONSTANTS_MOD</code></a>, <code>JSON</code> from <a href="../yrec-map/dimensions_mod.f.html"><code>DIMENSIONS_MOD</code></a>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Interior</strong> (shells 1 to $M$): the gravity $g = G m / r^2$, and, with rotation, the shape quantities
+   $$A = \frac{\Omega^2 r_0^3}{3\,G m}\,\frac{5}{2 + \eta_2},\qquad \frac{R_p}{R_e} = \frac{1 - A}{1 + A/2},$$
+   with $r_0$ (<code>R0</code>) and $\eta_2$ (<code>ETA2</code>) from the rotation routines, and the total circulation velocity <code>VTOT = VES + VGSF + VSS</code>. Without rotation the 11 rotation columns are zeros.</li>
+<li><strong>Envelope</strong> (<code>LSTENV</code>): the integration steps are set to the fixed output steps <code>ATMSTP</code>, <code>ENVSTP</code> ("dropping a sinkline"), and <code>ENVINT</code> integrates from the surface, at $\log R = \tfrac12(\log L + \log L_\odot - 4\log T_\mathrm{eff} - \log 4\pi - \log\sigma)$ and $\log g = \log G + \log M - 2\log R$, down to the pressure of the last interior shell; for a spotted star at the ambient temperature (the formula in <a href="../yrec-map/starin.f.html">starin.f</a>). The envelope points get shell numbers $M+1, \dots$; $\Omega$ and the composition are those of the last interior shell; the burning and rotation columns are zero.</li>
+<li><strong>Atmosphere</strong> (<code>LSTATM</code>): the atmosphere's points, outermost last, with $r = R_\mathrm{env} + $ <code>ATMOR</code>, the total mass and the surface luminosity.</li>
+</ol>
+<p><strong>Changed since <code>rp_1</code>.</strong> COMMON blocks to modules, <code>IMPLICIT NONE</code> (the unused <code>OVRTRN</code> dropped); a new argument <code>CMIXL</code>, passed on to <code>ENVINT</code>; the formats of the lines (62, 63) now put a blank between the $\log P$, $\log T$, $\log\rho$ columns and between the six <code>F9.5</code> columns ($\Gamma_1$ to $\eta$), so that neighbouring values no longer run together.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The integration steps are not restored.</strong> <code>STITCH</code> saves <code>ATMBEG</code>, <code>ATMMIN</code>, <code>ATMMAX</code>, <code>ENVBEG</code>, <code>ENVMIN</code>, <code>ENVMAX</code> into <code>ABEG0</code> … <code>EMAX0</code> and sets them to the output steps, but never restores them, so every later envelope integration of the run uses the output steps. (<a href="../yrec-map/calcad.f.html#def-CALCAD">CALCAD</a> does the same; <a href="../yrec-map/starin.f.html#def-STARIN">STARIN</a>, <a href="../yrec-map/wrtmod.f.html#def-WRTMOD">WRTMOD</a> and <a href="../yrec-map/getnewenv.f.html#def-GETNEWENV">GETNEWENV</a> restore the steps they change.) Intended?</li>
+<li><strong>β of the interior from the envelope's array.</strong> Column 39 (BETA) for interior shell $I$ is <code>EBETAS(I)</code>, the envelope's array, while <code>SBETA(I)</code> in <code>SCRTCH</code> seems to be the interior's. A bug?</li>
+<li><strong><code>LPULPT</code> undefined.</strong> <code>LPULPT</code> is passed to <code>ENVINT</code> but never set in <code>STITCH</code> (<code>CALCAD</code> sets its own to true). Is a value expected?</li>
+<li><strong>Gravity of the atmosphere.</strong> The atmosphere's lines write <code>SG</code>, which is left from the last envelope point (or interior shell when there is no envelope), not computed for each atmosphere point.</li>
+<li><strong>Atmosphere without envelope.</strong> With <code>LSTATM</code> but not <code>LSTENV</code>, the atmosphere's points are numbered and placed using <code>NUMENV</code> and <code>ENVR(NUMENV)</code> from whatever envelope integration ran last. And the atmosphere's luminosity column writes <code>B</code>, which is set (<code>B = DEXP(CLN*BL)</code>) only in the envelope branch, so it holds a value from an earlier call, or is undefined. Should the atmosphere require the envelope?</li>
+<li><strong>Spot test.</strong> The spotted-star branch tests <code>LC(M)</code> (the last shell convective), while <a href="../yrec-map/starin.f.html#def-STARIN">STARIN</a> and <code>CALCAD</code> test <code>JENV.EQ.M</code>. Same intent?</li>
+</ol></div>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-STITCH'>STITCH</a> <span class='muted'>subroutine</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-STITCH'><h3><span class='kind'>subroutine</span>STITCH</h3>
+<p class='muted'>lines 1–236 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/stitch.f#L1-L236'>GitHub</a></p>
+<pre>SUBROUTINE STITCH(HCOMP,HR,HP,HD,HS,HT,HL,HS1,</pre>
+<div class='notes'><p>Writes one model's interior, envelope and atmosphere to <code>ISTOR</code> in the 61-column <code>.store</code> format, integrating the envelope again with <code>ENVINT</code> at fixed output steps.</p></div>
+<p><strong>Uses modules</strong> <a href='../yrec-map/atmstruct_mod.f.html#def-ATMSTRUCT_MOD'>ATMSTRUCT_MOD</a>, <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/envstruct_mod.f.html#def-ENVSTRUCT_MOD'>ENVSTRUCT_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/pulse1_mod.f.html#def-PULSE1_MOD'>PULSE1_MOD</a>, <a href='../yrec-map/roten_mod.f.html#def-ROTEN_MOD'>ROTEN_MOD</a>, <a href='../yrec-map/scrtch_mod.f.html#def-SCRTCH_MOD'>SCRTCH_MOD</a>, <a href='../yrec-map/sound_mod.f.html#def-SOUND_MOD'>SOUND_MOD</a>, <a href='../yrec-map/temp2_mod.f.html#def-TEMP2_MOD'>TEMP2_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/putstore.f.html#def-PUTSTORE'>PUTSTORE</a> <span class='muted'>(putstore.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">1</span>      SUBROUTINE STITCH(HCOMP,HR,HP,HD,HS,HT,HL,HS1,
+<span class="ln">2</span>     * OMEGA,ETA2,HI,R0,HJM,FP,FT,TEFFL,HSTOT,BL,M,LC,MODEL,CMIXL)
+<span class="ln">3</span>C 10/15/26 MHP via Claude
+<span class="ln">4</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">5</span>C PARAMETER(JSON=5000) here.
+<span class="ln">6</span>      USE DIMENSIONS_MOD
+<span class="ln">7</span>C 10/14/26 MHP via Claude
+<span class="ln">8</span>C code changed to convert COMMON/TEMP2/ into TEMP2_MOD.
+<span class="ln">9</span>      USE TEMP2_MOD
+<span class="ln">10</span>C 10/14/26 MHP via Claude
+<span class="ln">11</span>C code changed to convert COMMON/SOUND/ into SOUND_MOD.
+<span class="ln">12</span>      USE SOUND_MOD
+<span class="ln">13</span>C 10/14/26 MHP via Claude
+<span class="ln">14</span>C code changed to convert COMMON/SCRTCH/ into SCRTCH_MOD.
+<span class="ln">15</span>      USE SCRTCH_MOD
+<span class="ln">16</span>C 10/14/26 MHP via Claude
+<span class="ln">17</span>C code changed to convert COMMON/ROTEN/ into ROTEN_MOD.
+<span class="ln">18</span>      USE ROTEN_MOD
+<span class="ln">19</span>C 10/14/26 MHP via Claude
+<span class="ln">20</span>C code changed to convert COMMON/PULSE1/ into PULSE1_MOD.
+<span class="ln">21</span>      USE PULSE1_MOD
+<span class="ln">22</span>C 10/14/26 MHP via Claude
+<span class="ln">23</span>C code changed to convert COMMON/ENVSTRUCT/ into ENVSTRUCT_MOD.
+<span class="ln">24</span>      USE ENVSTRUCT_MOD
+<span class="ln">25</span>C 10/14/26 MHP via Claude
+<span class="ln">26</span>C code changed to convert COMMON/ATMSTRUCT/ into ATMSTRUCT_MOD.
+<span class="ln">27</span>      USE ATMSTRUCT_MOD
+<span class="ln">28</span>C 10/14/26 MHP via Claude
+<span class="ln">29</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">30</span>      USE NMLPAR_MOD
+<span class="ln">31</span>C 10/14/26 MHP via Claude
+<span class="ln">32</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">33</span>      USE CONSTANTS_MOD
+<span class="ln">34</span>C 10/14/26 MHP via Claude
+<span class="ln">35</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">36</span>      USE IOUNITS_MOD
+<span class="ln">37</span>C 10/20/26 MHP via Claude
+<span class="ln">38</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">39</span>C explicit declarations.
+<span class="ln">40</span>      IMPLICIT NONE
+<span class="ln">41</span>      REAL*8 A,ABEG0,AMAX0,AMIN0,ATEFFL,B,BL,CG,CMIXL,DUMA,EBEG0,EMAX0,
+<span class="ln">42</span>     *       EMIN0,ETA2,FM,FP,FPL,FT,FTL,GL,HCOMP,HD,HI,HJM,HL,HP,HR,HS,
+<span class="ln">43</span>     *       HS1,HSTOT,HT,OMEGA,PLIM,R0,RAD,RL,RPOLEQ,SG,TEFFL,VTOT,X,Z
+<span class="ln">44</span>      INTEGER I,IDUM,IXX,J,K,KATM,KENV,KSAHA,M,MODEL
+<span class="ln">45</span>      LOGICAL*4 LC,LPRT,LPULPT,LSBC0
+<span class="ln">46</span>
+<span class="ln">47</span>      REAL*8 DUM1(4),DUM2(3),DUM3(3),DUM4(3)
+<span class="ln">48</span>      REAL*8 ENVS1(JSON)
+<span class="ln">49</span>C 10/11/26 MHP via Claude
+<span class="ln">50</span>C code changed to remove LSCRIB from COMMON/CCOUT/: it was declared
+<span class="ln">51</span>C positionally in all 17 files sharing this block but never read or
+<span class="ln">52</span>C written in executable code anywhere, and no namelist file sets it.
+<span class="ln">53</span>C 10/12/26 MHP via Claude
+<span class="ln">54</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">55</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">56</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">57</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">58</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">59</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">60</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">61</span>C
+<span class="ln">62</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">63</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">64</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">65</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CCOUT/ declaration
+<span class="ln">66</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">67</span>C 9/25/26 MHP via Claude
+<span class="ln">68</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">69</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">70</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">71</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">72</span>C COMMON/IOUNITS/
+<span class="ln">73</span>C 9/25/26 MHP via Claude
+<span class="ln">74</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">75</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">76</span>      DIMENSION HS(JSON),HL(JSON),HR(JSON),HP(JSON),HT(JSON),HD(JSON),
+<span class="ln">77</span>     * LC(JSON),HCOMP(15,JSON),OMEGA(JSON),HS1(JSON),
+<span class="ln">78</span>     * ETA2(JSON),HI(JSON),HJM(JSON),R0(JSON),FP(JSON),
+<span class="ln">79</span>     * FT(JSON)
+<span class="ln">80</span>
+<span class="ln">81</span>C G Somers 10/14, Add spot common block
+<span class="ln">82</span>C G Somers END
+<span class="ln">83</span>C G Somers 3/17, ADDING NEW TAUCZ COMMON BLOCK
+<span class="ln">84</span>C 10/13/26 MHP via Claude: removed the unused COMMON/OVRTRN/ declaration
+<span class="ln">85</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">86</span>      SAVE
+<span class="ln">87</span>C
+<span class="ln">88</span>C
+<span class="ln">89</span>C STITCH: and alternate file format for .store that provides profiles for each
+<span class="ln">90</span>C desired model. Stitches the envelope and atmosphere solutions onto the interior
+<span class="ln">91</span>C when LSTENV and LSTATM are true. Will not provide atmosphere information when
+<span class="ln">92</span>C atmosphere tables are used.
+<span class="ln">93</span>C
+<span class="ln">94</span>C The output columns in the new .store format are:
+<span class="ln">95</span>C 1 MODEL, 2 SHELL, 3 log(mass[g]), 4 log(r[cm]), 5 L/Lsun, 6 log(P[cgs]), 7 log(T[K])&#x27;,
+<span class="ln">96</span>C 8 log(DENSITY[cgs]),9 OMEGA(rad/s),10 CONVECTIVE?, 11 INTERIOR_POINT?, 12 ENVLELOPE_PT?
+<span class="ln">97</span>C 13 ATMOSPHERE_POINT?, 14 H1(mass frac), 15 He4(mass frac),16 METALS(mass frac),
+<span class="ln">98</span>C 17 He3(mass frac), 18 C12(mass frac), 19 C13(mass frac), 20 N14(mass frac),
+<span class="ln">99</span>C 21 N15(mass frac), 22 O16(mass frac), 23 O17(mass frac), 24 O18(mass frac),
+<span class="ln">100</span>C 25 H2(mass frac), 26 Li6(mass frac),27 Li7(mass frac),28 Be9(mass frac),29 OPACITY[cgs]
+<span class="ln">101</span>C 30 GRAVITY(cgs), 31 DELR(Rad. temp. grad), 32 DEL(actual temp grad),
+<span class="ln">102</span>C 33 DELA(adiabatic temp grad), 34 CONVECTIVE _VELOCITY[cm/s],35 GAM1(adiabatic exponent),
+<span class="ln">103</span>C 36 HII, 37 HEII, 38 HEIII, 39 BETA, 40 ETA, 41 PPI, 42 PPII, 43 PPIII, 44, CNO, 45 3HE
+<span class="ln">104</span>C 46 E_NUC,47 E_NEU,48 E_GRAV,49 Cp,50 dlnrho/dlnT,51 A, 52 RP/RE, 53 FP, 54 FT, 55 J/M,
+<span class="ln">105</span>C 56 MOMENT, 57 DEL_KE, 58 V_ES, 59 V_GSF, 60 V_SS, 61 VTOT   &#x27;
+<span class="ln">106</span>C
+<span class="ln">107</span>C ****************************  WRITE OUT INTERIOR INFORMATION   **********************
+<span class="ln">108</span>
+<span class="ln">109</span>      CG=DEXP(CLN*CGL)
+<span class="ln">110</span>      DO I = 1,M
+<span class="ln">111</span>            SG = DEXP(CLN*(CGL - 2.0D0*HR(I)))*HS1(I)
+<span class="ln">112</span>C write out the basic info
+<span class="ln">113</span>            WRITE(ISTOR,62,ADVANCE=&#x27;no&#x27;) MODEL,I,HS(I),HR(I),HL(I),HP(I),
+<span class="ln">114</span>     *         HT(I),HD(I),OMEGA(I),LC(I),.TRUE.,.FALSE.,.FALSE.,(HCOMP(J,I),J=1,15)
+<span class="ln">115</span>C write out additional physics if desired
+<span class="ln">116</span>            WRITE(ISTOR,63,ADVANCE=&#x27;no&#x27;) SO(I),SG,SDEL(1,I),SDEL(2,I),
+<span class="ln">117</span>     *           SDEL(3,I),SVEL(I),GAM1(I),SFXION(1,I),SFXION(2,I),SFXION(3,I),
+<span class="ln">118</span>     *           EBETAS(I),SETA(I),(SEG(K,I),K=1,5),SESUM(I),SEG(6,I),SEG(7,I),
+<span class="ln">119</span>     *           SCP(I),PQDT(I)
+<span class="ln">120</span>C write out additional rotation info if rotation is on
+<span class="ln">121</span>            IF(LROT)THEN
+<span class="ln">122</span>              FM = DEXP(CLN*HS(I))
+<span class="ln">123</span>              DUMA = CC13*OMEGA(I)**2/(CG*FM)*5.D0/(2.D0+ETA2(I))
+<span class="ln">124</span>              A = DUMA * R0(I)**3
+<span class="ln">125</span>              RPOLEQ = (1.0D0 - A)/(1.0D0 + 0.5D0*A)
+<span class="ln">126</span>              VTOT = VES(I)+VGSF(I)+VSS(I)
+<span class="ln">127</span>              WRITE(ISTOR,64) A,RPOLEQ,FP(I),FT(I),HJM(I),HI(I),DEROT(I),
+<span class="ln">128</span>     *            VES(I),VGSF(I),VSS(I),VTOT
+<span class="ln">129</span>            ELSE
+<span class="ln">130</span>               WRITE(ISTOR,64) 0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+<span class="ln">131</span>            ENDIF
+<span class="ln">132</span>         ENDDO
+<span class="ln">133</span>
+<span class="ln">134</span>
+<span class="ln">135</span>C **************************   WRITE OUT ENVELOPE INFORMATION   **********************
+<span class="ln">136</span>
+<span class="ln">137</span>      IF(LSTENV)THEN ! only provide an envelope if asked to do so
+<span class="ln">138</span>C Begin by &quot;dropping a sinkline&quot; with the envelope integrator
+<span class="ln">139</span>      ABEG0 = ATMBEG
+<span class="ln">140</span>      AMIN0 = ATMMIN
+<span class="ln">141</span>      AMAX0 = ATMMAX
+<span class="ln">142</span>      EBEG0 = ENVBEG
+<span class="ln">143</span>      EMIN0 = ENVMIN
+<span class="ln">144</span>      EMAX0 = ENVMAX
+<span class="ln">145</span>      ATMBEG = ATMSTP
+<span class="ln">146</span>      ATMMIN = ATMSTP
+<span class="ln">147</span>      ATMMAX = ATMSTP
+<span class="ln">148</span>      ENVBEG = ENVSTP
+<span class="ln">149</span>      ENVMIN = ENVSTP
+<span class="ln">150</span>      ENVMAX = ENVSTP
+<span class="ln">151</span>      IDUM = 0
+<span class="ln">152</span>      B = DEXP(CLN*BL)
+<span class="ln">153</span>      FPL = FP(M)
+<span class="ln">154</span>      FTL = FT(M)
+<span class="ln">155</span>      KATM = 0
+<span class="ln">156</span>      KENV = 0
+<span class="ln">157</span>      KSAHA = 0
+<span class="ln">158</span>      IXX=0
+<span class="ln">159</span>      LPRT=.TRUE.
+<span class="ln">160</span>      LSBC0 = .FALSE.
+<span class="ln">161</span>      X = HCOMP(1,M)
+<span class="ln">162</span>      Z = HCOMP(3,M)
+<span class="ln">163</span>      RL = 0.5D0*(BL + CLSUNL - 4.0D0*TEFFL - C4PIL - CSIGL)
+<span class="ln">164</span>      GL = CGL + HSTOT - RL - RL
+<span class="ln">165</span>      PLIM = HP(M)
+<span class="ln">166</span>C G Somers 10/14, FOR SPOTTED RUNS, FIND THE
+<span class="ln">167</span>C PRESSURE AT THE AMBIENT TEMPERATURE ATEFFL
+<span class="ln">168</span>      IF(LC(M).AND.SPOTF.NE.0.0.AND.SPOTX.NE.1.0)THEN
+<span class="ln">169</span>          ATEFFL = TEFFL - 0.25*LOG10(SPOTF*SPOTX**4.0+1.0-SPOTF)
+<span class="ln">170</span>      ELSE
+<span class="ln">171</span>          ATEFFL = TEFFL
+<span class="ln">172</span>      ENDIF
+<span class="ln">173</span>      CALL <a href="../yrec-map/envint.f.html#def-ENVINT" title="ENVINT in envint.f">ENVINT</a>(B,FPL,FTL,GL,HSTOT,IXX,LPRT,LSBC0,
+<span class="ln">174</span>     *   PLIM,RL,ATEFFL,X,Z,DUM1,IDUM,KATM,KENV,KSAHA,
+<span class="ln">175</span>     *   DUM2,DUM3,DUM4,LPULPT,CMIXL)
+<span class="ln">176</span>
+<span class="ln">177</span>C DEFINE SOME ARRAYS WE NEED
+<span class="ln">178</span>      DO I=1,NUMENV
+<span class="ln">179</span>          ENVS1(I) = DEXP(CLN*(ENVS(I)+HSTOT))
+<span class="ln">180</span>      ENDDO
+<span class="ln">181</span>         DO I=M+1,M+NUMENV
+<span class="ln">182</span>            SG = DEXP(CLN*(CGL - 2.0D0*ENVR(I-M)))*ENVS1(I-M)
+<span class="ln">183</span>C write out the basic info. Omega and abundances take value of last interior point.
+<span class="ln">184</span>            WRITE(ISTOR,62,ADVANCE=&#x27;no&#x27;) MODEL,I,ENVS(I-M)+HSTOT,ENVR(I-M),ENVL(I-M),
+<span class="ln">185</span>     *      ENVP(I-M),ENVT(I-M),ENVD(I-M),OMEGA(M),LCENV(I-M),.FALSE.,.TRUE.,.FALSE.,
+<span class="ln">186</span>     *      (HCOMP(J,M),J=1,15)
+<span class="ln">187</span>C write out additional physics
+<span class="ln">188</span>               WRITE(ISTOR,63,ADVANCE=&#x27;no&#x27;) ENVO(I-M),SG,EDELS(1,I-M),EDELS(2,I-M),
+<span class="ln">189</span>     *           EDELS(3,I-M),EVELS(I-M),EGAM1(I-M),EFXIONS(1,I-M),EFXIONS(2,I-M),
+<span class="ln">190</span>     *           EFXIONS(3,I-M),EBETAS(I-M),0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,
+<span class="ln">191</span>     *           EQCP(I-M),EQDT(I-M)
+<span class="ln">192</span>C             zero out rotation columns for envelope
+<span class="ln">193</span>               WRITE(ISTOR,64) 0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+<span class="ln">194</span>         ENDDO
+<span class="ln">195</span>       ENDIF
+<span class="ln">196</span>
+<span class="ln">197</span>
+<span class="ln">198</span>
+<span class="ln">199</span>C *************************** WRITE OUT ATMOSPHERE INFORMATION  ************************
+<span class="ln">200</span>C Finish with the atmosphere, if the atmosphere was computed
+<span class="ln">201</span>       IF(LSTATM)THEN
+<span class="ln">202</span>            DO I=NUMATM,1,-1
+<span class="ln">203</span>C write out the basic info. Omega and abundances take value of last interior point.
+<span class="ln">204</span>            RAD = DLOG10(DEXP(CLN*ENVR(NUMENV)) + ATMOR(I))
+<span class="ln">205</span>            WRITE(ISTOR,62,ADVANCE=&#x27;no&#x27;) MODEL,NUMATM-I+M+NUMENV,HSTOT,RAD,B,
+<span class="ln">206</span>     *      ATMOP(I),ATMOT(I),ATMOD(I),OMEGA(M),
+<span class="ln">207</span>     *      .FALSE.,.FALSE.,.FALSE.,.TRUE.,(HCOMP(J,M),J=1,15)
+<span class="ln">208</span>C write out additional physics
+<span class="ln">209</span>            WRITE(ISTOR,63,ADVANCE=&#x27;no&#x27;) ATMOO(I),SG,ADELS(1,I),
+<span class="ln">210</span>     *           ADELS(2,I),ADELS(3,I),0.0,AGAM1(I),
+<span class="ln">211</span>     *           AFXIONS(1,I),AFXIONS(2,I),
+<span class="ln">212</span>     *           AFXIONS(3,I),ABETAS(I),0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,
+<span class="ln">213</span>     *           ATMOCP(I),AQDT(I)
+<span class="ln">214</span>C  zero placeholders for rotation output
+<span class="ln">215</span>            WRITE(ISTOR,64) 0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+<span class="ln">216</span>         ENDDO
+<span class="ln">217</span>       ENDIF
+<span class="ln">218</span>
+<span class="ln">219</span>
+<span class="ln">220</span>
+<span class="ln">221</span>C **************************    Output format codes   ******************************
+<span class="ln">222</span>
+<span class="ln">223</span> 62   FORMAT(I6,1X,I6,0P2F18.14,1PE24.16,0PF18.14,1X,F18.14,1X,F18.14,1PE24.16,
+<span class="ln">224</span>     &amp;     1X,L1,1X,L1,1X,L1,1X,L1,3(0PF12.9),12(0PE16.8),2X)
+<span class="ln">225</span>
+<span class="ln">226</span> 63   FORMAT(1PE10.4,1PE11.3,E12.4,E12.4,E12.4,1PE12.4,0PF9.5,1X,F9.5,1X,F9.5,
+<span class="ln">227</span>CC     &amp;     F9.5,F9.5,F9.5,F9.5,F9.5,F9.5,F9.5,E13.5,E13.5,E13.5)
+<span class="ln">228</span>C     &amp;     F9.5,F9.5,E12.4,E12.4,E12.4,E12.4,E12.4,E13.5,E13.5,E13.5,E13.5)
+<span class="ln">229</span>     &amp;  1X,F9.5,1X,F9.5,1X,F9.5,E12.4,E12.4,E12.4,E12.4,E12.4,E13.5,E13.5,E13.5,E13.5,E13.5,E13.5,E13.5,
+<span class="ln">230</span>     &amp;  E13.5)
+<span class="ln">231</span> 64   FORMAT(E14.6,E14.6,E14.6,E14.6,E14.6,E14.6,E14.6,E11.3,E11.3,E11.3,E11.3)
+<span class="ln">232</span>
+<span class="ln">233</span>
+<span class="ln">234</span>
+<span class="ln">235</span>      RETURN
+<span class="ln">236</span>      END</pre></details>
+<details class='py' id='py-stitch'><summary>Python version: stitch</summary><pre class='doc'>Write one model&#x27;s full profile to the .store unit ISTOR, one line of
+61 columns per point: the interior shells, then, if asked (LSTENV,
+LSTATM), the envelope integrated again with ENVINT at fixed output
+steps, and the atmosphere.
+
+Translates: stitch.f#STITCH (09c3b9b)
+
+Arguments: the model (hcomp[species, shell], hr, hp, hd, hs, ht, hl,
+hs1, omega, lc, index 0 unused), the rotation arrays eta2, hi, r0, hjm,
+fp, ft, log Teff, log M (hstot), log L/Lsun (bl), m, the model number,
+and cmixl (the mixing length, passed to envint). Nothing is changed.
+
+Returns None.</pre><pre class='src'><span class="ln">80</span>def stitch(hcomp, hr, hp, hd, hs, ht, hl, hs1, omega, eta2, hi, r0, hjm, fp,
+<span class="ln">81</span>           ft, teffl, hstot, bl, m, lc, model, cmixl):
+<span class="ln">82</span>    &quot;&quot;&quot;Write one model&#x27;s full profile to the .store unit ISTOR, one line of
+<span class="ln">83</span>    61 columns per point: the interior shells, then, if asked (LSTENV,
+<span class="ln">84</span>    LSTATM), the envelope integrated again with ENVINT at fixed output
+<span class="ln">85</span>    steps, and the atmosphere.
+<span class="ln">86</span>
+<span class="ln">87</span>    Translates: stitch.f#STITCH (09c3b9b)
+<span class="ln">88</span>
+<span class="ln">89</span>    Arguments: the model (hcomp[species, shell], hr, hp, hd, hs, ht, hl,
+<span class="ln">90</span>    hs1, omega, lc, index 0 unused), the rotation arrays eta2, hi, r0, hjm,
+<span class="ln">91</span>    fp, ft, log Teff, log M (hstot), log L/Lsun (bl), m, the model number,
+<span class="ln">92</span>    and cmixl (the mixing length, passed to envint). Nothing is changed.
+<span class="ln">93</span>
+<span class="ln">94</span>    Returns None.
+<span class="ln">95</span>    &quot;&quot;&quot;
+<span class="ln">96</span>    global b
+<span class="ln">97</span>    c = constants_mod
+<span class="ln">98</span>    nml = nmlpar_mod
+<span class="ln">99</span>    sc = scrtch_mod
+<span class="ln">100</span>    es = envstruct_mod
+<span class="ln">101</span>    at = atmstruct_mod
+<span class="ln">102</span>    unit = iounits_mod.istor
+<span class="ln">103</span>    zeros11 = [0.0] * 11
+<span class="ln">104</span>
+<span class="ln">105</span>    cg = math.exp(c.cln * c.cgl)
+<span class="ln">106</span>    sg = 0.0
+<span class="ln">107</span>    for i in range(1, m + 1):
+<span class="ln">108</span>        sg = math.exp(c.cln * (c.cgl - 2.0 * hr[i])) * hs1[i]
+<span class="ln">109</span>        line = _fmt62(model, i, hs[i], hr[i], hl[i], hp[i], ht[i], hd[i],
+<span class="ln">110</span>                      omega[i], lc[i], True, False, False, hcomp[:, i])
+<span class="ln">111</span>        # Question (see the page): beta of an interior shell is read from
+<span class="ln">112</span>        # the envelope&#x27;s EBETAS, not SBETA.
+<span class="ln">113</span>        line += _fmt63([sc.so[i], sg, sc.sdel[1, i], sc.sdel[2, i],
+<span class="ln">114</span>                        sc.sdel[3, i], sc.svel[i], sound_mod.gam1[i],
+<span class="ln">115</span>                        sc.sfxion[1, i], sc.sfxion[2, i], sc.sfxion[3, i],
+<span class="ln">116</span>                        es.ebetas[i], sc.seta[i], sc.seg[1, i], sc.seg[2, i],
+<span class="ln">117</span>                        sc.seg[3, i], sc.seg[4, i], sc.seg[5, i],
+<span class="ln">118</span>                        sc.sesum[i], sc.seg[6, i], sc.seg[7, i], sc.scp[i],
+<span class="ln">119</span>                        pulse1_mod.pqdt[i]])
+<span class="ln">120</span>        if nml.lrot:
+<span class="ln">121</span>            fm = math.exp(c.cln * hs[i])
+<span class="ln">122</span>            duma = c.cc13 * omega[i]**2 / (cg * fm) * 5.0 / (2.0 + eta2[i])
+<span class="ln">123</span>            a = duma * r0[i]**3
+<span class="ln">124</span>            rpoleq = (1.0 - a) / (1.0 + 0.5 * a)
+<span class="ln">125</span>            vtot = temp2_mod.ves[i] + temp2_mod.vgsf[i] + temp2_mod.vss[i]
+<span class="ln">126</span>            line += _fmt64([a, rpoleq, fp[i], ft[i], hjm[i], hi[i],
+<span class="ln">127</span>                            roten_mod.derot[i], temp2_mod.ves[i],
+<span class="ln">128</span>                            temp2_mod.vgsf[i], temp2_mod.vss[i], vtot])
+<span class="ln">129</span>        else:
+<span class="ln">130</span>            line += _fmt64(zeros11)
+<span class="ln">131</span>        iounits_mod.write(unit, line)
+<span class="ln">132</span>
+<span class="ln">133</span>    if nml.lstenv:
+<span class="ln">134</span>        # Only provide an envelope if asked to do so: fixed output steps
+<span class="ln">135</span>        # (&quot;dropping a sinkline&quot;).
+<span class="ln">136</span>        # Question (see the page): the saved steps are never restored.
+<span class="ln">137</span>        abeg0 = nml.atmbeg
+<span class="ln">138</span>        amin0 = nml.atmmin
+<span class="ln">139</span>        amax0 = nml.atmmax
+<span class="ln">140</span>        ebeg0 = nml.envbeg
+<span class="ln">141</span>        emin0 = nml.envmin
+<span class="ln">142</span>        emax0 = nml.envmax
+<span class="ln">143</span>        nml.atmbeg = nml.atmstp
+<span class="ln">144</span>        nml.atmmin = nml.atmstp
+<span class="ln">145</span>        nml.atmmax = nml.atmstp
+<span class="ln">146</span>        nml.envbeg = nml.envstp
+<span class="ln">147</span>        nml.envmin = nml.envstp
+<span class="ln">148</span>        nml.envmax = nml.envstp
+<span class="ln">149</span>        idum = 0
+<span class="ln">150</span>        b = math.exp(c.cln * bl)
+<span class="ln">151</span>        fpl = fp[m]
+<span class="ln">152</span>        ftl = ft[m]
+<span class="ln">153</span>        katm = 0
+<span class="ln">154</span>        kenv = 0
+<span class="ln">155</span>        ksaha = 0
+<span class="ln">156</span>        ixx = 0
+<span class="ln">157</span>        lprt = True
+<span class="ln">158</span>        lsbc0 = False
+<span class="ln">159</span>        x = hcomp[1, m]
+<span class="ln">160</span>        z = hcomp[3, m]
+<span class="ln">161</span>        rl = 0.5 * (bl + c.clsunl - 4.0 * teffl - c.c4pil - c.csigl)
+<span class="ln">162</span>        gl = c.cgl + hstot - rl - rl
+<span class="ln">163</span>        plim = hp[m]
+<span class="ln">164</span>        # Question (see the page): tests lc[m], where STARIN tests jenv == m.
+<span class="ln">165</span>        if lc[m] and nml.spotf != 0.0 and nml.spotx != 1.0:
+<span class="ln">166</span>            ateffl = teffl - 0.25 * math.log10(
+<span class="ln">167</span>                nml.spotf * nml.spotx**4.0 + 1.0 - nml.spotf)
+<span class="ln">168</span>        else:
+<span class="ln">169</span>            ateffl = teffl
+<span class="ln">170</span>        dum1 = np.zeros(5)
+<span class="ln">171</span>        dum2 = np.zeros(4)
+<span class="ln">172</span>        dum3 = np.zeros(4)
+<span class="ln">173</span>        dum4 = np.zeros(4)
+<span class="ln">174</span>        rl, idum, katm, kenv, ksaha = envint(
+<span class="ln">175</span>            b, fpl, ftl, gl, hstot, ixx, lprt, lsbc0, plim, rl, ateffl, x, z,
+<span class="ln">176</span>            dum1, idum, katm, kenv, ksaha, dum2, dum3, dum4, lpulpt, cmixl)
+<span class="ln">177</span>
+<span class="ln">178</span>        for i in range(1, es.numenv + 1):
+<span class="ln">179</span>            envs1[i] = math.exp(c.cln * (es.envs[i] + hstot))
+<span class="ln">180</span>        for i in range(m + 1, m + es.numenv + 1):
+<span class="ln">181</span>            k = i - m
+<span class="ln">182</span>            sg = math.exp(c.cln * (c.cgl - 2.0 * es.envr[k])) * envs1[k]
+<span class="ln">183</span>            line = _fmt62(model, i, es.envs[k] + hstot, es.envr[k],
+<span class="ln">184</span>                          es.envl[k], es.envp[k], es.envt[k], es.envd[k],
+<span class="ln">185</span>                          omega[m], es.lcenv[k], False, True, False,
+<span class="ln">186</span>                          hcomp[:, m])
+<span class="ln">187</span>            line += _fmt63([es.envo[k], sg, es.edels[1, k], es.edels[2, k],
+<span class="ln">188</span>                            es.edels[3, k], es.evels[k], es.egam1[k],
+<span class="ln">189</span>                            es.efxions[1, k], es.efxions[2, k],
+<span class="ln">190</span>                            es.efxions[3, k], es.ebetas[k]]
+<span class="ln">191</span>                           + [0.0] * 9 + [es.eqcp[k], es.eqdt[k]])
+<span class="ln">192</span>            line += _fmt64(zeros11)
+<span class="ln">193</span>            iounits_mod.write(unit, line)
+<span class="ln">194</span>
+<span class="ln">195</span>    if nml.lstatm:
+<span class="ln">196</span>        # Question (see the page): without LSTENV, numenv, envr and b are
+<span class="ln">197</span>        # those of an earlier integration or call; sg is the last point&#x27;s.
+<span class="ln">198</span>        for i in range(at.numatm, 0, -1):
+<span class="ln">199</span>            rad = math.log10(math.exp(c.cln * es.envr[es.numenv])
+<span class="ln">200</span>                             + at.atmor[i])
+<span class="ln">201</span>            line = _fmt62(model, at.numatm - i + m + es.numenv, hstot, rad,
+<span class="ln">202</span>                          b, at.atmop[i], at.atmot[i], at.atmod[i], omega[m],
+<span class="ln">203</span>                          False, False, False, True, hcomp[:, m])
+<span class="ln">204</span>            line += _fmt63([at.atmoo[i], sg, at.adels[1, i], at.adels[2, i],
+<span class="ln">205</span>                            at.adels[3, i], 0.0, at.agam1[i],
+<span class="ln">206</span>                            at.afxions[1, i], at.afxions[2, i],
+<span class="ln">207</span>                            at.afxions[3, i], at.abetas[i]]
+<span class="ln">208</span>                           + [0.0] * 9 + [at.atmocp[i], at.aqdt[i]])
+<span class="ln">209</span>            line += _fmt64(zeros11)
+<span class="ln">210</span>            iounits_mod.write(unit, line)</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_e0'><summary>Python version: _e0</summary><pre class='doc'>Fortran&#x27;s 0PEw.d: a mantissa in [0.1, 1), e.g. 0.12345678E+01.</pre><pre class='src'><span class="ln">33</span>def _e0(x, w, d):
+<span class="ln">34</span>    &quot;&quot;&quot;Fortran&#x27;s 0PEw.d: a mantissa in [0.1, 1), e.g. 0.12345678E+01.&quot;&quot;&quot;
+<span class="ln">35</span>    if x == 0.0:
+<span class="ln">36</span>        return f&quot;{&#x27;0.&#x27; + &#x27;0&#x27; * d + &#x27;E+00&#x27;:&gt;{w}}&quot;
+<span class="ln">37</span>    e = math.floor(math.log10(abs(x))) + 1
+<span class="ln">38</span>    m = x / 10.0**e
+<span class="ln">39</span>    if round(abs(m), d) &gt;= 1.0:  # rounding carried into the next decade
+<span class="ln">40</span>        m /= 10.0
+<span class="ln">41</span>        e += 1
+<span class="ln">42</span>    s = f&quot;{abs(m):.{d}f}&quot;[1:]  # drop the leading zero, as Fortran does
+<span class="ln">43</span>    sign = &quot;-&quot; if x &lt; 0 else &quot;&quot;
+<span class="ln">44</span>    return f&quot;{sign + &#x27;0&#x27; + s + f&#x27;E{e:+03d}&#x27;:&gt;{w}}&quot;</pre></details>
+<details class='py' id='py-_l1'><summary>Python version: _l1</summary><pre class='src'><span class="ln">47</span>def _l1(flag):
+<span class="ln">48</span>    return &quot;T&quot; if flag else &quot;F&quot;</pre></details>
+<details class='py' id='py-_fmt62'><summary>Python version: _fmt62</summary><pre class='src'><span class="ln">51</span>def _fmt62(model, i, hs, hr, hl, hp, ht, hd, om, l1, l2, l3, l4, comp):
+<span class="ln">52</span>    # I6,1X,I6,0P2F18.14,1PE24.16,0PF18.14,1X,F18.14,1X,F18.14,1PE24.16,
+<span class="ln">53</span>    # 1X,L1,1X,L1,1X,L1,1X,L1,3(0PF12.9),12(0PE16.8),2X
+<span class="ln">54</span>    s = (f&quot;{model:6d} {i:6d}{hs:18.14f}{hr:18.14f}{hl:24.16E}{hp:18.14f}&quot;
+<span class="ln">55</span>         f&quot; {ht:18.14f} {hd:18.14f}{om:24.16E}&quot;
+<span class="ln">56</span>         f&quot; {_l1(l1)} {_l1(l2)} {_l1(l3)} {_l1(l4)}&quot;)
+<span class="ln">57</span>    s += &quot;&quot;.join(f&quot;{comp[j]:12.9f}&quot; for j in range(1, 4))
+<span class="ln">58</span>    s += &quot;&quot;.join(_e0(comp[j], 16, 8) for j in range(4, 16))
+<span class="ln">59</span>    return s + &quot;  &quot;</pre></details>
+<details class='py' id='py-_fmt63'><summary>Python version: _fmt63</summary><pre class='src'><span class="ln">62</span>def _fmt63(v):
+<span class="ln">63</span>    # 1PE10.4,1PE11.3,E12.4,E12.4,E12.4,1PE12.4,0PF9.5,1X,F9.5,1X,F9.5,
+<span class="ln">64</span>    # 1X,F9.5,1X,F9.5,1X,F9.5,5E12.4,8E13.5 (the last E&#x27;s with 0P); the
+<span class="ln">65</span>    # 22 values end the record at the fifth E13.5.
+<span class="ln">66</span>    s = f&quot;{v[0]:10.4E}{v[1]:11.3E}{v[2]:12.4E}{v[3]:12.4E}{v[4]:12.4E}&quot;
+<span class="ln">67</span>    s += f&quot;{v[5]:12.4E}{v[6]:9.5f}&quot;
+<span class="ln">68</span>    s += &quot;&quot;.join(f&quot; {v[k]:9.5f}&quot; for k in range(7, 12))
+<span class="ln">69</span>    s += &quot;&quot;.join(_e0(v[k], 12, 4) for k in range(12, 17))
+<span class="ln">70</span>    s += &quot;&quot;.join(_e0(v[k], 13, 5) for k in range(17, 22))
+<span class="ln">71</span>    return s</pre></details>
+<details class='py' id='py-_fmt64'><summary>Python version: _fmt64</summary><pre class='src'><span class="ln">74</span>def _fmt64(v):
+<span class="ln">75</span>    # 7E14.6, 4E11.3 (0P)
+<span class="ln">76</span>    return (&quot;&quot;.join(_e0(x, 14, 6) for x in v[:7])
+<span class="ln">77</span>            + &quot;&quot;.join(_e0(x, 11, 3) for x in v[7:]))</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing.</strong> Question 1: besides STARIN, <a href="../yrec-map/wrtmod.f.html#def-WRTMOD">WRTMOD</a> and <a href="../yrec-map/getnewenv.f.html#def-GETNEWENV">GETNEWENV</a> also restore the integration steps they change; only CALCAD and STITCH do not. <strong>Fix:</strong> add.</li>
+<li><strong>Missing.</strong> Question 5: with <code>LSTATM</code> but not <code>LSTENV</code>, the atmosphere's luminosity column writes <code>B</code>, which is set only in the envelope branch (a value from an earlier call, or undefined). <strong>Fix:</strong> add to question 5.</li>
+</ol>
+<p>Revised: questions 1 and 5 extended.</p></div></details>
+</main></body></html>

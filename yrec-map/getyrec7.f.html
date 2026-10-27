@@ -1,0 +1,568 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>getyrec7.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ getyrec7.f</span></header><main>
+<h1>getyrec7.f</h1>
+<p class='muted'>261 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/getyrec7.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>getyrec7.py</code>, 238 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>GETYREC7</code> reads a stellar model stored in the older YREC7 text format ("llp 4/16/03"; its header calls it <code>GETY7</code>) into memory. Since the YREC7 format lacks the physics flags of the newer Model2 format, it sets those to defaults ("?" strings, false flags).</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/starin.f.html#def-STARIN">STARIN</a>, when the input model's first record starts with <code>NMOD</code>; Model2 files (<code>MOD2</code>) go to <a href="../yrec-map/getmodel2.f.html#def-GETMODEL2">GETMODEL2</a>, which returns the same arguments.</li>
+<li><strong>Who writes the format:</strong> <a href="../yrec-map/putyrec7.f.html#def-PUTYREC7">PUTYREC7</a> (its formats match these), which nothing calls; so YREC7 files now come only from older codes.</li>
+<li><strong>Input:</strong> the file on unit <code>IREAD</code>, rewound before and after.</li>
+<li><strong>Outputs (arguments):</strong> the header (<code>MODEL</code>, <code>M</code>, <code>SMASS</code>, <code>TEFFL</code>, <code>BL</code>, <code>HSTOT</code>, <code>DAGE</code>, <code>DDAGE</code>), <code>LROT</code>, <code>LEXCOM</code>, <code>JCORE</code>, <code>JENV</code>, <code>CMIXL</code>, the luminosities <code>TLUMX</code> (converted to solar units if above $10^{20}$), the envelope triangle (<code>TRIT</code>, <code>TRIL</code>, <code>PS</code>, <code>TS</code>, <code>RS</code>, <code>CFENV</code>, <code>FTRI</code>), the shells (<code>HS</code>, <code>HR</code>, <code>HL</code>, <code>HP</code>, <code>HT</code>, <code>HD</code>, <code>LC</code>), <code>HCOMP</code> and <code>OMEGA</code>; plus the Model2-only items, set to defaults: the strings <code>ATM</code>, <code>EOS</code>, <code>HIK</code>, <code>ALOK</code> = "?", <code>COMPMIX</code> = "AG93", all flags false, <code>PDISK</code> = 7.2722×10$^{-6}$ rad s$^{-1}$ (a 10-day period), <code>TDISK</code> = 0, <code>WMAX</code> = 3×10$^{-4}$.</li>
+<li><strong>Modules:</strong> <a href="../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD"><code>CONSTANTS_MOD</code></a> (formerly <code>/CONST/</code>), for $L_\odot$.</li>
+</ul>
+<p><strong>The format, as read.</strong></p>
+<ol>
+<li>Each shell stores $X$ and $Z$ as integers in units of $10^{-6}$; $Y = 1 - X - Z - X(^3\mathrm{He})$ is recomputed. The run stops if a shell's $\log m$ is negative or above the total.</li>
+<li>The other species (rows 4–11) are stored only from <code>JCORE</code> to <code>JENV</code>, the region between the convective core and envelope, and copied into the homogeneous core and envelope. With <code>LEXCOM</code>, the light elements (rows 12–15) follow the same pattern, two shells per record.</li>
+<li>With <code>LROT</code>, $\Omega$ is stored as $-\log_{10}\Omega$; values of 58.9 or more mean $\Omega = 0$. If those records are missing, $\Omega$ is set to zero with a message.</li>
+</ol>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Precision of $X$ and $Z$.</strong> The format keeps $X$ and $Z$ to $10^{-6}$. Is that enough when models with diffusion are restarted from this format?</li>
+<li><strong>Defaults that change physics.</strong> <code>PDISK</code> and <code>WMAX</code> are set here to fixed values; if the namelist does not override them, a restart from a YREC7 model uses these. Are they the intended defaults?</li>
+<li><strong><code>ISHORT</code> still an argument.</strong> In <code>GETMODEL2</code> KC removed the unused <code>ISHORT</code>; here it is used (for the error messages), so it stays. Fine; noted for consistency.</li>
+<li><strong>A one-column offset.</strong> PUTYREC7 writes the flags record as <code>2(L1,1X),'F F ',2I4,F7.3</code> (four characters between the flags and <code>JCORE</code>), but GETYREC7 reads it as <code>2(L1,1X),5X,2I4,F7.3</code>, skipping five. Each field is then read one column late; with blanks ignored this gives the right values while <code>JCORE</code> and <code>JENV</code> are below 1000, but with a four-digit <code>JENV</code> (up to <code>JSON</code> = 5000) the first digit of <code>JENV</code> ends up in <code>JCORE</code>. Which layout did YREC7 itself write?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+GETY7 - Read a YREC7 format stellar model file into memory
+
+llp  4/16/03
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-GETYREC7'>GETYREC7</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-GETYREC7'><h3><span class='kind'>subroutine</span>GETYREC7</h3>
+<p class='muted'>lines 9–261 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/getyrec7.f#L9-L261'>GitHub</a></p>
+<pre>SUBROUTINE GETYREC7(BL,CFENV,CMIXL,DAGE,DDAGE,FTRI,HCOMP,HD,HL,</pre>
+<div class='notes'><p>Reads a YREC7-format model file (header, envelope data, shells, composition in compressed form, rotation) and sets the Model2-only items to defaults.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+GETY7 - Read a YREC7 format stellar model file into memory
+
+llp  4/16/03
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/starin.f.html#def-STARIN'>STARIN</a> <span class='muted'>(starin.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">9</span>      SUBROUTINE GETYREC7(BL,CFENV,CMIXL,DAGE,DDAGE,FTRI,HCOMP,HD,HL,
+<span class="ln">10</span>     * HP,HR,HS,HSTOT,HT,IREAD,ISHORT,JCORE,JENV,LC,LEXCOM,LROT,M,
+<span class="ln">11</span>     * MODEL,OMEGA,PS,RS,SMASS,TEFFL,TLUMX,TRIL,TRIT,TS,
+<span class="ln">12</span>     &amp; ATM,EOS,HIK,LDIFY,LDIFZ,LDISK,LINSTB,LJDOT0,ALOK,
+<span class="ln">13</span>     &amp; LOVSTC,LOVSTE,LOVSTM,LPUREZ,LSEMIC,COMPMIX,PDISK,TDISK,WMAX)
+<span class="ln">14</span>C 10/15/26 MHP via Claude
+<span class="ln">15</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">16</span>C PARAMETER(JSON=5000) here.
+<span class="ln">17</span>      USE DIMENSIONS_MOD
+<span class="ln">18</span>C 10/14/26 MHP via Claude
+<span class="ln">19</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">20</span>      USE CONSTANTS_MOD
+<span class="ln">21</span>C 10/20/26 MHP via Claude
+<span class="ln">22</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">23</span>C explicit declarations.
+<span class="ln">24</span>      IMPLICIT NONE
+<span class="ln">25</span>      REAL*8 BL,CCCMAX,CFENV,CMIXL,DAGE,DDAGE,FTRI,HCOMP,HD,HL,HP,HR,HS,
+<span class="ln">26</span>     *       HSTOT,HT,OMEGA,OMEGAL,PDISK,PS,RS,SMASS,TDISK,TEFFL,TLUMX,
+<span class="ln">27</span>     *       TRIL,TRIT,TS,WMAX
+<span class="ln">28</span>      INTEGER I,II,IO,IREAD,ISHORT,IX,IZ,J,JCORE,JENV,K,KT,M,MODEL
+<span class="ln">29</span>      LOGICAL*4 LC,LDIFY,LDIFZ,LDISK,LEXCOM,LINSTB,LJDOT0,LOVSTC,LOVSTE,
+<span class="ln">30</span>     *       LOVSTM,LPUREZ,LROT,LSEMIC
+<span class="ln">31</span>C First three lines above are YREC7 inputs
+<span class="ln">32</span>C Last two lines are MODEL2 add-ons
+<span class="ln">33</span>
+<span class="ln">34</span>
+<span class="ln">35</span>c     CHARACTER*4 ATM, LOK, HIK, COMPMIX
+<span class="ln">36</span>c MHP 4/25 changed LOK name to make it unique, used elsewhere
+<span class="ln">37</span>      CHARACTER*4 ATEMP,ATM,HIK,ALOK,COMPMIX
+<span class="ln">38</span>      CHARACTER*6 EOS
+<span class="ln">39</span>
+<span class="ln">40</span>C 9/25/26 MHP via Claude
+<span class="ln">41</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">42</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">43</span>
+<span class="ln">44</span>      DIMENSION CFENV(9),HCOMP(15,JSON),HD(JSON),HL(JSON),HR(JSON),
+<span class="ln">45</span>     *HP(JSON),HS(JSON),HT(JSON),LC(JSON),OMEGA(JSON),OMEGAL(JSON),
+<span class="ln">46</span>     *PS(3),RS(3),TS(3),TLUMX(8),TRIL(3),TRIT(3)
+<span class="ln">47</span>
+<span class="ln">48</span>      save
+<span class="ln">49</span>
+<span class="ln">50</span>C Initialization
+<span class="ln">51</span>
+<span class="ln">52</span>C Zero the composition arrays (HCOMP) and the OMEGA array.
+<span class="ln">53</span>C This is agreed upon protection in case they are inadvertently used in the program,
+<span class="ln">54</span>C but not present in the old YREC input data.
+<span class="ln">55</span>      DO I  = 1, JSON
+<span class="ln">56</span>         OMEGA(I) = 0D0
+<span class="ln">57</span>       DO J = 1, 15
+<span class="ln">58</span>          HCOMP(J,I) = 0D0
+<span class="ln">59</span>       ENDDO
+<span class="ln">60</span>      ENDDO
+<span class="ln">61</span>
+<span class="ln">62</span>C  Set Model2-sspecific strings to &quot;?&quot;
+<span class="ln">63</span>c      ATM = &quot; ? &quot;
+<span class="ln">64</span>c      EOS = &quot; ? &quot;
+<span class="ln">65</span>c      HIK = &quot; ? &quot;
+<span class="ln">66</span>c     LOK = &quot; ? &quot;
+<span class="ln">67</span>c MHP 4/25 padded character strings to proper length
+<span class="ln">68</span>      ATM = &quot;  ? &quot;
+<span class="ln">69</span>      EOS = &quot;    ? &quot;
+<span class="ln">70</span>      HIK = &quot;  ? &quot;
+<span class="ln">71</span>      ALOK = &quot;  ? &quot;
+<span class="ln">72</span>      COMPMIX = &quot;AG93&quot;
+<span class="ln">73</span>
+<span class="ln">74</span>C Set Model2-specific flags false
+<span class="ln">75</span>      LDIFY = .FALSE.
+<span class="ln">76</span>      LDIFZ = .FALSE.
+<span class="ln">77</span>      LDISK = .FALSE.
+<span class="ln">78</span>      LINSTB = .FALSE.
+<span class="ln">79</span>      LJDOT0 = .FALSE.
+<span class="ln">80</span>      LOVSTC = .FALSE.
+<span class="ln">81</span>      LOVSTE = .FALSE.
+<span class="ln">82</span>      LOVSTM = .FALSE.
+<span class="ln">83</span>      LPUREZ = .FALSE.
+<span class="ln">84</span>      LSEMIC = .FALSE.
+<span class="ln">85</span>
+<span class="ln">86</span>C Set Model2-specific constants to default
+<span class="ln">87</span>      PDISK = 7.2722D-6
+<span class="ln">88</span>      TDISK = 0D0
+<span class="ln">89</span>      WMAX = 3D-4
+<span class="ln">90</span>
+<span class="ln">91</span>C End of initialization
+<span class="ln">92</span>
+<span class="ln">93</span>C Read in an input model from the LU IREAD file in YREC7 Format
+<span class="ln">94</span>
+<span class="ln">95</span>      REWIND(IREAD)
+<span class="ln">96</span>
+<span class="ln">97</span>C get the header record
+<span class="ln">98</span>      READ(IREAD,10) ATEMP,MODEL,M,SMASS,TEFFL,BL,HSTOT,
+<span class="ln">99</span>     *        DAGE,DDAGE
+<span class="ln">100</span> 10   FORMAT(A4,1X,2I5,3F8.5,1X,F14.10,F13.9,F13.0)
+<span class="ln">101</span>
+<span class="ln">102</span>C Get the flags describing the input physics and the information that
+<span class="ln">103</span>C is stored in the model (rotating or not?, extendec compotition, etc.)
+<span class="ln">104</span>      READ(IREAD,30) LROT,LEXCOM,JCORE,JENV,CMIXL
+<span class="ln">105</span> 30   FORMAT(2(L1,1X),5X,2I4,F7.3)
+<span class="ln">106</span>
+<span class="ln">107</span>C get the LUMINOSITIES---PP(1-2-3)-CNO-HE-NU-GRAV
+<span class="ln">108</span>      READ(IREAD,40) (TLUMX(J),J=1,7)
+<span class="ln">109</span> 40   FORMAT(10X,7E10.3)
+<span class="ln">110</span>
+<span class="ln">111</span>C If TLUMX are in ergs, convert to solar units.  Decide by
+<span class="ln">112</span>C comparing to 10**20. If larger, divide by CLSUN.
+<span class="ln">113</span>      CCCMAX = DMAX1(TLUMX(1),TLUMX(2),TLUMX(3),TLUMX(4),TLUMX(5),
+<span class="ln">114</span>     *     DABS(TLUMX(6)),TLUMX(7))
+<span class="ln">115</span>      IF(CCCMAX.GT.1.0D20) THEN
+<span class="ln">116</span>       DO J = 1,7
+<span class="ln">117</span>          TLUMX(J) = TLUMX(J)/CLSUN
+<span class="ln">118</span>         ENDDO
+<span class="ln">119</span>      ENDIF
+<span class="ln">120</span>
+<span class="ln">121</span>C Get the ENVELOPE DATA
+<span class="ln">122</span>C FTRI is 1,normally.  It is set to -1  if any of the record numbers
+<span class="ln">123</span>C for the envelope triangle records was set to -1 by WRTLST.
+<span class="ln">124</span>      FTRI = 1D0
+<span class="ln">125</span>      DO 80 I = 1,3
+<span class="ln">126</span>       READ(IREAD,70) IO,TRIT(I),TRIL(I),PS(I),TS(I),RS(I),
+<span class="ln">127</span>     *        (CFENV(I+I+I-3+J),J = 1,3)
+<span class="ln">128</span> 70      FORMAT(3X,I2,F7.5,4F8.5,3E12.5)
+<span class="ln">129</span>       IF(IO.LT.0) FTRI = -1D0
+<span class="ln">130</span> 80   CONTINUE
+<span class="ln">131</span>
+<span class="ln">132</span>C READ IN HENYEY POINTS IN 4 PARTS
+<span class="ln">133</span>C
+<span class="ln">134</span>C Read FIRST PART:M,R,L,P,T,RHO,CONV(T/F),X,Y,AND Z - one line per shell
+<span class="ln">135</span>      DO 110 I = 1,M
+<span class="ln">136</span>       READ(IREAD,100) HS(I),HR(I),HL(I),HP(I),HT(I),HD(I),LC(I),
+<span class="ln">137</span>     *        IX,IZ
+<span class="ln">138</span> 100     FORMAT(0PF13.10,F10.7,1PE14.7,0PF10.7,2F10.7,L1,2I6)
+<span class="ln">139</span>       IF(HS(I).LT.0D0.OR.HS(I).GT.HSTOT) THEN
+<span class="ln">140</span>          WRITE(ISHORT,1000)
+<span class="ln">141</span>          WRITE(ISHORT,1050) I
+<span class="ln">142</span> 1000       FORMAT(1X,39(&#x27;&gt;&#x27;),40(&#x27;&lt;&#x27;)/1X,&#x27;RUN STOPPED&#x27;)
+<span class="ln">143</span> 1050       FORMAT(&#x27; ERROR IN SUBROUTINE GETY7&#x27;/1X,&#x27;GLITCH IN SHELL&#x27;,
+<span class="ln">144</span>     *      I3,&#x27;, SHELL MASS LESS THAN ZERO OR GREATER THAN STAR MASS&#x27;)
+<span class="ln">145</span>          STOP
+<span class="ln">146</span>       ENDIF
+<span class="ln">147</span>       HCOMP(1,I) = 1.0D-6*DFLOAT(IX)
+<span class="ln">148</span>       HCOMP(3,I) = 1.0D-6*DFLOAT(IZ)
+<span class="ln">149</span> 110  CONTINUE
+<span class="ln">150</span>
+<span class="ln">151</span>C Read SECOND PART:ELEMENT ABUNDANCES: HE3,CNO CYCLE ELEMENTS.
+<span class="ln">152</span>C ABUNDANCES IN SURFACE AND CENTRAL CONVECTION ZONES STORED WITH 1
+<span class="ln">153</span>C VALUE PER ZONE RATHER THAN 1 VALUE PER SHELL
+<span class="ln">154</span>      IF(JENV.LE.JCORE) THEN
+<span class="ln">155</span>       READ(IREAD,200)(HCOMP(I,JCORE),I=4,11)
+<span class="ln">156</span>       READ(IREAD,200)(HCOMP(I,JENV),I=4,11)
+<span class="ln">157</span>      ELSE
+<span class="ln">158</span>       DO 210 J = JCORE,JENV
+<span class="ln">159</span>          READ(IREAD,200) (HCOMP(I,J),I = 4,11)
+<span class="ln">160</span> 200        FORMAT(8(1PE9.3,1X))
+<span class="ln">161</span> 210     CONTINUE
+<span class="ln">162</span>      ENDIF
+<span class="ln">163</span>      IF(JCORE.GT.1) THEN
+<span class="ln">164</span>C CONVECTIVE CORE- ASSIGN FIRST COMPOSITION VALUE TO SHELLS 1-JCORE
+<span class="ln">165</span>       DO 230 J = 1,JCORE-1
+<span class="ln">166</span>          DO 220 I = 4,11
+<span class="ln">167</span>             HCOMP(I,J) = HCOMP(I,JCORE)
+<span class="ln">168</span> 220        CONTINUE
+<span class="ln">169</span> 230     CONTINUE
+<span class="ln">170</span>      ENDIF
+<span class="ln">171</span>      IF(JENV.LT.M) THEN
+<span class="ln">172</span>C CONVECTIVE SURFACE- ASSIGN LAST COMPOSITION TO SHELLS JENV-M
+<span class="ln">173</span>       DO 250 J = JENV+1,M
+<span class="ln">174</span>          DO 240 I = 4,11
+<span class="ln">175</span>             HCOMP(I,J) = HCOMP(I,JENV)
+<span class="ln">176</span> 240        CONTINUE
+<span class="ln">177</span> 250     CONTINUE
+<span class="ln">178</span>      ENDIF
+<span class="ln">179</span>C DEFINE HE4 = 1 - X - Z - HE3.
+<span class="ln">180</span>      DO 260 I = 1,M
+<span class="ln">181</span>       HCOMP(2,I) = 1.0D0 - HCOMP(1,I) - HCOMP(3,I) - HCOMP(4,I)
+<span class="ln">182</span> 260  CONTINUE
+<span class="ln">183</span>
+<span class="ln">184</span>C READ IN H2,LI6,LI7,BE9 (EXTENDED COMPOSITION)
+<span class="ln">185</span>
+<span class="ln">186</span>      IF(LEXCOM) THEN
+<span class="ln">187</span>       IF(JENV.EQ.1)THEN
+<span class="ln">188</span>C FULLY CONVECTIVE MODEL
+<span class="ln">189</span>          READ(IREAD,300)(HCOMP(I,1),I=12,15)
+<span class="ln">190</span> 300        FORMAT(4(1PE9.3,1X))
+<span class="ln">191</span>          DO 310 J = 1,M
+<span class="ln">192</span>             DO 305 I = 12,15
+<span class="ln">193</span>              HCOMP(I,J) = HCOMP(I,1)
+<span class="ln">194</span> 305           CONTINUE
+<span class="ln">195</span> 310        CONTINUE
+<span class="ln">196</span>       ELSE
+<span class="ln">197</span>C GENERAL CASE
+<span class="ln">198</span>C THESE ABUNDANCES ARE READ IN WITH 2 SHELLS PER LINE
+<span class="ln">199</span>          DO 315 K = JCORE,JENV-1,2
+<span class="ln">200</span>             READ(IREAD,200)((HCOMP(I,J),I = 12,15),J = K,K+1)
+<span class="ln">201</span> 315        CONTINUE
+<span class="ln">202</span>C IF AN ODD NUMBER OF ABUNDANCES STORED, READ IN LAST VALUE
+<span class="ln">203</span>          KT = JENV-1 - JCORE
+<span class="ln">204</span>          IF(MOD(KT,2).NE.0)READ(IREAD,300)(HCOMP(I,K),I = 12,15)
+<span class="ln">205</span>          IF(JCORE.GT.1) THEN
+<span class="ln">206</span>C CONVECTIVE CORE- ASSIGN FIRST VALUE TO SHELLS 1-JCORE
+<span class="ln">207</span>             DO 330 J = 1,JCORE-1
+<span class="ln">208</span>              DO 320 I = 12,15
+<span class="ln">209</span>                 HCOMP(I,J) = HCOMP(I,JCORE)
+<span class="ln">210</span> 320              CONTINUE
+<span class="ln">211</span> 330           CONTINUE
+<span class="ln">212</span>          ENDIF
+<span class="ln">213</span>          IF(JENV.LT.M) THEN
+<span class="ln">214</span>C CONVECTIVE SURFACE- ASSIGN LAST VALUE TO SHELLS JENV - M
+<span class="ln">215</span>             DO 350 J = JENV+1,M
+<span class="ln">216</span>              DO 340 I = 12,15
+<span class="ln">217</span>                 HCOMP(I,J) = HCOMP(I,JENV)
+<span class="ln">218</span> 340              CONTINUE
+<span class="ln">219</span> 350           CONTINUE
+<span class="ln">220</span>          ENDIF
+<span class="ln">221</span>       ENDIF
+<span class="ln">222</span>      ENDIF
+<span class="ln">223</span>
+<span class="ln">224</span>C Read in FOURTH PART:  - LOG J/M STORED , 8 SHELLS PER LINE
+<span class="ln">225</span>
+<span class="ln">226</span>      IF(LROT) THEN
+<span class="ln">227</span>C READ OMEGA IN. If OMEGA records are missing go to OMEGA BYPASS below
+<span class="ln">228</span>      READ(IREAD,500,END=9999)(OMEGAL(II),II = 1,M)
+<span class="ln">229</span> 500    FORMAT(0P8F10.7)
+<span class="ln">230</span>      DO 510 I = 1,M
+<span class="ln">231</span>           IF(OMEGAL(I) .LT. 58.9D0) THEN
+<span class="ln">232</span>              OMEGA(I) = 10D0**(-OMEGAL(I))
+<span class="ln">233</span>           ELSE
+<span class="ln">234</span>              OMEGA(I) = 0D0
+<span class="ln">235</span>           ENDIF
+<span class="ln">236</span> 510    CONTINUE
+<span class="ln">237</span>      ENDIF
+<span class="ln">238</span>
+<span class="ln">239</span>C KEEP IREAD OPEN
+<span class="ln">240</span>      REWIND IREAD
+<span class="ln">241</span>
+<span class="ln">242</span>      RETURN
+<span class="ln">243</span>
+<span class="ln">244</span>C  OMEGA BYPASS
+<span class="ln">245</span>C Come here if OMEGA records are missing -- Can happen if
+<span class="ln">246</span>C a new omega file is being generated (LWNEW is true in STARIN)
+<span class="ln">247</span>
+<span class="ln">248</span>9999  WRITE(ISHORT,9998) &quot;GETYREC7: OMEGA records are missing from &quot;,
+<span class="ln">249</span>     *  &quot; input model file - OMEGA array zeroed&quot;
+<span class="ln">250</span>9998  FORMAT(2A)
+<span class="ln">251</span>
+<span class="ln">252</span>      DO I  = 1, JSON
+<span class="ln">253</span>         OMEGA(I) = 0D0
+<span class="ln">254</span>      ENDDO
+<span class="ln">255</span>
+<span class="ln">256</span>C KEEP IREAD OPEN
+<span class="ln">257</span>      REWIND IREAD
+<span class="ln">258</span>
+<span class="ln">259</span>      RETURN
+<span class="ln">260</span>
+<span class="ln">261</span>      END</pre></details>
+<details class='py' id='py-getyrec7'><summary>Python version: getyrec7</summary><pre class='doc'>Read a YREC7-format model from unit iread (rewound before and
+after): the header, the luminosities, the envelope triangle, the
+shells with X and Z in units of 1e-6, the other species stored only
+between the convective core and envelope, and Omega (as -log Omega)
+with rotation. The Model2-only items get defaults.
+
+Translates: getyrec7.f#GETYREC7 (09c3b9b)
+
+Arguments: iread (the unit), ishort (for the error messages); every
+other scalar is only set.
+Arrays changed in place: cfenv, hcomp, hd, hl, hp, hr, hs, ht, lc,
+omega, ps, rs, tlumx, tril, trit, ts.
+
+Returns (bl, cmixl, dage, ddage, ftri, hstot, jcore, jenv, lexcom,
+lrot, m, model, smass, teffl, atm, eos, hik, ldify, ldifz, ldisk,
+linstb, ljdot0, alok, lovstc, lovste, lovstm, lpurez, lsemic,
+compmix, pdisk, tdisk, wmax).</pre><pre class='src'><span class="ln">60</span>def getyrec7(bl, cfenv, cmixl, dage, ddage, ftri, hcomp, hd, hl, hp, hr,
+<span class="ln">61</span>             hs, hstot, ht, iread, ishort, jcore, jenv, lc, lexcom, lrot, m,
+<span class="ln">62</span>             model, omega, ps, rs, smass, teffl, tlumx, tril, trit, ts, atm,
+<span class="ln">63</span>             eos, hik, ldify, ldifz, ldisk, linstb, ljdot0, alok, lovstc,
+<span class="ln">64</span>             lovste, lovstm, lpurez, lsemic, compmix, pdisk, tdisk, wmax):
+<span class="ln">65</span>    &quot;&quot;&quot;Read a YREC7-format model from unit iread (rewound before and
+<span class="ln">66</span>    after): the header, the luminosities, the envelope triangle, the
+<span class="ln">67</span>    shells with X and Z in units of 1e-6, the other species stored only
+<span class="ln">68</span>    between the convective core and envelope, and Omega (as -log Omega)
+<span class="ln">69</span>    with rotation. The Model2-only items get defaults.
+<span class="ln">70</span>
+<span class="ln">71</span>    Translates: getyrec7.f#GETYREC7 (09c3b9b)
+<span class="ln">72</span>
+<span class="ln">73</span>    Arguments: iread (the unit), ishort (for the error messages); every
+<span class="ln">74</span>    other scalar is only set.
+<span class="ln">75</span>    Arrays changed in place: cfenv, hcomp, hd, hl, hp, hr, hs, ht, lc,
+<span class="ln">76</span>    omega, ps, rs, tlumx, tril, trit, ts.
+<span class="ln">77</span>
+<span class="ln">78</span>    Returns (bl, cmixl, dage, ddage, ftri, hstot, jcore, jenv, lexcom,
+<span class="ln">79</span>    lrot, m, model, smass, teffl, atm, eos, hik, ldify, ldifz, ldisk,
+<span class="ln">80</span>    linstb, ljdot0, alok, lovstc, lovste, lovstm, lpurez, lsemic,
+<span class="ln">81</span>    compmix, pdisk, tdisk, wmax).
+<span class="ln">82</span>    &quot;&quot;&quot;
+<span class="ln">83</span>    json = dimensions_mod.json
+<span class="ln">84</span>    for i in range(1, json + 1):
+<span class="ln">85</span>        omega[i] = 0.0
+<span class="ln">86</span>        for j in range(1, 15 + 1):
+<span class="ln">87</span>            hcomp[j, i] = 0.0
+<span class="ln">88</span>
+<span class="ln">89</span>    # The Model2-only items, which this format lacks.
+<span class="ln">90</span>    atm = &quot;  ? &quot;
+<span class="ln">91</span>    eos = &quot;    ? &quot;
+<span class="ln">92</span>    hik = &quot;  ? &quot;
+<span class="ln">93</span>    alok = &quot;  ? &quot;
+<span class="ln">94</span>    compmix = &quot;AG93&quot;
+<span class="ln">95</span>    ldify = False
+<span class="ln">96</span>    ldifz = False
+<span class="ln">97</span>    ldisk = False
+<span class="ln">98</span>    linstb = False
+<span class="ln">99</span>    ljdot0 = False
+<span class="ln">100</span>    lovstc = False
+<span class="ln">101</span>    lovste = False
+<span class="ln">102</span>    lovstm = False
+<span class="ln">103</span>    lpurez = False
+<span class="ln">104</span>    lsemic = False
+<span class="ln">105</span>    # Question (see the page): defaults that change the physics.
+<span class="ln">106</span>    pdisk = 7.2722e-6
+<span class="ln">107</span>    tdisk = 0.0
+<span class="ln">108</span>    wmax = 3e-4
+<span class="ln">109</span>
+<span class="ln">110</span>    iounits_mod.rewind(iread)
+<span class="ln">111</span>
+<span class="ln">112</span>    # Header (FORMAT 10).
+<span class="ln">113</span>    (atemp, model, m, smass, teffl, bl, hstot, dage, ddage) = _fields(
+<span class="ln">114</span>        iounits_mod.read(iread),
+<span class="ln">115</span>        [(&#x27;a&#x27;, 4), (&#x27;x&#x27;, 1), (&#x27;i&#x27;, 5), (&#x27;i&#x27;, 5)] + [(&#x27;f&#x27;, 8, 5)] * 3
+<span class="ln">116</span>        + [(&#x27;x&#x27;, 1), (&#x27;f&#x27;, 14, 10), (&#x27;f&#x27;, 13, 9), (&#x27;f&#x27;, 13, 0)])
+<span class="ln">117</span>
+<span class="ln">118</span>    # Flags (FORMAT 30).
+<span class="ln">119</span>    # Question (see the page): 5X skips one column more than PUTYREC7
+<span class="ln">120</span>    # writes.
+<span class="ln">121</span>    lrot, lexcom, jcore, jenv, cmixl = _fields(
+<span class="ln">122</span>        iounits_mod.read(iread),
+<span class="ln">123</span>        [(&#x27;l&#x27;, 1), (&#x27;x&#x27;, 1), (&#x27;l&#x27;, 1), (&#x27;x&#x27;, 1), (&#x27;x&#x27;, 5), (&#x27;i&#x27;, 4),
+<span class="ln">124</span>         (&#x27;i&#x27;, 4), (&#x27;f&#x27;, 7, 3)])
+<span class="ln">125</span>
+<span class="ln">126</span>    # Luminosities by source (FORMAT 40); in erg/s if any exceeds 1e20.
+<span class="ln">127</span>    tlumx[1:8] = _fields(iounits_mod.read(iread),
+<span class="ln">128</span>                         [(&#x27;x&#x27;, 10)] + [(&#x27;f&#x27;, 10, 3)] * 7)
+<span class="ln">129</span>    cccmax = max(tlumx[1], tlumx[2], tlumx[3], tlumx[4], tlumx[5],
+<span class="ln">130</span>                 abs(tlumx[6]), tlumx[7])
+<span class="ln">131</span>    if cccmax &gt; 1.0e20:
+<span class="ln">132</span>        for j in range(1, 7 + 1):
+<span class="ln">133</span>            tlumx[j] = tlumx[j] / constants_mod.clsun
+<span class="ln">134</span>
+<span class="ln">135</span>    # The envelope triangle (FORMAT 70).
+<span class="ln">136</span>    ftri = 1.0
+<span class="ln">137</span>    for i in range(1, 3 + 1):  # label 80
+<span class="ln">138</span>        vals = _fields(iounits_mod.read(iread),
+<span class="ln">139</span>                       [(&#x27;x&#x27;, 3), (&#x27;i&#x27;, 2), (&#x27;f&#x27;, 7, 5)] + [(&#x27;f&#x27;, 8, 5)] * 4
+<span class="ln">140</span>                       + [(&#x27;f&#x27;, 12, 5)] * 3)
+<span class="ln">141</span>        io, trit[i], tril[i], ps[i], ts[i], rs[i] = vals[:6]
+<span class="ln">142</span>        for j in range(1, 3 + 1):
+<span class="ln">143</span>            cfenv[i + i + i - 3 + j] = vals[5 + j]
+<span class="ln">144</span>        if io &lt; 0:
+<span class="ln">145</span>            ftri = -1.0
+<span class="ln">146</span>
+<span class="ln">147</span>    # The shells (FORMAT 100), X and Z in units of 1e-6.
+<span class="ln">148</span>    spec100 = ([(&#x27;f&#x27;, 13, 10), (&#x27;f&#x27;, 10, 7), (&#x27;f&#x27;, 14, 7), (&#x27;f&#x27;, 10, 7),
+<span class="ln">149</span>                (&#x27;f&#x27;, 10, 7), (&#x27;f&#x27;, 10, 7), (&#x27;l&#x27;, 1), (&#x27;i&#x27;, 6), (&#x27;i&#x27;, 6)])
+<span class="ln">150</span>    for i in range(1, m + 1):  # label 110
+<span class="ln">151</span>        (hs[i], hr[i], hl[i], hp[i], ht[i], hd[i], lc[i], ix,
+<span class="ln">152</span>         iz) = _fields(iounits_mod.read(iread), spec100)
+<span class="ln">153</span>        if hs[i] &lt; 0.0 or hs[i] &gt; hstot:
+<span class="ln">154</span>            iounits_mod.write(ishort, &#x27; &#x27; + &#x27;&gt;&#x27; * 39 + &#x27;&lt;&#x27; * 40)
+<span class="ln">155</span>            iounits_mod.write(ishort, &#x27; RUN STOPPED&#x27;)
+<span class="ln">156</span>            iounits_mod.write(ishort, &#x27; ERROR IN SUBROUTINE GETY7&#x27;)
+<span class="ln">157</span>            iounits_mod.write(ishort, f&#x27; GLITCH IN SHELL{i:3d}, SHELL MASS &#x27;
+<span class="ln">158</span>                              &#x27;LESS THAN ZERO OR GREATER THAN STAR MASS&#x27;)
+<span class="ln">159</span>            raise SystemExit
+<span class="ln">160</span>        hcomp[1, i] = 1.0e-6 * float(ix)
+<span class="ln">161</span>        hcomp[3, i] = 1.0e-6 * float(iz)
+<span class="ln">162</span>
+<span class="ln">163</span>    # Species 4-11, stored from jcore to jenv only (FORMAT 200).
+<span class="ln">164</span>    spec200 = [(&#x27;f&#x27;, 9, 3), (&#x27;x&#x27;, 1)] * 8
+<span class="ln">165</span>    if jenv &lt;= jcore:
+<span class="ln">166</span>        hcomp[4:12, jcore] = _fields(iounits_mod.read(iread), spec200)
+<span class="ln">167</span>        hcomp[4:12, jenv] = _fields(iounits_mod.read(iread), spec200)
+<span class="ln">168</span>    else:
+<span class="ln">169</span>        for j in range(jcore, jenv + 1):  # label 210
+<span class="ln">170</span>            hcomp[4:12, j] = _fields(iounits_mod.read(iread), spec200)
+<span class="ln">171</span>    if jcore &gt; 1:
+<span class="ln">172</span>        # The homogeneous core.
+<span class="ln">173</span>        for j in range(1, jcore):  # label 230
+<span class="ln">174</span>            for i in range(4, 11 + 1):  # label 220
+<span class="ln">175</span>                hcomp[i, j] = hcomp[i, jcore]
+<span class="ln">176</span>    if jenv &lt; m:
+<span class="ln">177</span>        # The homogeneous envelope.
+<span class="ln">178</span>        for j in range(jenv + 1, m + 1):  # label 250
+<span class="ln">179</span>            for i in range(4, 11 + 1):  # label 240
+<span class="ln">180</span>                hcomp[i, j] = hcomp[i, jenv]
+<span class="ln">181</span>    for i in range(1, m + 1):  # label 260
+<span class="ln">182</span>        hcomp[2, i] = 1.0 - hcomp[1, i] - hcomp[3, i] - hcomp[4, i]
+<span class="ln">183</span>
+<span class="ln">184</span>    # The light elements (species 12-15), two shells per record.
+<span class="ln">185</span>    if lexcom:
+<span class="ln">186</span>        spec300 = [(&#x27;f&#x27;, 9, 3), (&#x27;x&#x27;, 1)] * 4
+<span class="ln">187</span>        if jenv == 1:
+<span class="ln">188</span>            # Fully convective: one record for the whole star.
+<span class="ln">189</span>            hcomp[12:16, 1] = _fields(iounits_mod.read(iread), spec300)
+<span class="ln">190</span>            for j in range(1, m + 1):  # label 310
+<span class="ln">191</span>                for i in range(12, 15 + 1):  # label 305
+<span class="ln">192</span>                    hcomp[i, j] = hcomp[i, 1]
+<span class="ln">193</span>        else:
+<span class="ln">194</span>            for k in range(jcore, jenv, 2):  # label 315
+<span class="ln">195</span>                vals = _fields(iounits_mod.read(iread), spec200)
+<span class="ln">196</span>                hcomp[12:16, k] = vals[0:4]
+<span class="ln">197</span>                hcomp[12:16, k + 1] = vals[4:8]
+<span class="ln">198</span>            # Fortran&#x27;s K after the loop: one step past its last value.
+<span class="ln">199</span>            kt = jenv - 1 - jcore
+<span class="ln">200</span>            k = jcore + 2 * max(0, int((kt + 2) / 2))
+<span class="ln">201</span>            if kt % 2 != 0:
+<span class="ln">202</span>                # An odd number of shells: the last one alone.
+<span class="ln">203</span>                hcomp[12:16, k] = _fields(iounits_mod.read(iread), spec300)
+<span class="ln">204</span>            if jcore &gt; 1:
+<span class="ln">205</span>                for j in range(1, jcore):  # label 330
+<span class="ln">206</span>                    for i in range(12, 15 + 1):  # label 320
+<span class="ln">207</span>                        hcomp[i, j] = hcomp[i, jcore]
+<span class="ln">208</span>            if jenv &lt; m:
+<span class="ln">209</span>                for j in range(jenv + 1, m + 1):  # label 350
+<span class="ln">210</span>                    for i in range(12, 15 + 1):  # label 340
+<span class="ln">211</span>                        hcomp[i, j] = hcomp[i, jenv]
+<span class="ln">212</span>
+<span class="ln">213</span>    # Rotation (FORMAT 500): -log Omega, 58.9 or more for Omega = 0.
+<span class="ln">214</span>    if lrot:
+<span class="ln">215</span>        omegal = _read_values(iread, m, [(&#x27;f&#x27;, 10, 7)] * 8)
+<span class="ln">216</span>        if omegal is None:  # END=9999
+<span class="ln">217</span>            iounits_mod.write(ishort,
+<span class="ln">218</span>                              &quot;GETYREC7: OMEGA records are missing from &quot;
+<span class="ln">219</span>                              &quot; input model file - OMEGA array zeroed&quot;)
+<span class="ln">220</span>            for i in range(1, json + 1):
+<span class="ln">221</span>                omega[i] = 0.0
+<span class="ln">222</span>            iounits_mod.rewind(iread)
+<span class="ln">223</span>            return (bl, cmixl, dage, ddage, ftri, hstot, jcore, jenv,
+<span class="ln">224</span>                    lexcom, lrot, m, model, smass, teffl, atm, eos, hik,
+<span class="ln">225</span>                    ldify, ldifz, ldisk, linstb, ljdot0, alok, lovstc,
+<span class="ln">226</span>                    lovste, lovstm, lpurez, lsemic, compmix, pdisk, tdisk,
+<span class="ln">227</span>                    wmax)
+<span class="ln">228</span>        for i in range(1, m + 1):  # label 510
+<span class="ln">229</span>            if omegal[i - 1] &lt; 58.9:
+<span class="ln">230</span>                omega[i] = 10.0 ** (-omegal[i - 1])
+<span class="ln">231</span>            else:
+<span class="ln">232</span>                omega[i] = 0.0
+<span class="ln">233</span>
+<span class="ln">234</span>    iounits_mod.rewind(iread)
+<span class="ln">235</span>    return (bl, cmixl, dage, ddage, ftri, hstot, jcore, jenv, lexcom, lrot,
+<span class="ln">236</span>            m, model, smass, teffl, atm, eos, hik, ldify, ldifz, ldisk,
+<span class="ln">237</span>            linstb, ljdot0, alok, lovstc, lovste, lovstm, lpurez, lsemic,
+<span class="ln">238</span>            compmix, pdisk, tdisk, wmax)</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_fields'><summary>Python version: _fields</summary><pre class='doc'>Read one record by a FORMAT, given as (kind, width[, decimals])
+items: &#x27;a&#x27; text, &#x27;i&#x27; integer, &#x27;f&#x27; real (F or E), &#x27;l&#x27; logical, &#x27;x&#x27;
+skipped. Blanks inside numbers are ignored and a blank field reads as
+0, as Fortran does by default; a real without a decimal point has its
+last `decimals` digits taken as decimals. (The 1P scale factor of the
+FORMATs only matters for fields without an exponent, and is not
+applied.)</pre><pre class='src'><span class="ln">9</span>def _fields(line, spec):
+<span class="ln">10</span>    &quot;&quot;&quot;Read one record by a FORMAT, given as (kind, width[, decimals])
+<span class="ln">11</span>    items: &#x27;a&#x27; text, &#x27;i&#x27; integer, &#x27;f&#x27; real (F or E), &#x27;l&#x27; logical, &#x27;x&#x27;
+<span class="ln">12</span>    skipped. Blanks inside numbers are ignored and a blank field reads as
+<span class="ln">13</span>    0, as Fortran does by default; a real without a decimal point has its
+<span class="ln">14</span>    last `decimals` digits taken as decimals. (The 1P scale factor of the
+<span class="ln">15</span>    FORMATs only matters for fields without an exponent, and is not
+<span class="ln">16</span>    applied.)&quot;&quot;&quot;
+<span class="ln">17</span>    out, pos = [], 0
+<span class="ln">18</span>    for item in spec:
+<span class="ln">19</span>        kind, w = item[0], item[1]
+<span class="ln">20</span>        text = line[pos:pos + w]
+<span class="ln">21</span>        pos += w
+<span class="ln">22</span>        if kind == &#x27;x&#x27;:
+<span class="ln">23</span>            continue
+<span class="ln">24</span>        if kind == &#x27;a&#x27;:
+<span class="ln">25</span>            out.append(text.ljust(w))
+<span class="ln">26</span>            continue
+<span class="ln">27</span>        t = text.replace(&#x27; &#x27;, &#x27;&#x27;)
+<span class="ln">28</span>        if kind == &#x27;l&#x27;:
+<span class="ln">29</span>            t = t.lstrip(&#x27;.&#x27;)
+<span class="ln">30</span>            out.append(t[:1].upper() == &#x27;T&#x27;)
+<span class="ln">31</span>        elif kind == &#x27;i&#x27;:
+<span class="ln">32</span>            out.append(int(t) if t else 0)
+<span class="ln">33</span>        else:
+<span class="ln">34</span>            t = t.upper().replace(&#x27;D&#x27;, &#x27;E&#x27;)
+<span class="ln">35</span>            if not t:
+<span class="ln">36</span>                out.append(0.0)
+<span class="ln">37</span>                continue
+<span class="ln">38</span>            mant, sep, expo = t.partition(&#x27;E&#x27;)
+<span class="ln">39</span>            value = float(mant)
+<span class="ln">40</span>            if &#x27;.&#x27; not in mant:
+<span class="ln">41</span>                value = value / 10.0 ** item[2]
+<span class="ln">42</span>            if sep:
+<span class="ln">43</span>                value = value * 10.0 ** int(expo)
+<span class="ln">44</span>            out.append(value)
+<span class="ln">45</span>    return out</pre></details>
+<details class='py' id='py-_read_values'><summary>Python version: _read_values</summary><pre class='doc'>Read n values with a FORMAT that is reused for further records
+(Fortran&#x27;s format reversion); None at the end of the file.</pre><pre class='src'><span class="ln">48</span>def _read_values(unit, n, spec):
+<span class="ln">49</span>    &quot;&quot;&quot;Read n values with a FORMAT that is reused for further records
+<span class="ln">50</span>    (Fortran&#x27;s format reversion); None at the end of the file.&quot;&quot;&quot;
+<span class="ln">51</span>    values = []
+<span class="ln">52</span>    while len(values) &lt; n:
+<span class="ln">53</span>        line = iounits_mod.read(unit)
+<span class="ln">54</span>        if line is None:
+<span class="ln">55</span>            return None
+<span class="ln">56</span>        values += _fields(line, spec)
+<span class="ln">57</span>    return values[:n]</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong (question 2).</strong> "<code>LDIFY = .FALSE.</code> appears twice". It appears once (getyrec7.f line 60), followed by <code>LDIFZ = .FALSE.</code> (line 61). Fix: drop the question.</li>
+<li><strong>Unclear.</strong> "Who writes the format: probably PUTYREC7". Its formats match GETYREC7's (putyrec7.f lines 44–125), and nothing calls it. Fix: drop "probably".</li>
+<li><strong>Missing (apparent mismatch).</strong> PUTYREC7 writes the flags record with <code>'F F '</code> (four characters) before <code>JCORE</code> (putyrec7.f line 52), GETYREC7 reads it with <code>5X</code> (getyrec7.f line 90): every field is read one column late, harmless with blanks ignored unless <code>JENV</code> (or <code>JCORE</code>) has four digits, when a digit of <code>JENV</code> lands in <code>JCORE</code>. Fix: new question.</li>
+</ol>
+<p>Otherwise checked: the defaults, the header, <code>TLUMX</code>, <code>FTRI</code>, the shell records and the range check, the compressed composition (including the odd-count read of rows 12–15, which relies on the DO variable's value after the loop and is right), $\Omega$, the rewinds and the caller.</p>
+<p>Revised: question 2 dropped, the others renumbered; PUTYREC7 stated as the writer; the offset question added.</p></div></details>
+</main></body></html>

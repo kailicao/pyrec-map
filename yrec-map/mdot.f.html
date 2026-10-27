@@ -1,0 +1,520 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>mdot.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ mdot.f</span></header><main>
+<h1>mdot.f</h1>
+<p class='muted'>275 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/mdot.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>mdot.py</code>, 178 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>MDOT</code> applies a mass change (loss or accretion) to the model over a step: it limits the step so that not too much mass changes, removes mass from the surface convection zone or adds it at the surface, rescales the mass coordinates, the total mass and the shell masses, removes angular momentum with lost mass, and for accretion mixes the accreted composition into the convection zone. Sign convention: <code>DMDT</code> &gt; 0 is a mass gain.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/massloss.f.html#def-MASSLOSS"><code>MASSLOSS</code></a>, when <code>LMDOT</code> is true.</li>
+<li><strong>Inputs and outputs (arguments):</strong> <code>DELTS</code> (s, may be shortened), the model (<code>HCOMP</code>, <code>HD</code>, <code>HJM</code>, <code>HP</code>, <code>HR</code>, <code>HS</code>, <code>HS1</code>, <code>HS2</code>, <code>HT</code>, <code>OMEGA</code>, <code>M</code>, <code>JENV</code>), <code>HSTOT</code> and <code>SMASS</code> (updated), <code>DMDT</code> ($M_\odot$/yr), <code>RTOT</code>, <code>SUMDM</code> (the convection zone's mass, from <code>MASSLOSS</code>); <code>EACC</code>, <code>ETHAV</code> and <code>RMU</code> have no effect (see step 4); outputs <code>LNEW</code> (= true: recompute the surface boundary condition) and <code>SENVOLD</code> (the old <code>HS(M)</code> − <code>HSTOT</code>, for <a href="../yrec-map/getnewenv.f.html#def-GETNEWENV"><code>GETNEWENV</code></a>).</li>
+<li><strong>Modules:</strong> <a href="../yrec-map/nmlpar_mod.f.html"><code>NMLPAR_MOD</code></a>, the namelist variables (<code>FCZDMDT</code>, <code>FTOTDMDT</code>, <code>COMPACC</code>, <code>LMDOT</code>, <code>TDISK</code>, <code>LDISK</code>, <code>LROT</code>, <code>WALPCZ</code>, <code>LSOLWIND</code>); <a href="../yrec-map/masschg2_mod.f.html"><code>MASSCHG2_MOD</code></a> (<code>SCEN</code>, <code>SMASS0</code>, <code>DLOGP</code>, <code>DLOGT</code>; with <code>MASSLOSS</code> and <a href="../yrec-map/coefft.f.html#def-COEFFT"><code>COEFFT</code></a>, which adds <code>DLOGT</code>, <code>DLOGP</code> to $\log T$, $\log P$ at and above <code>JENV</code> in its entropy terms when <code>LMDOT</code> and <code>DMDT0</code> &gt; 0); <a href="../yrec-map/disk_mod.f.html"><code>DISK_MOD</code></a> (the age <code>SAGE</code>, for the disk lifetime); <a href="../yrec-map/comp_mod.f.html"><code>COMP_MOD</code></a> (<code>STOTAL</code>, <code>SENV</code>); <a href="../yrec-map/deuter_mod.f.html"><code>DEUTER_MOD</code></a> (<code>FMASSACC</code>, read by <a href="../yrec-map/liburn.f.html#def-LIBURN"><code>LIBURN</code></a>, <a href="../yrec-map/dburn.f.html#def-DBURN"><code>DBURN</code></a> and <a href="../yrec-map/dburnm.f.html#def-DBURNM"><code>DBURNM</code></a>); <a href="../yrec-map/constants_mod.f.html"><code>CONSTANTS_MOD</code></a>; <code>JSON</code> from <a href="../yrec-map/dimensions_mod.f.html"><code>DIMENSIONS_MOD</code></a>. The solar-wind parameters <code>DMSUN</code>, <code>DMWSUN</code>, <code>DMWMAX</code> (formerly COMMON <code>MASSCHG3</code>) are now locals set to zero by DATA.</li>
+</ul>
+<p><strong>The method.</strong> Two masses of the convection zone appear: $M_\mathrm{cz}$ = <code>DMCZ</code> = <code>HS1(M)</code> − <code>HS1(JENV)</code> (or <code>HS1(M)</code> if <code>JENV</code> = 1), and $M&#x27;_\mathrm{cz}$ = <code>DMCZT</code> = <code>SUMDM</code>.</p>
+<ol>
+<li>Optionally (<code>LSOLWIND</code> with rotation, and only if <code>DMWSUN</code> &gt; 0) $\dot M = \dot M_\odot\,\min\big((\Omega/\Omega_\odot)^2, (\Omega_\mathrm{max}/\Omega_\odot)^2\big)$, with $\dot M_\odot$ = <code>DMSUN</code>, $\Omega_\odot$ = <code>DMWSUN</code>, $\Omega_\mathrm{max}$ = <code>DMWMAX</code>. Since these three are zero, the branch is inert; the guard on <code>DMWSUN</code> keeps it from dividing by zero now that <code>LSOLWIND</code> reaches this routine from the namelist.</li>
+<li>Rate in g/s: $|\dot M|\,M_\odot/\mathrm{yr}$. Step limits: $\Delta t \le f_\mathrm{tot}M/|\dot M|$, $\Delta t \le f_\mathrm{cz}\,M_\mathrm{cz}/|\dot M|$ ($f_\mathrm{tot}$ = <code>FTOTDMDT</code>, $f_\mathrm{cz}$ = <code>FCZDMDT</code>), and at most half the mass outside the fitting point, $\tfrac12(10^{\texttt{HSTOT}} - 10^{\texttt{HS(M)}})/|\dot M|$. The comment speaks of adding mass, but this limit applies to loss as well. With a disk (<code>LDISK</code>) and accretion, the step ends at the disk's lifetime <code>TDISK</code> (Gyr), and <code>LMDOT</code> is then turned off.</li>
+<li>$\Delta M = \dot M\,\Delta t$ (g).</li>
+<li><strong>Accretion</strong> ($\Delta M &gt; 0$):</li>
+<li>the new mean thermal energy $\bar e = (e_\mathrm{acc}\Delta M + \bar e_\mathrm{th}M&#x27;_\mathrm{cz})/(\Delta M + M&#x27;_\mathrm{cz})$ and <code>FAC</code> = $\log_{10}(\bar e/\bar e_\mathrm{th})$ are computed but not used (their use is commented out);</li>
+<li><code>RMU</code> = $P\beta/(\rho T)$ (the gas constant over $\mu$) is recomputed at <code>JENV</code>, and a scale factor $\Delta\ln E = (\Delta M/M_\mathrm{cz})\,s_\mathrm{cen}/(\mathcal{R}/\mu)$, with $s_\mathrm{cen}$ = <code>SCEN</code>, gives $\Delta\log r = \tfrac23\Delta\ln E/\ln 10$, $\Delta\log T = -\Delta\log r$, $\Delta\log P = -4\Delta\log r$ (the mass term <code>DLNM</code> is set to zero);</li>
+<li>if <code>JENV</code> = 1 (fully convective), $\log r$, $\log P$, $\log T$ of every point change by these amounts; otherwise only $P$ and $T$ at <code>JENV</code>, and the radii above it are stretched about $r_\mathrm{b} = r_\mathrm{JENV}$: $r \leftarrow r_\mathrm{b} + 10^{\Delta\log r}(r - r_\mathrm{b})$.</li>
+</ol>
+<p><code>MASSLOSS</code> sets <code>SCEN</code> = 0, so these changes are zero in practice.
+5. <strong>Angular momentum</strong> (rotation, loss): the lost matter carries the surface's specific angular momentum, $\Delta J = \tfrac23 R^2\,\Omega_s\,\Delta M$ (solid-body zone, <code>WALPCZ</code> ≥ 0), or $j_s\Delta M$ (<code>WALPCZ</code> ≤ −2), or the same with $\Omega_s = \Omega_M (r_M/R)^{\texttt{WALPCZ}}$; the zone's specific angular momentum <code>HJM</code> is scaled by $(J_\mathrm{cz}+\Delta J)/J_\mathrm{cz}$, with $J_\mathrm{cz} = \sum$ <code>HJM</code>·<code>HS2</code> from <code>JENV</code> to <code>M</code>.
+6. <strong>Mass coordinates</strong> (loss): points in the zone are compressed toward its base, $m_i \leftarrow m_\mathrm{b} + \frac{M_\mathrm{cz}+\Delta M}{M_\mathrm{cz}}(m_i - m_\mathrm{b})$. For accretion <code>HS1</code> is not changed: the gain goes to the outermost shell.
+7. New total mass (<code>SMASS</code>, <code>SMASS0</code>, <code>HSTOT</code>, <code>STOTAL</code>), shell masses <code>HS2</code> from <code>JENV</code> to <code>M</code> − 1 as half the distance between neighbours, <code>HS2(M)</code> = $10^{\texttt{HSTOT}}$ − (<code>HS1(M)</code> + <code>HS1(M−1)</code>)/2, and <code>SENV</code>.
+8. <strong>Accretion:</strong> elements 1–11 of the zone are mixed with the accreted composition <code>COMPACC</code>, $\bar x = (x_\mathrm{JENV}\,M&#x27;_\mathrm{cz} + x_\mathrm{acc}\Delta M)/(M&#x27;_\mathrm{cz}+\Delta M)$; <code>FMASSACC</code> = $\Delta M$.</p>
+<p><strong>Design.</strong> Several unconditional <code>WRITE(*,…)</code> lines report the step reduction, the angular momentum and the mass change.</p>
+<p><strong>KC's changes.</strong> 2025-05-30: the variables of COMMON <code>MASSCHG3</code> reordered (the logical <code>LSOLWIND</code> moved to the end). The block is gone since.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> COMMON blocks to modules, <code>IMPLICIT NONE</code>; <code>MASSCHG3</code> dropped (its three reals now zeroed locals, <code>LSOLWIND</code> from the namelist); the solar-wind branch guarded by <code>DMWSUN</code> &gt; 0 (a bug fix: it would have given $\dot M$ = NaN). The call from <code>MASSLOSS</code> now matches the interface (fixed in massloss.f), which settles former question 1; former question 2 (<code>MASSCHG3</code> set nowhere) is settled by the authors' fix, which confirms it and keeps the option inert until the three parameters are given a source.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Inert code.</strong> With <code>SCEN</code> = 0 and <code>DLNM</code> = 0, the structure changes of step 4 vanish, and <code>ETHNEW</code> and <code>FAC</code> are not used; so <code>EACC</code>, <code>ETHAV</code> and the <code>RMU</code> argument have no effect. Is the code kept for later work?</li>
+<li><strong>Hard stop.</strong> <code>IF(JENV.EQ.M) STOP911</code> (that is, <code>STOP 911</code>) ends the run with only the stop code 911 when there is no surface convection zone.</li>
+<li><strong>Angular momentum of accreted matter.</strong> For accretion <code>HJM</code> is not changed while <code>HS2(M)</code> grows, so the accreted matter implicitly takes the outer point's specific angular momentum. Intended?</li>
+<li><strong>Out-of-bounds read (apparent bug).</strong> The loop <code>DO I = JENV,M-1: HS2(I) = 0.5D0*(HS1(I+1)-HS1(I-1))</code> (lines 249–250) reads <code>HS1(0)</code> when <code>JENV</code> = 1, a case the routine handles elsewhere (lines 118 and 174). Should it start at <code>MAX(JENV,2)</code>, with the central shell treated apart?</li>
+<li><strong>The sign of <code>WALPCZ</code>.</strong> Line 209 sets $\Omega_\mathrm{surf} \propto r^{-\alpha}$ with $\alpha$ = <code>WALPCZ</code>, the opposite sign to <code>WCZ</code>'s $\Omega = C\,r^{\alpha}$ (wcz.f line 58 at <code>rp_1</code>; <code>WCZ</code> has since been removed as unreachable); see <a href="../yrec-map/getnewenv.f.html#def-GETNEWENV">GETNEWENV</a>, question 7. Which sign is meant?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+MASS LOSS ROUTINE
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MDOT'>MDOT</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MDOT'><h3><span class='kind'>subroutine</span>MDOT</h3>
+<p class='muted'>lines 5–274 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/mdot.f#L5-L274'>GitHub</a></p>
+<pre>SUBROUTINE MDOT(DELTS,HCOMP,HD,HJM,HP,HR,HS,HS1,HS2,HSTOT,</pre>
+<div class='notes'><p>Step limit, mass removal or addition, angular-momentum loss, and mixing of accreted matter (above).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+MASS LOSS ROUTINE
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/comp_mod.f.html#def-COMP_MOD'>COMP_MOD</a>, <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/deuter_mod.f.html#def-DEUTER_MOD'>DEUTER_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/disk_mod.f.html#def-DISK_MOD'>DISK_MOD</a>, <a href='../yrec-map/masschg2_mod.f.html#def-MASSCHG2_MOD'>MASSCHG2_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/massloss.f.html#def-MASSLOSS'>MASSLOSS</a> <span class='muted'>(massloss.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">5</span>      SUBROUTINE MDOT(DELTS,HCOMP,HD,HJM,HP,HR,HS,HS1,HS2,HSTOT,
+<span class="ln">6</span>     *                HT,JENV,LNEW,M,OMEGA,RMU,RTOT,SMASS,DMDT,
+<span class="ln">7</span>     *                EACC,ETHAV,SUMDM,SENVOLD)
+<span class="ln">8</span>C 10/15/26 MHP via Claude
+<span class="ln">9</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">10</span>C PARAMETER(JSON=5000) here.
+<span class="ln">11</span>      USE DIMENSIONS_MOD
+<span class="ln">12</span>C 10/14/26 MHP via Claude
+<span class="ln">13</span>C code changed to convert COMMON/MASSCHG2/ into MASSCHG2_MOD.
+<span class="ln">14</span>      USE MASSCHG2_MOD
+<span class="ln">15</span>C 10/14/26 MHP via Claude
+<span class="ln">16</span>C code changed to convert COMMON/DISK/ into DISK_MOD.
+<span class="ln">17</span>      USE DISK_MOD
+<span class="ln">18</span>C 10/14/26 MHP via Claude
+<span class="ln">19</span>C code changed to convert COMMON/DEUTER/ into DEUTER_MOD.
+<span class="ln">20</span>      USE DEUTER_MOD
+<span class="ln">21</span>C 10/14/26 MHP via Claude
+<span class="ln">22</span>C code changed to convert COMMON/COMP/ into COMP_MOD.
+<span class="ln">23</span>      USE COMP_MOD
+<span class="ln">24</span>C 10/14/26 MHP via Claude
+<span class="ln">25</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">26</span>      USE NMLPAR_MOD
+<span class="ln">27</span>C 10/14/26 MHP via Claude
+<span class="ln">28</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">29</span>      USE CONSTANTS_MOD
+<span class="ln">30</span>C 10/20/26 MHP via Claude
+<span class="ln">31</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">32</span>C explicit declarations.
+<span class="ln">33</span>      IMPLICIT NONE
+<span class="ln">34</span>      REAL*8 ABUND,BETA,CJNEW,CJTOT,D,DELJ,DELM,DELTS,DLNM,DLOGEN,DLOGR,
+<span class="ln">35</span>     *       DMCZ,DMCZT,DMDT,DMSUN,DMSUN0,DMWMAX,DMWSUN,DTCZ,DTENV,
+<span class="ln">36</span>     *       DTMAX,DTTOT,EACC,ETHAV,ETHNEW,F1,F2,FAC,FACR,FX,HCOMP,HD,
+<span class="ln">37</span>     *       HJM,HP,HR,HS,HS1,HS2,HSTOT,HSTOT1,HSTOT2,HT,OMEGA,P,RATE,
+<span class="ln">38</span>     *       RATIO,RB,RINIT,RMU,RNEW,RTOT,SENVOLD,SMASS,SUMDM,SURFI,T,
+<span class="ln">39</span>     *       TEST,WSURF
+<span class="ln">40</span>      INTEGER I,J,JENV,M
+<span class="ln">41</span>      LOGICAL*4 LDONE,LNEW
+<span class="ln">42</span>C 9/25/26 MHP via Claude
+<span class="ln">43</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">44</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">45</span>C 9/24/26 MHP via Claude
+<span class="ln">46</span>C code changed to remove dead CMIXL from COMMON/CONST3/; it is now
+<span class="ln">47</span>C passed as an explicit argument where actually used
+<span class="ln">48</span>C 10/12/26 MHP via Claude
+<span class="ln">49</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">50</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">51</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">52</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">53</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">54</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">55</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">56</span>C
+<span class="ln">57</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">58</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">59</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">60</span>C mhp 8/10 added option to scale mass loss rate by rotation; requires rotating model
+<span class="ln">61</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">62</span>C       COMMON/MASSCHG3/LSOLWIND,DMSUN,DMWSUN,DMWMAX
+<span class="ln">63</span>C 10/12/26 MHP via Claude
+<span class="ln">64</span>C code changed to drop COMMON/MASSCHG3/ entirely.  mdot.f was its only
+<span class="ln">65</span>C declaring file once LSOLWIND moved to the consolidated block, so
+<span class="ln">66</span>C DMSUN, DMWSUN and DMWMAX are now locals.  They are given an explicit
+<span class="ln">67</span>C zero below rather than relying on static storage happening to be
+<span class="ln">68</span>C zeroed, which makes the guarded branch provably inert until these
+<span class="ln">69</span>C three are given a real source.
+<span class="ln">70</span>      DATA DMSUN,DMWSUN,DMWMAX/3*0.0D0/
+<span class="ln">71</span>      DIMENSION HCOMP(15,JSON),HS(JSON),HS1(JSON),HS2(JSON),
+<span class="ln">72</span>     *          HT(JSON),HJM(JSON),OMEGA(JSON),HR(JSON),
+<span class="ln">73</span>     *          HP(JSON),HD(JSON)
+<span class="ln">74</span>      SAVE
+<span class="ln">75</span>      SENVOLD = HS(M) - HSTOT
+<span class="ln">76</span>C MHP 8/10- CHECK FOR SCALED SOLAR WIND MASS LOSS
+<span class="ln">77</span>C 10/12/26 MHP via Claude
+<span class="ln">78</span>C BUG FIX: added the DMWSUN guard below.  DMSUN, DMWSUN and DMWMAX are
+<span class="ln">79</span>C set NOWHERE in the code -- no assignment, no DATA statement, and no
+<span class="ln">80</span>C namelist entry in any of the 315 input files -- and COMMON/MASSCHG3/ is
+<span class="ln">81</span>C declared only here, so all three are permanently zero.  The branch
+<span class="ln">82</span>C therefore evaluated (OMEGA(M)/0)**2, and DMDT = 0*Infinity = NaN.
+<span class="ln">83</span>C
+<span class="ln">84</span>C It has never fired, for two separate reasons: parmin.f&#x27;s
+<span class="ln">85</span>C COMMON/MASSCHG3/ declaration is commented out (two variants, both
+<span class="ln">86</span>C inactive), so the PHYSICS namelist&#x27;s LSOLWIND is a local there and its
+<span class="ln">87</span>C value never reaches this routine, where LSOLWIND is itself never
+<span class="ln">88</span>C written and so always .FALSE.; and every one of the 315 namelists sets
+<span class="ln">89</span>C LMDOT = .FALSE., which makes MASSLOSS return before calling MDOT.
+<span class="ln">90</span>C
+<span class="ln">91</span>C That matters because the namelist consolidation will put LSOLWIND in
+<span class="ln">92</span>C the shared block and so repair the propagation.  Nine namelists set
+<span class="ln">93</span>C LSOLWIND = .TRUE. and all nine also set LROT = .TRUE., so without this
+<span class="ln">94</span>C guard they would start entering the branch and taking a NaN mass-loss
+<span class="ln">95</span>C rate.  The option stays inert until DMSUN/DMWSUN/DMWMAX are given a
+<span class="ln">96</span>C source, which is a separate decision for the experimental mass-loss
+<span class="ln">97</span>C code.
+<span class="ln">98</span>      IF(LSOLWIND .AND. LROT .AND. DMWSUN.GT.0.0D0) THEN
+<span class="ln">99</span>         F1 = (OMEGA(M)/DMWSUN)**2
+<span class="ln">100</span>         F2 = (DMWMAX/DMWSUN)**2
+<span class="ln">101</span>         DMDT = DMSUN*MIN(F1,F2)
+<span class="ln">102</span>         WRITE(*,*)OMEGA(M),DMDT
+<span class="ln">103</span>      ENDIF
+<span class="ln">104</span>C      LMDOT = .TRUE.
+<span class="ln">105</span>C      DMDT = 4.0D-10
+<span class="ln">106</span>C MAXIMUM FRACTION OF CZ MASS REMOVED PER TIMESTEP
+<span class="ln">107</span>C      FRAC = 0.1D0
+<span class="ln">108</span>C      IF(.NOT.LMDOT)GOTO 9999
+<span class="ln">109</span>C CONVERT FROM SOLAR MASSES/YEAR TO GM/SEC
+<span class="ln">110</span>      RATE = ABS(DMDT)*CMSUN/CSECYR
+<span class="ln">111</span>C THE SUM OF THE MASSES OF ALL SHELLS (E.G. TO JENV - 1)
+<span class="ln">112</span>C SHOULD BE USED RATHER THAN THE SUM OF THE MASSES DOWN
+<span class="ln">113</span>C TO THE MIDPOINT OF THE BOTTOM SHELL
+<span class="ln">114</span>C      DMCZT = 10.0D0**HSTOT - HS1(JENV)
+<span class="ln">115</span>      DMCZT = SUMDM
+<span class="ln">116</span>C COMPUTE MASS OF SURFACE CONVECTION ZONE BELOW FITTING POINT
+<span class="ln">117</span>      IF(JENV.EQ.M) STOP911
+<span class="ln">118</span>      IF(JENV.GT.1) THEN
+<span class="ln">119</span>         DMCZ = HS1(M) - HS1(JENV)
+<span class="ln">120</span>      ELSE
+<span class="ln">121</span>         DMCZ = HS1(M)
+<span class="ln">122</span>      ENDIF
+<span class="ln">123</span>C COMPUTE MAXIMUM TIMESTEP BASED ON NOT REMOVING TOO MUCH MASS FROM THE
+<span class="ln">124</span>C SURFACE CZ (FCZDMDT) OR AS A FRACTION OF THE TOTAL MASS (FTOTDMDT)
+<span class="ln">125</span>      DTTOT = FTOTDMDT*SMASS*CMSUN/RATE
+<span class="ln">126</span>      DTCZ = FCZDMDT*DMCZ/RATE
+<span class="ln">127</span>      DTMAX = MIN(DTTOT,DTCZ)
+<span class="ln">128</span>C RESTRICT TIMESTEP TO ADD NO MORE THAN 1/2 OF THE CURRENT MASS
+<span class="ln">129</span>C BEYOND THE FITTING POINT TO THE STAR.
+<span class="ln">130</span>      IF(RATE.GT.0.0D0)THEN
+<span class="ln">131</span>         DTENV = 0.5D0*(10.0D0**HSTOT-10.0D0**HS(M))/RATE
+<span class="ln">132</span>         DTMAX = MIN(DTMAX,DTENV)
+<span class="ln">133</span>      ENDIF
+<span class="ln">134</span>      IF(DTMAX.LT.DELTS)THEN
+<span class="ln">135</span>         WRITE(*,10)DELTS,DTMAX
+<span class="ln">136</span> 10      FORMAT(&#x27; TIMESTEP REDUCED FOR MASS LOSS - OLD,NEW&#x27;,1P2E12.3)
+<span class="ln">137</span>         DELTS = DTMAX
+<span class="ln">138</span>      ENDIF
+<span class="ln">139</span>C mhp 8/10 turn mass loss off when disk exhausted only when dm /dt &gt; 0, e.g. accretion
+<span class="ln">140</span>      IF(LDISK .AND. DMDT.GT.0.0D0)THEN
+<span class="ln">141</span>         TEST = SAGE + 1.0d-9*DELTS/CSECYR
+<span class="ln">142</span>         IF(TEST.GT.TDISK)THEN
+<span class="ln">143</span>            DELTS = (TDISK-SAGE)*1.0D9*CSECYR
+<span class="ln">144</span>            LDONE = .TRUE.
+<span class="ln">145</span>         ELSE
+<span class="ln">146</span>            LDONE = .FALSE.
+<span class="ln">147</span>         ENDIF
+<span class="ln">148</span>      ELSE
+<span class="ln">149</span>         LDONE = .FALSE.
+<span class="ln">150</span>      ENDIF
+<span class="ln">151</span>C FINAL AMOUNT OF MASS LOSS INFERRED IN CGS UNITS.
+<span class="ln">152</span>      DELM = DMDT*CMSUN*DELTS/CSECYR
+<span class="ln">153</span>C COMPUTE THE MEAN THERMAL ENERGY
+<span class="ln">154</span>C CONTENT OF THE CONVECTION ZONE FOR MODELS WITH ACCRETION.
+<span class="ln">155</span>      IF(DELM.GT.0.0D0)THEN
+<span class="ln">156</span>         ETHNEW = (EACC*DELM + ETHAV*SUMDM)/(DELM+SUMDM)
+<span class="ln">157</span>         FAC = LOG10(ETHNEW/ETHAV)
+<span class="ln">158</span>C         WRITE(*,912) JENV,EACC,ETHAV,ETHNEW,FAC,SUMDM,DELM
+<span class="ln">159</span>C 912     FORMAT(I5,1P6E12.3)
+<span class="ln">160</span>C OVERALL SCALE FACTOR IN R
+<span class="ln">161</span>         T = 10.0D0**HT(JENV)
+<span class="ln">162</span>         P = 10.0D0**HP(JENV)
+<span class="ln">163</span>         D = 10.0D0**HD(JENV)
+<span class="ln">164</span>         BETA = 1.0D0- (CA3*T**4/P)
+<span class="ln">165</span>         RMU = P*BETA/(D*T)
+<span class="ln">166</span>C         DLOGEN = (DELM/DMCZ)*(SACC-SCEN)/RMU
+<span class="ln">167</span>         DLOGEN = (DELM/DMCZ)*SCEN/RMU
+<span class="ln">168</span>C         DLNM = LOG(DMCZ+DELM)-LOG(DMCZ)
+<span class="ln">169</span>         DLNM = 0.0D0
+<span class="ln">170</span>         DLOGR = (CC23*DLOGEN - CC13*DLNM)/CLN
+<span class="ln">171</span>         DLOGT = DLNM/CLN - DLOGR
+<span class="ln">172</span>         DLOGP = 2.0D0*DLNM/CLN -4.0D0*DLOGR
+<span class="ln">173</span>C         WRITE(*,*)DLOGR,DLOGP,DLOGT
+<span class="ln">174</span>         IF(JENV.EQ.1)THEN
+<span class="ln">175</span>            DO J = JENV,M
+<span class="ln">176</span>               HR(J) = HR(J)+DLOGR
+<span class="ln">177</span>               HP(J) = HP(J)+DLOGP
+<span class="ln">178</span>               HT(J) = HT(J)+DLOGT
+<span class="ln">179</span>            END DO
+<span class="ln">180</span>         ELSE
+<span class="ln">181</span>            HP(JENV) = HP(JENV)+DLOGP
+<span class="ln">182</span>            HT(JENV) = HT(JENV)+DLOGT
+<span class="ln">183</span>            RB = 10.0D0**HR(JENV)
+<span class="ln">184</span>            FACR = 10.0D0**DLOGR
+<span class="ln">185</span>            DO J = JENV+1,M
+<span class="ln">186</span>               RINIT = 10.0D0**HR(J)
+<span class="ln">187</span>               RNEW = RB+FACR*(RINIT-RB)
+<span class="ln">188</span>               HR(J) = LOG10(RNEW)
+<span class="ln">189</span>            END DO
+<span class="ln">190</span>         ENDIF
+<span class="ln">191</span>C         DO J = JENV,M
+<span class="ln">192</span>C            HT(J) = HT(J) + FAC
+<span class="ln">193</span>C         END DO
+<span class="ln">194</span>C         WRITE(*,*)HT(15),HT(16),HT(17)
+<span class="ln">195</span>      ENDIF
+<span class="ln">196</span>C FOR MODELS WITH ROTATION AND MASS LOSS REMOVE ANGULAR MOMENTUM.
+<span class="ln">197</span>C IN THIS CASE WE ASSUME A THERMAL WIND WHERE THE SURFACE MATTER
+<span class="ln">198</span>C CARRIES AWAY ONLY ITS LOCAL ANGULAR MOMENTUM PER UNIT MASS.
+<span class="ln">199</span>      IF(LROT .AND. DELM.LT.0.0D0)THEN
+<span class="ln">200</span>C MOMENT OF INERTIA PER UNIT MASS AT THE SURFACE.
+<span class="ln">201</span>         SURFI = 2.0D0/3.0D0 * RTOT**2
+<span class="ln">202</span>         IF(WALPCZ.GE.0.0D0)THEN
+<span class="ln">203</span>C SOLID BODY CZ ROTATION
+<span class="ln">204</span>            DELJ = OMEGA(M)*SURFI*DELM
+<span class="ln">205</span>         ELSE IF(WALPCZ.LE.-2.0D0)THEN
+<span class="ln">206</span>C CONSTANT J/M
+<span class="ln">207</span>            DELJ = HJM(M)*DELM
+<span class="ln">208</span>         ELSE
+<span class="ln">209</span>            WSURF = OMEGA(M)*10.0D0**(HR(M)*WALPCZ)/RTOT**WALPCZ
+<span class="ln">210</span>            DELJ = WSURF*SURFI*DELM
+<span class="ln">211</span>         ENDIF
+<span class="ln">212</span>C  FIND TOTAL STARTING ANGULAR MOMENTUM OF C.Z.
+<span class="ln">213</span>         CJTOT = HJM(JENV)*HS2(JENV)
+<span class="ln">214</span>         DO J = JENV+1,M
+<span class="ln">215</span>            CJTOT = CJTOT + HJM(J)*HS2(J)
+<span class="ln">216</span>         END DO
+<span class="ln">217</span>         CJNEW = (CJTOT+DELJ)
+<span class="ln">218</span>         RATIO = CJNEW/CJTOT
+<span class="ln">219</span>         WRITE(*,22)DELM,DELJ,OMEGA(M),CJNEW,CJTOT,DMCZT
+<span class="ln">220</span> 22      FORMAT(1P6E13.4)
+<span class="ln">221</span>         DO J = JENV,M
+<span class="ln">222</span>            HJM(J) = HJM(J)*RATIO
+<span class="ln">223</span>         END DO
+<span class="ln">224</span>      ENDIF
+<span class="ln">225</span>C REMOVE OR ADD MASS IN THE CONVECTION ZONE.
+<span class="ln">226</span>C HS1 IS THE LOCATION OF THE ZONE CENTERS IN GM;
+<span class="ln">227</span>C HS IS THE BASE-10 LOG OF HS1
+<span class="ln">228</span>      IF(DELM.LT.0.0D0)THEN
+<span class="ln">229</span>         FX = (DMCZ + DELM)/DMCZ
+<span class="ln">230</span>C      WRITE(*,*)JENV,M,DMCZ,DELM,FX,HS1(M),HS(M)
+<span class="ln">231</span>         DO I = JENV+1,M
+<span class="ln">232</span>            HS1(I) = HS1(JENV)+FX*(HS1(I)-HS1(JENV))
+<span class="ln">233</span>            HS(I) = LOG10(HS1(I))
+<span class="ln">234</span>         END DO
+<span class="ln">235</span>      ENDIF
+<span class="ln">236</span>C      WRITE(*,*)HS1(M),HS(M)
+<span class="ln">237</span>C CORRECT TOTAL MASS IN SOLAR UNITS (SMASS) AND
+<span class="ln">238</span>C LOG OF TOTAL MASS IN GRAMS (HSTOT,STOTAL)
+<span class="ln">239</span>      SMASS = SMASS + DELM/CMSUN
+<span class="ln">240</span>      SMASS0 = SMASS
+<span class="ln">241</span>      DMSUN0 = DELM/CMSUN
+<span class="ln">242</span>      WRITE(*,20)SMASS,DMSUN0
+<span class="ln">243</span> 20   FORMAT(&#x27;MASS LOSS APPLIED - NEW M,DEL M&#x27;,1P2E19.10)
+<span class="ln">244</span>      HSTOT1 = 10.0D0**HSTOT
+<span class="ln">245</span>      HSTOT2 = HSTOT1 + DELM
+<span class="ln">246</span>      HSTOT = LOG10(HSTOT2)
+<span class="ln">247</span>      STOTAL = HSTOT
+<span class="ln">248</span>C CORRECT MASS CONTENTS OF INDIVIDUAL SHELLS (HS2, IN GM)
+<span class="ln">249</span>      DO I = JENV,M-1
+<span class="ln">250</span>       HS2(I) = 0.5D0*(HS1(I+1)-HS1(I-1))
+<span class="ln">251</span>      END DO
+<span class="ln">252</span>      HS2(M) = HSTOT2 - 0.5D0*(HS1(M)+HS1(M-1))
+<span class="ln">253</span>C 07/02RESET SENV
+<span class="ln">254</span>      SENV = HS(M) - HSTOT
+<span class="ln">255</span>C RECOMPUTE SURFACE BOUNDRY CONDITION
+<span class="ln">256</span>      LNEW = .TRUE.
+<span class="ln">257</span>C REMIX THE SURFACE CONVECTION ZONE IF MDOT IS POSITIVE.
+<span class="ln">258</span>C      WRITE(*,911)DELM,DMCZT,COMPACC(12),HCOMP(12,M),
+<span class="ln">259</span>C     *            COMPACC(4),HCOMP(4,M)
+<span class="ln">260</span>C 911  FORMAT(1P6E12.3)
+<span class="ln">261</span>      IF(DELM.GT.0.0D0)THEN
+<span class="ln">262</span>         DO I = 1,11
+<span class="ln">263</span>            ABUND=(HCOMP(I,JENV)*DMCZT+COMPACC(I)*DELM)/(DELM+DMCZT)
+<span class="ln">264</span>            DO J = JENV,M
+<span class="ln">265</span>               HCOMP(I,J) = ABUND
+<span class="ln">266</span>            END DO
+<span class="ln">267</span>         END DO
+<span class="ln">268</span>         FMASSACC = DELM
+<span class="ln">269</span>      ENDIF
+<span class="ln">270</span>C  9999 CONTINUE
+<span class="ln">271</span>      IF(LDONE)LMDOT = .FALSE.
+<span class="ln">272</span>C      WRITE(*,*)M,HS(M),HSTOT
+<span class="ln">273</span>      RETURN
+<span class="ln">274</span>      END</pre></details>
+<details class='py' id='py-mdot'><summary>Python version: mdot</summary><pre class='doc'>Apply a mass change (loss, or accretion if dmdt &gt; 0) to the model
+over a step: limit the step, rescale the mass coordinates, total mass
+and shell masses, remove angular momentum with lost mass, and mix
+accreted matter into the surface convection zone.
+
+Translates: mdot.f#MDOT (09c3b9b)
+
+Arguments: the step delts (s); the model hcomp[species, shell], hd, hjm,
+hp, hr, hs, hs1, hs2, ht, omega (arrays, index 0 unused, changed in
+place); log total mass hstot; jenv, the base of the surface convection
+zone; m, the number of shells; rmu; rtot, the radius; smass (Msun);
+dmdt (Msun/yr); eacc, ethav (no effect); sumdm, the zone&#x27;s mass.
+
+Returns (delts, hstot, lnew, rmu, smass, dmdt, senvold): the possibly
+shortened step, the new log total mass, lnew = True (recompute the
+surface boundary condition), rmu (recomputed for accretion), the new
+mass, dmdt (changed only by the inert solar-wind branch) and senvold,
+the old hs[m] - hstot.</pre><pre class='src'><span class="ln">20</span>def mdot(delts, hcomp, hd, hjm, hp, hr, hs, hs1, hs2, hstot,
+<span class="ln">21</span>         ht, jenv, lnew, m, omega, rmu, rtot, smass, dmdt,
+<span class="ln">22</span>         eacc, ethav, sumdm, senvold):
+<span class="ln">23</span>    &quot;&quot;&quot;Apply a mass change (loss, or accretion if dmdt &gt; 0) to the model
+<span class="ln">24</span>    over a step: limit the step, rescale the mass coordinates, total mass
+<span class="ln">25</span>    and shell masses, remove angular momentum with lost mass, and mix
+<span class="ln">26</span>    accreted matter into the surface convection zone.
+<span class="ln">27</span>
+<span class="ln">28</span>    Translates: mdot.f#MDOT (09c3b9b)
+<span class="ln">29</span>
+<span class="ln">30</span>    Arguments: the step delts (s); the model hcomp[species, shell], hd, hjm,
+<span class="ln">31</span>    hp, hr, hs, hs1, hs2, ht, omega (arrays, index 0 unused, changed in
+<span class="ln">32</span>    place); log total mass hstot; jenv, the base of the surface convection
+<span class="ln">33</span>    zone; m, the number of shells; rmu; rtot, the radius; smass (Msun);
+<span class="ln">34</span>    dmdt (Msun/yr); eacc, ethav (no effect); sumdm, the zone&#x27;s mass.
+<span class="ln">35</span>
+<span class="ln">36</span>    Returns (delts, hstot, lnew, rmu, smass, dmdt, senvold): the possibly
+<span class="ln">37</span>    shortened step, the new log total mass, lnew = True (recompute the
+<span class="ln">38</span>    surface boundary condition), rmu (recomputed for accretion), the new
+<span class="ln">39</span>    mass, dmdt (changed only by the inert solar-wind branch) and senvold,
+<span class="ln">40</span>    the old hs[m] - hstot.
+<span class="ln">41</span>    &quot;&quot;&quot;
+<span class="ln">42</span>    c = constants_mod
+<span class="ln">43</span>    senvold = hs[m] - hstot
+<span class="ln">44</span>    # MHP 8/10: check for scaled solar wind mass loss (inert: DMWSUN = 0).
+<span class="ln">45</span>    if nmlpar_mod.lsolwind and nmlpar_mod.lrot and DMWSUN &gt; 0.0:
+<span class="ln">46</span>        f1 = (omega[m] / DMWSUN)**2
+<span class="ln">47</span>        f2 = (DMWMAX / DMWSUN)**2
+<span class="ln">48</span>        dmdt = DMSUN * min(f1, f2)
+<span class="ln">49</span>        print(omega[m], dmdt)
+<span class="ln">50</span>    # Convert from solar masses per year to g/s.
+<span class="ln">51</span>    rate = abs(dmdt) * c.cmsun / c.csecyr
+<span class="ln">52</span>    dmczt = sumdm
+<span class="ln">53</span>    # Mass of the surface convection zone below the fitting point.
+<span class="ln">54</span>    # Question (see the page): hard stop with code 911 only.
+<span class="ln">55</span>    if jenv == m:
+<span class="ln">56</span>        raise SystemExit(911)
+<span class="ln">57</span>    if jenv &gt; 1:
+<span class="ln">58</span>        dmcz = hs1[m] - hs1[jenv]
+<span class="ln">59</span>    else:
+<span class="ln">60</span>        dmcz = hs1[m]
+<span class="ln">61</span>    # Maximum step: not too much mass from the zone (FCZDMDT) or from the
+<span class="ln">62</span>    # star (FTOTDMDT).
+<span class="ln">63</span>    dttot = nmlpar_mod.ftotdmdt * smass * c.cmsun / rate
+<span class="ln">64</span>    dtcz = nmlpar_mod.fczdmdt * dmcz / rate
+<span class="ln">65</span>    dtmax = min(dttot, dtcz)
+<span class="ln">66</span>    # At most half the mass beyond the fitting point.
+<span class="ln">67</span>    if rate &gt; 0.0:
+<span class="ln">68</span>        dtenv = 0.5 * (10.0**hstot - 10.0**hs[m]) / rate
+<span class="ln">69</span>        dtmax = min(dtmax, dtenv)
+<span class="ln">70</span>    if dtmax &lt; delts:
+<span class="ln">71</span>        print(f&quot; TIMESTEP REDUCED FOR MASS LOSS - OLD,NEW&quot;
+<span class="ln">72</span>              f&quot;{delts:12.3E}{dtmax:12.3E}&quot;)  # format 10
+<span class="ln">73</span>        delts = dtmax
+<span class="ln">74</span>    # MHP 8/10: turn accretion off once the disk is exhausted.
+<span class="ln">75</span>    if nmlpar_mod.ldisk and dmdt &gt; 0.0:
+<span class="ln">76</span>        test = disk_mod.sage + 1.0e-9 * delts / c.csecyr
+<span class="ln">77</span>        if test &gt; nmlpar_mod.tdisk:
+<span class="ln">78</span>            delts = (nmlpar_mod.tdisk - disk_mod.sage) * 1.0e9 * c.csecyr
+<span class="ln">79</span>            ldone = True
+<span class="ln">80</span>        else:
+<span class="ln">81</span>            ldone = False
+<span class="ln">82</span>    else:
+<span class="ln">83</span>        ldone = False
+<span class="ln">84</span>    # Mass change in g.
+<span class="ln">85</span>    delm = dmdt * c.cmsun * delts / c.csecyr
+<span class="ln">86</span>
+<span class="ln">87</span>    # Accretion: mean thermal energy and structure changes of the zone.
+<span class="ln">88</span>    if delm &gt; 0.0:
+<span class="ln">89</span>        # Question (see the page): ethnew and fac are not used.
+<span class="ln">90</span>        ethnew = (eacc * delm + ethav * sumdm) / (delm + sumdm)
+<span class="ln">91</span>        fac = math.log10(ethnew / ethav)
+<span class="ln">92</span>        t = 10.0**ht[jenv]
+<span class="ln">93</span>        p = 10.0**hp[jenv]
+<span class="ln">94</span>        d = 10.0**hd[jenv]
+<span class="ln">95</span>        beta = 1.0 - (c.ca3 * t**4 / p)
+<span class="ln">96</span>        rmu = p * beta / (d * t)
+<span class="ln">97</span>        # Question (see the page): SCEN = 0, so these changes vanish.
+<span class="ln">98</span>        dlogen = (delm / dmcz) * masschg2_mod.scen / rmu
+<span class="ln">99</span>        dlnm = 0.0
+<span class="ln">100</span>        dlogr = (c.cc23 * dlogen - c.cc13 * dlnm) / c.cln
+<span class="ln">101</span>        masschg2_mod.dlogt = dlnm / c.cln - dlogr
+<span class="ln">102</span>        masschg2_mod.dlogp = 2.0 * dlnm / c.cln - 4.0 * dlogr
+<span class="ln">103</span>        if jenv == 1:
+<span class="ln">104</span>            for j in range(jenv, m + 1):
+<span class="ln">105</span>                hr[j] = hr[j] + dlogr
+<span class="ln">106</span>                hp[j] = hp[j] + masschg2_mod.dlogp
+<span class="ln">107</span>                ht[j] = ht[j] + masschg2_mod.dlogt
+<span class="ln">108</span>        else:
+<span class="ln">109</span>            hp[jenv] = hp[jenv] + masschg2_mod.dlogp
+<span class="ln">110</span>            ht[jenv] = ht[jenv] + masschg2_mod.dlogt
+<span class="ln">111</span>            rb = 10.0**hr[jenv]
+<span class="ln">112</span>            facr = 10.0**dlogr
+<span class="ln">113</span>            for j in range(jenv + 1, m + 1):
+<span class="ln">114</span>                rinit = 10.0**hr[j]
+<span class="ln">115</span>                rnew = rb + facr * (rinit - rb)
+<span class="ln">116</span>                hr[j] = math.log10(rnew)
+<span class="ln">117</span>
+<span class="ln">118</span>    # Rotation and mass loss: the lost matter carries its local specific
+<span class="ln">119</span>    # angular momentum (a thermal wind).
+<span class="ln">120</span>    if nmlpar_mod.lrot and delm &lt; 0.0:
+<span class="ln">121</span>        surfi = 2.0 / 3.0 * rtot**2
+<span class="ln">122</span>        walpcz = nmlpar_mod.walpcz
+<span class="ln">123</span>        if walpcz &gt;= 0.0:
+<span class="ln">124</span>            # Solid-body zone.
+<span class="ln">125</span>            delj = omega[m] * surfi * delm
+<span class="ln">126</span>        elif walpcz &lt;= -2.0:
+<span class="ln">127</span>            # Constant J/M.
+<span class="ln">128</span>            delj = hjm[m] * delm
+<span class="ln">129</span>        else:
+<span class="ln">130</span>            # Question (see the page): the sign of WALPCZ.
+<span class="ln">131</span>            wsurf = omega[m] * 10.0**(hr[m] * walpcz) / rtot**walpcz
+<span class="ln">132</span>            delj = wsurf * surfi * delm
+<span class="ln">133</span>        # Total starting angular momentum of the zone.
+<span class="ln">134</span>        cjtot = hjm[jenv] * hs2[jenv]
+<span class="ln">135</span>        for j in range(jenv + 1, m + 1):
+<span class="ln">136</span>            cjtot = cjtot + hjm[j] * hs2[j]
+<span class="ln">137</span>        cjnew = cjtot + delj
+<span class="ln">138</span>        ratio = cjnew / cjtot
+<span class="ln">139</span>        print(f&quot;{delm:13.4E}{delj:13.4E}{omega[m]:13.4E}{cjnew:13.4E}&quot;
+<span class="ln">140</span>              f&quot;{cjtot:13.4E}{dmczt:13.4E}&quot;)  # format 22
+<span class="ln">141</span>        for j in range(jenv, m + 1):
+<span class="ln">142</span>            hjm[j] = hjm[j] * ratio
+<span class="ln">143</span>
+<span class="ln">144</span>    # Remove mass in the convection zone: compress toward its base
+<span class="ln">145</span>    # (hs1: shell centres in g; hs: log10 of hs1).
+<span class="ln">146</span>    if delm &lt; 0.0:
+<span class="ln">147</span>        fx = (dmcz + delm) / dmcz
+<span class="ln">148</span>        for i in range(jenv + 1, m + 1):
+<span class="ln">149</span>            hs1[i] = hs1[jenv] + fx * (hs1[i] - hs1[jenv])
+<span class="ln">150</span>            hs[i] = math.log10(hs1[i])
+<span class="ln">151</span>
+<span class="ln">152</span>    # New total mass in solar units (smass) and log g (hstot, stotal).
+<span class="ln">153</span>    smass = smass + delm / c.cmsun
+<span class="ln">154</span>    masschg2_mod.smass0 = smass
+<span class="ln">155</span>    dmsun0 = delm / c.cmsun
+<span class="ln">156</span>    print(f&quot;MASS LOSS APPLIED - NEW M,DEL M{smass:19.10E}{dmsun0:19.10E}&quot;)
+<span class="ln">157</span>    hstot1 = 10.0**hstot
+<span class="ln">158</span>    hstot2 = hstot1 + delm
+<span class="ln">159</span>    hstot = math.log10(hstot2)
+<span class="ln">160</span>    comp_mod.stotal = hstot
+<span class="ln">161</span>    # Shell masses hs2 (g).
+<span class="ln">162</span>    # Question (see the page): reads hs1[0] when jenv = 1.
+<span class="ln">163</span>    for i in range(jenv, m):
+<span class="ln">164</span>        hs2[i] = 0.5 * (hs1[i + 1] - hs1[i - 1])
+<span class="ln">165</span>    hs2[m] = hstot2 - 0.5 * (hs1[m] + hs1[m - 1])
+<span class="ln">166</span>    comp_mod.senv = hs[m] - hstot
+<span class="ln">167</span>    lnew = True
+<span class="ln">168</span>    # Accretion: remix the zone with the accreted composition.
+<span class="ln">169</span>    if delm &gt; 0.0:
+<span class="ln">170</span>        for i in range(1, 12):
+<span class="ln">171</span>            abund = ((hcomp[i, jenv] * dmczt + nmlpar_mod.compacc[i] * delm)
+<span class="ln">172</span>                     / (delm + dmczt))
+<span class="ln">173</span>            for j in range(jenv, m + 1):
+<span class="ln">174</span>                hcomp[i, j] = abund
+<span class="ln">175</span>        deuter_mod.fmassacc = delm
+<span class="ln">176</span>    if ldone:
+<span class="ln">177</span>        nmlpar_mod.lmdot = False
+<span class="ln">178</span>    return delts, hstot, lnew, rmu, smass, dmdt, senvold</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> Step 2: "(accretion) at most half the mass outside the fitting point". The limit applies whenever <code>RATE</code> &gt; 0, and <code>RATE</code> = $|\dot M|$, so it applies to loss as well (mdot.f:66–69), though its comment says "add". Fix.</li>
+<li><strong>Wrong.</strong> Step 4 says the correction "changes $\log r$, $\log T$, $\log P$ of the zone". Only for a fully convective model (<code>JENV</code> = 1) are all points shifted; otherwise only $T$ and $P$ at <code>JENV</code> change, and the radii above <code>JENV</code> are stretched about $r_\mathrm{b}$ by $10^{\Delta\log r}$. Fix: say so; add that <code>DLOGP</code>, <code>DLOGT</code> go to <code>COEFFT</code> through <code>MASSCHG2</code> (its entropy terms, for points at or above <code>JENV</code>, when <code>LMDOT</code> and <code>DMDT0</code> &gt; 0).</li>
+<li><strong>Missing.</strong> In step 4 the code also computes the new mean thermal energy $\bar e = (e_\mathrm{acc}\Delta M + \bar e_\mathrm{th} M_\mathrm{cz})/(\Delta M + M_\mathrm{cz})$ and <code>FAC</code> = $\log(\bar e/\bar e_\mathrm{th})$, both unused (their use is commented out); the <code>RMU</code> argument is overwritten before use. Fix: add to step 4 and to question 3.</li>
+<li><strong>Missing.</strong> For accretion the mass coordinates <code>HS1</code> are not changed: the gain goes into the outer shell's mass <code>HS2(M)</code> = $10^{\texttt{HSTOT}}$ − midpoint. Fix: add to steps 6–7.</li>
+<li><strong>Missing question (apparent bug).</strong> The shell-mass loop <code>DO I = JENV,M-1: HS2(I) = 0.5*(HS1(I+1)-HS1(I-1))</code> reads <code>HS1(0)</code>, out of bounds, when <code>JENV</code> = 1 (mdot.f:185–186), a case the routine handles elsewhere (lines 54, 110). Fix: add a question.</li>
+<li><strong>Unclear.</strong> Step 8 writes $M_\mathrm{cz}$ for two different masses: the step limit uses <code>DMCZ</code> = <code>HS1(M)</code> − <code>HS1(JENV)</code>, the mixing uses <code>DMCZT</code> = <code>SUMDM</code> (the sum of <code>HS2</code> from <code>JENV</code> to <code>M</code>, from <code>MASSLOSS</code>). Fix: name them.</li>
+<li><strong>Unclear (question 4).</strong> "without a message": <code>STOP911</code> is <code>STOP 911</code> (blanks do not count in fixed form), which prints the code 911. Fix: "with only the stop code 911".</li>
+<li><strong>Wrong (question 5).</strong> "Accretion adds mass but no angular momentum." <code>HJM</code> (specific angular momentum) is kept while <code>HS2(M)</code> grows, so the accreted mass takes the outer point's specific angular momentum. Fix: rephrase as a question on that implicit choice.</li>
+<li><strong>Missing.</strong> Question 1 should note that, through the shift, <code>MDOT</code> would write the shortened step into <code>MASSLOSS</code>'s <code>BL</code>, <code>LNEW</code> = true into the integer <code>JENV</code>, the new mass into <code>RTOT</code> and <code>SENVOLD</code> into <code>SUMDM</code>. Fix: one sentence.</li>
+</ol>
+<p>Revised: items 1–9 applied.</p></div></details>
+</main></body></html>

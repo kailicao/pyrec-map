@@ -1,0 +1,273 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>qatm.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ qatm.f</span></header><main>
+<h1>qatm.f</h1>
+<p class='muted'>125 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/qatm.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>qatm.py</code>, 99 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> The right-hand side of the atmosphere integration: with $\log\tau$ as the independent variable and $\log P$ as the dependent one, it returns $d\log P/d\log\tau$ from a $T$–$\tau$ relation. Its comment: "QATM calculates the derivative d(P)/d(tau), using the Eddington approximation for a T-tau relation."</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> <code>X0</code> $=\log\tau$, <code>Y(1)</code> $=\log P$; $\log g$ (<code>GL</code>), the distortion factor <code>FPL</code>, <code>TEFFL</code>, $X$, $Z$; the choice of relation <code>KTTAU</code> from <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a> and <code>HRAS</code> from <a href="../yrec-map/atmos_mod.f.html#def-ATMOS_MOD"><code>ATMOS_MOD</code></a>; <code>LPUMOD</code> (pulsation output) from <a href="../yrec-map/pulse1_mod.f.html#def-PULSE1_MOD"><code>PULSE1_MOD</code></a>.</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a>, directly and as the <code>EXTERNAL</code> derivative routine passed to <a href="../yrec-map/bsstep.f.html#def-BSSTEP">BSSTEP</a> (and so to <a href="../yrec-map/mmid.f.html#def-MMID">MMID</a>); this is why it keeps arguments it does not use.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/eqstat.f.html#def-EQSTAT">EQSTAT</a>, <a href="../yrec-map/getopac.f.html#def-GETOPAC">GETOPAC</a>, and the function <a href="../yrec-map/hra.f.html#def-HRA">HRA</a> (the Harvard–Smithsonian reference atmosphere).</li>
+<li><strong>Outputs:</strong> <code>DYDX(1)</code>; the counter <code>KATM</code>; the point's $\log P$, $\log T$ (and, when saving or for pulsation output, $\log\rho$, $\kappa$, ionization fractions) in <a href="../yrec-map/atmprt_mod.f.html#def-ATMPRT_MOD"><code>ATMPRT_MOD</code></a>; the thermodynamic quantities for pulsation output in <a href="../yrec-map/pulse2_mod.f.html#def-PULSE2_MOD"><code>PULSE2_MOD</code></a>.</li>
+</ul>
+<p><strong>The method.</strong> The temperature from the $T$–$\tau$ relation:</p>
+<ul>
+<li>Eddington (<code>KTTAU = 0</code>): $T^4 = \tfrac34\,T_\mathrm{eff}^4\,(\tau + \tfrac23)$, coded as $\log T = \log T_\mathrm{eff} - 0.031235 + \tfrac14\log(\tau + \tfrac23)$ (with $\tfrac14\log\tfrac34 = -0.031235$);</li>
+<li>Krishna Swamy (1966, ApJ 145, 176; <code>KTTAU = 1</code>): the same with $q(\tau) = 1.39 - 0.815\,e^{-2.54\tau} - 0.025\,e^{-30\tau}$ in place of $\tfrac23$;</li>
+<li>Harvard–Smithsonian (<code>KTTAU = 2</code>): $\log T = \log T_\mathrm{eff} + \mathrm{HRA}(\tau) - \mathrm{HRA}(\tfrac23)$ (<code>HRAS</code> $=\mathrm{HRA}(\tfrac23)$, set once by <a href="../yrec-map/setups.f.html#def-SETUPS">SETUPS</a>).</li>
+</ul>
+<p>Then $\rho$ and $\kappa$ at $(P, T)$, and hydrostatic equilibrium in the form $dP/d\tau = g/\kappa$:
+$$\frac{d\log P}{d\log\tau} = \frac{g\,\tau}{\kappa\,P},\qquad g = 10^{\log g}\,f_P .$$</p>
+<p><strong>KC's changes.</strong> 2025-05-31: unused arguments removed from the call to <code>MEQOS</code> (that call is gone since <code>rp_1</code>); a never-executed <code>PRINT</code> keeps the unused arguments <code>B</code>, <code>FTL</code>, <code>LOCOND</code>, <code>RL</code> referenced, "for external procedure compatibility".</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> The MHD equation of state removed: <code>EQSTAT</code> is always called (no <code>LMHD</code>, no <code>MEQOS</code>); COMMON blocks to modules (the unused <code>/PULSE/</code>, <code>/NWLAOL/</code>, <code>/MHD/</code> dropped), <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>KTTAU</code> 3–5.</strong> For the tabulated atmospheres (Kurucz, Allard, Kurucz/Castelli), no branch sets <code>TL</code>, so it keeps its value from the previous call. Are these atmospheres never integrated through <code>QATM</code> (their surface pressures come from tables), and should the routine stop if called with them?</li>
+<li><strong>The comment.</strong> It says the routine computes $dP/d\tau$ "using the Eddington approximation"; it computes $d\log P/d\log\tau$ with any of three relations.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+QATM
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-QATM'>QATM</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-QATM'><h3><span class='kind'>subroutine</span>QATM</h3>
+<p class='muted'>lines 6–125 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/qatm.f#L6-L125'>GitHub</a></p>
+<pre>SUBROUTINE QATM(X0,Y,DYDX,B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,LSAVE,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+QATM
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/atmos_mod.f.html#def-ATMOS_MOD'>ATMOS_MOD</a>, <a href='../yrec-map/atmprt_mod.f.html#def-ATMPRT_MOD'>ATMPRT_MOD</a>, <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/pulse1_mod.f.html#def-PULSE1_MOD'>PULSE1_MOD</a>, <a href='../yrec-map/pulse2_mod.f.html#def-PULSE2_MOD'>PULSE2_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/eqstat.f.html#def-EQSTAT'>EQSTAT</a> <span class='muted'>(eqstat.f)</span></li>
+<li><a href='../yrec-map/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span></li>
+<li><a href='../yrec-map/hra.f.html#def-HRA'>HRA</a> <span class='muted'>(hra.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE QATM(X0,Y,DYDX,B,FPL,FTL,GL,LATMO,LDERIV,LOCOND,LSAVE,
+<span class="ln">7</span>     *                RL,TEFFL,X,Z,KATM,KSAHA)
+<span class="ln">8</span>C 10/14/26 MHP via Claude
+<span class="ln">9</span>C code changed to convert COMMON/PULSE2/ into PULSE2_MOD.
+<span class="ln">10</span>      USE PULSE2_MOD
+<span class="ln">11</span>C 10/14/26 MHP via Claude
+<span class="ln">12</span>C code changed to convert COMMON/PULSE1/ into PULSE1_MOD.
+<span class="ln">13</span>      USE PULSE1_MOD
+<span class="ln">14</span>C 10/14/26 MHP via Claude
+<span class="ln">15</span>C code changed to convert COMMON/ATMPRT/ into ATMPRT_MOD.
+<span class="ln">16</span>      USE ATMPRT_MOD
+<span class="ln">17</span>C 10/14/26 MHP via Claude
+<span class="ln">18</span>C code changed to convert COMMON/ATMOS/ into ATMOS_MOD.
+<span class="ln">19</span>      USE ATMOS_MOD
+<span class="ln">20</span>C 10/14/26 MHP via Claude
+<span class="ln">21</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">22</span>      USE NMLPAR_MOD
+<span class="ln">23</span>C 10/14/26 MHP via Claude
+<span class="ln">24</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">25</span>      USE CONSTANTS_MOD
+<span class="ln">26</span>C 10/20/26 MHP via Claude
+<span class="ln">27</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">28</span>C explicit declarations.
+<span class="ln">29</span>      IMPLICIT NONE
+<span class="ln">30</span>      REAL*8 AMU,B,BETA,BETA1,BETA14,D,DELA,DL,DYDX,EMU,ETA,FPL,FTL,
+<span class="ln">31</span>     *       FXION,G,GL,HRA,O,OL,P,PL,QAP,QAT,QCP,QCPP,QCPT,QDP,QDT,
+<span class="ln">32</span>     *       QDTP,QDTT,QOD,QOT,RL,RMU,T,TAU,TEFFL,TL,TTAUL0,TTAUL1,X,X0,
+<span class="ln">33</span>     *       Y,YY,Z
+<span class="ln">34</span>      INTEGER KATM,KSAHA
+<span class="ln">35</span>      LOGICAL*4 LATMO,LDERIV,LOCOND,LSAVE
+<span class="ln">36</span>C QATM CALCULATES THE DERIVATIVE D(P)/D(TAU), USING THE EDDINGTON
+<span class="ln">37</span>C APPROXIMATION FOR A T-TAU RELATION.
+<span class="ln">38</span>C IT ALSO RETURNS TL,O, AND FXION FOR OUTPUT PURPOSES
+<span class="ln">39</span>C   Q(TAU) = 0.6666667
+<span class="ln">40</span>
+<span class="ln">41</span>C 10/13/26 MHP via Claude: removed the unused COMMON/IOUNITS/ declaration
+<span class="ln">42</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">43</span>C 10/12/26 MHP via Claude
+<span class="ln">44</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">45</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">46</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">47</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">48</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">49</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">50</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">51</span>C
+<span class="ln">52</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">53</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">54</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">55</span>C 10/13/26 MHP via Claude: removed the unused COMMON/NEWOPAC/ declaration
+<span class="ln">56</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">57</span>      DIMENSION Y(3),DYDX(3),FXION(3)
+<span class="ln">58</span>C 10/13/26 MHP via Claude
+<span class="ln">59</span>C code changed to drop COMMON/PULSE/, declared here but never used.
+<span class="ln">60</span>C 9/25/26 MHP via Claude
+<span class="ln">61</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">62</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">63</span>      SAVE
+<span class="ln">64</span>
+<span class="ln">65</span>C EDDINGTON APPROXIMATION
+<span class="ln">66</span>      TTAUL0(YY) = TEFFL - 0.031235D0 + 0.25D0*DLOG10(YY + CC23)
+<span class="ln">67</span>
+<span class="ln">68</span>C KRISHNA-SWAMY APPROXIMATION (BASED ON FIT TO SOLAR ATMOSPHER)
+<span class="ln">69</span>C SEE KRISHNA-SWAMY, AP.J. 1966, 145, 176.
+<span class="ln">70</span>      TTAUL1(YY) = TEFFL - 0.031235D0 + 0.25D0*DLOG10(YY +
+<span class="ln">71</span>     1    1.39D0 - 0.815D0*EXP(-2.54D0*YY) - 0.025D0*EXP(-30.0D0*YY))
+<span class="ln">72</span>
+<span class="ln">73</span>      G = DEXP(CLN*GL)*FPL
+<span class="ln">74</span>      TAUL = X0
+<span class="ln">75</span>      TAU = DEXP(CLN*TAUL)
+<span class="ln">76</span>C USE KTTAU TO IMPLIMENT FUTURE T TAU RELATIONS
+<span class="ln">77</span>      IF (KTTAU .EQ. 0) THEN
+<span class="ln">78</span>            TL = TTAUL0(TAU)
+<span class="ln">79</span>      ELSE IF (KTTAU .EQ. 1) THEN
+<span class="ln">80</span>            TL = TTAUL1(TAU)
+<span class="ln">81</span>      ELSE IF (KTTAU .EQ. 2) THEN
+<span class="ln">82</span>            TL = TEFFL + <a href="../yrec-map/hra.f.html#def-HRA" title="HRA in hra.f">HRA</a>(TAU) - HRAS
+<span class="ln">83</span>      END IF
+<span class="ln">84</span>      PL = Y(1)
+<span class="ln">85</span>C 9/22/26 MHP via Claude
+<span class="ln">86</span>C code changed to remove the MHD equation of state
+<span class="ln">87</span>      CALL <a href="../yrec-map/eqstat.f.html#def-EQSTAT" title="EQSTAT in eqstat.f">EQSTAT</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETA1,BETA14,FXION,RMU,AMU,
+<span class="ln">88</span>     *   EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP,LDERIV,
+<span class="ln">89</span>     *   LATMO,KSAHA)
+<span class="ln">90</span>      CALL <a href="../yrec-map/getopac.f.html#def-GETOPAC" title="GETOPAC in getopac.f">GETOPAC</a>(DL, TL, X, Z, O, OL, QOD, QOT,FXION)
+<span class="ln">91</span>      DYDX(1) = G*TAU/(P*O)
+<span class="ln">92</span>      KATM = KATM + 1
+<span class="ln">93</span>      AP = PL
+<span class="ln">94</span>      AT = TL
+<span class="ln">95</span>      IF(LSAVE .OR. LPUMOD) THEN
+<span class="ln">96</span>       AD = DL
+<span class="ln">97</span>       AO = O
+<span class="ln">98</span>       AFXION(1) = FXION(1)
+<span class="ln">99</span>       AFXION(2) = FXION(2)
+<span class="ln">100</span>       AFXION(3) = FXION(3)
+<span class="ln">101</span>       QTL = TL
+<span class="ln">102</span>       QT = DEXP(CLN*TL)
+<span class="ln">103</span>       QPL = PL
+<span class="ln">104</span>       QP = DEXP(CLN*PL)
+<span class="ln">105</span>       QDL = DL
+<span class="ln">106</span>       QD = DEXP(CLN*DL)
+<span class="ln">107</span>       QO = O
+<span class="ln">108</span>       QOL = OL
+<span class="ln">109</span>       QQDP = QDP
+<span class="ln">110</span>       QQED = 0.0D0
+<span class="ln">111</span>       QQOD = QOD
+<span class="ln">112</span>       QQOT = QOT
+<span class="ln">113</span>       QDEL = 0.0D0
+<span class="ln">114</span>       QQDT = QDT
+<span class="ln">115</span>       QDELA = DELA
+<span class="ln">116</span>       QQCP = QCP
+<span class="ln">117</span>       QRMU = RMU
+<span class="ln">118</span>       QEMU = EMU
+<span class="ln">119</span>      ENDIF
+<span class="ln">120</span>
+<span class="ln">121</span>C KC 2025-05-31 THESE MUST BE RETAINED FOR EXTERNAL PROCEDURE COMPATIBILITY.
+<span class="ln">122</span>      IF (.FALSE.) PRINT *, B, FTL, LOCOND, RL
+<span class="ln">123</span>
+<span class="ln">124</span>      RETURN
+<span class="ln">125</span>      END</pre></details>
+<details class='py' id='py-qatm'><summary>Python version: qatm</summary><pre class='doc'>Derivative of log P with respect to log tau in the atmosphere, from
+a T-tau relation (Eddington, Krishna Swamy or the Harvard reference
+atmosphere, by KTTAU) and hydrostatic equilibrium dP/dtau = g/kappa.
+Also stores the point for output in atmprt_mod and pulse2_mod.
+
+Translates: qatm.f#QATM (09c3b9b)
+
+Arguments: x0 = log tau; y (array of 3, index 0 unused), y[1] = log P;
+the surface gravity gl, distortion factor fpl, teffl, x, z; lsave
+(store the point for output). b, ftl, locond and rl are not used: the
+argument list is that of the derivative routine called by bsstep and
+mmid. Arrays changed in place: dydx (dydx[1] set).
+
+Returns (katm, ksaha): the atmosphere-call counter, incremented, and
+the counter of Saha calls, from eqstat.</pre><pre class='src'><span class="ln">23</span>def qatm(x0, y, dydx, b, fpl, ftl, gl, latmo, lderiv, locond, lsave,
+<span class="ln">24</span>         rl, teffl, x, z, katm, ksaha):
+<span class="ln">25</span>    &quot;&quot;&quot;Derivative of log P with respect to log tau in the atmosphere, from
+<span class="ln">26</span>    a T-tau relation (Eddington, Krishna Swamy or the Harvard reference
+<span class="ln">27</span>    atmosphere, by KTTAU) and hydrostatic equilibrium dP/dtau = g/kappa.
+<span class="ln">28</span>    Also stores the point for output in atmprt_mod and pulse2_mod.
+<span class="ln">29</span>
+<span class="ln">30</span>    Translates: qatm.f#QATM (09c3b9b)
+<span class="ln">31</span>
+<span class="ln">32</span>    Arguments: x0 = log tau; y (array of 3, index 0 unused), y[1] = log P;
+<span class="ln">33</span>    the surface gravity gl, distortion factor fpl, teffl, x, z; lsave
+<span class="ln">34</span>    (store the point for output). b, ftl, locond and rl are not used: the
+<span class="ln">35</span>    argument list is that of the derivative routine called by bsstep and
+<span class="ln">36</span>    mmid. Arrays changed in place: dydx (dydx[1] set).
+<span class="ln">37</span>
+<span class="ln">38</span>    Returns (katm, ksaha): the atmosphere-call counter, incremented, and
+<span class="ln">39</span>    the counter of Saha calls, from eqstat.
+<span class="ln">40</span>    &quot;&quot;&quot;
+<span class="ln">41</span>    global tl
+<span class="ln">42</span>    fxion = np.zeros(4)   # index 0 unused
+<span class="ln">43</span>
+<span class="ln">44</span>    # Statement functions: Eddington, and Krishna Swamy (1966, ApJ 145, 176).
+<span class="ln">45</span>    def ttaul0(yy):
+<span class="ln">46</span>        return teffl - 0.031235 + 0.25 * math.log10(yy + constants_mod.cc23)
+<span class="ln">47</span>
+<span class="ln">48</span>    def ttaul1(yy):
+<span class="ln">49</span>        return teffl - 0.031235 + 0.25 * math.log10(
+<span class="ln">50</span>            yy + 1.39 - 0.815 * math.exp(-2.54 * yy)
+<span class="ln">51</span>            - 0.025 * math.exp(-30.0 * yy))
+<span class="ln">52</span>
+<span class="ln">53</span>    g = math.exp(constants_mod.cln * gl) * fpl
+<span class="ln">54</span>    atmprt_mod.taul = x0
+<span class="ln">55</span>    tau = math.exp(constants_mod.cln * atmprt_mod.taul)
+<span class="ln">56</span>    if nmlpar_mod.kttau == 0:
+<span class="ln">57</span>        tl = ttaul0(tau)
+<span class="ln">58</span>    elif nmlpar_mod.kttau == 1:
+<span class="ln">59</span>        tl = ttaul1(tau)
+<span class="ln">60</span>    elif nmlpar_mod.kttau == 2:
+<span class="ln">61</span>        tl = teffl + hra(tau) - atmos_mod.hras
+<span class="ln">62</span>    # Question (see the page): for KTTAU 3-5 TL keeps its last value.
+<span class="ln">63</span>    pl = y[1]
+<span class="ln">64</span>    (t, p, dl, d, beta, beta1, beta14, rmu, amu, emu, eta, qdt, qdp, qcp,
+<span class="ln">65</span>     dela, qdtt, qdtp, qat, qap, qcpt, qcpp, ksaha) = eqstat(
+<span class="ln">66</span>        tl, 0.0, pl, 0.0, 0.0, 0.0, x, z, 0.0, 0.0, 0.0, fxion, 0.0, 0.0,
+<span class="ln">67</span>        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+<span class="ln">68</span>        lderiv, latmo, ksaha)
+<span class="ln">69</span>    o, ol, qod, qot = getopac(dl, tl, x, z, 0.0, 0.0, 0.0, 0.0, fxion)
+<span class="ln">70</span>    dydx[1] = g * tau / (p * o)
+<span class="ln">71</span>    katm = katm + 1
+<span class="ln">72</span>    atmprt_mod.ap = pl
+<span class="ln">73</span>    atmprt_mod.at = tl
+<span class="ln">74</span>    if lsave or pulse1_mod.lpumod:
+<span class="ln">75</span>        atmprt_mod.ad = dl
+<span class="ln">76</span>        atmprt_mod.ao = o
+<span class="ln">77</span>        atmprt_mod.afxion[1] = fxion[1]
+<span class="ln">78</span>        atmprt_mod.afxion[2] = fxion[2]
+<span class="ln">79</span>        atmprt_mod.afxion[3] = fxion[3]
+<span class="ln">80</span>        q = pulse2_mod
+<span class="ln">81</span>        q.qtl = tl
+<span class="ln">82</span>        q.qt = math.exp(constants_mod.cln * tl)
+<span class="ln">83</span>        q.qpl = pl
+<span class="ln">84</span>        q.qp = math.exp(constants_mod.cln * pl)
+<span class="ln">85</span>        q.qdl = dl
+<span class="ln">86</span>        q.qd = math.exp(constants_mod.cln * dl)
+<span class="ln">87</span>        q.qo = o
+<span class="ln">88</span>        q.qol = ol
+<span class="ln">89</span>        q.qqdp = qdp
+<span class="ln">90</span>        q.qqed = 0.0
+<span class="ln">91</span>        q.qqod = qod
+<span class="ln">92</span>        q.qqot = qot
+<span class="ln">93</span>        q.qdel = 0.0
+<span class="ln">94</span>        q.qqdt = qdt
+<span class="ln">95</span>        q.qdela = dela
+<span class="ln">96</span>        q.qqcp = qcp
+<span class="ln">97</span>        q.qrmu = rmu
+<span class="ln">98</span>        q.qemu = emu
+<span class="ln">99</span>    return katm, ksaha</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing (small).</strong> <code>HRAS</code> is HRA(2/3), set once by SETUPS (<code>HRAS = HRA(CC23)</code>). Fix: add.</li>
+</ol>
+<p>Revised: applied.</p></div></details>
+</main></body></html>

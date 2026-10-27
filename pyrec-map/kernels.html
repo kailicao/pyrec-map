@@ -1,0 +1,655 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Kernels and settings · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ New structure (Fortran and Python) / Kernels and settings</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='fortran.html'>Language and style</a></li><li><a href='common-map.html'>The COMMON-block map</a></li><li><strong>Kernels and settings</strong></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><a href='timestep.html'>Time stepping</a></li><li><a href='composition.html'>Composition and settling</a></li><li><a href='rotation.html'>Rotation and mass loss</a></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>Kernels and settings</h1>
+<p><em>In Python: <code>pyrec.kernels</code> and <code>pyrec.config</code>, under Python below.</em></p>
+<h2>3.1 Kernels: <code>kinds</code>, <code>constants</code>, <code>numerics</code>, <code>odeint</code></h2>
+<p><strong>The design follows YREC's development branch (09c3b9b).</strong> That branch removed the interpolation helpers that only the removed options called (<code>FINDEX</code>, <code>INTPOL</code>, <code>LIR</code>, <code>QUINT</code>, <code>YSPLIN</code> and <code>ZERO</code>, called by the OPAL 1992 and Kurucz 1990 opacities and the MHD equation of state) and the two unused spline copies <code>SPLINNR</code> and <code>SPLNR</code>, so the lists below no longer name them; its COMMON blocks are modules (<a href="common-map.html">Section 6.4</a>).</p>
+<p><strong>Responsibility:</strong> small, stateless numerical routines and named constants, free of any class state ("compute kernels are module-level functions; classes orchestrate").</p>
+<pre><code class="language-fortran">! kinds.f90
+integer, parameter :: dp = real64, sp = real32
+integer, parameter :: NSP = 15  !! Species in a composition column.
+integer, parameter :: I_H1 = 1, I_HE4 = 2, I_Z = 3, I_HE3 = 4, I_C12 = 5, &amp;
+    I_C13 = 6, I_N14 = 7, I_N15 = 8, I_O16 = 9, I_O17 = 10, I_O18 = 11, &amp;
+    I_H2 = 12, I_LI6 = 13, I_LI7 = 14, I_BE9 = 15  !! Rows of hcomp.
+
+! numerics.f90 (pure procedures)
+pure subroutine spline_coeffs(x, y, y2, yp1, ypn)
+    !! Second derivatives of a cubic spline through (x, y).
+    !! x, y : (n,); y2 : (n,), out; yp1, ypn : optional end slopes,
+    !! natural ends if absent.
+pure function spline_eval(x, y, y2, xi) result(yi)
+    !! Cubic spline at xi, from spline_coeffs.
+subroutine osplin_eval(xtab, ytab, xval, yval)
+    !! Shape-preserving quadratic spline (ACM 574) at the points xval.
+pure subroutine tridiag_solve(a, b, c, r, x, ierr)
+    !! Thomas algorithm, a_j x_{j-1} + b_j x_j + c_j x_{j+1} = r_j.
+    !! ierr = 1 on a zero pivot (no STOP).
+pure subroutine band_solve(abd, nlow, nup, b, ierr)
+    !! Banded system without pivoting (BANDW).
+subroutine lu_decompose(a, indx, d, ierr); subroutine lu_solve(a, indx, b)
+function lagrange_weights(x, xs) result(w)
+    !! Weights of n-point Lagrange interpolation (and derivative).
+pure function fermi_half_inv(f) result(eta)   !! IFERMI12.
+pure function fermi_mhalf(eta) result(f)      !! ZFERMIM12.
+
+! odeint.f90
+type, abstract :: OdeRhs
+    !! Right-hand side of an ODE system; holds what the derivative needs.
+contains
+    procedure(rhs_if), deferred :: deriv
+        !! (x, y(:), dydx(:)) The derivatives at x.
+end type
+subroutine bs_step(rhs, y, dydx, x, htry, eps, yscal, hdid, hnext, ierr)
+    !! One adaptive Bulirsch-Stoer step (BSSTEP with MMID, RATEXT).
+</code></pre>
+<p><strong>Replaces:</strong> the splines <a href="../yrec-map/splinc.f.html#def-SPLINC"><code>SPLINC</code></a>, <a href="../yrec-map/splinj.f.html#def-SPLINJ"><code>SPLINJ</code></a>, <a href="../yrec-map/splint.f.html#def-SPLINT"><code>SPLINT</code></a>, <a href="../yrec-map/splintd2.f.html#def-SPLINTD2"><code>SPLINTD2</code></a>, <a href="../yrec-map/cspline.f.html#def-CSPLINE"><code>CSPLINE</code></a>, <a href="../yrec-map/kspline.f.html#def-KSPLINE"><code>KSPLINE</code></a>, <a href="../yrec-map/ksplint.f.html#def-KSPLINT"><code>KSPLINT</code></a>; the shape-preserving splines <a href="../yrec-map/osplin.f.html#def-OSPLIN"><code>OSPLIN</code></a>, <a href="../yrec-map/meval.f.html#def-MEVAL"><code>MEVAL</code></a>, <a href="../yrec-map/slopes.f.html#def-SLOPES"><code>SLOPES</code></a>, <a href="../yrec-map/choose.f.html#def-CHOOSE"><code>CHOOSE</code></a>, <a href="../yrec-map/cases.f.html#def-CASES"><code>CASES</code></a>, <a href="../yrec-map/spline.f.html#def-SPLINE"><code>SPLINE</code></a>, <a href="../yrec-map/search.f.html#def-SEARCH"><code>SEARCH</code></a>; the solvers <a href="../yrec-map/tridia.f.html#def-TRIDIA"><code>TRIDIA</code></a>, <a href="../yrec-map/ctridi.f.html#def-CTRIDI"><code>CTRIDI</code></a>, <a href="../yrec-map/tridiag_gs.f.html#def-TRIDIAG_GS"><code>TRIDIAG_GS</code></a>, <a href="../yrec-map/bandw.f.html#def-BANDW"><code>BANDW</code></a>, <a href="../yrec-map/simeqc.f.html#def-SIMEQC"><code>SIMEQC</code></a>, <a href="../yrec-map/ludcmp.f.html#def-LUDCMP"><code>LUDCMP</code></a>, <a href="../yrec-map/lubksb.f.html#def-LUBKSB"><code>LUBKSB</code></a>; interpolation <a href="../yrec-map/interp.f.html#def-INTERP"><code>INTERP</code></a>, <a href="../yrec-map/intrp2.f.html#def-INTRP2"><code>INTRP2</code></a>, <a href="../yrec-map/inter3.f.html#def-INTER3"><code>INTER3</code></a>, <a href="../yrec-map/polint.f.html#def-POLINT"><code>POLINT</code></a>, <a href="../yrec-map/xrng4.f.html#def-XRNG4"><code>XRNG4</code></a>, <a href="../yrec-map/locate.f.html#def-LOCATE"><code>LOCATE</code></a>; quadrature <a href="../yrec-map/boole.f.html#def-BOOLE"><code>BOOLE</code></a>, <a href="../yrec-map/trapzd.f.html#def-TRAPZD"><code>TRAPZD</code></a>, <a href="../yrec-map/qgauss.f.html#def-QGAUSS"><code>QGAUSS</code></a>; <a href="../yrec-map/ifermi12.f.html#def-IFERMI12"><code>IFERMI12</code></a>, <a href="../yrec-map/zfermim12.f.html#def-ZFERMIM12"><code>ZFERMIM12</code></a>; <a href="../yrec-map/bsstep.f.html#def-BSSTEP"><code>BSSTEP</code></a>, <a href="../yrec-map/mmid.f.html#def-MMID"><code>MMID</code></a>, <a href="../yrec-map/ratext.f.html#def-RATEXT"><code>RATEXT</code></a>. The constants that <a href="../yrec-map/setups.f.html#def-SETUPS"><code>SETUPS</code></a> sets, held in <a href="../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD"><code>CONSTANTS_MOD</code></a> (formerly <code>/CONST/</code>–<code>/CONST3/</code>) and <a href="../yrec-map/confac_mod.f.html#def-CONFAC_MOD"><code>CONFAC_MOD</code></a> (formerly <code>/CONFAC/</code>), become named parameters in <code>constants.f90</code>, each with its unit and source; the mixing length, formerly in <code>/CONST3/</code> and now an argument (and <a href="../yrec-map/qenvmix_mod.f.html#def-QENVMIX_MOD"><code>QENVMIX_MOD</code></a> for <code>QENV</code>), is a setting (Section 3.2).</p>
+<p>Where today's duplicates differ (the fixed size 5000 of <code>SPLINTD2</code> against the adjustable size of <code>SPLINT</code>; single against double precision), one routine serves both; the merge is checked against the benchmarks (<a href="overview.html">Section 7</a>). <code>OdeRhs</code> carries the state that <code>QATM</code> and <code>QENV</code> now read from modules (COMMON blocks at <code>rp_1</code>), so the derivative routine no longer needs a fixed argument list (the reason the development branch must keep <code>QENVMIX_MOD</code>, <a href="overview.html">Section 7.3</a>).</p>
+<h2>3.2 Settings: <code>Config</code>, <code>KindCard</code></h2>
+<p><strong><code>Config</code>. Responsibility:</strong> the single source of a job's settings, read once from the two namelists, checked, with derived values recomputed in one place; children reach it through their parent (<code>self%cfg</code>), never copy it.</p>
+<pre><code class="language-fortran">type :: Config
+    !! Every setting of a job. Defaults are the type's initial values.
+    type(IoConfig) :: io            !! Units, file names, output switches.
+    type(NumericsConfig) :: num     !! HTOLER, HPTTOL, ATIME, NITER1-4, ...
+    type(CompositionConfig) :: comp !! Mixtures, isotopes, LEXCOM.
+    type(ConvectionConfig) :: conv  !! CMIXL, overshoot, semiconvection.
+    type(EosConfig) :: eos          !! LOPALE06, LSCV, LDH.
+    type(OpacityConfig) :: opac     !! Table flags, their Z, ramps.
+    type(NuclearConfig) :: nuc      !! SSTANDARD, S-factor derivatives.
+    type(SettlingConfig) :: sett    !! LDIFY, LDIFZ, LNEWDIF, ...
+    type(RotationConfig) :: rot     !! LROT, LINSTB, wind law, disk.
+    type(SurfaceConfig) :: surf     !! KTTAU, Allard options, spots.
+    type(MassLossConfig) :: mloss   !! DMDT0, Reimers, accretion.
+    type(KindCard), allocatable :: cards(:)  !! (NUMRUN,) Run cards.
+    character(len=:), allocatable :: input_dir  !! Tables; from YREC_INPUT.
+contains
+    procedure :: read_namelists
+        !! (file_control, file_physics, ierr) Read both namelists, map the
+        !! newer names onto the older vectors (REMAP), then derive.
+    procedure :: derive
+        !! (ierr) Recompute every derived setting: one OPAL EOS, one low-T
+        !! table, wind exponents, settling switches, TENV, Li/Be factors.
+        !! ierr names the setting that failed (&quot;LSEMIC: not with overshoot&quot;).
+    procedure :: write_namelists
+        !! (unit) Every entry, defaults included, into the output.
+    procedure :: summary
+        !! (log) The table of standard and current values (.short file).
+end type
+
+type :: KindCard
+    !! One run card: what to do with the starting model.
+    integer :: kind = 1             !! 1 evolve, 2 rescale and relax, 3 both.
+    integer :: nmodels = 0          !! NMODLS.
+    logical :: read_model = .false. !! LFIRST: read from file, else keep.
+    real(dp) :: rescale(4) = -1     !! RESCAL: mass, X, Z, core mass.
+    real(dp) :: end_age = 0         !! [yr], ENDAGE; 0: none.
+    real(dp) :: fixed_dt = 0        !! [yr], SETDT; 0: from TimeStepper.
+    real(dp) :: end_dcen = 0, end_xcen = 0, end_ycen = 0  !! Stop criteria.
+    real(dp) :: x = -1, z = -1, cmixl = -1  !! XENV0A, ZENV0A, CMIXLA.
+    logical :: zramp = .false., core = .false., he_flash = .false.
+end type
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../yrec-map/parmin.f.html#def-PARMIN"><code>PARMIN</code></a> (defaults, namelists, derived settings, run cards, summary; it no longer opens files, which <code>Logger</code> and the writers do), <a href="../yrec-map/remap.f.html#def-REMAP"><code>REMAP</code></a>, and the namelist modules <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a> and <a href="../yrec-map/nmlbypass_mod.f.html#def-NMLBYPASS_MOD"><code>NMLBYPASS_MOD</code></a>, with the other settings listed in <a href="common-map.html">Section 6.4</a>. Opening the right files moves to the writers that use them. The namelist dump goes after the <code>.short</code> file is opened (PARMIN question 1); the "standard" column of the summary is generated from the defaults (question 4). Namelist entries that were read and never used at <code>rp_1</code> (question 6: <code>LPMM</code>, <code>PMMWMAX</code>, <code>LSOLWIND</code>, <code>ZOPAL952</code>, <code>ZALEX2</code>) are still accepted, with a warning, so old namelists run; on a development base this is moot for <code>LPMM</code>, <code>PMMWMAX</code>, <code>ZOPAL952</code> and <code>ZALEX2</code>, which development has removed from the namelists (with a test that guards against the return of the first two), and for <code>LSOLWIND</code>, which now reaches <code>MDOT</code>.</p>
+<p>This follows Known improvements ("Hold settings in an object ... with derived values ... recomputed by one <code>configure()</code>"): YREC already has a second user and many configurations, so the trigger has arrived. Fortran has no <code>__slots__</code>; a namelist already rejects a misspelled entry, which is the same protection.</p>
+<h2>Python</h2>
+<p>The stubs of the new structure (signatures and docstrings, no bodies), each naming the routines it replaces in the current code.</p>
+<h3><code>pyrec/config/__init__.py</code></h3>
+<pre><code class="language-python">&quot;&quot;&quot;Settings: the single source of a job's settings, read once and checked.
+
+Modules
+-------
+settings : Config, its parts (dataclasses with __slots__), KindCard.
+
+&quot;&quot;&quot;
+from .settings import Config, KindCard
+</code></pre>
+<h3><code>pyrec/config/settings.py</code></h3>
+<ul>
+<li><code>Config.read_namelists</code> replaces <a href="../yrec-map/parmin.f.html#def-PARMIN"><code>PARMIN</code></a>, <a href="../yrec-map/remap.f.html#def-REMAP"><code>REMAP</code></a>.</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;Config and its parts; KindCard; the two namelists.
+
+The parts are dataclasses with ``slots=True``, so a misspelled setting is an
+error; defaults are the field defaults, today's values. Children reach the
+settings through their parent (``self.track.run.cfg``), never copy them.
+
+Classes
+-------
+IoConfig, NumericsConfig, CompositionConfig, ConvectionConfig, EosConfig,
+OpacityConfig, NuclearConfig, SettlingConfig, RotationConfig, SurfaceConfig,
+MassLossConfig : The parts of Config, one per physics.
+KindCard : One run card.
+Config : Every setting of a job.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import numpy as np
+
+
+@dataclass(slots=True)
+class IoConfig:
+    &quot;&quot;&quot;Units, file names, output switches (IOUNITS_MOD, CCOUT_MOD; formerly /LUNUM/, /LUOUT/, /CCOUT/, ...).&quot;&quot;&quot;
+
+
+@dataclass(slots=True)
+class NumericsConfig:
+    &quot;&quot;&quot;HTOLER, HPTTOL, ATIME, NITER1-4, tolerances (NMLPAR_MOD, CTOL_MOD, INTPAR_MOD, ...; formerly /CTOL/, /CTLIM/, /INTPAR/, ...).&quot;&quot;&quot;
+
+
+@dataclass(slots=True)
+class CompositionConfig:
+    &quot;&quot;&quot;Mixtures, isotopes, LEXCOM (NMLPAR_MOD, NMLBYPASS_MOD; formerly /NEWCMP/, /NEWMX/, ...).&quot;&quot;&quot;
+
+
+@dataclass(slots=True)
+class ConvectionConfig:
+    &quot;&quot;&quot;CMIXL, overshoot, semiconvection (NMLPAR_MOD, DPMIX_MOD; CMIXL, formerly of /CONST3/, now an argument).&quot;&quot;&quot;
+
+
+@dataclass(slots=True)
+class EosConfig:
+    &quot;&quot;&quot;LOPALE06, LSCV, LDH (NMLPAR_MOD, DEBHU_MOD; formerly /OPALEOS/, /SCV2/, /DEBHU/, ...).&quot;&quot;&quot;
+
+
+@dataclass(slots=True)
+class OpacityConfig:
+    &quot;&quot;&quot;Table flags, their Z, ramps (NMLPAR_MOD, NEWOPAC_MOD; formerly /NEWOPAC/, /MISCOPAC/, ...).&quot;&quot;&quot;
+
+
+@dataclass(slots=True)
+class NuclearConfig:
+    &quot;&quot;&quot;SSTANDARD, S-factor derivatives (NMLPAR_MOD, NMLBYPASS_MOD, CROSS_MOD; formerly /CROSS/, /NEWCROSS/, ...).&quot;&quot;&quot;
+
+
+@dataclass(slots=True)
+class SettlingConfig:
+    &quot;&quot;&quot;LDIFY, LDIFZ, LNEWDIF, ... (NMLPAR_MOD; formerly /GRAVST/, /GRAVS2/, ...).&quot;&quot;&quot;
+
+
+@dataclass(slots=True)
+class RotationConfig:
+    &quot;&quot;&quot;LROT, LINSTB, wind law, disk (NMLPAR_MOD, DISK_MOD, ...; formerly /ROT/, /CWIND/, /DISK/, ...).&quot;&quot;&quot;
+
+
+@dataclass(slots=True)
+class SurfaceConfig:
+    &quot;&quot;&quot;KTTAU, Allard options, spots (NMLPAR_MOD, ATMOS_MOD; formerly /ATMOS/, /ALATM03/, /SPOTS/, ...).&quot;&quot;&quot;
+
+
+@dataclass(slots=True)
+class MassLossConfig:
+    &quot;&quot;&quot;DMDT0, Reimers, accretion (NMLPAR_MOD; formerly /MASSCHG/, /MASSCHG3/).&quot;&quot;&quot;
+
+
+@dataclass(slots=True)
+class KindCard:
+    &quot;&quot;&quot;One run card: what to do with the starting model.
+
+    Attributes
+    ----------
+    kind : int, default: 1
+        1 evolve, 2 rescale and relax, 3 both.
+    nmodels : int, default: 0
+        NMODLS.
+    read_model : bool, default: False
+        LFIRST: read from file, else keep.
+    rescale : np.ndarray, shape: `(4,)`
+        RESCAL: mass, X, Z, core mass; -1 for unchanged.
+    end_age, fixed_dt : float
+        [yr]; 0 for none (ENDAGE, SETDT).
+    end_dcen, end_xcen, end_ycen : float
+        Stop criteria.
+    x, z, cmixl : float
+        XENV0A, ZENV0A, CMIXLA; -1 for unchanged.
+    zramp, core, he_flash : bool
+    &quot;&quot;&quot;
+
+    kind: int = 1
+    nmodels: int = 0
+    read_model: bool = False
+    rescale: np.ndarray = field(default_factory=lambda: -np.ones(4))
+    end_age: float = 0.0
+    fixed_dt: float = 0.0
+    end_dcen: float = 0.0
+    end_xcen: float = 0.0
+    end_ycen: float = 0.0
+    x: float = -1.0
+    z: float = -1.0
+    cmixl: float = -1.0
+    zramp: bool = False
+    core: bool = False
+    he_flash: bool = False
+
+
+@dataclass(slots=True)
+class Config:
+    &quot;&quot;&quot;Every setting of a job, read once from the two namelists.
+
+    Attributes
+    ----------
+    io, num, comp, conv, eos, opac, nuc, sett, rot, surf, mloss
+        The parts, one per physics.
+    cards : list[KindCard]
+        (NUMRUN,) run cards.
+    input_dir : Path
+        Tables; from ``YREC_INPUT``.
+
+    Methods
+    -------
+    read_namelists : Read both namelists, map the newer names, derive.
+    derive : Recompute every derived setting.
+    write_namelists : Every entry, defaults included, into the output.
+    summary : The table of standard and current values.
+    &quot;&quot;&quot;
+
+    io: IoConfig = field(default_factory=IoConfig)
+    num: NumericsConfig = field(default_factory=NumericsConfig)
+    comp: CompositionConfig = field(default_factory=CompositionConfig)
+    conv: ConvectionConfig = field(default_factory=ConvectionConfig)
+    eos: EosConfig = field(default_factory=EosConfig)
+    opac: OpacityConfig = field(default_factory=OpacityConfig)
+    nuc: NuclearConfig = field(default_factory=NuclearConfig)
+    sett: SettlingConfig = field(default_factory=SettlingConfig)
+    rot: RotationConfig = field(default_factory=RotationConfig)
+    surf: SurfaceConfig = field(default_factory=SurfaceConfig)
+    mloss: MassLossConfig = field(default_factory=MassLossConfig)
+    cards: list[KindCard] = field(default_factory=list)
+    input_dir: Path = Path(&quot;.&quot;)
+
+    def read_namelists(self, file_control: Path, file_physics: Path) -&gt; None:
+        &quot;&quot;&quot;Read both namelists (f90nml), map the newer names onto the older vectors, then derive.
+
+        Unused entries (LPMM, PMMWMAX, LSOLWIND, ZOPAL952, ZALEX2) are
+        accepted with a warning, so old namelists run.
+
+        Replaces: parmin.f#PARMIN, remap.f#REMAP
+        &quot;&quot;&quot;
+        ...
+
+    def derive(self) -&gt; None:
+        &quot;&quot;&quot;Recompute every derived setting: one OPAL EOS, one low-T table, wind exponents, settling switches, TENV, Li/Be factors.
+
+        Raises ``ValueError`` naming the setting (&quot;LSEMIC: not with overshoot&quot;).
+        &quot;&quot;&quot;
+        ...
+
+    def write_namelists(self, path: Path) -&gt; None:
+        &quot;&quot;&quot;Every entry, defaults included, into the output.&quot;&quot;&quot;
+        ...
+
+    def summary(self, log) -&gt; None:
+        &quot;&quot;&quot;The table of standard (generated from the defaults) and current values, to the .short file.&quot;&quot;&quot;
+        ...
+</code></pre>
+<h3><code>pyrec/kernels/__init__.py</code></h3>
+<pre><code class="language-python">&quot;&quot;&quot;Kernels: small, stateless numerical routines and named constants.
+
+The bottom of the layering; imports nothing from pyrec. Compute kernels are
+module-level functions (Numba where hot); classes orchestrate.
+
+Modules
+-------
+constants : Physical constants (cgs, with sources) and the species indices of HCOMP.
+numerics : Splines, tridiagonal and banded solvers, LU, interpolation, quadrature, Fermi integrals.
+odeint : OdeRhs and the Bulirsch-Stoer step.
+logger : Logger, for the .short file and timings.
+
+&quot;&quot;&quot;
+</code></pre>
+<h3><code>pyrec/kernels/constants.py</code></h3>
+<ul>
+<li>The module replaces <a href="../yrec-map/setups.f.html#def-SETUPS"><code>SETUPS</code></a> (the constants of <a href="../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD"><code>CONSTANTS_MOD</code></a> and <a href="../yrec-map/confac_mod.f.html#def-CONFAC_MOD"><code>CONFAC_MOD</code></a>).</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;Physical constants and the species indices of a composition column.
+
+Each constant in cgs, with its source in a comment. Fortran's ``kinds.f90``
+and ``constants.f90`` in one module (Python needs no kind parameters).
+
+Classes
+-------
+Species : Named rows of ``hcomp`` (IntEnum).
+
+
+Replaces: setups.f#SETUPS (the constants of CONSTANTS_MOD and CONFAC_MOD)
+&quot;&quot;&quot;
+from __future__ import annotations
+
+from enum import IntEnum
+
+NSP = 15  # Species in a composition column (rows of hcomp).
+
+
+class Species(IntEnum):
+    &quot;&quot;&quot;Rows of ``hcomp``, in the order the code prints (0-based).&quot;&quot;&quot;
+
+    H1 = 0
+    HE4 = 1
+    Z = 2
+    HE3 = 3
+    C12 = 4
+    C13 = 5
+    N14 = 6
+    N15 = 7
+    O16 = 8
+    O17 = 9
+    O18 = 10
+    H2 = 11
+    LI6 = 12
+    LI7 = 13
+    BE9 = 14
+
+
+C_LIGHT = 2.99792458e10  # [cm s-1], exact (CODATA).
+G_NEWTON = 6.67430e-8  # [cm3 g-1 s-2] (CODATA 2018); rp_1's value to be checked.
+SIGMA_SB = 5.670374e-5  # [erg cm-2 s-1 K-4] (CODATA 2018).
+A_RAD = 4.0 * SIGMA_SB / C_LIGHT  # [erg cm-3 K-4], derived.
+AMU = 1.66053907e-24  # [g] (CODATA 2018); one value for VISCOS and the rest.
+SEC_PER_YR = 3.1557600e7  # [s yr-1] (CSECYR, Julian year).
+M_SUN = 1.989e33  # [g]; rp_1's CMSUN, kept until the benchmarks allow a change.
+R_SUN = 6.9598e10  # [cm]; rp_1's CRSUN.
+</code></pre>
+<h3><code>pyrec/kernels/logger.py</code></h3>
+<pre><code class="language-python">&quot;&quot;&quot;The run's log: the .short file, message levels and timings.
+
+Classes
+-------
+Logger : A ``logging`` logger writing the .short file, with a fixed timing format.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+
+class Logger:
+    &quot;&quot;&quot;The .short file and the levels of its messages.
+
+    Routines that write to the terminal at every call today (MASSLOSS, MDOT,
+    RSCALE, TAUCAL, BSROTMIX) log at ``debug``.
+
+    Attributes
+    ----------
+    path : Path
+        The .short file.
+    log : logging.Logger
+    &quot;&quot;&quot;
+
+    TIME_FMT = &quot;{name}: {seconds:.3f} s&quot;  # One fixed format for timings.
+
+    def __init__(self, path: Path, level: int = logging.INFO) -&gt; None:
+        &quot;&quot;&quot;Store the path and level; open nothing yet.&quot;&quot;&quot;
+        ...
+
+    def __call__(self) -&gt; None:
+        &quot;&quot;&quot;Open the .short file and attach the handler.&quot;&quot;&quot;
+        ...
+
+    def timing(self, name: str, seconds: float) -&gt; None:
+        &quot;&quot;&quot;Log one timing in ``TIME_FMT``.&quot;&quot;&quot;
+        ...
+
+    def clear(self) -&gt; None:
+        &quot;&quot;&quot;Close the file.&quot;&quot;&quot;
+        ...
+</code></pre>
+<h3><code>pyrec/kernels/numerics.py</code></h3>
+<ul>
+<li>The module replaces <a href="../yrec-map/xrng4.f.html#def-XRNG4"><code>XRNG4</code></a>, <a href="../yrec-map/boole.f.html#def-BOOLE"><code>BOOLE</code></a>, <a href="../yrec-map/trapzd.f.html#def-TRAPZD"><code>TRAPZD</code></a>.</li>
+<li><code>spline_coeffs</code> replaces <a href="../yrec-map/splinc.f.html#def-SPLINC"><code>SPLINC</code></a>, <a href="../yrec-map/splinj.f.html#def-SPLINJ"><code>SPLINJ</code></a>, <a href="../yrec-map/cspline.f.html#def-CSPLINE"><code>CSPLINE</code></a>, <a href="../yrec-map/kspline.f.html#def-KSPLINE"><code>KSPLINE</code></a>.</li>
+<li><code>spline_eval</code> replaces <a href="../yrec-map/splint.f.html#def-SPLINT"><code>SPLINT</code></a>, <a href="../yrec-map/splintd2.f.html#def-SPLINTD2"><code>SPLINTD2</code></a>, <a href="../yrec-map/ksplint.f.html#def-KSPLINT"><code>KSPLINT</code></a>.</li>
+<li><code>osplin_eval</code> replaces <a href="../yrec-map/osplin.f.html#def-OSPLIN"><code>OSPLIN</code></a>, <a href="../yrec-map/meval.f.html#def-MEVAL"><code>MEVAL</code></a>, <a href="../yrec-map/slopes.f.html#def-SLOPES"><code>SLOPES</code></a>, <a href="../yrec-map/choose.f.html#def-CHOOSE"><code>CHOOSE</code></a>, <a href="../yrec-map/cases.f.html#def-CASES"><code>CASES</code></a>, <a href="../yrec-map/spline.f.html#def-SPLINE"><code>SPLINE</code></a>, <a href="../yrec-map/search.f.html#def-SEARCH"><code>SEARCH</code></a>.</li>
+<li><code>tridiag_solve</code> replaces <a href="../yrec-map/tridia.f.html#def-TRIDIA"><code>TRIDIA</code></a>, <a href="../yrec-map/ctridi.f.html#def-CTRIDI"><code>CTRIDI</code></a>, <a href="../yrec-map/tridiag_gs.f.html#def-TRIDIAG_GS"><code>TRIDIAG_GS</code></a>.</li>
+<li><code>band_solve</code> replaces <a href="../yrec-map/bandw.f.html#def-BANDW"><code>BANDW</code></a>, <a href="../yrec-map/simeqc.f.html#def-SIMEQC"><code>SIMEQC</code></a>.</li>
+<li><code>lu_decompose</code> replaces <a href="../yrec-map/ludcmp.f.html#def-LUDCMP"><code>LUDCMP</code></a>.</li>
+<li><code>lu_solve</code> replaces <a href="../yrec-map/lubksb.f.html#def-LUBKSB"><code>LUBKSB</code></a>.</li>
+<li><code>lagrange_weights</code> replaces <a href="../yrec-map/interp.f.html#def-INTERP"><code>INTERP</code></a>, <a href="../yrec-map/intrp2.f.html#def-INTRP2"><code>INTRP2</code></a>, <a href="../yrec-map/inter3.f.html#def-INTER3"><code>INTER3</code></a>, <a href="../yrec-map/polint.f.html#def-POLINT"><code>POLINT</code></a>.</li>
+<li><code>locate</code> replaces <a href="../yrec-map/locate.f.html#def-LOCATE"><code>LOCATE</code></a>.</li>
+<li><code>quad_gauss</code> replaces <a href="../yrec-map/qgauss.f.html#def-QGAUSS"><code>QGAUSS</code></a>.</li>
+<li><code>fermi_half_inv</code> replaces <a href="../yrec-map/ifermi12.f.html#def-IFERMI12"><code>IFERMI12</code></a>.</li>
+<li><code>fermi_mhalf</code> replaces <a href="../yrec-map/zfermim12.f.html#def-ZFERMIM12"><code>ZFERMIM12</code></a>.</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;Numerical kernels: splines, solvers, interpolation, quadrature, Fermi integrals.
+
+Every function fills preallocated arrays or returns a scalar, takes no class
+state, and is marked for Numba where it runs per shell or per point
+(``@njit``; ``NUMBA_DISABLE_JIT=1`` runs it as plain Python for debugging).
+Errors are raised as ``ValueError`` naming the input, never ``STOP``.
+
+Functions
+---------
+spline_coeffs : Second derivatives of a cubic spline.
+spline_eval : A cubic spline at given points.
+osplin_eval : Shape-preserving quadratic spline (ACM 574).
+tridiag_solve : Thomas algorithm.
+band_solve : Banded system without pivoting.
+lu_decompose, lu_solve : LU with partial pivoting.
+lagrange_weights : Weights of n-point Lagrange interpolation.
+locate : Bracketing index in a sorted table.
+quad_gauss : Gauss-Legendre quadrature.
+fermi_half_inv, fermi_mhalf : Fermi-Dirac integrals.
+
+
+Replaces: xrng4.f#XRNG4, boole.f#BOOLE, trapzd.f#TRAPZD
+&quot;&quot;&quot;
+from __future__ import annotations
+
+import numpy as np
+from numba import njit
+
+
+@njit(cache=True)
+def spline_coeffs(x: np.ndarray, y: np.ndarray, y2: np.ndarray,
+                  yp1: float = np.nan, ypn: float = np.nan) -&gt; None:
+    &quot;&quot;&quot;Second derivatives of a cubic spline through ``(x, y)``, in place.
+
+    Parameters
+    ----------
+    x, y : np.ndarray, shape: `(n,)`, dtype: ``float64``
+        Knots, ``x`` increasing.
+    y2 : np.ndarray, shape: `(n,)`, dtype: ``float64``
+        Output: second derivatives.
+    yp1, ypn : float
+        End slopes; NaN for natural ends.
+
+    Notes
+    -----
+    Numba: hot loop. One routine for the fixed size 5000 of SPLINTD2 and
+    the adjustable size of SPLINT; checked by point comparisons.
+
+    Replaces: splinc.f#SPLINC, splinj.f#SPLINJ, cspline.f#CSPLINE, kspline.f#KSPLINE
+    &quot;&quot;&quot;
+    ...
+
+
+@njit(cache=True)
+def spline_eval(x: np.ndarray, y: np.ndarray, y2: np.ndarray,
+                xi: np.ndarray, yi: np.ndarray) -&gt; None:
+    &quot;&quot;&quot;Cubic spline at ``xi``, from :func:`spline_coeffs`, into ``yi``.
+
+    Notes
+    -----
+    Numba: hot loop.
+
+    Replaces: splint.f#SPLINT, splintd2.f#SPLINTD2, ksplint.f#KSPLINT
+    &quot;&quot;&quot;
+    ...
+
+
+def osplin_eval(xtab: np.ndarray, ytab: np.ndarray, xval: np.ndarray) -&gt; np.ndarray:
+    &quot;&quot;&quot;Shape-preserving quadratic spline (ACM 574) at the points ``xval``.
+
+    Returns
+    -------
+    np.ndarray, shape: `(len(xval),)`, dtype: ``float64``
+
+    Replaces: osplin.f#OSPLIN, meval.f#MEVAL, slopes.f#SLOPES, choose.f#CHOOSE, cases.f#CASES, spline.f#SPLINE, search.f#SEARCH
+    &quot;&quot;&quot;
+    ...
+
+
+@njit(cache=True)
+def tridiag_solve(a: np.ndarray, b: np.ndarray, c: np.ndarray,
+                  r: np.ndarray, x: np.ndarray) -&gt; int:
+    &quot;&quot;&quot;Thomas algorithm, ``a_j x_{j-1} + b_j x_j + c_j x_{j+1} = r_j``, into ``x``.
+
+    Returns
+    -------
+    int
+        0, or 1 on a zero pivot (Numba cannot raise with a message here;
+        the caller raises).
+
+    Notes
+    -----
+    Numba: hot loop.
+
+    Replaces: tridia.f#TRIDIA, ctridi.f#CTRIDI, tridiag_gs.f#TRIDIAG_GS
+    &quot;&quot;&quot;
+    ...
+
+
+@njit(cache=True)
+def band_solve(abd: np.ndarray, nlow: int, nup: int, b: np.ndarray) -&gt; int:
+    &quot;&quot;&quot;Banded system without pivoting, ``b`` overwritten with the solution.
+
+    Notes
+    -----
+    Numba: hot loop.
+
+    Replaces: bandw.f#BANDW, simeqc.f#SIMEQC
+    &quot;&quot;&quot;
+    ...
+
+
+def lu_decompose(a: np.ndarray) -&gt; tuple[np.ndarray, np.ndarray, float]:
+    &quot;&quot;&quot;LU decomposition with partial pivoting: ``(lu, indx, d)``.
+
+    Replaces: ludcmp.f#LUDCMP
+    &quot;&quot;&quot;
+    ...
+
+
+def lu_solve(lu: np.ndarray, indx: np.ndarray, b: np.ndarray) -&gt; np.ndarray:
+    &quot;&quot;&quot;Solve with the output of :func:`lu_decompose`.
+
+    Replaces: lubksb.f#LUBKSB
+    &quot;&quot;&quot;
+    ...
+
+
+@njit(cache=True)
+def lagrange_weights(x: float, xs: np.ndarray, w: np.ndarray, dw: np.ndarray) -&gt; None:
+    &quot;&quot;&quot;Weights (and derivative weights) of n-point Lagrange interpolation at ``x``.
+
+    Notes
+    -----
+    Numba: called per point of every table lookup.
+
+    Replaces: interp.f#INTERP, intrp2.f#INTRP2, inter3.f#INTER3, polint.f#POLINT
+    &quot;&quot;&quot;
+    ...
+
+
+@njit(cache=True)
+def locate(xx: np.ndarray, x: float) -&gt; int:
+    &quot;&quot;&quot;Index ``j`` with ``xx[j] &lt;= x &lt; xx[j+1]`` (bisection), -1 or n-1 outside.
+
+    Replaces: locate.f#LOCATE
+    &quot;&quot;&quot;
+    ...
+
+
+def quad_gauss(f, a: float, b: float, n: int = 10) -&gt; float:
+    &quot;&quot;&quot;Gauss-Legendre quadrature of ``f`` on ``[a, b]``.
+
+    Replaces: qgauss.f#QGAUSS
+    &quot;&quot;&quot;
+    ...
+
+
+@njit(cache=True)
+def fermi_half_inv(f: float) -&gt; float:
+    &quot;&quot;&quot;Inverse of the Fermi-Dirac integral of order 1/2.
+
+    Replaces: ifermi12.f#IFERMI12
+    &quot;&quot;&quot;
+    ...
+
+
+@njit(cache=True)
+def fermi_mhalf(eta: float) -&gt; float:
+    &quot;&quot;&quot;Fermi-Dirac integral of order -1/2.
+
+    Replaces: zfermim12.f#ZFERMIM12
+    &quot;&quot;&quot;
+    ...
+</code></pre>
+<h3><code>pyrec/kernels/odeint.py</code></h3>
+<ul>
+<li><code>bs_step</code> replaces <a href="../yrec-map/bsstep.f.html#def-BSSTEP"><code>BSSTEP</code></a>, <a href="../yrec-map/mmid.f.html#def-MMID"><code>MMID</code></a>, <a href="../yrec-map/ratext.f.html#def-RATEXT"><code>RATEXT</code></a>.</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;ODE stepping: the right-hand-side base class and the Bulirsch-Stoer step.
+
+Classes
+-------
+OdeRhs : Right-hand side of an ODE system; holds what the derivative needs.
+
+Functions
+---------
+bs_step : One adaptive Bulirsch-Stoer step.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+import numpy as np
+
+
+class OdeRhs:
+    &quot;&quot;&quot;Right-hand side of an ODE system; subclasses hold what the derivative needs.
+
+    Carrying its state as attributes ends the fixed argument list that made
+    QENV and QATM read module variables, COMMON blocks at rp_1 (the QENV/QATM constraint).
+
+    Methods
+    -------
+    deriv : The derivatives at x.
+    &quot;&quot;&quot;
+
+    def deriv(self, x: float, y: np.ndarray, dydx: np.ndarray) -&gt; None:
+        &quot;&quot;&quot;Fill ``dydx`` (shape `(n,)`) with the derivatives at ``x``.
+
+        This is a hook for derived classes. The base class does nothing.
+        &quot;&quot;&quot;
+        ...
+
+
+def bs_step(rhs: OdeRhs, y: np.ndarray, dydx: np.ndarray, x: float, htry: float,
+            eps: float, yscal: np.ndarray) -&gt; tuple[float, float, float]:
+    &quot;&quot;&quot;One adaptive Bulirsch-Stoer step, ``y`` updated in place.
+
+    Parameters
+    ----------
+    rhs : OdeRhs
+    y, dydx, yscal : np.ndarray, shape: `(n,)`, dtype: ``float64``
+    x, htry, eps : float
+        Start, trial step, relative accuracy.
+
+    Returns
+    -------
+    x_new, hdid, hnext : float
+
+    Notes
+    -----
+    Not Numba: it calls a Python method per substep; the envelope's
+    right-hand sides are where the time goes (see structure.envelope).
+
+    Replaces: bsstep.f#BSSTEP, mmid.f#MMID, ratext.f#RATEXT
+    &quot;&quot;&quot;
+    ...
+</code></pre>
+
+</main></body></html>

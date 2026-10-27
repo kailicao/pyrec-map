@@ -1,0 +1,260 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>op95ztab.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ op95ztab.f</span></header><main>
+<h1>op95ztab.f</h1>
+<p class='muted'>125 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/op95ztab.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>op95ztab.py</code>, 92 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Builds the OPAL95 opacity tables at the model's fixed $Z$ (one table for each of the ten $X$ values) from the full set of tables (MHP 7/98). The result is what <a href="../yrec-map/op953d.f.html#def-OP953D">OP953D</a> interpolates, and what <a href="../yrec-map/op95xtab.f.html#def-OP95XTAB">OP95XTAB</a> reduces further to the surface $X$.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the desired $Z$; the full set in <code>LLOT95A_MOD</code> (<code>ZZG</code>, <code>NZ</code>, <code>CAPPA2</code>).</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/ll95tbl.f.html#def-LL95TBL">LL95TBL</a>, after reading the tables.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/intrp2.f.html#def-INTRP2">INTRP2</a>.</li>
+<li><strong>Output:</strong> <code>CAPPA(10,70,19)</code> and <code>ZTAB</code> in <code>LLOT95_MOD</code>, read by <code>OP953D</code>, <code>OP95XTAB</code>, <a href="../yrec-map/getopal95.f.html#def-GETOPAL95">GETOPAL95</a> and <a href="../yrec-map/calcad.f.html#def-CALCAD">CALCAD</a>.</li>
+</ul>
+<p><strong>The method.</strong> It finds the four $Z$ values around the desired $Z$ and interpolates each $(T, R)$ entry with Lagrange weights $b_k$, $\log\kappa(X_j, T, R) = \sum_k b_k\,\log\kappa(Z_k, X_j, T, R)$:</p>
+<ul>
+<li>tables 1–8 (present at every $Z$): directly;</li>
+<li>table 9 ($X = 0.95$): only if $Z &lt; 0.04$, from four $Z$ values no larger than 0.04 (shifted to 0.01–0.04 if needed);</li>
+<li>table 10 ($X = 1 - Z$): only if $Z &lt; 0.1$, from four $Z$ values below 0.1 (shifted to 0.03–0.08 if needed).</li>
+</ul>
+<p>The search for the four $Z$ values only accepts a fourth value up to the twelfth, $Z = 0.08$ (the loop runs to <code>NUMZ-1</code>), so any $Z &gt; 0.08$ stops the run ("DESIRED Z … OUTSIDE OP95 TABLE RANGE"), although the comment says "Z &gt; 0.1". The top table, $Z = 0.1$, still enters as the fourth of the four values.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (<code>/LLOT95/</code> to <code>LLOT95_MOD</code>, <code>/LLOT95A/</code> to <code>LLOT95A_MOD</code>), <code>IMPLICIT NONE</code> (the unused parameters <code>NUMX</code> and <code>NUMXZ</code> dropped).</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The upper limit on $Z$.</strong> Any $Z$ between 0.08 and 0.1 stops the run, though the tables reach 0.1 and the comment says only $Z &gt; 0.1$ stops. Is 0.08 the intended limit? If the loop ran to <code>NUMZ</code>, $Z$ up to 0.1 would be accepted.</li>
+<li><strong>Label 30 in the wrong place.</strong> For $Z \ge 0.1$, <code>GOTO 30</code> is meant to skip table 10 ("omit table 10 if desired Z &gt;= 0.1"), but label 30 stands <em>before</em> the loop that fills table 10, so it would be filled anyway, with <code>IDZ2</code> and <code>BB</code> left from an earlier step. Since $Z &gt; 0.08$ stops the run first (question 1), this path is never reached now; it matters only if the limit is raised.</li>
+<li><strong>Table 9 for $Z \ge 0.04$.</strong> Table 9 is not rebuilt, so <code>CAPPA(9,…)</code> keeps old values (zeros at first). <a href="../yrec-map/op95xtab.f.html#def-OP95XTAB">OP95XTAB</a> avoids it for $0.04 &lt; Z &lt; 0.1$, but uses it at exactly $Z = 0.04$ (its test is <code>ZTAB.LE.0.04</code>) when the surface $X &gt; 0.8$.</li>
+<li><strong>Fixed positions in the $Z$ grid.</strong> The shifts for tables 9 and 10 use <code>NUMZ - 6</code> and <code>NUMZ - 4</code>, which assume where 0.04 and 0.1 sit in the 13-value $Z$ grid. Worth a comment, or a search.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+OP95ZTAB
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-OP95ZTAB'>OP95ZTAB</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-OP95ZTAB'><h3><span class='kind'>subroutine</span>OP95ZTAB</h3>
+<p class='muted'>lines 6–125 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/op95ztab.f#L6-L125'>GitHub</a></p>
+<pre>SUBROUTINE OP95ZTAB(Z)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+OP95ZTAB
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/llot95a_mod.f.html#def-LLOT95A_MOD'>LLOT95A_MOD</a>, <a href='../yrec-map/llot95_mod.f.html#def-LLOT95_MOD'>LLOT95_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/intrp2.f.html#def-INTRP2'>INTRP2</a> <span class='muted'>(intrp2.f)</span> ×3</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/ll95tbl.f.html#def-LL95TBL'>LL95TBL</a> <span class='muted'>(ll95tbl.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE OP95ZTAB(Z)
+<span class="ln">7</span>C 10/14/26 MHP via Claude
+<span class="ln">8</span>C code changed to convert COMMON/LLOT95A/ into LLOT95A_MOD.
+<span class="ln">9</span>      USE LLOT95A_MOD
+<span class="ln">10</span>C 10/14/26 MHP via Claude
+<span class="ln">11</span>C code changed to convert COMMON/LLOT95/ into LLOT95_MOD.
+<span class="ln">12</span>      USE LLOT95_MOD
+<span class="ln">13</span>C 10/20/26 MHP via Claude
+<span class="ln">14</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">15</span>C explicit declarations.
+<span class="ln">16</span>      IMPLICIT NONE
+<span class="ln">17</span>      REAL*8 A,B,BB,Z
+<span class="ln">18</span>      INTEGER I,I1,I2,I3,I4,IDZ,IDZ2,J,K,NUMD,NUMT,NUMZ
+<span class="ln">19</span>c MHP 7/98 COMPUTE OPACITY TABLE AT FIXED Z FROM THE FULL OP95 SET
+<span class="ln">20</span>      PARAMETER (NUMT=70)
+<span class="ln">21</span>      PARAMETER (NUMD=19)
+<span class="ln">22</span>      PARAMETER (NUMZ=13)
+<span class="ln">23</span>C GRID ENTRIES FOR TEMPERATURE, ABUNDANCE (X), AND RHO/T6**3
+<span class="ln">24</span>C OPACITY AS A FUNCTION OF X, T, AND RHO/T6**3
+<span class="ln">25</span>C FULL SET OF TABLES: OPACITY AS A FUNCTION OF Z AND X, T, RHO/T6**3
+<span class="ln">26</span>C TABLES ARE INCREMENTED IN SETS OF NZ*NX.  SO THE TABLES FOR THE
+<span class="ln">27</span>C THIRD METAL ABUNDANCE (3 X 10**-4)BEGIN AT TABLE 21 AND END AT TABLE 30.
+<span class="ln">28</span>C FOR THE HIGH VALUES OF Z, THE NUMBER OF X TABLES IS NOT THE SAME (I.E.
+<span class="ln">29</span>C X&lt;0.9 FOR Z=0.1).
+<span class="ln">30</span>C FOR EACH COMPOSITION A FULL GRID IN (T,RHO/T6**3) IS RETAINED.
+<span class="ln">31</span>      DIMENSION A(4),B(4),BB(4)
+<span class="ln">32</span>      SAVE
+<span class="ln">33</span>      ZTAB = Z
+<span class="ln">34</span>C  FIND 4 NEAREST TABLES IN Z TO DESIRED VALUE.
+<span class="ln">35</span>      DO I = 3,NUMZ-1
+<span class="ln">36</span>         IF(ZZG(I).GE.Z)THEN
+<span class="ln">37</span>            IDZ = I - 2
+<span class="ln">38</span>            GOTO 10
+<span class="ln">39</span>         ENDIF
+<span class="ln">40</span>      END DO
+<span class="ln">41</span>C DESIRED Z &gt; 0.1D0; STOP
+<span class="ln">42</span>      WRITE(*,5)Z
+<span class="ln">43</span> 5    FORMAT(1X,&#x27;DESIRED Z&#x27;,F10.6,&#x27;OUTSIDE OP95 TABLE RANGE&#x27;/
+<span class="ln">44</span>     *       &#x27; RUN STOPPED&#x27;)
+<span class="ln">45</span>      STOP
+<span class="ln">46</span> 10   CONTINUE
+<span class="ln">47</span>C  FIND INTERPOLATION FACTORS IN Z.
+<span class="ln">48</span>      DO I = 1,4
+<span class="ln">49</span>         A(I) = ZZG(IDZ+I-1)
+<span class="ln">50</span>      END DO
+<span class="ln">51</span>      CALL <a href="../yrec-map/intrp2.f.html#def-INTRP2" title="INTRP2 in intrp2.f">INTRP2</a>(A,B,Z)
+<span class="ln">52</span>C  FOR X TABLES 1-8, ALL VALUES OF Z PRESENT; PERFORM INTERPOLATION.
+<span class="ln">53</span>      DO I = 1,8
+<span class="ln">54</span>C INDICES FOR 4 DESIRED COMPOSITIONS.
+<span class="ln">55</span>         I1 = NZ(IDZ)+I
+<span class="ln">56</span>         I2 = NZ(IDZ+1)+I
+<span class="ln">57</span>         I3 = NZ(IDZ+2)+I
+<span class="ln">58</span>         I4 = NZ(IDZ+3)+I
+<span class="ln">59</span>         DO J = 1,NUMT
+<span class="ln">60</span>            DO K = 1,NUMD
+<span class="ln">61</span>               CAPPA(I,J,K) = B(1)*CAPPA2(I1,J,K)+
+<span class="ln">62</span>     *         B(2)*CAPPA2(I2,J,K)+B(3)*CAPPA2(I3,J,K)+
+<span class="ln">63</span>     *         B(4)*CAPPA2(I4,J,K)
+<span class="ln">64</span>            END DO
+<span class="ln">65</span>         END DO
+<span class="ln">66</span>      END DO
+<span class="ln">67</span>C  FOR X TABLES 9 AND 10, HIGH VALUES OF Z ARE NOT PRESENT
+<span class="ln">68</span>C  OMIT TABLE 9 (X=0.95) IF DESIRED Z &gt; 0.04
+<span class="ln">69</span>      IF(Z.GE.0.04D0)GOTO 20
+<span class="ln">70</span>C  OTHERWISE, CHECK TO ENSURE THAT THE 4 Z TABLES USED HAVE Z &lt; 0.04
+<span class="ln">71</span>C  ADJUST INTERPOLATION FACTORS IF NEEDED
+<span class="ln">72</span>      IF(ZZG(IDZ+3).GT.0.04D0)THEN
+<span class="ln">73</span>         IDZ2 = NUMZ - 6
+<span class="ln">74</span>         DO I = 1,4
+<span class="ln">75</span>            A(I) = ZZG(IDZ2+I-1)
+<span class="ln">76</span>         END DO
+<span class="ln">77</span>         CALL <a href="../yrec-map/intrp2.f.html#def-INTRP2" title="INTRP2 in intrp2.f">INTRP2</a>(A,BB,Z)
+<span class="ln">78</span>      ELSE
+<span class="ln">79</span>         IDZ2 = IDZ
+<span class="ln">80</span>         DO I = 1,4
+<span class="ln">81</span>            BB(I) = B(I)
+<span class="ln">82</span>         END DO
+<span class="ln">83</span>      ENDIF
+<span class="ln">84</span>      I1 = NZ(IDZ2)+9
+<span class="ln">85</span>      I2 = NZ(IDZ2+1)+9
+<span class="ln">86</span>      I3 = NZ(IDZ2+2)+9
+<span class="ln">87</span>      I4 = NZ(IDZ2+3)+9
+<span class="ln">88</span>      DO J = 1,NUMT
+<span class="ln">89</span>         DO K = 1,NUMD
+<span class="ln">90</span>            CAPPA(9,J,K) = BB(1)*CAPPA2(I1,J,K)+
+<span class="ln">91</span>     *      BB(2)*CAPPA2(I2,J,K)+BB(3)*CAPPA2(I3,J,K)+
+<span class="ln">92</span>     *      BB(4)*CAPPA2(I4,J,K)
+<span class="ln">93</span>         END DO
+<span class="ln">94</span>      END DO
+<span class="ln">95</span> 20   CONTINUE
+<span class="ln">96</span>C  OMIT TABLE 10 (X = 1-Z) IF DESIRED Z &gt;= 0.1
+<span class="ln">97</span>      IF(Z.GE.0.1D0)GOTO 30
+<span class="ln">98</span>C  CHECK TO ENSURE THAT Z=0.1 TABLE IS NOT ONE OF THE 4 TABLES; ADJUST
+<span class="ln">99</span>C  INTERPOLATION FACTORS IF NEEDED.
+<span class="ln">100</span>      IF(ZZG(IDZ+3).GE.0.1D0)THEN
+<span class="ln">101</span>         IDZ2 = NUMZ - 4
+<span class="ln">102</span>         DO I = 1,4
+<span class="ln">103</span>            A(I) = ZZG(IDZ2+I-1)
+<span class="ln">104</span>         END DO
+<span class="ln">105</span>         CALL <a href="../yrec-map/intrp2.f.html#def-INTRP2" title="INTRP2 in intrp2.f">INTRP2</a>(A,BB,Z)
+<span class="ln">106</span>      ELSE
+<span class="ln">107</span>         IDZ2 = IDZ
+<span class="ln">108</span>         DO I = 1,4
+<span class="ln">109</span>            BB(I) = B(I)
+<span class="ln">110</span>         END DO
+<span class="ln">111</span>      ENDIF
+<span class="ln">112</span> 30   CONTINUE
+<span class="ln">113</span>      I1 = NZ(IDZ2)+10
+<span class="ln">114</span>      I2 = NZ(IDZ2+1)+10
+<span class="ln">115</span>      I3 = NZ(IDZ2+2)+10
+<span class="ln">116</span>      I4 = NZ(IDZ2+3)+10
+<span class="ln">117</span>      DO J = 1,NUMT
+<span class="ln">118</span>         DO K = 1,NUMD
+<span class="ln">119</span>            CAPPA(10,J,K) = BB(1)*CAPPA2(I1,J,K)+
+<span class="ln">120</span>     *      BB(2)*CAPPA2(I2,J,K)+BB(3)*CAPPA2(I3,J,K)+
+<span class="ln">121</span>     *      BB(4)*CAPPA2(I4,J,K)
+<span class="ln">122</span>         END DO
+<span class="ln">123</span>      END DO
+<span class="ln">124</span>      RETURN
+<span class="ln">125</span>      END</pre></details>
+<details class='py' id='py-op95ztab'><summary>Python version: op95ztab</summary><pre class='doc'>Interpolate the full OPAL95 set (LLOT95A_MOD) in Z, with four-point
+Lagrange weights, to the ten X tables at the desired Z (CAPPA and ZTAB
+in LLOT95_MOD). Tables 1-8 always; table 9 (X = 0.95) only for
+Z &lt; 0.04; table 10 (X = 1 - Z) only for Z &lt; 0.1. Stops the run if Z
+lies above the twelfth grid value, 0.08.
+
+Translates: op95ztab.f#OP95ZTAB (09c3b9b)
+
+Arguments: z, the desired metallicity. Returns nothing.</pre><pre class='src'><span class="ln">38</span>def op95ztab(z):
+<span class="ln">39</span>    &quot;&quot;&quot;Interpolate the full OPAL95 set (LLOT95A_MOD) in Z, with four-point
+<span class="ln">40</span>    Lagrange weights, to the ten X tables at the desired Z (CAPPA and ZTAB
+<span class="ln">41</span>    in LLOT95_MOD). Tables 1-8 always; table 9 (X = 0.95) only for
+<span class="ln">42</span>    Z &lt; 0.04; table 10 (X = 1 - Z) only for Z &lt; 0.1. Stops the run if Z
+<span class="ln">43</span>    lies above the twelfth grid value, 0.08.
+<span class="ln">44</span>
+<span class="ln">45</span>    Translates: op95ztab.f#OP95ZTAB (09c3b9b)
+<span class="ln">46</span>
+<span class="ln">47</span>    Arguments: z, the desired metallicity. Returns nothing.
+<span class="ln">48</span>    &quot;&quot;&quot;
+<span class="ln">49</span>    global idz, idz2
+<span class="ln">50</span>    zzg = llot95a_mod.zzg
+<span class="ln">51</span>    llot95_mod.ztab = z
+<span class="ln">52</span>    # Find the four Z values around z; the loop stops at NUMZ-1 (question 1).
+<span class="ln">53</span>    for i in range(3, NUMZ):
+<span class="ln">54</span>        if zzg[i] &gt;= z:
+<span class="ln">55</span>            idz = i - 2
+<span class="ln">56</span>            break
+<span class="ln">57</span>    else:
+<span class="ln">58</span>        print(f&quot; DESIRED Z{z:10.6f}OUTSIDE OP95 TABLE RANGE\n RUN STOPPED&quot;)
+<span class="ln">59</span>        raise SystemExit()
+<span class="ln">60</span>    # label 10
+<span class="ln">61</span>    for i in range(1, 5):
+<span class="ln">62</span>        a[i] = zzg[idz + i - 1]
+<span class="ln">63</span>    intrp2(a, b, z)
+<span class="ln">64</span>    for i in range(1, 9):
+<span class="ln">65</span>        _fill_table(i, idz, b)
+<span class="ln">66</span>    # Table 9 (X = 0.95) only for Z &lt; 0.04.
+<span class="ln">67</span>    if not z &gt;= 0.04:
+<span class="ln">68</span>        if zzg[idz + 3] &gt; 0.04:
+<span class="ln">69</span>            idz2 = NUMZ - 6     # Question (see the page): fixed grid position
+<span class="ln">70</span>            for i in range(1, 5):
+<span class="ln">71</span>                a[i] = zzg[idz2 + i - 1]
+<span class="ln">72</span>            intrp2(a, bb, z)
+<span class="ln">73</span>        else:
+<span class="ln">74</span>            idz2 = idz
+<span class="ln">75</span>            for i in range(1, 5):
+<span class="ln">76</span>                bb[i] = b[i]
+<span class="ln">77</span>        _fill_table(9, idz2, bb)
+<span class="ln">78</span>    # label 20: table 10 (X = 1 - Z), meant to be skipped for Z &gt;= 0.1.
+<span class="ln">79</span>    if not z &gt;= 0.1:
+<span class="ln">80</span>        if zzg[idz + 3] &gt;= 0.1:
+<span class="ln">81</span>            idz2 = NUMZ - 4
+<span class="ln">82</span>            for i in range(1, 5):
+<span class="ln">83</span>                a[i] = zzg[idz2 + i - 1]
+<span class="ln">84</span>            intrp2(a, bb, z)
+<span class="ln">85</span>        else:
+<span class="ln">86</span>            idz2 = idz
+<span class="ln">87</span>            for i in range(1, 5):
+<span class="ln">88</span>                bb[i] = b[i]
+<span class="ln">89</span>    # label 30
+<span class="ln">90</span>    # Question (see the page): label 30 stands before the loop, so table 10
+<span class="ln">91</span>    # is filled even for Z &gt;= 0.1, with IDZ2 and BB from earlier.
+<span class="ln">92</span>    _fill_table(10, idz2, bb)</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_fill_table'><summary>Python version: _fill_table</summary><pre class='doc'>CAPPA(itab, j, k) = sum_n w(n) * CAPPA2(NZ(idzz+n-1)+itab, j, k),
+summed in the Fortran&#x27;s order.</pre><pre class='src'><span class="ln">23</span>def _fill_table(itab, idzz, w):
+<span class="ln">24</span>    &quot;&quot;&quot;CAPPA(itab, j, k) = sum_n w(n) * CAPPA2(NZ(idzz+n-1)+itab, j, k),
+<span class="ln">25</span>    summed in the Fortran&#x27;s order.&quot;&quot;&quot;
+<span class="ln">26</span>    m = llot95a_mod
+<span class="ln">27</span>    i1 = m.nz[idzz] + itab
+<span class="ln">28</span>    i2 = m.nz[idzz + 1] + itab
+<span class="ln">29</span>    i3 = m.nz[idzz + 2] + itab
+<span class="ln">30</span>    i4 = m.nz[idzz + 3] + itab
+<span class="ln">31</span>    for j in range(1, NUMT + 1):
+<span class="ln">32</span>        for k in range(1, NUMD + 1):
+<span class="ln">33</span>            llot95_mod.cappa[itab, j, k] = (
+<span class="ln">34</span>                w[1] * m.cappa2[i1, j, k] + w[2] * m.cappa2[i2, j, k]
+<span class="ln">35</span>                + w[3] * m.cappa2[i3, j, k] + w[4] * m.cappa2[i4, j, k])</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Wrong.</strong> "A $Z$ above the grid stops the run": the loop <code>DO I = 3,NUMZ-1</code> accepts a fourth value only up to $Z = 0.08$, so any $Z &gt; 0.08$ stops the run, though the comment says "Z &gt; 0.1". Fix: say so; add a question.</li>
+<li><strong>Wrong (consequence).</strong> Question 1 (label 30 before the table-10 loop) is real but unreachable now, since $Z \ge 0.1$ never gets that far. Fix: say so.</li>
+<li><strong>Unclear.</strong> "four $Z$ values all below 0.04": the shift gives 0.01–0.04, so "no larger than 0.04"; table 10's shift gives 0.03–0.08. Fix: state the ranges.</li>
+</ol>
+<p>Revised: the stop at $Z &gt; 0.08$ stated, new question 1; the label-30 question qualified; table 9's mismatch at $Z = 0.04$ tied to OP95XTAB; the shifted ranges given.</p></div></details>
+</main></body></html>

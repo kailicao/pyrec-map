@@ -1,0 +1,169 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>trapzd.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ trapzd.f</span></header><main>
+<h1>trapzd.f</h1>
+<p class='muted'>59 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/trapzd.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>trapzd.py</code>, 55 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>TRAPZD</code> is a refinement step of the trapezoidal rule (Numerical Recipes' <code>trapzd</code>), specialised to one integral of the rotation code: between two shells, $r_{0,i-1}$ and $r_{0,i}$ (<code>B1</code>, <code>B2</code>), it integrates, by its comment,
+$$\int \frac{\rho}{m}\; r_0^7\;\Omega^2\;\frac{5 + \eta_2}{2 + \eta_2}\; dr_0 ,$$
+which <a href="../yrec-map/fpft.f.html#def-FPFT">FPFT</a> needs, with its derivatives, to find the mean effective gravity.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/fpft.f.html#def-FPFT">FPFT</a>, with <code>N = 1, 2, 3, …</code> (each call doubles the number of points).</li>
+<li><strong>Inputs:</strong> $\rho$, $m$, $\Omega^2$ and $\eta_2 + 2$ at both shells (<code>RHO</code>/<code>RHOP</code>, <code>SM</code>/<code>SMP</code>, <code>W2</code>/<code>W2P</code>, <code>ETA22</code>/<code>ETA22P</code>), and <code>QP</code>, the integrand at the inner shell.</li>
+<li><strong>Outputs:</strong> the running estimate <code>S</code>, and <code>Q</code>, the integrand at the outer shell (on the first call).</li>
+<li><strong>Modules:</strong> none.</li>
+</ul>
+<p><strong>The method.</strong> The integrand is
+$$q(r_0) = \frac{\rho\,\Omega^2\,r_0^7}{m}\;\frac{3 + (\eta_2 + 2)}{\eta_2 + 2}.$$
+On the first call, $S = \tfrac12 (b_2 - b_1)(q_1 + q_2)$. Each later call adds the midpoints of the current intervals,
+$$S \leftarrow \tfrac12\left(S + \Delta \sum_j q(y_j)\right),\qquad \Delta = \frac{b_2 - b_1}{n_\mathrm{it}},$$
+and doubles $n_\mathrm{it}$ (<code>IT</code>, kept by <code>SAVE</code>). Between the shells, $\rho$, $\Omega^2$ and $\eta_2$ are interpolated linearly in $r_0$, and $m$ linearly in $r_0^2$.</p>
+<p><strong>KC's changes.</strong> The unused argument <code>I</code> was removed (2025-05-31).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: <code>IMPLICIT NONE</code>; the unused <code>COMMON/CONST1/</code> and <code>/CONST2/</code> dropped.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The interpolation does not move.</strong> Inside the loop over midpoints, $\rho$, $\Omega^2$ and $\eta_2$ are interpolated at <code>RHOP+DRHO*DEL</code> (and likewise), the same value for every midpoint $y_j$; only $m$ uses $y_j$. Should <code>DEL</code> be <code>Y-B1</code> there?</li>
+<li><strong>The state between calls.</strong> The number of intervals <code>IT</code> lives in a <code>SAVE</code>d local, set on the call with <code>N = 1</code>. The routine relies on its caller to start every integral with <code>N = 1</code>.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+TRAPZD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-TRAPZD'>TRAPZD</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-TRAPZD'><h3><span class='kind'>subroutine</span>TRAPZD</h3>
+<p class='muted'>lines 6–59 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/trapzd.f#L6-L59'>GitHub</a></p>
+<pre>SUBROUTINE TRAPZD(B1,B2,S,N,RHO,RHOP,SM,SMP,W2,W2P,ETA22,</pre>
+<div class='notes'><p>One refinement of the trapezoidal rule for FPFT's integral of $\rho\,\Omega^2 r_0^7/m \cdot (5 + \eta_2)/(2 + \eta_2)$ between two shells.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+TRAPZD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/fpft.f.html#def-FPFT'>FPFT</a> <span class='muted'>(fpft.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">6</span>      SUBROUTINE TRAPZD(B1,B2,S,N,RHO,RHOP,SM,SMP,W2,W2P,ETA22,
+<span class="ln">7</span>C      *ETA22P,Q,QP,I)  ! KC 2025-05-31
+<span class="ln">8</span>     *ETA22P,Q,QP)
+<span class="ln">9</span>C 10/20/26 MHP via Claude
+<span class="ln">10</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">11</span>C explicit declarations.
+<span class="ln">12</span>      IMPLICIT NONE
+<span class="ln">13</span>      REAL*8 B1,B2,DEL,DETA2,DM,DR,DRHO,DW2,ETA22,ETA22P,ETA22T,Q,Q0,QP,
+<span class="ln">14</span>     *       R0,R03,R03T,RHO,RHOP,RHOT,S,SM,SMP,SMT,SUM,TNM,W2,W2P,W2T,Y
+<span class="ln">15</span>      INTEGER IT,J,N
+<span class="ln">16</span>
+<span class="ln">17</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CONSTANTS/ declaration
+<span class="ln">18</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">19</span>      SAVE
+<span class="ln">20</span>      R0 = B2
+<span class="ln">21</span>      R03 = R0**3
+<span class="ln">22</span>      IF(N.EQ.1) THEN
+<span class="ln">23</span>C  AINT = INT(0=&gt;R0) (RHO/M)*R0&#x27;**7*OMEGA**2*(5+ETA2)/(2+ETA2) DR0&#x27;
+<span class="ln">24</span>C  Q IS THE INTEGRAND (RO&#x27;**7,ETC.) EVALUATED AT R0(I)
+<span class="ln">25</span>C  AINT AND ITS DERIVATIVES W/R/TO R AND THETA ARE NEEDED TO FIND &lt;G&gt;
+<span class="ln">26</span>       Q = (RHO*W2*R03*(3.0D0+ETA22)/(SM*ETA22))*R03*R0
+<span class="ln">27</span>C        Q(I) = DEXP(CLN*(HD(I)-HS(I)))*OMEGA(I)**2*R0(I)**6
+<span class="ln">28</span>C    *   *(5.0D0+ETA2(I))/(2.0D0+ETA2(I))
+<span class="ln">29</span>       S = 0.5D0*(B2-B1)*(QP+Q)
+<span class="ln">30</span>       IT = 1
+<span class="ln">31</span>      ELSE
+<span class="ln">32</span>       TNM = DFLOAT(IT)
+<span class="ln">33</span>       DR = B2 - B1
+<span class="ln">34</span>       DEL = DR/TNM
+<span class="ln">35</span>       Y = B1 + 0.5D0*DEL
+<span class="ln">36</span>       SUM = 0.0D0
+<span class="ln">37</span>       DRHO = (RHO - RHOP)/DR
+<span class="ln">38</span>       DM = (SM - SMP)/(B2**2 - B1**2)
+<span class="ln">39</span>       DETA2 = (ETA22 - ETA22P)/DR
+<span class="ln">40</span>       DW2 = (W2 - W2P)/DR
+<span class="ln">41</span>       DO 10 J = 1,IT
+<span class="ln">42</span>          R03T = Y**3
+<span class="ln">43</span>C INTERPOLATE RHO,M,OMEGA,ETA2+2 BETWEEN SHELL I AND SHELL I-1
+<span class="ln">44</span>          RHOT = RHOP+DRHO*DEL
+<span class="ln">45</span>          SMT = SMP+DM*(Y**2 - B1**2)
+<span class="ln">46</span>          W2T = W2P + DW2*DEL
+<span class="ln">47</span>          ETA22T = ETA22P + DETA2*DEL
+<span class="ln">48</span>C CALCULATE Q BETWEEN SHELLS
+<span class="ln">49</span>          Q0 = (RHOT*W2T*R03T*(3.0D0+ETA22T)/(SMT*ETA22T))*R03T*Y
+<span class="ln">50</span>C Q0 = RHO*W2*R07T*(3.0D0+ETA22)/(SM*ETA22)
+<span class="ln">51</span>          SUM = SUM + Q0
+<span class="ln">52</span>          Y = Y+DEL
+<span class="ln">53</span> 10      CONTINUE
+<span class="ln">54</span>       S = 0.5D0*(S+DEL*SUM)
+<span class="ln">55</span>       IT = IT*2
+<span class="ln">56</span>      ENDIF
+<span class="ln">57</span>
+<span class="ln">58</span>      RETURN
+<span class="ln">59</span>      END</pre></details>
+<details class='py' id='py-trapzd'><summary>Python version: trapzd</summary><pre class='doc'>One refinement step of the trapezoidal rule (Numerical Recipes&#x27;
+trapzd) for the integral of rho*Omega^2*r0^7/m*(5+eta2)/(2+eta2)
+between r0 = b1 and b2: the first call (n = 1) takes the two ends,
+each later call adds the midpoints of the current intervals.
+
+Translates: trapzd.f#TRAPZD (09c3b9b)
+
+Arguments: the shells&#x27; radii b1 (inner), b2 (outer); s, the running
+estimate; n, the refinement (1, 2, 3, ...); rho, sm, w2, eta22 at the
+outer shell and rhop, smp, w2p, eta22p at the inner one (eta22 is
+eta2 + 2); q, the integrand at the outer shell (set when n = 1, passed
+in with any value otherwise); qp, the integrand at the inner shell.
+
+Returns (s, q).</pre><pre class='src'><span class="ln">8</span>def trapzd(b1, b2, s, n, rho, rhop, sm, smp, w2, w2p, eta22, eta22p, q, qp):
+<span class="ln">9</span>    &quot;&quot;&quot;One refinement step of the trapezoidal rule (Numerical Recipes&#x27;
+<span class="ln">10</span>    trapzd) for the integral of rho*Omega^2*r0^7/m*(5+eta2)/(2+eta2)
+<span class="ln">11</span>    between r0 = b1 and b2: the first call (n = 1) takes the two ends,
+<span class="ln">12</span>    each later call adds the midpoints of the current intervals.
+<span class="ln">13</span>
+<span class="ln">14</span>    Translates: trapzd.f#TRAPZD (09c3b9b)
+<span class="ln">15</span>
+<span class="ln">16</span>    Arguments: the shells&#x27; radii b1 (inner), b2 (outer); s, the running
+<span class="ln">17</span>    estimate; n, the refinement (1, 2, 3, ...); rho, sm, w2, eta22 at the
+<span class="ln">18</span>    outer shell and rhop, smp, w2p, eta22p at the inner one (eta22 is
+<span class="ln">19</span>    eta2 + 2); q, the integrand at the outer shell (set when n = 1, passed
+<span class="ln">20</span>    in with any value otherwise); qp, the integrand at the inner shell.
+<span class="ln">21</span>
+<span class="ln">22</span>    Returns (s, q).
+<span class="ln">23</span>    &quot;&quot;&quot;
+<span class="ln">24</span>    global it
+<span class="ln">25</span>    r0 = b2
+<span class="ln">26</span>    r03 = r0**3
+<span class="ln">27</span>    if n == 1:
+<span class="ln">28</span>        q = (rho * w2 * r03 * (3.0 + eta22) / (sm * eta22)) * r03 * r0
+<span class="ln">29</span>        s = 0.5 * (b2 - b1) * (qp + q)
+<span class="ln">30</span>        it = 1
+<span class="ln">31</span>    else:
+<span class="ln">32</span>        # Question (see the page): relies on the caller starting with n = 1.
+<span class="ln">33</span>        tnm = float(it)
+<span class="ln">34</span>        dr = b2 - b1
+<span class="ln">35</span>        delta = dr / tnm                 # DEL
+<span class="ln">36</span>        y = b1 + 0.5 * delta
+<span class="ln">37</span>        total = 0.0                      # SUM
+<span class="ln">38</span>        drho = (rho - rhop) / dr
+<span class="ln">39</span>        dm = (sm - smp) / (b2**2 - b1**2)
+<span class="ln">40</span>        deta2 = (eta22 - eta22p) / dr
+<span class="ln">41</span>        dw2 = (w2 - w2p) / dr
+<span class="ln">42</span>        for j in range(1, it + 1):      # loop 10
+<span class="ln">43</span>            r03t = y**3
+<span class="ln">44</span>            # Question (see the page): rho, w2 and eta2 are interpolated at
+<span class="ln">45</span>            # b1 + delta for every midpoint; only m uses y.
+<span class="ln">46</span>            rhot = rhop + drho * delta
+<span class="ln">47</span>            smt = smp + dm * (y**2 - b1**2)
+<span class="ln">48</span>            w2t = w2p + dw2 * delta
+<span class="ln">49</span>            eta22t = eta22p + deta2 * delta
+<span class="ln">50</span>            q0 = (rhot * w2t * r03t * (3.0 + eta22t) / (smt * eta22t)) * r03t * y
+<span class="ln">51</span>            total = total + q0
+<span class="ln">52</span>            y = y + delta
+<span class="ln">53</span>        s = 0.5 * (s + delta * total)
+<span class="ln">54</span>        it = it * 2
+<span class="ln">55</span>    return s, q</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings.</p>
+<p>No change.</p></div></details>
+</main></body></html>

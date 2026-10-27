@@ -1,0 +1,156 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>acdpth_mod.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ acdpth_mod.f</span></header><main>
+<h1>acdpth_mod.f</h1>
+<p class='muted'>57 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/acdpth_mod.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>acdpth_mod.py</code>, 36 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>ACDPTH_MOD</code> holds the acoustic-depth output: the results of <a href="../yrec-map/calcad.f.html#def-CALCAD"><code>CALCAD</code></a> and the switches that decide at which ages it runs, shared by 6 routines. It replaces <code>COMMON/ACDPTH/</code> (MHP via Claude, 10/14/26); <code>JSON</code> comes from <code>DIMENSIONS_MOD</code>. Five switches and the ages carry initial values, moved from PARMIN's <code>DATA</code> statements.</p>
+<p><strong>What its variables hold, who sets them, who reads them.</strong></p>
+<ul>
+<li><code>TAUCZN</code>, <code>TCZ</code>, <code>TNORM</code>, <code>TAUHE</code>, <code>WHE</code>, <code>TATMOS</code>: the acoustic depths computed by <code>CALCAD</code> (<code>TAUCZN</code> $= t_\mathrm{CZ}/t_\mathrm{norm}$; <code>TATMOS</code> is always 0 there); <a href="../yrec-map/wrtout.f.html#def-WRTOUT"><code>WRTOUT</code></a> writes them, and resets <code>TAUCZN</code> to 0 when there is no convective envelope.</li>
+<li><code>DELADJ(JSON)</code>: $\nabla_\mathrm{ad}$ at each point, set and read by <code>CALCAD</code>.</li>
+<li><code>LACOUT</code>: the master switch, <code>.FALSE.</code>; read by the <a href="../yrec-map/main.f.html#def-_file_level_">main program</a>, <a href="../yrec-map/parmin.f.html#def-PARMIN"><code>PARMIN</code></a> (the output file's name), <a href="../yrec-map/getopal95.f.html#def-GETOPAL95"><code>GETOPAL95</code></a> and <code>WRTOUT</code>.</li>
+<li><code>AGEOUT(5)</code>: the ages (Gyr) at which to write, 0.5, 1, 5, 10, 20; read by the main program.</li>
+<li><code>LADON</code>, <code>LCLCD</code>, <code>LJLAST</code>, <code>LJWRT</code>: set by the main program from <code>LACOUT</code> and the age. <code>LADON</code> is read by <code>GETOPAL95</code> (four-point interpolation) and <code>WRTOUT</code>; <code>LCLCD</code> by <code>CALCAD</code> and <a href="../yrec-map/envint.f.html#def-ENVINT"><code>ENVINT</code></a>; <code>LJLAST</code> by <code>WRTOUT</code>; <code>LJWRT</code> by the main program.</li>
+<li><code>ACATMR</code>, <code>ACATMD</code>, <code>ACATMP</code>, <code>ACATMT</code> (<code>JSON</code> each) and <code>LAOLY</code>: set and read nowhere.</li>
+</ul>
+<p><strong>Design.</strong> A blanket <code>USE ACDPTH_MOD</code> in each of the six routines. The module's header calls the initialized members namelist variables, but <code>LACOUT</code> is in no namelist and is set nowhere, so it stays <code>.FALSE.</code> and the acoustic-depth output never runs (so also at <code>rp_1</code>, where its default came from a <code>DATA</code> statement).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> New file: <code>COMMON/ACDPTH/</code> as a module, with the defaults of <code>AGEOUT</code>, <code>LCLCD</code>, <code>LJLAST</code>, <code>LJWRT</code> and <code>LACOUT</code> moved from PARMIN.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A switch that cannot be turned on.</strong> <code>LACOUT</code> is in no namelist and no routine sets it, so the acoustic-depth branch (CALCAD, the age outputs) is dead unless the source is edited. Should it be added to a namelist, or the branch removed?</li>
+<li><strong>Unused members.</strong> <code>ACATMR</code>, <code>ACATMD</code>, <code>ACATMP</code>, <code>ACATMT</code> (four arrays of 5000) and <code>LAOLY</code> are used nowhere. Can they go?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+ACDPTH_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/14/26 MHP via Claude
+code changed to convert COMMON/ACDPTH/ into this module.
+
+Imported with a blanket USE, the convention for the conversion.
+All 6 files declared this block identically, so the USE imports
+exactly the names the declaration already made global in each
+scoping unit and cannot change meaning.
+
+The types restate what the implicit rules supplied: L is
+LOGICAL*4, I/J/K/M/N are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while
+ifort Classic predates it.  That matches COMMON&#x27;s semantics.
+
+5 of the 18 members carry an initializer, migrated
+from parmin.f&#x27;s DATA statements because DATA on a USE-associated
+name is rejected.  The literal text is copied verbatim: these
+are namelist variables whose DATA supplied a default the
+namelist read could override, and a module initializer is
+applied once at load time, before PARMIN runs, which is the
+same thing.  Rewriting a literal such as 0.9828 as 0.9828D0
+would change its stored value, so that is deliberately not
+done here; see KNOWN_ISSUES.md issue 23.</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-ACDPTH_MOD'>ACDPTH_MOD</a> <span class='muted'>module · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-ACDPTH_MOD'><h3><span class='kind'>module</span>ACDPTH_MOD</h3>
+<p class='muted'>lines 29–57 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/acdpth_mod.f#L29-L57'>GitHub</a></p>
+<pre>MODULE ACDPTH_MOD</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+ACDPTH_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/14/26 MHP via Claude
+code changed to convert COMMON/ACDPTH/ into this module.
+
+Imported with a blanket USE, the convention for the conversion.
+All 6 files declared this block identically, so the USE imports
+exactly the names the declaration already made global in each
+scoping unit and cannot change meaning.
+
+The types restate what the implicit rules supplied: L is
+LOGICAL*4, I/J/K/M/N are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while
+ifort Classic predates it.  That matches COMMON&#x27;s semantics.
+
+5 of the 18 members carry an initializer, migrated
+from parmin.f&#x27;s DATA statements because DATA on a USE-associated
+name is rejected.  The literal text is copied verbatim: these
+are namelist variables whose DATA supplied a default the
+namelist read could override, and a module initializer is
+applied once at load time, before PARMIN runs, which is the
+same thing.  Rewriting a literal such as 0.9828 as 0.9828D0
+would change its stored value, so that is deliberately not
+done here; see KNOWN_ISSUES.md issue 23.</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a></p>
+<details><summary>Used by (6 units)</summary><p><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a>, <a href='../yrec-map/calcad.f.html#def-CALCAD'>CALCAD</a>, <a href='../yrec-map/envint.f.html#def-ENVINT'>ENVINT</a>, <a href='../yrec-map/getopal95.f.html#def-GETOPAL95'>GETOPAL95</a>, <a href='../yrec-map/parmin.f.html#def-PARMIN'>PARMIN</a>, <a href='../yrec-map/wrtout.f.html#def-WRTOUT'>WRTOUT</a></p></details>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">29</span>      MODULE ACDPTH_MOD
+<span class="ln">30</span>C 10/20/26 MHP via Claude
+<span class="ln">31</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">32</span>C a PRIVATE copy here.
+<span class="ln">33</span>      USE DIMENSIONS_MOD
+<span class="ln">34</span>
+<span class="ln">35</span>      IMPLICIT NONE
+<span class="ln">36</span>      SAVE
+<span class="ln">37</span>
+<span class="ln">38</span>      REAL*8    :: TAUCZN
+<span class="ln">39</span>      REAL*8    :: DELADJ(JSON)
+<span class="ln">40</span>      REAL*8    :: TAUHE
+<span class="ln">41</span>      REAL*8    :: TNORM
+<span class="ln">42</span>      REAL*8    :: TCZ
+<span class="ln">43</span>      REAL*8    :: WHE
+<span class="ln">44</span>      REAL*8    :: ACATMR(JSON)
+<span class="ln">45</span>      REAL*8    :: ACATMD(JSON)
+<span class="ln">46</span>      REAL*8    :: ACATMP(JSON)
+<span class="ln">47</span>      REAL*8    :: ACATMT(JSON)
+<span class="ln">48</span>      REAL*8    :: TATMOS
+<span class="ln">49</span>      REAL*8    :: AGEOUT(5) = (/0.5D0, 1.0D0, 5.0D0, 10.0D0, 20.0D0/)
+<span class="ln">50</span>      LOGICAL*4 :: LCLCD = .FALSE.
+<span class="ln">51</span>      LOGICAL*4 :: LJLAST = .FALSE.
+<span class="ln">52</span>      LOGICAL*4 :: LJWRT = .FALSE.
+<span class="ln">53</span>      LOGICAL*4 :: LADON
+<span class="ln">54</span>      LOGICAL*4 :: LAOLY
+<span class="ln">55</span>      LOGICAL*4 :: LACOUT = .FALSE.
+<span class="ln">56</span>
+<span class="ln">57</span>      END MODULE ACDPTH_MOD</pre></details>
+<details class='py' id='py-_module_level_'><summary>Python version: acdpth_mod.py</summary><pre class='src'><span class="ln">1</span>&quot;&quot;&quot;Python version of acdpth_mod.f (YREC 09c3b9b): the acoustic-depth outputs of calcad and their switches, formerly COMMON/ACDPTH/.
+<span class="ln">2</span>
+<span class="ln">3</span>Translates: acdpth_mod.f#ACDPTH_MOD (09c3b9b)
+<span class="ln">4</span>
+<span class="ln">5</span>Module-level names, as in the Fortran module, in lower case. Routines that
+<span class="ln">6</span>USE ACDPTH_MOD import this module and write ``acdpth_mod.&lt;name&gt;``.
+<span class="ln">7</span>&quot;&quot;&quot;
+<span class="ln">8</span>
+<span class="ln">9</span>import numpy as np
+<span class="ln">10</span>
+<span class="ln">11</span>from pyrec import dimensions_mod
+<span class="ln">12</span>
+<span class="ln">13</span>_JSON = dimensions_mod.json
+<span class="ln">14</span>
+<span class="ln">15</span># Results of calcad (written by wrtout).
+<span class="ln">16</span>tauczn = 0.0                       # t_CZ / t_norm (wrtout resets it to 0)
+<span class="ln">17</span>deladj = np.zeros(_JSON + 1)       # nabla_ad at each point (calcad)
+<span class="ln">18</span>tauhe = 0.0
+<span class="ln">19</span>tnorm = 0.0
+<span class="ln">20</span>tcz = 0.0
+<span class="ln">21</span>whe = 0.0
+<span class="ln">22</span>acatmr = np.zeros(_JSON + 1)       # unused
+<span class="ln">23</span>acatmd = np.zeros(_JSON + 1)       # unused
+<span class="ln">24</span>acatmp = np.zeros(_JSON + 1)       # unused
+<span class="ln">25</span>acatmt = np.zeros(_JSON + 1)       # unused
+<span class="ln">26</span>tatmos = 0.0                       # always 0 (calcad)
+<span class="ln">27</span># Ages (Gyr) of the outputs, index 0 unused (initializer, from parmin).
+<span class="ln">28</span>ageout = np.array([0.0, 0.5, 1.0, 5.0, 10.0, 20.0])
+<span class="ln">29</span># Switches (set by main from lacout and the age).
+<span class="ln">30</span>lclcd = False
+<span class="ln">31</span>ljlast = False
+<span class="ln">32</span>ljwrt = False
+<span class="ln">33</span>ladon = False
+<span class="ln">34</span>laoly = False                      # unused
+<span class="ln">35</span># Question (see the page): in no namelist and set nowhere, so always False.
+<span class="ln">36</span>lacout = False</pre></details>
+</section>
+</main></body></html>

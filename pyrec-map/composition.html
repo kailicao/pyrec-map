@@ -1,0 +1,241 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Composition and settling · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ New structure (Fortran and Python) / Composition and settling</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='fortran.html'>Language and style</a></li><li><a href='common-map.html'>The COMMON-block map</a></li><li><a href='kernels.html'>Kernels and settings</a></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><a href='timestep.html'>Time stepping</a></li><li><strong>Composition and settling</strong></li><li><a href='rotation.html'>Rotation and mass loss</a></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>Composition and settling</h1>
+<p><em>In Python: <code>pyrec.composition</code>, under Python below.</em></p>
+<h2>3.9 Composition: <code>CompositionStep</code>, <code>Semiconvection</code>, <code>ChiGrid</code>, settling</h2>
+<p><strong><code>CompositionStep</code>. Responsibility:</strong> change the composition over one step: burning in radiative shells and in each mixed zone, convective and semiconvective mixing, settling and deuterium burning, in the order of <a href="../yrec-map/mix.f.html#def-MIX"><code>MIX</code></a>.</p>
+<pre><code class="language-fortran">type :: CompositionStep
+    type(NuclearNetwork) :: net
+    type(Semiconvection) :: semi
+    class(SettlingBase), allocatable :: settling   !! Absent: no settling.
+    type(Deuterium) :: deut
+contains
+    procedure :: run
+        !! (star, start, zones, rates, dt, ierr) MIX: zones, rates, implicit
+        !! burning, mixing, settling. dt [s].
+end type
+
+type :: ChiGrid
+    !! Equally spaced grid in chi, the zoning coordinate (GETGRID), for
+    !! the diffusion of composition (MIXGRID, MIXCOM) and of angular
+    !! momentum (ROTGRID, EQ2MOD).
+    real(dp), allocatable :: chi(:), dm(:), d(:)   !! (n,) chi; [g]; D
+contains
+    procedure :: build      !! (star, ibeg, iend) GETGRID, MIXGRID.
+    procedure :: diffuse    !! (y, dt) MIXCOM: implicit step on the grid.
+    procedure :: to_model   !! (star, dy) EQ2MOD: back to the shells.
+end type
+
+type, abstract :: SettlingBase
+    logical :: active = .true.       !! LDIFY; MIX may switch it off.
+contains
+    procedure(settle_if), deferred :: settle
+        !! (star, dt, ierr) Settle He (and Z, light elements) over dt [s].
+end type
+type, extends(SettlingBase) :: GrsettSettling   !! Bahcall &amp; Loeb (GRSETT)
+type, extends(SettlingBase) :: ThoulSettling    !! MICRODIFF with THDIFF
+type :: EqualGrid                               !! Equal steps in radius
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../yrec-map/mix.f.html#def-MIX"><code>MIX</code></a>, <a href="../yrec-map/mixgrid.f.html#def-MIXGRID"><code>MIXGRID</code></a>, <a href="../yrec-map/mixcom.f.html#def-MIXCOM"><code>MIXCOM</code></a>, <a href="../yrec-map/getgrid.f.html#def-GETGRID"><code>GETGRID</code></a>, <a href="../yrec-map/sconvec.f.html#def-SCONVEC"><code>SCONVEC</code></a>; for <code>GrsettSettling</code> <a href="../yrec-map/grsett.f.html#def-GRSETT"><code>GRSETT</code></a>, <a href="../yrec-map/setup_grsett.f.html#def-SETUP_GRSETT"><code>SETUP_GRSETT</code></a>, <a href="../yrec-map/lax_wendrof1.f.html#def-LAX_WENDROF1"><code>LAX_WENDROF1</code></a>, <a href="../yrec-map/lax_wendrof2.f.html#def-LAX_WENDROF2"><code>LAX_WENDROF2</code></a>, <a href="../yrec-map/get_imp_diffco.f.html#def-GET_IMP_DIFFCO"><code>GET_IMP_DIFFCO</code></a>; for <code>ThoulSettling</code> <a href="../yrec-map/microdiff.f.html#def-MICRODIFF"><code>MICRODIFF</code></a>, <a href="../yrec-map/microdiff_setup.f.html#def-MICRODIFF_SETUP"><code>MICRODIFF_SETUP</code></a>, <a href="../yrec-map/microdiff_run.f.html#def-MICRODIFF_RUN"><code>MICRODIFF_RUN</code></a>, <a href="../yrec-map/microdiff_cod.f.html#def-MICRODIFF_COD"><code>MICRODIFF_COD</code></a>, <a href="../yrec-map/microdiff_etm.f.html#def-MICRODIFF_ETM"><code>MICRODIFF_ETM</code></a>, <a href="../yrec-map/microdiff_mte.f.html#def-MICRODIFF_MTE"><code>MICRODIFF_MTE</code></a>, <a href="../yrec-map/thdiff.f.html#def-THDIFF"><code>THDIFF</code></a>; for <code>EqualGrid</code> <a href="../yrec-map/model_to_equal.f.html#def-MODEL_TO_EQUAL"><code>MODEL_TO_EQUAL</code></a>, <a href="../yrec-map/equal_to_model.f.html#def-EQUAL_TO_MODEL"><code>EQUAL_TO_MODEL</code></a>. Both settling solvers solve
+$$\frac{\partial X}{\partial t} = -\frac{1}{\rho r^2}\frac{\partial}{\partial r}\Bigl[\rho r^2\Bigl(A_P\,\frac{d\ln P}{dr}\,X - D\,\frac{\partial X}{\partial r}\Bigr)\Bigr]$$
+in Bahcall and Loeb's units, the first term explicitly (Lax–Wendroff) and the second implicitly; they share the equal grid, which becomes <code>EqualGrid</code>, and differ in the coefficients, which become the subclasses. Whether <code>GRSETT</code>, "retained for backwards compatability", is still needed is a question for KC (<a href="overview.html">Section 8</a>). <code>MIX</code> switching settling off for the rest of the run becomes <code>settling%active = .false.</code>, visible and reset per track.</p>
+<h2>Python</h2>
+<p>The stubs of the new structure (signatures and docstrings, no bodies), each naming the routines it replaces in the current code.</p>
+<h3><code>pyrec/composition/__init__.py</code></h3>
+<pre><code class="language-python">&quot;&quot;&quot;Composition over one step: burning, mixing, semiconvection, settling.
+
+Imports `kernels`, `config`, `physics` and `star`.
+
+Modules
+-------
+mixing : CompositionStep, Semiconvection, ChiGrid.
+settling : SettlingBase, GrsettSettling, ThoulSettling, EqualGrid.
+
+&quot;&quot;&quot;
+from .mixing import ChiGrid, CompositionStep
+</code></pre>
+<h3><code>pyrec/composition/mixing.py</code></h3>
+<ul>
+<li><code>diffuse_kernel</code> replaces <a href="../yrec-map/mixcom.f.html#def-MIXCOM"><code>MIXCOM</code></a>.</li>
+<li><code>Semiconvection</code> replaces <a href="../yrec-map/sconvec.f.html#def-SCONVEC"><code>SCONVEC</code></a>.</li>
+<li><code>ChiGrid.build</code> replaces <a href="../yrec-map/getgrid.f.html#def-GETGRID"><code>GETGRID</code></a>, <a href="../yrec-map/mixgrid.f.html#def-MIXGRID"><code>MIXGRID</code></a>.</li>
+<li><code>ChiGrid.to_model</code> replaces <a href="../yrec-map/eq2mod.f.html#def-EQ2MOD"><code>EQ2MOD</code></a>.</li>
+<li><code>CompositionStep</code> replaces <a href="../yrec-map/mix.f.html#def-MIX"><code>MIX</code></a>.</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;The composition step, semiconvection and the chi grid.
+
+Functions
+---------
+diffuse_kernel : One implicit diffusion step on an equal grid (Numba).
+
+Classes
+-------
+Semiconvection : Semiconvective mixing.
+ChiGrid : Equally spaced grid in chi, for the diffusion of composition and of j.
+CompositionStep : Burning, mixing, settling and deuterium over one step, in MIX's order.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+import numpy as np
+from numba import njit
+
+from ..physics.nuclear import Deuterium, NuclearNetwork, ReactionRates
+from ..star import Star, StepStart
+from ..star.zones import ConvectionZones
+from .settling import SettlingBase
+
+
+@njit(cache=True)
+def diffuse_kernel(y: np.ndarray, d: np.ndarray, dm: np.ndarray, dt: float, work: np.ndarray) -&gt; None:
+    &quot;&quot;&quot;Implicit diffusion step of ``y`` (`(n_sp, n)`) with coefficients ``d`` (`(n,)`), in place.
+
+    Notes
+    -----
+    Numba: hot loop; a tridiagonal solve per species.
+
+    Replaces: mixcom.f#MIXCOM
+    &quot;&quot;&quot;
+    ...
+
+
+class Semiconvection:
+    &quot;&quot;&quot;Semiconvective mixing.
+
+    Replaces: sconvec.f#SCONVEC
+    &quot;&quot;&quot;
+
+
+class ChiGrid:
+    &quot;&quot;&quot;Equally spaced grid in chi, the zoning coordinate.
+
+    Attributes
+    ----------
+    chi, dm, d : np.ndarray, shape: `(n,)`
+        chi; [g]; diffusion coefficient.
+    &quot;&quot;&quot;
+
+    def build(self, star: Star, ibeg: int, iend: int) -&gt; None:
+        &quot;&quot;&quot;Build the grid between two shells.
+
+        Replaces: getgrid.f#GETGRID, mixgrid.f#MIXGRID
+        &quot;&quot;&quot;
+        ...
+
+    def diffuse(self, y: np.ndarray, dt: float) -&gt; None:
+        &quot;&quot;&quot;An implicit step on the grid (calls ``diffuse_kernel``).&quot;&quot;&quot;
+        ...
+
+    def to_model(self, star: Star, dy: np.ndarray) -&gt; None:
+        &quot;&quot;&quot;Back to the shells.
+
+        Replaces: eq2mod.f#EQ2MOD
+        &quot;&quot;&quot;
+        ...
+
+
+class CompositionStep:
+    &quot;&quot;&quot;Changes the composition over one step, in the order of MIX.
+
+    Attributes
+    ----------
+    net : NuclearNetwork
+    semi : Semiconvection
+    settling : SettlingBase or None
+        None: no settling.
+    deut : Deuterium
+
+    Replaces: mix.f#MIX
+    &quot;&quot;&quot;
+
+    def __call__(self, star: Star, start: StepStart, zones: ConvectionZones,
+                 rates: ReactionRates, dt: float) -&gt; None:
+        &quot;&quot;&quot;Zones, rates, implicit burning, mixing, settling; ``dt`` [s].&quot;&quot;&quot;
+        ...
+</code></pre>
+<h3><code>pyrec/composition/settling.py</code></h3>
+<ul>
+<li><code>lax_wendroff_kernel</code> replaces <a href="../yrec-map/lax_wendrof1.f.html#def-LAX_WENDROF1"><code>LAX_WENDROF1</code></a>, <a href="../yrec-map/lax_wendrof2.f.html#def-LAX_WENDROF2"><code>LAX_WENDROF2</code></a>.</li>
+<li><code>EqualGrid</code> replaces <a href="../yrec-map/model_to_equal.f.html#def-MODEL_TO_EQUAL"><code>MODEL_TO_EQUAL</code></a>, <a href="../yrec-map/equal_to_model.f.html#def-EQUAL_TO_MODEL"><code>EQUAL_TO_MODEL</code></a>.</li>
+<li><code>GrsettSettling</code> replaces <a href="../yrec-map/grsett.f.html#def-GRSETT"><code>GRSETT</code></a>, <a href="../yrec-map/setup_grsett.f.html#def-SETUP_GRSETT"><code>SETUP_GRSETT</code></a>, <a href="../yrec-map/get_imp_diffco.f.html#def-GET_IMP_DIFFCO"><code>GET_IMP_DIFFCO</code></a>.</li>
+<li><code>ThoulSettling</code> replaces <a href="../yrec-map/microdiff.f.html#def-MICRODIFF"><code>MICRODIFF</code></a>, <a href="../yrec-map/microdiff_setup.f.html#def-MICRODIFF_SETUP"><code>MICRODIFF_SETUP</code></a>, <a href="../yrec-map/microdiff_run.f.html#def-MICRODIFF_RUN"><code>MICRODIFF_RUN</code></a>, <a href="../yrec-map/microdiff_cod.f.html#def-MICRODIFF_COD"><code>MICRODIFF_COD</code></a>, <a href="../yrec-map/microdiff_etm.f.html#def-MICRODIFF_ETM"><code>MICRODIFF_ETM</code></a>, <a href="../yrec-map/microdiff_mte.f.html#def-MICRODIFF_MTE"><code>MICRODIFF_MTE</code></a>, <a href="../yrec-map/thdiff.f.html#def-THDIFF"><code>THDIFF</code></a>.</li>
+</ul>
+<pre><code class="language-python">r&quot;&quot;&quot;Gravitational settling: two solvers on one equal grid.
+
+Both solve
+$\partial X/\partial t = -\frac{1}{\rho r^2}\partial_r\bigl[\rho r^2(A_P\,\frac{d\ln P}{dr}X - D\,\partial_r X)\bigr]$,
+the first term explicitly (Lax-Wendroff), the second implicitly.
+
+Functions
+---------
+lax_wendroff_kernel : The explicit advection step (Numba).
+
+Classes
+-------
+EqualGrid : Equal steps in radius.
+SettlingBase : Base of the family.
+GrsettSettling : Bahcall and Loeb (GRSETT).
+ThoulSettling : MICRODIFF with THDIFF.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+import numpy as np
+from numba import njit
+
+from ..star import Star
+
+
+@njit(cache=True)
+def lax_wendroff_kernel(x: np.ndarray, v: np.ndarray, dr: float, dt: float, out: np.ndarray) -&gt; None:
+    &quot;&quot;&quot;One explicit Lax-Wendroff step of the settling term, into ``out``.
+
+    Notes
+    -----
+    Numba: hot loop.
+
+    Replaces: lax_wendrof1.f#LAX_WENDROF1, lax_wendrof2.f#LAX_WENDROF2
+    &quot;&quot;&quot;
+    ...
+
+
+class EqualGrid:
+    &quot;&quot;&quot;The equal grid in radius that both solvers share.
+
+    Replaces: model_to_equal.f#MODEL_TO_EQUAL, equal_to_model.f#EQUAL_TO_MODEL
+    &quot;&quot;&quot;
+
+
+class SettlingBase:
+    &quot;&quot;&quot;Base of the settling solvers.
+
+    Attributes
+    ----------
+    active : bool
+        LDIFY; MIX may switch it off, for the current track only.
+    &quot;&quot;&quot;
+
+    def settle(self, star: Star, dt: float) -&gt; None:
+        &quot;&quot;&quot;Settle He (and Z, light elements) over ``dt`` [s].
+
+        This is a hook for derived classes. The base class does nothing.
+        &quot;&quot;&quot;
+        ...
+
+
+class GrsettSettling(SettlingBase):
+    &quot;&quot;&quot;Bahcall and Loeb settling (&quot;retained for backwards compatability&quot;; whether to keep it is open).
+
+    Replaces: grsett.f#GRSETT, setup_grsett.f#SETUP_GRSETT, get_imp_diffco.f#GET_IMP_DIFFCO
+    &quot;&quot;&quot;
+
+
+class ThoulSettling(SettlingBase):
+    &quot;&quot;&quot;Thoul et al. settling.
+
+    Replaces: microdiff.f#MICRODIFF, microdiff_setup.f#MICRODIFF_SETUP, microdiff_run.f#MICRODIFF_RUN, microdiff_cod.f#MICRODIFF_COD, microdiff_etm.f#MICRODIFF_ETM, microdiff_mte.f#MICRODIFF_MTE, thdiff.f#THDIFF
+    &quot;&quot;&quot;
+</code></pre>
+
+</main></body></html>

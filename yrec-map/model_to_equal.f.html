@@ -1,0 +1,487 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>model_to_equal.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ model_to_equal.f</span></header><main>
+<h1>model_to_equal.f</h1>
+<p class='muted'>271 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/model_to_equal.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>model_to_equal.py</code>, 176 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> "Model to equal" for the older settling routine <a href="../yrec-map/grsett.f.html#def-GRSETT">GRSETT</a>: it interpolates the diffusion coefficients and the abundances from the model points to an equally spaced grid in radius, at the grid points and at the midpoints. <a href="../yrec-map/microdiff_mte.f.html#def-MICRODIFF_MTE">MICRODIFF_MTE</a> is its newer counterpart, for <a href="../yrec-map/microdiff.f.html#def-MICRODIFF">MICRODIFF</a>.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the coefficients <code>COD1</code>, <code>COD2</code> and their derivatives with respect to $X$, <code>QCOD1X</code>, <code>QCOD2X</code>, at the model points (from <a href="../yrec-map/setup_grsett.f.html#def-SETUP_GRSETT">SETUP_GRSETT</a>); the metal coefficients <code>COD1Z</code>, <code>COD2Z</code>, <code>QCOD1Z</code>, <code>QCOD2Z</code> (arguments, formerly <code>/GRAVSZ/</code>: SETUP_GRSETT fills them in arrays GRSETT owns); <code>HCOMP</code>, the radii <code>HRU</code> and masses <code>HS1</code> in Bahcall–Loeb units; <code>IBEGIN</code>, <code>IEND</code>, <code>M</code>.</li>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/grsett.f.html#def-GRSETT">GRSETT</a>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/interp.f.html#def-INTERP">INTERP</a> (four-point Lagrange weights).</li>
+<li><strong>Outputs:</strong> <code>NPT</code>, <code>DR</code>, the grid radii <code>ER</code>, and on the points and midpoints: masses (<code>EM</code>, <code>EM_H</code>), coefficients (<code>ECOD1</code>, <code>ECOD1_H</code>, <code>ECOD2_H</code>, <code>EQCOD1X_H</code>, <code>EQCOD2X_H</code>) and hydrogen (<code>EX</code>, <code>EX_H</code>). For metals (<code>LDIFZ</code>), the same in <code>GRAVEZ_MOD</code>, which <a href="../yrec-map/lax_wendrof1.f.html#def-LAX_WENDROF1">LAX_WENDROF1</a>, <a href="../yrec-map/lax_wendrof2.f.html#def-LAX_WENDROF2">LAX_WENDROF2</a>, GRSETT and <a href="../yrec-map/equal_to_model.f.html#def-EQUAL_TO_MODEL">EQUAL_TO_MODEL</a> read.</li>
+<li><strong>Modules:</strong> <code>NMLPAR_MOD</code> (<code>LDIFZ</code>), <code>GRAVEZ_MOD</code> (written), <code>DIMENSIONS_MOD</code> (<code>JSON</code>).</li>
+</ul>
+<p><strong>The method.</strong> As in <code>MICRODIFF_MTE</code>: the number of points $N = \lceil (r_\mathrm{end}-r_\mathrm{begin})/\Delta r_\mathrm{min}\rceil$ (at least 2, at most <code>JSON</code>), here with $\Delta r_\mathrm{min}$ the smallest spacing over the whole region; the first midpoint by linear interpolation, the others by four-point Lagrange interpolation, $f(r) = \sum_{k=1}^4 w_k(r)\,f_{k_0+k-1}$; the end points take the model's values.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused arguments <code>HQPR</code> and <code>HTU</code> removed.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> The metal coefficients <code>COD1Z</code>, <code>COD2Z</code>, <code>QCOD1Z</code>, <code>QCOD2Z</code> are four new last arguments (formerly <code>/GRAVSZ/</code>); COMMON blocks to modules, <code>IMPLICIT NONE</code>. No question is settled.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The metals come from row 8.</strong> <code>EZ</code> and <code>EZ_H</code> are interpolated from <code>HCOMP(8,·)</code>, while <a href="../yrec-map/equal_to_model.f.html#def-EQUAL_TO_MODEL">EQUAL_TO_MODEL</a> applies the change to <code>HCOMP(3,·)</code> ($Z$), and <a href="../yrec-map/mix.f.html#def-MIX">MIX</a> names row 8 ¹⁵N (<code>XN15</code>). Is row 8 a mistake for row 3? If so, the old routine's metal settling has been computed from the ¹⁵N profile.</li>
+<li><strong>Unused derivative factors.</strong> The "center derivative" block computes <code>FAC1</code>, <code>FAC2</code> and <code>DELR</code>, which are never used.</li>
+<li><strong>The first midpoint's search.</strong> As in <code>MICRODIFF_MTE</code>, the search runs over model indices <code>2..NPT</code> (bounded by the number of grid points) rather than <code>IBEGIN+1..IEND</code>.</li>
+<li><strong>Midpoint radii lost.</strong> <code>ER</code> first holds the midpoint radii and is then overwritten with the grid points' radii, so the caller never sees the midpoints' radii. Intended?</li>
+<li><strong>A debugging line.</strong> <code>IF(I-1 .EQ. 0) PRINT*, 'mte line 47'</code> cannot fire, and names the other file.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+SUBROUTINE MODEL_TO_EQUAL(COD1,COD2,HCOMP,HQPR,HRU,HS1,HTU,  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MODEL_TO_EQUAL'>MODEL_TO_EQUAL</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MODEL_TO_EQUAL'><h3><span class='kind'>subroutine</span>MODEL_TO_EQUAL</h3>
+<p class='muted'>lines 3–271 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/model_to_equal.f#L3-L271'>GitHub</a></p>
+<pre>SUBROUTINE MODEL_TO_EQUAL(COD1,COD2,HCOMP,HRU,HS1,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+SUBROUTINE MODEL_TO_EQUAL(COD1,COD2,HCOMP,HQPR,HRU,HS1,HTU,  ! KC 2025-05-31</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/gravez_mod.f.html#def-GRAVEZ_MOD'>GRAVEZ_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/interp.f.html#def-INTERP'>INTERP</a> <span class='muted'>(interp.f)</span> ×2</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/grsett.f.html#def-GRSETT'>GRSETT</a> <span class='muted'>(grsett.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE MODEL_TO_EQUAL(COD1,COD2,HCOMP,HRU,HS1,
+<span class="ln">4</span>     *                          IBEGIN,IEND,M,QCOD1X,QCOD2X,DR,
+<span class="ln">5</span>     *                          ECOD1,ECOD1_H,ECOD2_H,EM,EM_H,
+<span class="ln">6</span>     *                          EQCOD1X_H,EQCOD2X_H,ER,EX,EX_H,NPT,COD1Z,COD2Z,QCOD1Z,QCOD2Z)
+<span class="ln">7</span>C 10/15/26 MHP via Claude
+<span class="ln">8</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">9</span>C PARAMETER(JSON=5000) here.
+<span class="ln">10</span>      USE DIMENSIONS_MOD
+<span class="ln">11</span>C 10/14/26 MHP via Claude
+<span class="ln">12</span>C code changed to convert COMMON/GRAVEZ/ into GRAVEZ_MOD.
+<span class="ln">13</span>      USE GRAVEZ_MOD
+<span class="ln">14</span>C 10/14/26 MHP via Claude
+<span class="ln">15</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">16</span>      USE NMLPAR_MOD
+<span class="ln">17</span>C 10/20/26 MHP via Claude
+<span class="ln">18</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">19</span>C explicit declarations.
+<span class="ln">20</span>      IMPLICIT NONE
+<span class="ln">21</span>      REAL*8 COD1,COD1Z,COD2,COD2Z,DELR,DR,DR1,DR2,DRMIN,DRTOT,ECOD1,
+<span class="ln">22</span>     *       ECOD1_H,ECOD2_H,EM,EM_H,EQCOD1X_H,EQCOD2X_H,ER,EX,EX_H,
+<span class="ln">23</span>     *       FAC1,FAC2,FACDERIV,FACINTERP,FX,GRIDRAD,HCOMP,HRU,HS1,
+<span class="ln">24</span>     *       QCOD1X,QCOD1Z,QCOD2X,QCOD2Z,TABLER
+<span class="ln">25</span>      INTEGER I,IBEGIN,IEND,IU,J,JMIN,K,K0,M,NPT
+<span class="ln">26</span>C 10/13/26 MHP via Claude
+<span class="ln">27</span>C formerly COMMON/GRAVSZ/, now dummy arguments.
+<span class="ln">28</span>      DIMENSION COD1Z(JSON),COD2Z(JSON),QCOD1Z(JSON),QCOD2Z(JSON)
+<span class="ln">29</span>C 10/12/26 MHP via Claude
+<span class="ln">30</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">31</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">32</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">33</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">34</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">35</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">36</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">37</span>C
+<span class="ln">38</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">39</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">40</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">41</span>C 10/13/26 MHP via Claude
+<span class="ln">42</span>C code changed to replace COMMON/GRAVSZ/ with explicit arguments:
+<span class="ln">43</span>C setup_grsett.f fills these four and model_to_equal.f reads them, and
+<span class="ln">44</span>C grsett.f calls both, so grsett.f now owns the storage.
+<span class="ln">45</span>C       DIMENSION COD1(JSON),COD2(JSON),HCOMP(15,JSON),HQPR(JSON),
+<span class="ln">46</span>C      *   HRU(JSON),HS1(JSON),HTU(JSON),QCOD1X(JSON),QCOD2X(JSON),  ! KC 2025-05-31
+<span class="ln">47</span>      DIMENSION COD1(JSON),COD2(JSON),HCOMP(15,JSON),
+<span class="ln">48</span>     *   HRU(JSON),HS1(JSON),QCOD1X(JSON),QCOD2X(JSON),
+<span class="ln">49</span>     *   ECOD1(JSON),ECOD1_H(JSON),ECOD2_H(JSON),EM(JSON),
+<span class="ln">50</span>     *   EM_H(JSON),EQCOD1X_H(JSON),EQCOD2X_H(JSON),ER(JSON),EX(JSON),
+<span class="ln">51</span>     *   EX_H(JSON),FACINTERP(4),FACDERIV(4),TABLER(4)
+<span class="ln">52</span>      SAVE
+<span class="ln">53</span>C  FIND MINIMUM MODEL POINT SPACING IN RADIUS.
+<span class="ln">54</span>
+<span class="ln">55</span>      DRTOT = HRU(IEND)-HRU(IBEGIN)
+<span class="ln">56</span>      DRMIN = DRTOT
+<span class="ln">57</span>      DO 7 I = IBEGIN+1,IEND
+<span class="ln">58</span>         DRMIN=MIN(DRMIN,HRU(I)-HRU(I-1))
+<span class="ln">59</span>    7 CONTINUE
+<span class="ln">60</span>C  ASSIGN THE MINIMUM NUMBER OF EQUALLY SPACED GRID POINTS SUCH THAT
+<span class="ln">61</span>C  DR &lt;= DRMIN.
+<span class="ln">62</span>      NPT=INT(DRTOT/DRMIN)
+<span class="ln">63</span>      IF(MOD(DRTOT,DRMIN).NE.0.0D0)NPT=NPT+1
+<span class="ln">64</span>C JVS add additional trap to deal with models with NPT=1
+<span class="ln">65</span>      IF (NPT .EQ. 1) NPT=NPT+1
+<span class="ln">66</span>C  ENSURE THAT NUMBER OF POINTS DOES NOT EXCEED JSON.
+<span class="ln">67</span>
+<span class="ln">68</span>      NPT=MIN(NPT,JSON)
+<span class="ln">69</span>      DR = DRTOT/DFLOAT(NPT-1)
+<span class="ln">70</span>
+<span class="ln">71</span>C  SET UP VECTOR OF EQUALLY SPACED RADII AT ZONE MIDPOINTS.
+<span class="ln">72</span>      ER(1)=HRU(IBEGIN)+0.5D0*DR
+<span class="ln">73</span>C JVS added logic trap (IF statement)
+<span class="ln">74</span>      IF (NPT .EQ. 2) THEN
+<span class="ln">75</span>            ER(2)=ER(1)+DR
+<span class="ln">76</span>      ELSE
+<span class="ln">77</span>            DO 10 I = 2,NPT-1 ! old piece
+<span class="ln">78</span>            IF(I-1 .EQ. 0) PRINT*, &#x27;mte line 47&#x27;
+<span class="ln">79</span>               ER(I)=ER(I-1)+DR  ! old piece
+<span class="ln">80</span>  10             CONTINUE          ! old piece
+<span class="ln">81</span>      ENDIF
+<span class="ln">82</span>
+<span class="ln">83</span>C  NOW USE 4-POINT LAGRANGIAN INTERPOLATION TO FIND RUN OF VARIABLES
+<span class="ln">84</span>C  AT EQUALLY SPACED ZONE MIDPOINTS.
+<span class="ln">85</span>C
+<span class="ln">86</span>C  FIRST POINT : LINEAR INTERPOLATION BETWEEN STARTING POINT AND 2ND PT.
+<span class="ln">87</span>      DO 15 IU=2,NPT
+<span class="ln">88</span>         IF(HRU(IU).GE.ER(1))GOTO 17
+<span class="ln">89</span>   15 CONTINUE
+<span class="ln">90</span>      IU=NPT
+<span class="ln">91</span>   17 CONTINUE
+<span class="ln">92</span>      FX=(ER(1)-HRU(IU-1))/(HRU(IU)-HRU(IU-1))
+<span class="ln">93</span>      EM_H(1) = HS1(IU-1)+FX*(HS1(IU)-HS1(IU-1))
+<span class="ln">94</span>      ECOD1_H(1)=COD1(IU-1)+FX*(COD1(IU)-COD1(IU-1))
+<span class="ln">95</span>      ECOD2_H(1)=COD2(IU-1)+FX*(COD2(IU)-COD2(IU-1))
+<span class="ln">96</span>      EQCOD1X_H(1)=QCOD1X(IU-1)+FX*(QCOD1X(IU)-QCOD1X(IU-1))
+<span class="ln">97</span>      EQCOD2X_H(1)=QCOD2X(IU-1)+FX*(QCOD2X(IU)-QCOD2X(IU-1))
+<span class="ln">98</span>      EX_H(1) = HCOMP(1,IU-1)+FX*(HCOMP(1,IU)-HCOMP(1,IU-1))
+<span class="ln">99</span>      IF(LDIFZ)THEN
+<span class="ln">100</span>         ECOD1Z_H(1)=COD1Z(IU-1)+FX*(COD1Z(IU)-COD1Z(IU-1))
+<span class="ln">101</span>         ECOD2Z_H(1)=COD2Z(IU-1)+FX*(COD2Z(IU)-COD2Z(IU-1))
+<span class="ln">102</span>         EQCOD1Z_H(1)=QCOD1Z(IU-1)+FX*(QCOD1Z(IU)-QCOD1Z(IU-1))
+<span class="ln">103</span>         EQCOD2Z_H(1)=QCOD2Z(IU-1)+FX*(QCOD2Z(IU)-QCOD2Z(IU-1))
+<span class="ln">104</span>         EZ_H(1) = HCOMP(8,IU-1)+FX*(HCOMP(8,IU)-HCOMP(8,IU-1))
+<span class="ln">105</span>      ENDIF
+<span class="ln">106</span>C  CENTER DERIVATIVE.
+<span class="ln">107</span>      DR1=ER(1)-HRU(IU-1)
+<span class="ln">108</span>      DR2=HRU(IU)-ER(1)
+<span class="ln">109</span>      IF(DR2.GT.DR1)THEN
+<span class="ln">110</span>         FAC1=1.0D0
+<span class="ln">111</span>         FAC2=DR1/DR2
+<span class="ln">112</span>         DELR=2.0D0*DR1
+<span class="ln">113</span>      ELSE IF(DR1.GT.DR2)THEN
+<span class="ln">114</span>         FAC1=DR2/DR1
+<span class="ln">115</span>         FAC2=1.0D0
+<span class="ln">116</span>         DELR=2.0D0*DR2
+<span class="ln">117</span>      ELSE
+<span class="ln">118</span>         FAC1=1.0D0
+<span class="ln">119</span>         FAC2=1.0D0
+<span class="ln">120</span>         DELR=DR1+DR2
+<span class="ln">121</span>      ENDIF
+<span class="ln">122</span>C  FOR OTHER POINTS: FIRST FIND 4 NEAREST (IN RADIUS) MODEL POINTS
+<span class="ln">123</span>C  AND THEN FIND LAGRANGIAN INTERPOLATION FACTORS. APPLY THEM TO FIND
+<span class="ln">124</span>C  MODEL QUANTITIES AT THE EQUALLY SPACED GRID POINTS.
+<span class="ln">125</span>C  JMIN IS THE UPPERMOST MODEL POINT ABOVE THE PREVIOUS EQUALLY SPACED
+<span class="ln">126</span>C  GRID POINT (IN RADIUS).
+<span class="ln">127</span>      JMIN=IBEGIN+1
+<span class="ln">128</span>      DO 50 I=2,NPT-1
+<span class="ln">129</span>         DO 20 J = JMIN,IEND
+<span class="ln">130</span>C  FIND 4 MODEL POINTS CLOSEST TO THE EQUALLY SPACED GRID POINT.
+<span class="ln">131</span>            IF(HRU(J).GE.ER(I))THEN
+<span class="ln">132</span>C  ENSURE THAT FIRST INTERPOLATION POINT NO LESS THAN FIRST MODEL POINT.
+<span class="ln">133</span>               K0 = MAX(J-2,1)
+<span class="ln">134</span>C  ENSURE THAT LAST INTERPOLATION POINT NO GREATER THAN LAST MODEL POINT.
+<span class="ln">135</span>               K0 = MIN(K0,M-3)
+<span class="ln">136</span>               JMIN=J
+<span class="ln">137</span>               GOTO 30
+<span class="ln">138</span>            ENDIF
+<span class="ln">139</span>   20    CONTINUE
+<span class="ln">140</span>         K0 = M-3
+<span class="ln">141</span>         JMIN=M
+<span class="ln">142</span>   30    CONTINUE
+<span class="ln">143</span>         DO 40 K=1,4
+<span class="ln">144</span>            TABLER(K)=HRU(K0+K-1)
+<span class="ln">145</span>   40    CONTINUE
+<span class="ln">146</span>         GRIDRAD=ER(I)
+<span class="ln">147</span>C  FIND 4 POINT LAGRANGIAN INTERPOLATION FACTORS.
+<span class="ln">148</span>C  FACINTERP=INTERPOLATION FACTORS FOR POINT GRIDRAD GIVEN THE 4 TABLE
+<span class="ln">149</span>C  RADII IN TABLER; FACDERIV=SAME FOR DERIVATIVES AT POINT GRIDRAD.
+<span class="ln">150</span>         CALL <a href="../yrec-map/interp.f.html#def-INTERP" title="INTERP in interp.f">INTERP</a>(TABLER,FACINTERP,FACDERIV,GRIDRAD)
+<span class="ln">151</span>C  PERFORM 4 POINT LAGRANGIAN INTERPOLATION FOR DESIRED QUANTITIES:
+<span class="ln">152</span>C  MASS WITHIN THE RADIUS ER
+<span class="ln">153</span>         EM_H(I) = FACINTERP(1)*HS1(K0)+FACINTERP(2)*HS1(K0+1)+
+<span class="ln">154</span>     *             FACINTERP(3)*HS1(K0+2)+FACINTERP(4)*HS1(K0+3)
+<span class="ln">155</span>C  D1
+<span class="ln">156</span>         ECOD1_H(I) = FACINTERP(1)*COD1(K0)+FACINTERP(2)*COD1(K0+1)+
+<span class="ln">157</span>     *             FACINTERP(3)*COD1(K0+2)+FACINTERP(4)*COD1(K0+3)
+<span class="ln">158</span>C  D2
+<span class="ln">159</span>         ECOD2_H(I) = FACINTERP(1)*COD2(K0)+FACINTERP(2)*COD2(K0+1)+
+<span class="ln">160</span>     *             FACINTERP(3)*COD2(K0+2)+FACINTERP(4)*COD2(K0+3)
+<span class="ln">161</span>C  DERIVATIVE OF D1 WRT X
+<span class="ln">162</span>         EQCOD1X_H(I)=FACINTERP(1)*QCOD1X(K0)+FACINTERP(2)*QCOD1X(K0+1)
+<span class="ln">163</span>     *             +FACINTERP(3)*QCOD1X(K0+2)+FACINTERP(4)*QCOD1X(K0+3)
+<span class="ln">164</span>C  DERIVATIVE OF D2 WRT X
+<span class="ln">165</span>         EQCOD2X_H(I)=FACINTERP(1)*QCOD2X(K0)+FACINTERP(2)*QCOD2X(K0+1)
+<span class="ln">166</span>     *             +FACINTERP(3)*QCOD2X(K0+2)+FACINTERP(4)*QCOD2X(K0+3)
+<span class="ln">167</span>C  MASS FRACTION OF HYDROGEN
+<span class="ln">168</span>         EX_H(I)=FACINTERP(1)*HCOMP(1,K0)+FACINTERP(2)*HCOMP(1,K0+1)+
+<span class="ln">169</span>     *           FACINTERP(3)*HCOMP(1,K0+2)+FACINTERP(4)*HCOMP(1,K0+3)
+<span class="ln">170</span>         IF(LDIFZ)THEN
+<span class="ln">171</span>C  METAL DIFFUSION-TREATED AS FULLY IONIZED IRON.
+<span class="ln">172</span>C  D1
+<span class="ln">173</span>         ECOD1Z_H(I)=FACINTERP(1)*COD1Z(K0)+FACINTERP(2)*COD1Z(K0+1)+
+<span class="ln">174</span>     *             FACINTERP(3)*COD1Z(K0+2)+FACINTERP(4)*COD1Z(K0+3)
+<span class="ln">175</span>C  D2
+<span class="ln">176</span>         ECOD2Z_H(I)=FACINTERP(1)*COD2Z(K0)+FACINTERP(2)*COD2Z(K0+1)+
+<span class="ln">177</span>     *             FACINTERP(3)*COD2Z(K0+2)+FACINTERP(4)*COD2Z(K0+3)
+<span class="ln">178</span>C  DERIVATIVE OF D1 WRT Z
+<span class="ln">179</span>         EQCOD1Z_H(I)=FACINTERP(1)*QCOD1Z(K0)+FACINTERP(2)*QCOD1Z(K0+1)
+<span class="ln">180</span>     *             +FACINTERP(3)*QCOD1Z(K0+2)+FACINTERP(4)*QCOD1Z(K0+3)
+<span class="ln">181</span>C  DERIVATIVE OF D2 WRT Z
+<span class="ln">182</span>         EQCOD2Z_H(I)=FACINTERP(1)*QCOD2Z(K0)+FACINTERP(2)*QCOD2Z(K0+1)
+<span class="ln">183</span>     *             +FACINTERP(3)*QCOD2Z(K0+2)+FACINTERP(4)*QCOD2Z(K0+3)
+<span class="ln">184</span>C  MASS FRACTION OF METALS
+<span class="ln">185</span>         EZ_H(I)=FACINTERP(1)*HCOMP(8,K0)+FACINTERP(2)*HCOMP(8,K0+1)+
+<span class="ln">186</span>     *           FACINTERP(3)*HCOMP(8,K0+2)+FACINTERP(4)*HCOMP(8,K0+3)
+<span class="ln">187</span>         ENDIF
+<span class="ln">188</span>   50 CONTINUE
+<span class="ln">189</span>C  SET UP VECTOR OF EQUALLY SPACED RADII AT ZONE CENTERS.
+<span class="ln">190</span>
+<span class="ln">191</span>      ER(1)=HRU(IBEGIN)
+<span class="ln">192</span>      DO 60 I = 2,NPT
+<span class="ln">193</span>         ER(I)=ER(I-1)+DR
+<span class="ln">194</span>   60 CONTINUE
+<span class="ln">195</span>
+<span class="ln">196</span>
+<span class="ln">197</span>C  NOW USE 4-POINT LAGRANGIAN INTERPOLATION TO FIND RUN OF VARIABLES
+<span class="ln">198</span>C  AT EQUALLY SPACED ZONE CENTERS.
+<span class="ln">199</span>C
+<span class="ln">200</span>C  FIRST POINT : BY DEFINITION, AT STARTING POINT.
+<span class="ln">201</span>      EM(1) = HS1(IBEGIN)
+<span class="ln">202</span>      EX(1) = HCOMP(1,IBEGIN)
+<span class="ln">203</span>      ECOD1(1)=COD1(IBEGIN)
+<span class="ln">204</span>      IF(LDIFZ)THEN
+<span class="ln">205</span>         EZ(1) = HCOMP(8,IBEGIN)
+<span class="ln">206</span>         ECOD1Z(1) = COD1Z(IBEGIN)
+<span class="ln">207</span>      ENDIF
+<span class="ln">208</span>C  FOR OTHER POINTS: FIRST FIND 4 NEAREST (IN RADIUS) MODEL POINTS
+<span class="ln">209</span>C  AND THEN FIND LAGRANGIAN INTERPOLATION FACTORS. APPLY THEM TO FIND
+<span class="ln">210</span>C  MODEL QUANTITIES AT THE EQUALLY SPACED GRID POINTS.
+<span class="ln">211</span>C  JMIN IS THE UPPERMOST MODEL POINT ABOVE THE PREVIOUS EQUALLY SPACED
+<span class="ln">212</span>C  GRID POINT (IN RADIUS).
+<span class="ln">213</span>      JMIN=IBEGIN+1
+<span class="ln">214</span>      DO 70 I=2,NPT-1
+<span class="ln">215</span>         DO 80 J = JMIN,IEND
+<span class="ln">216</span>C  FIND 4 MODEL POINTS CLOSEST TO THE EQUALLY SPACED GRID POINT.
+<span class="ln">217</span>            IF(HRU(J).GE.ER(I))THEN
+<span class="ln">218</span>C  ENSURE THAT FIRST INTERPOLATION POINT NO LESS THAN FIRST MODEL POINT.
+<span class="ln">219</span>               K0 = MAX(J-2,1)
+<span class="ln">220</span>C  ENSURE THAT LAST INTERPOLATION POINT NO GREATER THAN LAST MODEL POINT.
+<span class="ln">221</span>               K0 = MIN(K0,M-3)
+<span class="ln">222</span>               JMIN=J
+<span class="ln">223</span>               GOTO 90
+<span class="ln">224</span>            ENDIF
+<span class="ln">225</span>   80    CONTINUE
+<span class="ln">226</span>         K0 = M-3
+<span class="ln">227</span>         JMIN=M
+<span class="ln">228</span>   90    CONTINUE
+<span class="ln">229</span>         DO 100 K=1,4
+<span class="ln">230</span>            TABLER(K)=HRU(K0+K-1)
+<span class="ln">231</span>  100    CONTINUE
+<span class="ln">232</span>
+<span class="ln">233</span>         GRIDRAD=ER(I)
+<span class="ln">234</span>
+<span class="ln">235</span>C  FIND 4 POINT LAGRANGIAN INTERPOLATION FACTORS.
+<span class="ln">236</span>C  FACINTERP=INTERPOLATION FACTORS FOR POINT GRIDRAD GIVEN THE 4 TABLE
+<span class="ln">237</span>C  RADII IN TABLER; FACDERIV=SAME FOR DERIVATIVES AT POINT GRIDRAD.
+<span class="ln">238</span>         CALL <a href="../yrec-map/interp.f.html#def-INTERP" title="INTERP in interp.f">INTERP</a>(TABLER,FACINTERP,FACDERIV,GRIDRAD)
+<span class="ln">239</span>C  PERFORM 4 POINT LAGRANGIAN INTERPOLATION FOR DESIRED QUANTITIES:
+<span class="ln">240</span>C  MASS WITHIN THE RADIUS ER
+<span class="ln">241</span>         EM(I) = FACINTERP(1)*HS1(K0)+FACINTERP(2)*HS1(K0+1)+
+<span class="ln">242</span>     *             FACINTERP(3)*HS1(K0+2)+FACINTERP(4)*HS1(K0+3)
+<span class="ln">243</span>C  D1
+<span class="ln">244</span>         ECOD1(I) = FACINTERP(1)*COD1(K0)+FACINTERP(2)*COD1(K0+1)+
+<span class="ln">245</span>     *             FACINTERP(3)*COD1(K0+2)+FACINTERP(4)*COD1(K0+3)
+<span class="ln">246</span>C  MASS FRACTION OF HYDROGEN
+<span class="ln">247</span>
+<span class="ln">248</span>         EX(I)=FACINTERP(1)*HCOMP(1,K0)+FACINTERP(2)*HCOMP(1,K0+1)+
+<span class="ln">249</span>     *         FACINTERP(3)*HCOMP(1,K0+2)+FACINTERP(4)*HCOMP(1,K0+3)
+<span class="ln">250</span>C METAL DIFFUSION
+<span class="ln">251</span>         IF(LDIFZ)THEN
+<span class="ln">252</span>C  D1
+<span class="ln">253</span>         ECOD1Z(I)=FACINTERP(1)*COD1Z(K0)+FACINTERP(2)*COD1Z(K0+1)+
+<span class="ln">254</span>     *             FACINTERP(3)*COD1Z(K0+2)+FACINTERP(4)*COD1Z(K0+3)
+<span class="ln">255</span>C  MASS FRACTION OF METALS
+<span class="ln">256</span>         EZ(I)=FACINTERP(1)*HCOMP(8,K0)+FACINTERP(2)*HCOMP(8,K0+1)+
+<span class="ln">257</span>     *         FACINTERP(3)*HCOMP(8,K0+2)+FACINTERP(4)*HCOMP(8,K0+3)
+<span class="ln">258</span>         ENDIF
+<span class="ln">259</span>   70 CONTINUE
+<span class="ln">260</span>C  LAST POINT : BY DEFINITION, AT ENDING POINT.
+<span class="ln">261</span>
+<span class="ln">262</span>      EM(NPT) = HS1(IEND)
+<span class="ln">263</span>      EX(NPT) = HCOMP(1,IEND)
+<span class="ln">264</span>      ECOD1(NPT)=COD1(IEND)
+<span class="ln">265</span>
+<span class="ln">266</span>      IF(LDIFZ)THEN
+<span class="ln">267</span>         EZ(NPT) = HCOMP(8,IEND)
+<span class="ln">268</span>         ECOD1Z(NPT)=COD1Z(IEND)
+<span class="ln">269</span>      ENDIF
+<span class="ln">270</span>      RETURN
+<span class="ln">271</span>      END</pre></details>
+<details class='py' id='py-model_to_equal'><summary>Python version: model_to_equal</summary><pre class='doc'>Interpolate the settling coefficients and abundances of GRSETT from
+the model points (ibegin..iend) to an equally spaced grid in radius, at
+the grid points and the midpoints (_h).
+
+Translates: model_to_equal.f#MODEL_TO_EQUAL (09c3b9b)
+
+Arguments: the coefficients cod1, cod2, their derivatives in X qcod1x,
+qcod2x, and the metal ones cod1z, cod2z, qcod1z, qcod2z (from
+SETUP_GRSETT); hcomp[k, j], the radii hru and masses hs1 (Bahcall-Loeb
+units); m shells. dr and npt are passed in with any value. Arrays have
+index 0 unused.
+
+Sets in place: em, ex, ecod1 on the grid points; em_h, ecod1_h, ecod2_h,
+eqcod1x_h, eqcod2x_h, ex_h on the midpoints; er (the grid radii, after
+holding the midpoints&#x27; radii); with LDIFZ, the metal arrays of
+gravez_mod.
+
+Returns (dr, npt): the grid spacing and the number of grid points.</pre><pre class='src'><span class="ln">40</span>def model_to_equal(cod1, cod2, hcomp, hru, hs1, ibegin, iend, m, qcod1x,
+<span class="ln">41</span>                   qcod2x, dr, ecod1, ecod1_h, ecod2_h, em, em_h, eqcod1x_h,
+<span class="ln">42</span>                   eqcod2x_h, er, ex, ex_h, npt, cod1z, cod2z, qcod1z,
+<span class="ln">43</span>                   qcod2z):
+<span class="ln">44</span>    &quot;&quot;&quot;Interpolate the settling coefficients and abundances of GRSETT from
+<span class="ln">45</span>    the model points (ibegin..iend) to an equally spaced grid in radius, at
+<span class="ln">46</span>    the grid points and the midpoints (_h).
+<span class="ln">47</span>
+<span class="ln">48</span>    Translates: model_to_equal.f#MODEL_TO_EQUAL (09c3b9b)
+<span class="ln">49</span>
+<span class="ln">50</span>    Arguments: the coefficients cod1, cod2, their derivatives in X qcod1x,
+<span class="ln">51</span>    qcod2x, and the metal ones cod1z, cod2z, qcod1z, qcod2z (from
+<span class="ln">52</span>    SETUP_GRSETT); hcomp[k, j], the radii hru and masses hs1 (Bahcall-Loeb
+<span class="ln">53</span>    units); m shells. dr and npt are passed in with any value. Arrays have
+<span class="ln">54</span>    index 0 unused.
+<span class="ln">55</span>
+<span class="ln">56</span>    Sets in place: em, ex, ecod1 on the grid points; em_h, ecod1_h, ecod2_h,
+<span class="ln">57</span>    eqcod1x_h, eqcod2x_h, ex_h on the midpoints; er (the grid radii, after
+<span class="ln">58</span>    holding the midpoints&#x27; radii); with LDIFZ, the metal arrays of
+<span class="ln">59</span>    gravez_mod.
+<span class="ln">60</span>
+<span class="ln">61</span>    Returns (dr, npt): the grid spacing and the number of grid points.
+<span class="ln">62</span>    &quot;&quot;&quot;
+<span class="ln">63</span>    gz = gravez_mod
+<span class="ln">64</span>    ldifz = nmlpar_mod.ldifz
+<span class="ln">65</span>    # The minimum model point spacing in radius, over the whole region.
+<span class="ln">66</span>    drtot = hru[iend] - hru[ibegin]
+<span class="ln">67</span>    drmin = drtot
+<span class="ln">68</span>    for i in range(ibegin + 1, iend + 1):
+<span class="ln">69</span>        drmin = min(drmin, hru[i] - hru[i - 1])
+<span class="ln">70</span>    # The minimum number of equally spaced points such that DR &lt;= DRMIN.
+<span class="ln">71</span>    npt = int(drtot / drmin)
+<span class="ln">72</span>    if math.fmod(drtot, drmin) != 0.0:
+<span class="ln">73</span>        npt = npt + 1
+<span class="ln">74</span>    # JvS: trap for models with NPT = 1.
+<span class="ln">75</span>    if npt == 1:
+<span class="ln">76</span>        npt = npt + 1
+<span class="ln">77</span>    npt = min(npt, JSON)
+<span class="ln">78</span>    dr = drtot / float(npt - 1)
+<span class="ln">79</span>
+<span class="ln">80</span>    # Equally spaced radii at the zone midpoints (held in ER for now).
+<span class="ln">81</span>    # Question (see the page): ER is overwritten below.
+<span class="ln">82</span>    er[1] = hru[ibegin] + 0.5 * dr
+<span class="ln">83</span>    if npt == 2:
+<span class="ln">84</span>        er[2] = er[1] + dr
+<span class="ln">85</span>    else:
+<span class="ln">86</span>        for i in range(2, npt):  # DO 10 (its debug PRINT can never fire)
+<span class="ln">87</span>            er[i] = er[i - 1] + dr
+<span class="ln">88</span>
+<span class="ln">89</span>    # First midpoint: linear interpolation.
+<span class="ln">90</span>    # Question (see the page): the search runs over model indices 2..NPT.
+<span class="ln">91</span>    iu = npt
+<span class="ln">92</span>    for k in range(2, npt + 1):  # DO 15
+<span class="ln">93</span>        if hru[k] &gt;= er[1]:
+<span class="ln">94</span>            iu = k
+<span class="ln">95</span>            break
+<span class="ln">96</span>    fx = (er[1] - hru[iu - 1]) / (hru[iu] - hru[iu - 1])
+<span class="ln">97</span>
+<span class="ln">98</span>    def lin(f):
+<span class="ln">99</span>        return f[iu - 1] + fx * (f[iu] - f[iu - 1])
+<span class="ln">100</span>
+<span class="ln">101</span>    em_h[1] = lin(hs1)
+<span class="ln">102</span>    ecod1_h[1] = lin(cod1)
+<span class="ln">103</span>    ecod2_h[1] = lin(cod2)
+<span class="ln">104</span>    eqcod1x_h[1] = lin(qcod1x)
+<span class="ln">105</span>    eqcod2x_h[1] = lin(qcod2x)
+<span class="ln">106</span>    ex_h[1] = hcomp[1, iu - 1] + fx * (hcomp[1, iu] - hcomp[1, iu - 1])
+<span class="ln">107</span>    if ldifz:
+<span class="ln">108</span>        gz.ecod1z_h[1] = lin(cod1z)
+<span class="ln">109</span>        gz.ecod2z_h[1] = lin(cod2z)
+<span class="ln">110</span>        gz.eqcod1z_h[1] = lin(qcod1z)
+<span class="ln">111</span>        gz.eqcod2z_h[1] = lin(qcod2z)
+<span class="ln">112</span>        # Question (see the page): row 8, not row 3 (Z).
+<span class="ln">113</span>        gz.ez_h[1] = hcomp[8, iu - 1] + fx * (hcomp[8, iu] - hcomp[8, iu - 1])
+<span class="ln">114</span>    # &quot;Center derivative&quot;: FAC1, FAC2, DELR are never used (question 2).
+<span class="ln">115</span>    dr1 = er[1] - hru[iu - 1]
+<span class="ln">116</span>    dr2 = hru[iu] - er[1]
+<span class="ln">117</span>    if dr2 &gt; dr1:
+<span class="ln">118</span>        fac1, fac2, delr = 1.0, dr1 / dr2, 2.0 * dr1
+<span class="ln">119</span>    elif dr1 &gt; dr2:
+<span class="ln">120</span>        fac1, fac2, delr = dr2 / dr1, 1.0, 2.0 * dr2
+<span class="ln">121</span>    else:
+<span class="ln">122</span>        fac1, fac2, delr = 1.0, 1.0, dr1 + dr2
+<span class="ln">123</span>
+<span class="ln">124</span>    # Other midpoints: 4-point Lagrange interpolation.
+<span class="ln">125</span>    jmin = ibegin + 1
+<span class="ln">126</span>    for i in range(2, npt):  # DO 50
+<span class="ln">127</span>        k0, jmin = _find_k0(er[i], jmin, iend, m, hru)
+<span class="ln">128</span>        for k in range(1, 5):
+<span class="ln">129</span>            tabler[k] = hru[k0 + k - 1]
+<span class="ln">130</span>        interp(tabler, facinterp, facderiv, er[i])
+<span class="ln">131</span>        em_h[i] = _lagrange(hs1, k0)
+<span class="ln">132</span>        ecod1_h[i] = _lagrange(cod1, k0)
+<span class="ln">133</span>        ecod2_h[i] = _lagrange(cod2, k0)
+<span class="ln">134</span>        eqcod1x_h[i] = _lagrange(qcod1x, k0)
+<span class="ln">135</span>        eqcod2x_h[i] = _lagrange(qcod2x, k0)
+<span class="ln">136</span>        ex_h[i] = _lagrange(hcomp[1, :], k0)
+<span class="ln">137</span>        if ldifz:
+<span class="ln">138</span>            # Metal diffusion, treated as fully ionized iron.
+<span class="ln">139</span>            gz.ecod1z_h[i] = _lagrange(cod1z, k0)
+<span class="ln">140</span>            gz.ecod2z_h[i] = _lagrange(cod2z, k0)
+<span class="ln">141</span>            gz.eqcod1z_h[i] = _lagrange(qcod1z, k0)
+<span class="ln">142</span>            gz.eqcod2z_h[i] = _lagrange(qcod2z, k0)
+<span class="ln">143</span>            gz.ez_h[i] = _lagrange(hcomp[8, :], k0)
+<span class="ln">144</span>
+<span class="ln">145</span>    # Equally spaced radii at the zone centers.
+<span class="ln">146</span>    er[1] = hru[ibegin]
+<span class="ln">147</span>    for i in range(2, npt + 1):
+<span class="ln">148</span>        er[i] = er[i - 1] + dr
+<span class="ln">149</span>    # First point: by definition, at the starting point.
+<span class="ln">150</span>    em[1] = hs1[ibegin]
+<span class="ln">151</span>    ex[1] = hcomp[1, ibegin]
+<span class="ln">152</span>    ecod1[1] = cod1[ibegin]
+<span class="ln">153</span>    if ldifz:
+<span class="ln">154</span>        gz.ez[1] = hcomp[8, ibegin]
+<span class="ln">155</span>        gz.ecod1z[1] = cod1z[ibegin]
+<span class="ln">156</span>    # Other points: 4-point Lagrange interpolation.
+<span class="ln">157</span>    jmin = ibegin + 1
+<span class="ln">158</span>    for i in range(2, npt):  # DO 70
+<span class="ln">159</span>        k0, jmin = _find_k0(er[i], jmin, iend, m, hru)
+<span class="ln">160</span>        for k in range(1, 5):
+<span class="ln">161</span>            tabler[k] = hru[k0 + k - 1]
+<span class="ln">162</span>        interp(tabler, facinterp, facderiv, er[i])
+<span class="ln">163</span>        em[i] = _lagrange(hs1, k0)
+<span class="ln">164</span>        ecod1[i] = _lagrange(cod1, k0)
+<span class="ln">165</span>        ex[i] = _lagrange(hcomp[1, :], k0)
+<span class="ln">166</span>        if ldifz:
+<span class="ln">167</span>            gz.ecod1z[i] = _lagrange(cod1z, k0)
+<span class="ln">168</span>            gz.ez[i] = _lagrange(hcomp[8, :], k0)
+<span class="ln">169</span>    # Last point: by definition, at the ending point.
+<span class="ln">170</span>    em[npt] = hs1[iend]
+<span class="ln">171</span>    ex[npt] = hcomp[1, iend]
+<span class="ln">172</span>    ecod1[npt] = cod1[iend]
+<span class="ln">173</span>    if ldifz:
+<span class="ln">174</span>        gz.ez[npt] = hcomp[8, iend]
+<span class="ln">175</span>        gz.ecod1z[npt] = cod1z[iend]
+<span class="ln">176</span>    return dr, npt</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_lagrange'><summary>Python version: _lagrange</summary><pre class='src'><span class="ln">22</span>def _lagrange(f, k0):
+<span class="ln">23</span>    # FACINTERP(1)*F(K0) + ... + FACINTERP(4)*F(K0+3), in the Fortran&#x27;s order.
+<span class="ln">24</span>    return (facinterp[1] * f[k0] + facinterp[2] * f[k0 + 1]
+<span class="ln">25</span>            + facinterp[3] * f[k0 + 2] + facinterp[4] * f[k0 + 3])</pre></details>
+<details class='py' id='py-_find_k0'><summary>Python version: _find_k0</summary><pre class='src'><span class="ln">28</span>def _find_k0(r, jmin, iend, m, hru):
+<span class="ln">29</span>    # Labels 20/30 (and 80/90): the first model point J &gt;= JMIN at or above
+<span class="ln">30</span>    # radius r gives the four interpolation points K0..K0+3, kept inside
+<span class="ln">31</span>    # 1..M; returns (k0, jmin).
+<span class="ln">32</span>    for j in range(jmin, iend + 1):
+<span class="ln">33</span>        if hru[j] &gt;= r:
+<span class="ln">34</span>            k0 = max(j - 2, 1)
+<span class="ln">35</span>            k0 = min(k0, m - 3)
+<span class="ln">36</span>            return k0, j
+<span class="ln">37</span>    return m - 3, m</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>Checked: the grid (minimum spacing over the whole region), the interpolation, the row-8 metals (row 3 is $Z$ in SETUP_GRSETT and EQUAL_TO_MODEL), the overwritten midpoint radii, <code>/GRAVSZ/</code> and <code>/GRAVEZ/</code>. Nothing to fix.</p>
+<p>Revised: no change.</p></div></details>
+</main></body></html>

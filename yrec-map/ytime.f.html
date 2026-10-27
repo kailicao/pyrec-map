@@ -1,0 +1,274 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>ytime.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ ytime.f</span></header><main>
+<h1>ytime.f</h1>
+<p class='muted'>134 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/ytime.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>ytime.py</code>, 91 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>YTIME</code> gives the time step allowed by helium burning. Its comment: stars with a helium luminosity have a time step limited by the time to burn <code>ATIME(4)</code> of $Y$ at the temperature maximum, or the fraction <code>ATIME(5)</code> of $Y$ there; a high central density is taken as the sign of a giant in the helium flash rather than a horizontal-branch star.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the model (arguments: $\log\rho$ <code>HD</code>, <code>HCOMP</code>, $L$, $m$, $\log T$, <code>JCORE</code>, <code>M</code>, <code>JXBEG</code>), work arrays for the rates, and from modules the limits <code>ATIME</code> and the extended-composition switch <code>LEXCOM</code> (<code>NMLPAR_MOD</code>), and $L_\odot$ <code>CLSUN</code> (<code>CONSTANTS_MOD</code>).</li>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/htimer.f.html#def-HTIMER">HTIMER</a>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/engeb.f.html#def-ENGEB">ENGEB</a>, for the energy rates at the temperature maximum, which also returns <code>EALPCA</code> and <code>ENU</code> (and a $^7$Be mass fraction this routine does not use).</li>
+<li><strong>Outputs:</strong> <code>DELTSY</code>, the step (in seconds, by its use in <code>HTIMER</code>), and <code>EG(1..6)</code>, the energy rates at the temperature maximum.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ul>
+<li><strong>Helium flash</strong> ($\log\rho_c \ge 5$): find the shell of maximum temperature, compute its energy rates with <code>ENGEB</code>, and take
+  $$\Delta t = \frac{10^{15}}{\varepsilon_5},$$
+  with $\varepsilon_5$ = <code>EG(5)</code> (probably the triple-α rate, by the order in <code>ENGEB</code>), at least $10^{-22}$.</li>
+<li><strong>Otherwise:</strong> with $Y_\mathrm{core}$ at <code>JCORE</code> and $q = 5.85\times10^{17}$ erg/g (the commented-out <code>Q3A</code>), if $Y_\mathrm{core} \ge$ <code>ATIME(1)</code>,
+  $$\Delta Y = \min(\texttt{ATIME(4)},\ \texttt{ATIME(5)}\,Y_\mathrm{core}),\qquad \Delta t = \frac{q}{L_\odot}\,\frac{m}{L/L_\odot}\,\Delta Y$$
+  at <code>JCORE</code>; otherwise the same with $m$ and $L$ just below the hydrogen shell (<code>JXBEG-1</code>).</li>
+</ul>
+<p><strong>KC's changes.</strong> Removed the unused arguments <code>QDP</code> and <code>QDT</code>, and shortened the call to <code>ENGEB</code> to its new argument list (2025-05-31).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> <code>EALPCA</code> and <code>ENU</code> come back from ENGEB as arguments (<code>/NEWEPS/</code> retired), with the new <code>BE7MFLOC</code> for ENGEB's $^7$Be mass fraction (formerly <code>/BE7/</code>); COMMON blocks to modules, <code>JSON</code> from <code>DIMENSIONS_MOD</code>, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>$Y$ or $1 - Z$?</strong> <code>YCORE = 1D0 - HCOMP(3,JCORE)</code> is $X + Y$, not $Y$ (<code>HCOMP(2,·)</code>). In a helium core $X \approx 0$ and the two agree, but during hydrogen burning they do not. Intended?</li>
+<li><strong>An undefined step.</strong> In the <code>ELSE</code> branch ($Y_\mathrm{core} &lt;$ <code>ATIME(1)</code>), <code>DELTSY</code> is used on the right-hand side before it is set in this call; it holds the value <code>SAVE</code>d from an earlier call. A line like <code>DELTSY = MIN(ATIME(4), ATIME(5)*Y)</code> seems to be missing.</li>
+<li><strong>The same threshold for $X$ and $Y$.</strong> <code>ATIME(1)</code> is the central-hydrogen threshold in <a href="../yrec-map/xtime.f.html#def-XTIME">XTIME</a>, and here the threshold for $Y_\mathrm{core}$. Two parameters?</li>
+<li><strong>Hard-coded values.</strong> The flash criterion $\log\rho_c \ge 5$, the constant $10^{15}$ (whose units are unclear) and the floor $10^{-22}$.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+YTIME
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-YTIME'>YTIME</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-YTIME'><h3><span class='kind'>subroutine</span>YTIME</h3>
+<p class='muted'>lines 4–134 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/ytime.f#L4-L134'>GitHub</a></p>
+<pre>SUBROUTINE YTIME(EG,HCOMP,HD,HL,HS1,HT,JCORE,M,DELTSY,</pre>
+<div class='notes'><p>The helium-burning time step: during the helium flash $10^{15}/\varepsilon_{3\alpha}$ at the temperature maximum; otherwise the time to burn a fraction of the core's helium.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+YTIME
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/engeb.f.html#def-ENGEB'>ENGEB</a> <span class='muted'>(engeb.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/htimer.f.html#def-HTIMER'>HTIMER</a> <span class='muted'>(htimer.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">4</span>      SUBROUTINE YTIME(EG,HCOMP,HD,HL,HS1,HT,JCORE,M,DELTSY,
+<span class="ln">5</span>     *   HR1,HR2,HR3,HR4,HR5,HR6,HR7,HR8,HR9,HR10,HR11,HR12,HR13,
+<span class="ln">6</span>C      *   HF1,HF2,QDP,QDT,JXBEG)  ! KC 2025-05-31
+<span class="ln">7</span>     *   HF1,HF2,JXBEG)
+<span class="ln">8</span>C 10/15/26 MHP via Claude
+<span class="ln">9</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">10</span>C PARAMETER(JSON=5000) here.
+<span class="ln">11</span>      USE DIMENSIONS_MOD
+<span class="ln">12</span>C 10/14/26 MHP via Claude
+<span class="ln">13</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">14</span>      USE NMLPAR_MOD
+<span class="ln">15</span>C 10/14/26 MHP via Claude
+<span class="ln">16</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">17</span>      USE CONSTANTS_MOD
+<span class="ln">18</span>C 10/20/26 MHP via Claude
+<span class="ln">19</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">20</span>C explicit declarations.
+<span class="ln">21</span>      IMPLICIT NONE
+<span class="ln">22</span>      REAL*8 BE7MFLOC,DELTSY,DL,E,EALPCA,ECA,EG,EGG11,EGG22,EGG33,EGG44,
+<span class="ln">23</span>     *       EGG55,ENU,HCOMP,HD,HF1,HF2,HL,HR1,HR10,HR11,HR12,HR13,HR2,
+<span class="ln">24</span>     *       HR3,HR4,HR5,HR6,HR7,HR8,HR9,HS1,HT,HTMAX,QED,QET,SUM1,TL,X,
+<span class="ln">25</span>     *       XBE9,XC12,XC13,XH2,XHE3,XLI6,XLI7,XN14,XN15,XO16,XO17,XO18,
+<span class="ln">26</span>     *       Y,YCORE,Z
+<span class="ln">27</span>      INTEGER IT,ITMAX,IU,JCORE,JXBEG,M
+<span class="ln">28</span>C 10/12/26 MHP via Claude
+<span class="ln">29</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">30</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">31</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">32</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">33</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">34</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">35</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">36</span>C
+<span class="ln">37</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">38</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">39</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">40</span>C 10/13/26 MHP via Claude
+<span class="ln">41</span>C code changed to drop COMMON/CTLIM/, declared here but never used.
+<span class="ln">42</span>C 9/25/26 MHP via Claude
+<span class="ln">43</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">44</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">45</span>C MHP 10/02 added missing common block
+<span class="ln">46</span>C 10/13/26 MHP via Claude
+<span class="ln">47</span>C code changed to replace COMMON/NEWEPS/ with explicit arguments: engeb.f
+<span class="ln">48</span>C computes EALPCA and ENU, and coefft.f and ytime.f read them right after
+<span class="ln">49</span>C their own CALL ENGEB, so they are returned as arguments.  main.f, the
+<span class="ln">50</span>C third caller, passes locals it does not use.
+<span class="ln">51</span>      DIMENSION HCOMP(15,JSON),HD(JSON),HL(JSON),HS1(JSON),
+<span class="ln">52</span>     * HT(JSON),EG(6)
+<span class="ln">53</span>      DIMENSION HR1(JSON),HR2(JSON),HR3(JSON),HR4(JSON),HR5(JSON),
+<span class="ln">54</span>     *HR6(JSON),HR7(JSON),HR8(JSON),HR9(JSON),HR10(JSON),HR11(JSON),
+<span class="ln">55</span>     *HR12(JSON),HR13(JSON),HF1(JSON),HF2(JSON)
+<span class="ln">56</span>      SAVE
+<span class="ln">57</span>C  STARS WITH A HELIUM LUMINOSITY HAVE A TIMESTEP LIMIT
+<span class="ln">58</span>C       BASED ON THE TIME REQUIRED TO BURN ATIME(4) OF Y AT THE
+<span class="ln">59</span>C       MAXIMUM IN TEMPERATURE OR THE FRACTION ATIME(5) OF Y AT THIS POINT.
+<span class="ln">60</span>C TEST FOR HELIUM FLASH BURNING; HIGH CENTRAL DENSITY IS TAKEN AS
+<span class="ln">61</span>C A SIGN THAT THE MODEL IS A GIANT UNDERGOING A HE FLASH RATHER THAN
+<span class="ln">62</span>C A HORIZONTAL BRANCH STAR.
+<span class="ln">63</span>C       DATA Q3A,QCA/5.85D17,1.7276D18/
+<span class="ln">64</span>      IF (HD(1).GE.5.0D0) THEN
+<span class="ln">65</span>C     SEARCH FOR TEMPERATURE MAXIMUM
+<span class="ln">66</span>       HTMAX = 0.0D0
+<span class="ln">67</span>       ITMAX = 1
+<span class="ln">68</span>       DO 210 IT = 1,M
+<span class="ln">69</span>          IF (HT(IT).GT.HTMAX) THEN
+<span class="ln">70</span>             ITMAX = IT
+<span class="ln">71</span>             HTMAX = HT(IT)
+<span class="ln">72</span>          ENDIF
+<span class="ln">73</span>  210    CONTINUE
+<span class="ln">74</span>C     CALCULATE HELIUM BURNING RATE AT TMAX
+<span class="ln">75</span>       DL = HD(ITMAX)
+<span class="ln">76</span>       TL = HT(ITMAX)
+<span class="ln">77</span>       X = HCOMP(1,ITMAX)
+<span class="ln">78</span>       Y = HCOMP(2,ITMAX)
+<span class="ln">79</span>       Z = HCOMP(3,ITMAX)
+<span class="ln">80</span>       XHE3 = HCOMP(4,ITMAX)
+<span class="ln">81</span>       XC12 = HCOMP(5,ITMAX)
+<span class="ln">82</span>       XC13 = HCOMP(6,ITMAX)
+<span class="ln">83</span>       XN14 = HCOMP(7,ITMAX)
+<span class="ln">84</span>       XN15 = HCOMP(8,ITMAX)
+<span class="ln">85</span>       XO16 = HCOMP(9,ITMAX)
+<span class="ln">86</span>       XO17 = HCOMP(10,ITMAX)
+<span class="ln">87</span>       XO18 = HCOMP(11,ITMAX)
+<span class="ln">88</span>       IF(LEXCOM) THEN
+<span class="ln">89</span>          XH2 = HCOMP(12,ITMAX)
+<span class="ln">90</span>          XLI6 = HCOMP(13,ITMAX)
+<span class="ln">91</span>          XLI7 = HCOMP(14,ITMAX)
+<span class="ln">92</span>          XBE9 = HCOMP(15,ITMAX)
+<span class="ln">93</span>       ENDIF
+<span class="ln">94</span>       IU = ITMAX
+<span class="ln">95</span>C 10/13/26 MHP via Claude
+<span class="ln">96</span>C code changed to pass BE7MFLOC for ENGEB&#x27;s new BE7MASSFRACTION
+<span class="ln">97</span>C argument, which replaces COMMON/BE7/.  This routine does not use the
+<span class="ln">98</span>C value; only main.f reads it.
+<span class="ln">99</span>         CALL <a href="../yrec-map/engeb.f.html#def-ENGEB" title="ENGEB in engeb.f">ENGEB</a>(EGG11,EGG22,EGG33,EGG44,EGG55,QED,QET,SUM1,DL,
+<span class="ln">100</span>C      *        TL,QDT,QDP,X,Y,Z,XHE3,XC12,XC13,XN14,XN15,XO16,XO17,
+<span class="ln">101</span>C      *        XO18,XH2,XLI6,XLI7,XBE9,IU,HR1,HR2,HR3,HR4,HR5,HR6,HR7,  ! KC 2025-05-31
+<span class="ln">102</span>     *        TL,X,Y,XHE3,XC12,XC13,XN14,XO16,
+<span class="ln">103</span>     *        XO18,XH2,IU,HR1,HR2,HR3,HR4,HR5,HR6,HR7,
+<span class="ln">104</span>     *        HR8,HR9,HR10,HR11,HR12,HR13,HF1,HF2,BE7MFLOC,EALPCA,ENU)
+<span class="ln">105</span>         E = SUM1
+<span class="ln">106</span>         EG(1) = EGG11
+<span class="ln">107</span>         EG(2) = EGG22
+<span class="ln">108</span>         EG(3) = EGG33
+<span class="ln">109</span>         EG(4) = EGG44
+<span class="ln">110</span>         EG(5) = EGG55
+<span class="ln">111</span>         EG(6) = ENU
+<span class="ln">112</span>         ECA = EALPCA
+<span class="ln">113</span>       IF(EG(5).LT.1.D-22) EG(5) = 1.D-22
+<span class="ln">114</span>       DELTSY=1.0D15/EG(5)
+<span class="ln">115</span>      ELSE
+<span class="ln">116</span>C SET LIMITS ON HE BURNING FOR NON-HELIUM FLASH STARS
+<span class="ln">117</span>       YCORE = 1D0 - HCOMP(3,JCORE)
+<span class="ln">118</span>       IF(YCORE.GE.ATIME(1)) THEN
+<span class="ln">119</span>
+<span class="ln">120</span>            DELTSY = MIN(ATIME(4),ATIME(5)*YCORE)
+<span class="ln">121</span>C
+<span class="ln">122</span>          DELTSY = (5.85D17/CLSUN)*DELTSY*(HS1(JCORE)/HL(JCORE))
+<span class="ln">123</span>
+<span class="ln">124</span>            ELSE
+<span class="ln">125</span>
+<span class="ln">126</span>            DELTSY = (5.85D17/CLSUN)*DELTSY*(HS1(JXBEG-1)/HL(JXBEG-1))
+<span class="ln">127</span>
+<span class="ln">128</span>C
+<span class="ln">129</span>         ENDIF
+<span class="ln">130</span>C
+<span class="ln">131</span>      ENDIF
+<span class="ln">132</span>
+<span class="ln">133</span>      RETURN
+<span class="ln">134</span>      END</pre></details>
+<details class='py' id='py-ytime'><summary>Python version: ytime</summary><pre class='doc'>The helium-burning time step DELTSY: in the helium flash (central
+log rho &gt;= 5), 1e15 over the triple-alpha rate at the temperature
+maximum; otherwise the time to burn a fraction of the core&#x27;s helium.
+
+Translates: ytime.f#YTIME (09c3b9b)
+
+Arguments: the energy rates eg(1..6) (set here, in the flash), the model
+(hcomp, hd = log rho, hl, hs1 = m, ht = log T, jcore, m, jxbeg), the
+step deltsy, and the rate work arrays hr1..hr13, hf1, hf2 passed on to
+ENGEB. Returns deltsy.</pre><pre class='src'><span class="ln">16</span>def ytime(eg, hcomp, hd, hl, hs1, ht, jcore, m, deltsy,
+<span class="ln">17</span>          hr1, hr2, hr3, hr4, hr5, hr6, hr7, hr8, hr9, hr10, hr11, hr12, hr13,
+<span class="ln">18</span>          hf1, hf2, jxbeg):
+<span class="ln">19</span>    &quot;&quot;&quot;The helium-burning time step DELTSY: in the helium flash (central
+<span class="ln">20</span>    log rho &gt;= 5), 1e15 over the triple-alpha rate at the temperature
+<span class="ln">21</span>    maximum; otherwise the time to burn a fraction of the core&#x27;s helium.
+<span class="ln">22</span>
+<span class="ln">23</span>    Translates: ytime.f#YTIME (09c3b9b)
+<span class="ln">24</span>
+<span class="ln">25</span>    Arguments: the energy rates eg(1..6) (set here, in the flash), the model
+<span class="ln">26</span>    (hcomp, hd = log rho, hl, hs1 = m, ht = log T, jcore, m, jxbeg), the
+<span class="ln">27</span>    step deltsy, and the rate work arrays hr1..hr13, hf1, hf2 passed on to
+<span class="ln">28</span>    ENGEB. Returns deltsy.
+<span class="ln">29</span>    &quot;&quot;&quot;
+<span class="ln">30</span>    global xh2, xli6, xli7, xbe9
+<span class="ln">31</span>    n = nmlpar_mod
+<span class="ln">32</span>    if hd[1] &gt;= 5.0:
+<span class="ln">33</span>        # Helium flash: the energy rates at the temperature maximum.
+<span class="ln">34</span>        htmax = 0.0
+<span class="ln">35</span>        itmax = 1
+<span class="ln">36</span>        for it in range(1, m + 1):  # label 210
+<span class="ln">37</span>            if ht[it] &gt; htmax:
+<span class="ln">38</span>                itmax = it
+<span class="ln">39</span>                htmax = ht[it]
+<span class="ln">40</span>        dl = hd[itmax]
+<span class="ln">41</span>        tl = ht[itmax]
+<span class="ln">42</span>        x = hcomp[1, itmax]
+<span class="ln">43</span>        y = hcomp[2, itmax]
+<span class="ln">44</span>        z = hcomp[3, itmax]
+<span class="ln">45</span>        xhe3 = hcomp[4, itmax]
+<span class="ln">46</span>        xc12 = hcomp[5, itmax]
+<span class="ln">47</span>        xc13 = hcomp[6, itmax]
+<span class="ln">48</span>        xn14 = hcomp[7, itmax]
+<span class="ln">49</span>        xn15 = hcomp[8, itmax]
+<span class="ln">50</span>        xo16 = hcomp[9, itmax]
+<span class="ln">51</span>        xo17 = hcomp[10, itmax]
+<span class="ln">52</span>        xo18 = hcomp[11, itmax]
+<span class="ln">53</span>        if n.lexcom:
+<span class="ln">54</span>            xh2 = hcomp[12, itmax]
+<span class="ln">55</span>            xli6 = hcomp[13, itmax]
+<span class="ln">56</span>            xli7 = hcomp[14, itmax]
+<span class="ln">57</span>            xbe9 = hcomp[15, itmax]
+<span class="ln">58</span>        iu = itmax
+<span class="ln">59</span>        # ENGEB&#x27;s set scalars are passed in with any value; BE7MFLOC is not
+<span class="ln">60</span>        # used here.
+<span class="ln">61</span>        (egg11, egg22, egg33, egg44, egg55, qed, qet, sum1, be7mfloc,
+<span class="ln">62</span>         ealpca, enu) = engeb(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, dl,
+<span class="ln">63</span>                              tl, x, y, xhe3, xc12, xc13, xn14, xo16,
+<span class="ln">64</span>                              xo18, xh2, iu, hr1, hr2, hr3, hr4, hr5, hr6,
+<span class="ln">65</span>                              hr7, hr8, hr9, hr10, hr11, hr12, hr13, hf1,
+<span class="ln">66</span>                              hf2, 0.0, 0.0, 0.0)
+<span class="ln">67</span>        e = sum1
+<span class="ln">68</span>        eg[1] = egg11
+<span class="ln">69</span>        eg[2] = egg22
+<span class="ln">70</span>        eg[3] = egg33
+<span class="ln">71</span>        eg[4] = egg44
+<span class="ln">72</span>        eg[5] = egg55
+<span class="ln">73</span>        eg[6] = enu
+<span class="ln">74</span>        eca = ealpca
+<span class="ln">75</span>        if eg[5] &lt; 1.0e-22:
+<span class="ln">76</span>            eg[5] = 1.0e-22
+<span class="ln">77</span>        # Question (see the page): the constant 1e15 and the floor 1e-22.
+<span class="ln">78</span>        deltsy = 1.0e15 / eg[5]
+<span class="ln">79</span>    else:
+<span class="ln">80</span>        # Limits on helium burning for stars outside the flash.
+<span class="ln">81</span>        # Question (see the page): 1 - Z is X + Y, not Y.
+<span class="ln">82</span>        ycore = 1.0 - hcomp[3, jcore]
+<span class="ln">83</span>        if ycore &gt;= n.atime[1]:
+<span class="ln">84</span>            deltsy = min(n.atime[4], n.atime[5] * ycore)
+<span class="ln">85</span>            deltsy = ((5.85e17 / constants_mod.clsun) * deltsy
+<span class="ln">86</span>                      * (hs1[jcore] / hl[jcore]))
+<span class="ln">87</span>        else:
+<span class="ln">88</span>            # Question (see the page): deltsy is the value passed in.
+<span class="ln">89</span>            deltsy = ((5.85e17 / constants_mod.clsun) * deltsy
+<span class="ln">90</span>                      * (hs1[jxbeg - 1] / hl[jxbeg - 1]))
+<span class="ln">91</span>    return deltsy</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings.</p>
+<p>No change.</p></div></details>
+</main></body></html>

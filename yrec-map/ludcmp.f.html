@@ -1,0 +1,232 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>ludcmp.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ ludcmp.f</span></header><main>
+<h1>ludcmp.f</h1>
+<p class='muted'>97 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/ludcmp.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>ludcmp.py</code>, 85 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>LUDCMP</code> replaces a square matrix by its LU decomposition with partial pivoting (Crout's method with implicit scaling), as <em>Numerical Recipes</em>' <code>LUDCMP</code>. <a href="../yrec-map/lubksb.f.html#def-LUBKSB"><code>LUBKSB</code></a> then solves systems with it.</p>
+<p><strong>How it fits.</strong> Called only by <a href="../yrec-map/thdiff.f.html#def-THDIFF"><code>THDIFF</code></a> (the diffusion coefficients of Thoul et al., by its name). No COMMON blocks, no calls. Arguments: <code>A(NP,NP)</code> (overwritten by L and U), <code>N</code>, <code>NP</code>, the row permutation <code>INDX</code>, and <code>D</code> = ±1 (the parity of the row swaps).</p>
+<p><strong>The method.</strong> It first stores each row's scale, $1/\max_k |a_{ik}|$, and stops with <code>STOP 'Singular matrix.'</code> if a row is all zero. Then, for each column $j$ it computes the $U$ entries above the diagonal and the candidates below, picks the pivot with the largest scaled magnitude $|a_{ij}|/\max_k |a_{ik}|$, swaps rows, and divides the sub-diagonal entries by the pivot. A zero pivot is replaced by <code>TINY</code> = $10^{-20}$.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: <code>IMPLICIT NONE</code> with explicit declarations.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Fixed work size.</strong> The scaling vector <code>VV</code> has <code>NMAX</code> = 100 entries and <code>N</code> is not checked against it.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>********************************************************</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-LUDCMP'>LUDCMP</a> <span class='muted'>subroutine · ********************************************************</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-LUDCMP'><h3><span class='kind'>subroutine</span>LUDCMP</h3>
+<p class='muted'>lines 2–97 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/ludcmp.f#L2-L97'>GitHub</a></p>
+<pre>SUBROUTINE LUDCMP(A,N,NP,INDX,D)</pre>
+<div class='notes'><p>LU decomposition with partial pivoting (<em>Numerical Recipes</em>).</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>********************************************************</pre></details>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/thdiff.f.html#def-THDIFF'>THDIFF</a> <span class='muted'>(thdiff.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE LUDCMP(A,N,NP,INDX,D)
+<span class="ln">3</span>C 10/20/26 MHP via Claude
+<span class="ln">4</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">5</span>C explicit declarations.
+<span class="ln">6</span>      IMPLICIT NONE
+<span class="ln">7</span>      REAL*8 A,AAMAX,D,DUM,SUM,TINY,VV
+<span class="ln">8</span>
+<span class="ln">9</span>
+<span class="ln">10</span>C     .. Parameters ..
+<span class="ln">11</span>      INTEGER NMAX
+<span class="ln">12</span>C      REAL TINY
+<span class="ln">13</span>      PARAMETER (NMAX=100,TINY=1.0D-20)
+<span class="ln">14</span>C     ..
+<span class="ln">15</span>C     .. Scalar Arguments ..
+<span class="ln">16</span>C      REAL D
+<span class="ln">17</span>      INTEGER N,NP
+<span class="ln">18</span>C     ..
+<span class="ln">19</span>C     .. Array Arguments ..
+<span class="ln">20</span>      DIMENSION A(NP,NP)
+<span class="ln">21</span>      INTEGER INDX(N)
+<span class="ln">22</span>C     ..
+<span class="ln">23</span>C     .. Local Scalars ..
+<span class="ln">24</span>C      REAL AAMAX,DUM,SUM
+<span class="ln">25</span>      INTEGER I,IMAX,J,K
+<span class="ln">26</span>C     ..
+<span class="ln">27</span>C     .. Local Arrays ..
+<span class="ln">28</span>      DIMENSION VV(NMAX)
+<span class="ln">29</span>      SAVE
+<span class="ln">30</span>C     ..
+<span class="ln">31</span>C     .. Intrinsic Functions ..
+<span class="ln">32</span>      INTRINSIC ABS
+<span class="ln">33</span>C     ..
+<span class="ln">34</span>      D = 1.D0
+<span class="ln">35</span>      DO 12 I = 1,N
+<span class="ln">36</span>          AAMAX = 0.D0
+<span class="ln">37</span>          DO 11 J = 1,N
+<span class="ln">38</span>              IF (ABS(A(I,J)).GT.AAMAX) AAMAX = ABS(A(I,J))
+<span class="ln">39</span>   11     CONTINUE
+<span class="ln">40</span>          IF (AAMAX.EQ.0D0) STOP &#x27;Singular matrix.&#x27;
+<span class="ln">41</span>          VV(I) = 1.D0/AAMAX
+<span class="ln">42</span>   12 CONTINUE
+<span class="ln">43</span>      DO 19 J = 1,N
+<span class="ln">44</span>          IF (J.GT.1) THEN
+<span class="ln">45</span>              DO 14 I = 1,J - 1
+<span class="ln">46</span>                  SUM = A(I,J)
+<span class="ln">47</span>                  IF (I.GT.1) THEN
+<span class="ln">48</span>                      DO 13 K = 1,I - 1
+<span class="ln">49</span>                          SUM = SUM - A(I,K)*A(K,J)
+<span class="ln">50</span>   13                 CONTINUE
+<span class="ln">51</span>                      A(I,J) = SUM
+<span class="ln">52</span>                  END IF
+<span class="ln">53</span>
+<span class="ln">54</span>   14         CONTINUE
+<span class="ln">55</span>          END IF
+<span class="ln">56</span>
+<span class="ln">57</span>          AAMAX = 0.D0
+<span class="ln">58</span>          DO 16 I = J,N
+<span class="ln">59</span>              SUM = A(I,J)
+<span class="ln">60</span>              IF (J.GT.1) THEN
+<span class="ln">61</span>                  DO 15 K = 1,J - 1
+<span class="ln">62</span>                      SUM = SUM - A(I,K)*A(K,J)
+<span class="ln">63</span>   15             CONTINUE
+<span class="ln">64</span>                  A(I,J) = SUM
+<span class="ln">65</span>              END IF
+<span class="ln">66</span>
+<span class="ln">67</span>              DUM = VV(I)*ABS(SUM)
+<span class="ln">68</span>              IF (DUM.GE.AAMAX) THEN
+<span class="ln">69</span>                  IMAX = I
+<span class="ln">70</span>                  AAMAX = DUM
+<span class="ln">71</span>              END IF
+<span class="ln">72</span>
+<span class="ln">73</span>   16     CONTINUE
+<span class="ln">74</span>          IF (J.NE.IMAX) THEN
+<span class="ln">75</span>              DO 17 K = 1,N
+<span class="ln">76</span>                  DUM = A(IMAX,K)
+<span class="ln">77</span>                  A(IMAX,K) = A(J,K)
+<span class="ln">78</span>                  A(J,K) = DUM
+<span class="ln">79</span>   17         CONTINUE
+<span class="ln">80</span>              D = -D
+<span class="ln">81</span>              VV(IMAX) = VV(J)
+<span class="ln">82</span>          END IF
+<span class="ln">83</span>
+<span class="ln">84</span>          INDX(J) = IMAX
+<span class="ln">85</span>          IF (J.NE.N) THEN
+<span class="ln">86</span>              IF (A(J,J).EQ.0D0) A(J,J) = TINY
+<span class="ln">87</span>              DUM = 1.D0/A(J,J)
+<span class="ln">88</span>              DO 18 I = J + 1,N
+<span class="ln">89</span>                  A(I,J) = A(I,J)*DUM
+<span class="ln">90</span>   18         CONTINUE
+<span class="ln">91</span>          END IF
+<span class="ln">92</span>
+<span class="ln">93</span>   19 CONTINUE
+<span class="ln">94</span>      IF (A(N,N).EQ.0D0) A(N,N) = TINY
+<span class="ln">95</span>      RETURN
+<span class="ln">96</span>
+<span class="ln">97</span>      END</pre></details>
+<details class='py' id='py-ludcmp'><summary>Python version: ludcmp</summary><pre class='doc'>LU decomposition with partial pivoting (Crout, implicit scaling).
+
+*Numerical Recipes*&#x27; LUDCMP: ``a`` is replaced by L (below the
+diagonal, unit diagonal implied) and U; ``indx`` records the row
+swaps and ``d`` their parity. LUBKSB then solves systems with it.
+
+Translates: ludcmp.f#LUDCMP (09c3b9b)
+
+Parameters
+----------
+a : ndarray, shape (np_ + 1, np_ + 1)
+    In: the matrix, ``a[i, j]`` for ``A(I, J)``. Out, in place: its
+    LU decomposition.
+n : int
+    The order of the matrix.
+np_ : int
+    The declared size of ``a`` (Fortran&#x27;s ``NP``).
+indx : ndarray of int, shape (n + 1,)
+    Set in place: the row permutation.
+d : float
+    Output only (passed in with any value).
+
+Returns
+-------
+d : float
+    +1 or -1, the parity of the row interchanges.</pre><pre class='src'><span class="ln">9</span>def ludcmp(a, n, np_, indx, d):
+<span class="ln">10</span>    &quot;&quot;&quot;LU decomposition with partial pivoting (Crout, implicit scaling).
+<span class="ln">11</span>
+<span class="ln">12</span>    *Numerical Recipes*&#x27; LUDCMP: ``a`` is replaced by L (below the
+<span class="ln">13</span>    diagonal, unit diagonal implied) and U; ``indx`` records the row
+<span class="ln">14</span>    swaps and ``d`` their parity. LUBKSB then solves systems with it.
+<span class="ln">15</span>
+<span class="ln">16</span>    Translates: ludcmp.f#LUDCMP (09c3b9b)
+<span class="ln">17</span>
+<span class="ln">18</span>    Parameters
+<span class="ln">19</span>    ----------
+<span class="ln">20</span>    a : ndarray, shape (np_ + 1, np_ + 1)
+<span class="ln">21</span>        In: the matrix, ``a[i, j]`` for ``A(I, J)``. Out, in place: its
+<span class="ln">22</span>        LU decomposition.
+<span class="ln">23</span>    n : int
+<span class="ln">24</span>        The order of the matrix.
+<span class="ln">25</span>    np_ : int
+<span class="ln">26</span>        The declared size of ``a`` (Fortran&#x27;s ``NP``).
+<span class="ln">27</span>    indx : ndarray of int, shape (n + 1,)
+<span class="ln">28</span>        Set in place: the row permutation.
+<span class="ln">29</span>    d : float
+<span class="ln">30</span>        Output only (passed in with any value).
+<span class="ln">31</span>
+<span class="ln">32</span>    Returns
+<span class="ln">33</span>    -------
+<span class="ln">34</span>    d : float
+<span class="ln">35</span>        +1 or -1, the parity of the row interchanges.
+<span class="ln">36</span>    &quot;&quot;&quot;
+<span class="ln">37</span>    # The scale vector VV has a fixed size NMAX, and n is not checked
+<span class="ln">38</span>    # against it (question on the page).
+<span class="ln">39</span>    vv = np.zeros(NMAX + 1)
+<span class="ln">40</span>    imax = 0
+<span class="ln">41</span>    d = 1.0
+<span class="ln">42</span>    for i in range(1, n + 1):  # loop 12
+<span class="ln">43</span>        aamax = 0.0
+<span class="ln">44</span>        for j in range(1, n + 1):  # loop 11
+<span class="ln">45</span>            if abs(a[i, j]) &gt; aamax:
+<span class="ln">46</span>                aamax = abs(a[i, j])
+<span class="ln">47</span>        if aamax == 0.0:
+<span class="ln">48</span>            raise SystemExit(&quot;Singular matrix.&quot;)
+<span class="ln">49</span>        vv[i] = 1.0 / aamax
+<span class="ln">50</span>    for j in range(1, n + 1):  # loop 19
+<span class="ln">51</span>        if j &gt; 1:
+<span class="ln">52</span>            for i in range(1, j):  # loop 14
+<span class="ln">53</span>                sum_ = a[i, j]
+<span class="ln">54</span>                if i &gt; 1:
+<span class="ln">55</span>                    for k in range(1, i):  # loop 13
+<span class="ln">56</span>                        sum_ = sum_ - a[i, k] * a[k, j]
+<span class="ln">57</span>                    a[i, j] = sum_
+<span class="ln">58</span>        aamax = 0.0
+<span class="ln">59</span>        for i in range(j, n + 1):  # loop 16
+<span class="ln">60</span>            sum_ = a[i, j]
+<span class="ln">61</span>            if j &gt; 1:
+<span class="ln">62</span>                for k in range(1, j):  # loop 15
+<span class="ln">63</span>                    sum_ = sum_ - a[i, k] * a[k, j]
+<span class="ln">64</span>                a[i, j] = sum_
+<span class="ln">65</span>            dum = vv[i] * abs(sum_)
+<span class="ln">66</span>            if dum &gt;= aamax:
+<span class="ln">67</span>                imax = i
+<span class="ln">68</span>                aamax = dum
+<span class="ln">69</span>        if j != imax:
+<span class="ln">70</span>            for k in range(1, n + 1):  # loop 17
+<span class="ln">71</span>                dum = a[imax, k]
+<span class="ln">72</span>                a[imax, k] = a[j, k]
+<span class="ln">73</span>                a[j, k] = dum
+<span class="ln">74</span>            d = -d
+<span class="ln">75</span>            vv[imax] = vv[j]
+<span class="ln">76</span>        indx[j] = imax
+<span class="ln">77</span>        if j != n:
+<span class="ln">78</span>            if a[j, j] == 0.0:
+<span class="ln">79</span>                a[j, j] = TINY
+<span class="ln">80</span>            dum = 1.0 / a[j, j]
+<span class="ln">81</span>            for i in range(j + 1, n + 1):  # loop 18
+<span class="ln">82</span>                a[i, j] = a[i, j] * dum
+<span class="ln">83</span>    if a[n, n] == 0.0:
+<span class="ln">84</span>        a[n, n] = TINY
+<span class="ln">85</span>    return d</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing.</strong> The hard stop: a row of zeros ends the run with <code>STOP 'Singular matrix.'</code> (ludcmp.f:36). Fix: add to the method.</li>
+</ol>
+<p>Revised: the stop added to the method.</p></div></details>
+</main></body></html>

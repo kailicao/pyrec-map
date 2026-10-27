@@ -1,0 +1,140 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>aeos06_mod.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ aeos06_mod.f</span></header><main>
+<h1>aeos06_mod.f</h1>
+<p class='muted'>52 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/aeos06_mod.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>aeos06_mod.py</code>, 31 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>AEOS06_MOD</code> holds the OPAL 2006 equation-of-state tables and their grids, shared by 5 routines. It replaces <code>COMMON/AEOS06/</code> (MHP via Claude, 10/20/26), whose member <code>M</code> is now named <code>MIDX</code>; the table dimensions (<code>MX</code> = 5, <code>MV</code> = 10, <code>NR</code> = 169, <code>NT</code> = 197) are private to the module, since each user declares its own.</p>
+<p><strong>What its variables hold, who sets them, who reads them.</strong></p>
+<ul>
+<li><code>XZ(MX,MV,NT,NR)</code>: the tables, for each of the five $X$ values, ten quantities on the $(T_6, \rho)$ grid; read in by <a href="../yrec-map/readcoeos06.f.html#def-READCOEOS06"><code>READCOEOS06</code></a>, read by <a href="../yrec-map/esac06.f.html#def-ESAC06"><code>ESAC06</code></a> and <a href="../yrec-map/rhoofp06.f.html#def-RHOOFP06"><code>RHOOFP06</code></a>.</li>
+<li><code>T6LIST(NR,NT)</code>, <code>RHO(NR)</code>, <code>T6A(NT)</code>: the grids, from <code>READCOEOS06</code>; read by <code>ESAC06</code>, <code>RHOOFP06</code>, <a href="../yrec-map/eqbound06.f.html#def-EQBOUND06"><code>EQBOUND06</code></a> and <a href="../yrec-map/t6rinteos06.f.html#def-T6RINTEOS06"><code>T6RINTEOS06</code></a>.</li>
+<li><code>DFSX(MX)</code>, <code>DFS(NT)</code>, <code>DFSR(NR)</code>: inverse grid spacings in $X$, $T_6$ and $\rho$, set by <code>READCOEOS06</code>; read by <code>ESAC06</code> and <code>T6RINTEOS06</code>.</li>
+<li><code>ESK(NT,NR)</code>, <code>ESK2(NT,NR)</code>: values interpolated in $X$, set by <code>ESAC06</code> and read by it and <code>T6RINTEOS06</code>.</li>
+<li><code>MIDX</code>: read from the table file by <code>READCOEOS06</code>; <code>MF</code>: the $X$ index, set in <code>ESAC06</code>.</li>
+<li><code>XA(MX)</code>: the five $X$ values, 0, 0.2, 0.4, 0.6, 0.8 (a <code>DATA</code> statement moved from <code>ESAC06</code>); read by <code>ESAC06</code> and <code>RHOOFP06</code>.</li>
+</ul>
+<p><strong>Design.</strong> A blanket <code>USE AEOS06_MOD</code>; the table alone holds $5 \times 10 \times 197 \times 169$ values (about 13 MB).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> New file: <code>COMMON/AEOS06/</code> as a module, <code>M</code> renamed <code>MIDX</code>, <code>XA</code>'s values moved from ESAC06.</p></div>
+<h2>Questions for the experts</h2>
+<p class='placeholder'>None yet.</p>
+<h2>Header comments</h2>
+<pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+AEOS06_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/20/26 MHP via Claude
+code changed to convert COMMON/AEOS06/ into this module, completing
+stages 3 and 4 (KNOWN_ISSUES.md issue 37).
+
+Imported with a blanket USE, the convention for the conversion.
+All 6 declarations of this block were identical, so the USE
+imports exactly the names the declaration already made global in
+each scoping unit and cannot change meaning.
+
+The types restate what every declaring unit already gave them
+explicitly: MIDX and MF are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while ifort
+Classic predates it.  That matches COMMON&#x27;s semantics.
+
+The dimension parameters are PRIVATE: they are OPAL06 table
+dimensions, which each importing unit also declares (issue 10).
+
+XA&#x27;s initializer moved here from esac06.f, because DATA on a
+USE-associated name is rejected.  The literal text is copied
+verbatim, so the stored values are unchanged.</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-AEOS06_MOD'>AEOS06_MOD</a> <span class='muted'>module · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-AEOS06_MOD'><h3><span class='kind'>module</span>AEOS06_MOD</h3>
+<p class='muted'>lines 27–52 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/aeos06_mod.f#L27-L52'>GitHub</a></p>
+<pre>MODULE AEOS06_MOD</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+AEOS06_MOD
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+10/20/26 MHP via Claude
+code changed to convert COMMON/AEOS06/ into this module, completing
+stages 3 and 4 (KNOWN_ISSUES.md issue 37).
+
+Imported with a blanket USE, the convention for the conversion.
+All 6 declarations of this block were identical, so the USE
+imports exactly the names the declaration already made global in
+each scoping unit and cannot change meaning.
+
+The types restate what every declaring unit already gave them
+explicitly: MIDX and MF are INTEGER*4, everything else REAL*8.
+SAVE is explicit rather than relying on module variables being
+implicitly saved, which holds only from Fortran 2008 while ifort
+Classic predates it.  That matches COMMON&#x27;s semantics.
+
+The dimension parameters are PRIVATE: they are OPAL06 table
+dimensions, which each importing unit also declares (issue 10).
+
+XA&#x27;s initializer moved here from esac06.f, because DATA on a
+USE-associated name is rejected.  The literal text is copied
+verbatim, so the stored values are unchanged.</pre></details>
+<details><summary>Used by (6 units)</summary><p><a href='../yrec-map/eqbound06.f.html#def-EQBOUND06'>EQBOUND06</a>, <a href='../yrec-map/esac06.f.html#def-ESAC06'>ESAC06</a>, <a href='../yrec-map/readcoeos06.f.html#def-READCOEOS06'>READCOEOS06</a>, <a href='../yrec-map/rhoofp06.f.html#def-RHOOFP06'>RHOOFP06</a>, <a href='../yrec-map/esac06.f.html#def-SETEOS06'>SETEOS06</a>, <a href='../yrec-map/t6rinteos06.f.html#def-T6RINTEOS06'>T6RINTEOS06</a></p></details>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">27</span>      MODULE AEOS06_MOD
+<span class="ln">28</span>
+<span class="ln">29</span>      IMPLICIT NONE
+<span class="ln">30</span>      SAVE
+<span class="ln">31</span>
+<span class="ln">32</span>      INTEGER*4, PARAMETER, PRIVATE :: MX = 5
+<span class="ln">33</span>      INTEGER*4, PARAMETER, PRIVATE :: MV = 10
+<span class="ln">34</span>      INTEGER*4, PARAMETER, PRIVATE :: NR = 169
+<span class="ln">35</span>      INTEGER*4, PARAMETER, PRIVATE :: NT = 197
+<span class="ln">36</span>
+<span class="ln">37</span>      REAL*8    :: XZ(MX,MV,NT,NR)
+<span class="ln">38</span>      REAL*8    :: T6LIST(NR,NT)
+<span class="ln">39</span>      REAL*8    :: RHO(NR)
+<span class="ln">40</span>      REAL*8    :: T6A(NT)
+<span class="ln">41</span>      REAL*8    :: ESK(NT,NR)
+<span class="ln">42</span>      REAL*8    :: ESK2(NT,NR)
+<span class="ln">43</span>      REAL*8    :: DFSX(MX)
+<span class="ln">44</span>      REAL*8    :: DFS(NT)
+<span class="ln">45</span>      REAL*8    :: DFSR(NR)
+<span class="ln">46</span>      INTEGER*4 :: MIDX
+<span class="ln">47</span>      INTEGER*4 :: MF
+<span class="ln">48</span>      REAL*8    :: XA(MX)
+<span class="ln">49</span>
+<span class="ln">50</span>      DATA XA/0.0,0.2,0.4,0.6,0.8/
+<span class="ln">51</span>
+<span class="ln">52</span>      END MODULE AEOS06_MOD</pre></details>
+<details class='py' id='py-_module_level_'><summary>Python version: aeos06_mod.py</summary><pre class='src'><span class="ln">1</span>&quot;&quot;&quot;Python version of aeos06_mod.f (YREC 09c3b9b): the OPAL 2006 equation-of-state tables and grids, formerly COMMON/AEOS06/.
+<span class="ln">2</span>
+<span class="ln">3</span>Translates: aeos06_mod.f#AEOS06_MOD (09c3b9b)
+<span class="ln">4</span>
+<span class="ln">5</span>Module-level names, as in the Fortran module, in lower case. Routines that
+<span class="ln">6</span>USE AEOS06_MOD import this module and write ``aeos06_mod.&lt;name&gt;``.
+<span class="ln">7</span>&quot;&quot;&quot;
+<span class="ln">8</span>
+<span class="ln">9</span>import numpy as np
+<span class="ln">10</span>
+<span class="ln">11</span># Table dimensions (PRIVATE in the Fortran).
+<span class="ln">12</span>_MX = 5
+<span class="ln">13</span>_MV = 10
+<span class="ln">14</span>_NR = 169
+<span class="ln">15</span>_NT = 197
+<span class="ln">16</span>
+<span class="ln">17</span>xz = np.zeros((_MX + 1, _MV + 1, _NT + 1, _NR + 1))   # the tables (readcoeos06)
+<span class="ln">18</span>t6list = np.zeros((_NR + 1, _NT + 1))
+<span class="ln">19</span>rho = np.zeros(_NR + 1)            # density grid (readcoeos06)
+<span class="ln">20</span>t6a = np.zeros(_NT + 1)            # T6 grid (readcoeos06)
+<span class="ln">21</span>esk = np.zeros((_NT + 1, _NR + 1))   # values interpolated in X (esac06)
+<span class="ln">22</span>esk2 = np.zeros((_NT + 1, _NR + 1))
+<span class="ln">23</span>dfsx = np.zeros(_MX + 1)           # inverse spacings in X, T6, rho
+<span class="ln">24</span>dfs = np.zeros(_NT + 1)
+<span class="ln">25</span>dfsr = np.zeros(_NR + 1)
+<span class="ln">26</span>midx = 0                           # formerly M (readcoeos06)
+<span class="ln">27</span>mf = 0                             # the X index (esac06)
+<span class="ln">28</span># The X values of the tables, index 0 unused (DATA, from esac06; the
+<span class="ln">29</span># Fortran&#x27;s single-precision literals, as stored in REAL*8).
+<span class="ln">30</span>xa = np.array([0.0, 0.0, np.float32(0.2), np.float32(0.4),
+<span class="ln">31</span>               np.float32(0.6), np.float32(0.8)], dtype=float)</pre></details>
+</section>
+</main></body></html>

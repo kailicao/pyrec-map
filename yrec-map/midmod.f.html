@@ -1,0 +1,899 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>midmod.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ midmod.f</span></header><main>
+<h1>midmod.f</h1>
+<p class='muted'>523 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/midmod.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>midmod.py</code>, 321 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> In the rotational-mixing and angular-momentum transport loop, a model time step is divided into shorter "diffusion" steps. <code>MIDMOD</code> builds the structure at an intermediate time of the model step by linear interpolation between the old model (start of the step) and the new one (end of the step). Its comments say it also accounts for nuclear burning, recomputes the angular velocity from the conserved specific angular momentum, and finds the edges of the central and surface convection zones and the moment of inertia of the surface convection zone.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the new model in the arguments (<code>HD</code>, <code>HL</code>, <code>HP</code>, <code>HR</code>, <code>HT</code>, <code>HG</code>, the convection flags <code>LC</code>); the old model in <code>OLDMOD_MOD</code>, <code>OLDPHY_MOD</code> and <code>OLDROT_MOD</code> (<code>HGO</code>); the new auxiliary physics in <code>SCRTCH_MOD</code> (<code>SDEL</code>, <code>SESUM</code>, <code>SEG</code>, <code>SO</code>, <code>SVEL</code>) and <code>TEMP_MOD</code> (<code>CP</code>, <code>HAMU</code>, <code>SQDT</code>, <code>THDIF</code>, <code>VISC</code>); the fraction of the step <code>FX</code> and the diffusion step <code>DT</code> (of the model step <code>DELTS</code>); the specific angular momentum <code>HJM</code>.</li>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/getw.f.html#def-GETW">GETW</a>, once per diffusion step, with <code>FX = SUMDT/DELTS</code>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/ovrot.f.html#def-OVROT">OVROT</a> (convective overshoot for the mixing zones), <a href="../yrec-map/rotmix.f.html#def-ROTMIX">ROTMIX</a> (burning and mixing over the short step), <a href="../yrec-map/dburnm.f.html#def-DBURNM">DBURNM</a> (deuterium burning), and <a href="../yrec-map/getrot.f.html#def-GETROT">GETROT</a> or <a href="../yrec-map/solid.f.html#def-SOLID">SOLID</a> (the rotation variables).</li>
+<li><strong>Outputs:</strong> the intermediate structure (<code>HDM</code>, <code>HLM</code>, <code>HPM</code>, <code>HRM</code>, <code>HTM</code>, <code>HGM</code>, <code>LCM</code>, <code>LCZM</code>), the rotation variables (<code>OMEGAM</code>, <code>HIM</code>, <code>ETA2M</code>, <code>QIWM</code>, <code>R0M</code>), <code>IMIN</code>, <code>IMAX</code>, <code>HSTOP</code>, <code>HSBOT</code>, <code>HICZ</code>, <code>LCZSUR</code>, <code>LALLCZ</code>, the mixing zones (<code>MRZONE</code>, <code>MXZONE</code>, <code>NRZONE</code>, <code>NZONE</code>), and the interpolated physics in <code>MDPHY_MOD</code> (<code>DELM</code>, <code>DELAM</code>, <code>DELRM</code>, <code>VELM</code>, <code>VISCM</code>, <code>THDIFM</code>, <code>CPM</code>, <code>QDTM</code>, <code>OM</code>, <code>AMUM</code>, <code>EPSM</code>, <code>ESUMM</code>), which GETW and the transport routines (<a href="../yrec-map/codiff.f.html#def-CODIFF">CODIFF</a>, <a href="../yrec-map/mixgrid.f.html#def-MIXGRID">MIXGRID</a>, <a href="../yrec-map/mixcz.f.html#def-MIXCZ">MIXCZ</a> and others) read. It saves the composition after mixing in the argument <code>HCOMPS</code> (formerly <code>/OLDAB/</code>), an array GETW owns and passes on to <a href="../yrec-map/seculr.f.html#def-SECULR">SECULR</a>.</li>
+<li><strong>Modules:</strong> <code>NMLPAR_MOD</code> (<code>LSOLID</code>, <code>IMPJMOD</code>, <code>TCUT</code>, <code>LEXCOM</code>), <code>DEUTER_MOD</code> (<code>DRATE</code>, <code>DRATE0</code>), <code>CONSTANTS_MOD</code> (<code>CLN</code>, <code>CC23</code>, <code>CMSUN</code>), <code>OLDROT_MOD</code> (the old model's <code>HGO</code>) and the modules above. The values of the previous intermediate step (<code>DDELP</code>, <code>DDELN</code>, <code>HRP</code>, <code>LCP</code>, formerly <code>/PREVMID/</code>) are local saved arrays.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>The first diffusion step</strong> (<code>LFIRSTIT</code>): <code>HCOMP</code> (rows 1–11, or 1–15 with <code>LEXCOM</code>) is reset to the old model's composition <code>HCOMPP</code>, and <code>AMUM</code> to <code>AMUO</code>, so that burning and mixing start from the start of the model step.</li>
+<li>
+<p><strong>Interpolation in time.</strong> For each variable $q$ (logarithmic structure variables and the physics),
+$$q_\mathrm{mid} = q_\mathrm{old} + f\,(q_\mathrm{new} - q_\mathrm{old}),\qquad f = \texttt{FX}.$$
+The mean molecular weight <code>AMUM</code> is instead incremented: $\mu_\mathrm{mid} \mathrel{+}= (\Delta t/\Delta t_\mathrm{model})(\mu_\mathrm{new}-\mu_\mathrm{old})$. The total energy generation <code>EPSM</code> interpolates <code>SESUM + SEG(6) + SEG(7)</code>.</p>
+</li>
+<li>
+<p><strong>Convection.</strong> A shell keeps its convective state if it is the same at both ends of the step; otherwise it is convective if $\nabla_\mathrm{ad} &lt; \nabla_\mathrm{rad}$ at the intermediate time, with the larger of the two convective velocities.</p>
+</li>
+<li><strong>Receding convection zones</strong> (MHP 06/02): a block meant to correct the specific angular momentum of shells that leave a convection zone during the step. It is never run (question 1).</li>
+<li><strong>Mixing and burning.</strong> <code>OVROT</code> sets the mixed zones with overshoot; <code>ROTMIX</code> burns and mixes over <code>DT</code>, using the intermediate temperature <code>HTM</code> "for thermodynamic consistency" (MHP 6/00). If the surface deuterium abundance at the start of the step (<code>HCOMPP(12,M)</code>) exceeds $10^{-14}$, the deuterium rate is interpolated and burnt by <code>DBURNM</code>, shell by shell in radiative zones (down to the burning cutoff <code>TCUT(1)</code>) and zone by zone in convective ones.</li>
+<li><strong>Convection zone edges.</strong> <code>IMIN</code> $= \max(2, I-1)$, where $I$ is the first shell that is not convective, so it is the outermost shell of a central convection zone (the comment calls it "the first zone above" it; question 7), or 2; <code>IMAX</code> the lowest shell of the surface convection zone (or <code>M</code>). <code>HSTOP</code> is the total mass, <code>HSBOT</code> the mass at the base of the surface zone.</li>
+<li><strong>Rotation.</strong> Unless rotation is forced to be solid (<code>LSOLID</code>, or <code>IMPJMOD = 1</code>), the first guess of each shell's moment of inertia per unit mass is that of a thin spherical shell, $i = \tfrac23 r^2$, so $\Omega = j/i$; <code>GETROT</code> then solves for the distorted shells. <code>HICZ</code> sums the moments of inertia of the surface convection zone. For solid rotation, <code>SOLID</code> gives the run, and <code>HICZ</code> sums all shells.</li>
+</ol>
+<p><strong>Design.</strong> A long block for a local convective turnover time (MHP 3/09) is commented out; <a href="../yrec-map/getw.f.html#def-GETW">GETW</a> and other routines handle <code>TAUCZ</code> through <code>OVRTRN_MOD</code>. The routine prints to the screen (<code>WRITE(*,*)</code>) inside the dead block only.</p>
+<p><strong>KC's changes.</strong> 2025-05-31: the unused argument <code>LCZ</code> removed, and the unused argument <code>5</code> removed from the call to <code>ROTMIX</code>.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> <code>HCOMPS</code> is a new last argument (formerly <code>/OLDAB/</code>), and <code>LFIRST</code> is renamed <code>LFIRSTIT</code>; COMMON blocks to modules (the unused <code>/BURN/</code>, <code>/CWIND/</code>, <code>/DWMAX/</code>, <code>/OVRTRN/</code> and <code>/CTLIM/</code> are gone, <code>TCUT</code> now from <code>NMLPAR_MOD</code>; <code>/PREVMID/</code> to local saved arrays), <code>IMPLICIT NONE</code>. No question is settled.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Dead code: the receding convection zone.</strong> <code>LNEWCZ</code> is set by loop 50 when any shell changes state, but then reset to <code>.FALSE.</code> at line 141, just before <code>IF(LNEWCZ)</code>. The whole block that corrects $j$ for shells leaving a convection zone never runs. Was it switched off on purpose? If it is revived: (a) it overwrites the argument <code>FX</code>, which the caller uses; (b) <code>RR = HJM2/HJM(J)</code> is computed after <code>HJM(J) = HJM2</code>, so it is always 1; (c) the moment of inertia uses <code>HR(II)-HRO(II)</code> for the zone but <code>HR(J)-HRP(J)</code> for the shell; (d) in the envelope branch $J$ is summed over <code>J+1..ICZ1</code> but rescaled over <code>J+1..M</code>.</li>
+<li><strong>The mean molecular weight.</strong> <code>AMUM</code> is incremented by <code>FAC2*(HAMU - AMUO)</code> at every call rather than interpolated, so after the steps of one model step it reaches $\mu_\mathrm{old}+\sum(\Delta t/\Delta t_\mathrm{model})(\mu_\mathrm{new}-\mu_\mathrm{old})$, which is $\mu_\mathrm{new}$ only if the steps sum to the model step. Intended?</li>
+<li><strong>Burning "accounted for here".</strong> The header says nuclear burning is accounted for here, but the update of <code>HCOMP</code> by <code>HCOMPM</code> (<code>/BURN/</code>) is commented out; burning now happens inside <code>ROTMIX</code>. The header could be updated.</li>
+<li><strong><code>LCZSUR</code>.</strong> The test <code>(HSTOP-HSBOT)/CMSUN .GT. 0</code> is true for any surface convection zone; the comment speaks of one "deep enough for angular momentum loss". Was a threshold intended?</li>
+<li><strong>Deuterium in radiative zones.</strong> <code>GOTO 190</code> leaves both loops at the first shell below <code>TCUT(1)</code>, so the remaining radiative zones (which may be hotter, deeper ones listed later) are skipped. Are the zones always ordered so that this is safe?</li>
+<li><strong><code>HICZ</code> for solid rotation.</strong> With solid rotation, <code>HICZ</code> is the moment of inertia of the whole star, not of the surface convection zone. Intended, since a solid body couples everything?</li>
+<li><strong><code>IMIN</code>.</strong> The comment says <code>IMIN</code> "is the first zone above a central convection zone", but <code>IMIN = MAX(2,I-1)</code> with <code>I</code> the first non-convective shell is the last convective one. Which is meant, given that <code>IMIN</code> is the first zone tested for rotational instabilities?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-MIDMOD'>MIDMOD</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-MIDMOD'><h3><span class='kind'>subroutine</span>MIDMOD</h3>
+<p class='muted'>lines 2–523 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/midmod.f#L2-L523'>GitHub</a></p>
+<pre>SUBROUTINE MIDMOD(DELTS,DT,FX,HCOMP,HD,HG,HJM,HL,HP,HR,HS,HS1,</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/deuter_mod.f.html#def-DEUTER_MOD'>DEUTER_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/mdphy_mod.f.html#def-MDPHY_MOD'>MDPHY_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/oldmod_mod.f.html#def-OLDMOD_MOD'>OLDMOD_MOD</a>, <a href='../yrec-map/oldphy_mod.f.html#def-OLDPHY_MOD'>OLDPHY_MOD</a>, <a href='../yrec-map/oldrot_mod.f.html#def-OLDROT_MOD'>OLDROT_MOD</a>, <a href='../yrec-map/scrtch_mod.f.html#def-SCRTCH_MOD'>SCRTCH_MOD</a>, <a href='../yrec-map/temp_mod.f.html#def-TEMP_MOD'>TEMP_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/dburnm.f.html#def-DBURNM'>DBURNM</a> <span class='muted'>(dburnm.f)</span> ×2</li>
+<li><a href='../yrec-map/getrot.f.html#def-GETROT'>GETROT</a> <span class='muted'>(getrot.f)</span></li>
+<li><a href='../yrec-map/ovrot.f.html#def-OVROT'>OVROT</a> <span class='muted'>(ovrot.f)</span></li>
+<li><a href='../yrec-map/rotmix.f.html#def-ROTMIX'>ROTMIX</a> <span class='muted'>(rotmix.f)</span></li>
+<li><a href='../yrec-map/solid.f.html#def-SOLID'>SOLID</a> <span class='muted'>(solid.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/getw.f.html#def-GETW'>GETW</a> <span class='muted'>(getw.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">2</span>      SUBROUTINE MIDMOD(DELTS,DT,FX,HCOMP,HD,HG,HJM,HL,HP,HR,HS,HS1,
+<span class="ln">3</span>C      *            HS2,HSTOT,HT,LC,LCZ,LFIRSTIT,M,ETA2M,HDM,HGM,HICZ,HIM,  ! KC 2025-05-31
+<span class="ln">4</span>     *            HS2,HSTOT,HT,LC,LFIRSTIT,M,ETA2M,HDM,HGM,HICZ,HIM,
+<span class="ln">5</span>     *            HLM,HPM,HRM,HSBOT,HSTOP,HTM,IMIN,IMAX,LALLCZ,LCM,
+<span class="ln">6</span>     *            LCZM,LCZSUR,OMEGAM,R0M,QIWM,MRZONE,MXZONE,NRZONE,
+<span class="ln">7</span>     *            NZONE,HCOMPS)
+<span class="ln">8</span>C 10/15/26 MHP via Claude
+<span class="ln">9</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">10</span>C PARAMETER(JSON=5000) here.
+<span class="ln">11</span>      USE DIMENSIONS_MOD
+<span class="ln">12</span>C 10/14/26 MHP via Claude
+<span class="ln">13</span>C code changed to convert COMMON/TEMP/ into TEMP_MOD.
+<span class="ln">14</span>      USE TEMP_MOD
+<span class="ln">15</span>C 10/14/26 MHP via Claude
+<span class="ln">16</span>C code changed to convert COMMON/SCRTCH/ into SCRTCH_MOD.
+<span class="ln">17</span>      USE SCRTCH_MOD
+<span class="ln">18</span>C 10/14/26 MHP via Claude
+<span class="ln">19</span>C code changed to convert COMMON/OLDROT/ into OLDROT_MOD.
+<span class="ln">20</span>      USE OLDROT_MOD
+<span class="ln">21</span>C 10/14/26 MHP via Claude
+<span class="ln">22</span>C code changed to convert COMMON/OLDPHY/ into OLDPHY_MOD.
+<span class="ln">23</span>      USE OLDPHY_MOD
+<span class="ln">24</span>C 10/14/26 MHP via Claude
+<span class="ln">25</span>C code changed to convert COMMON/OLDMOD/ into OLDMOD_MOD.
+<span class="ln">26</span>      USE OLDMOD_MOD
+<span class="ln">27</span>C 10/14/26 MHP via Claude
+<span class="ln">28</span>C code changed to convert COMMON/MDPHY/ into MDPHY_MOD.
+<span class="ln">29</span>      USE MDPHY_MOD
+<span class="ln">30</span>C 10/14/26 MHP via Claude
+<span class="ln">31</span>C code changed to convert COMMON/DEUTER/ into DEUTER_MOD.
+<span class="ln">32</span>      USE DEUTER_MOD
+<span class="ln">33</span>C 10/14/26 MHP via Claude
+<span class="ln">34</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">35</span>      USE NMLPAR_MOD
+<span class="ln">36</span>C 10/14/26 MHP via Claude
+<span class="ln">37</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">38</span>      USE CONSTANTS_MOD
+<span class="ln">39</span>C 10/20/26 MHP via Claude
+<span class="ln">40</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">41</span>C explicit declarations.
+<span class="ln">42</span>      IMPLICIT NONE
+<span class="ln">43</span>      REAL*8 CZI,CZJ,DDELN,DDELP,DELJ,DELTS,DRATEM,DRATEM0,DT,ETA2M,F2,
+<span class="ln">44</span>     *       FAC2,FX,HCOMP,HCOMPS,HD,HDM,HG,HGM,HICZ,HIM,HJM,HJM2,HL,
+<span class="ln">45</span>     *       HLM,HP,HPM,HR,HRM,HRP,HRR,HRSH,HS,HS1,HS2,HSBOT,HSTOP,
+<span class="ln">46</span>     *       HSTOT,HT,HTM,OMEGAM,QIWM,R0M,RATIO,RR,TEMP
+<span class="ln">47</span>      INTEGER I,I0,I1,IBEGIN,ICZ0,ICZ1,IEND,II,IMAX,IMIN,IND,J,JEND,
+<span class="ln">48</span>     *       JSTART,K,M,MRZONE,MXZONE,NRZONE,NZONE
+<span class="ln">49</span>      LOGICAL*4 LALLCZ,LC,LCC,LCM,LCP,LCZM,LCZSUR,LDO,LFIRSTIT,LNEWCZ
+<span class="ln">50</span>
+<span class="ln">51</span>C 10/13/26 MHP via Claude
+<span class="ln">52</span>C HCOMPS is now a dummy argument, formerly COMMON/OLDAB/.
+<span class="ln">53</span>      DIMENSION HCOMPS(15,JSON)
+<span class="ln">54</span>C 10/13/26 MHP via Claude: removed the unused COMMON/BURN/ declaration
+<span class="ln">55</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">56</span>C 9/25/26 MHP via Claude
+<span class="ln">57</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">58</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">59</span>C MHP 8/17 ADDED EXCEN, C_2 TO COMMON BLOCK FOR MATT ET AL. 2012 CENT. TERM
+<span class="ln">60</span>C 10/12/26 MHP via Claude
+<span class="ln">61</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">62</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">63</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">64</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">65</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">66</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">67</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">68</span>C
+<span class="ln">69</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">70</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">71</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">72</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CWIND/ declaration
+<span class="ln">73</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">74</span>C 10/13/26 MHP via Claude: removed the unused COMMON/DWMAX/ declaration
+<span class="ln">75</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">76</span>C 10/13/26 MHP via Claude
+<span class="ln">77</span>C code changed to replace COMMON/OLDAB/ with an explicit argument: midmod.f
+<span class="ln">78</span>C fills HCOMPS and seculr.f reads it, both called only from getw.f, which
+<span class="ln">79</span>C now owns the storage.
+<span class="ln">80</span>C MHP 05/02 ADDED FOR DEUTERIUM BURNING
+<span class="ln">81</span>C 10/13/26 MHP via Claude
+<span class="ln">82</span>C code changed to drop COMMON/CTLIM/, declared here but never used.
+<span class="ln">83</span>C MHP 06/02
+<span class="ln">84</span>C 10/9/26 MHP via Claude
+<span class="ln">85</span>C code changed to convert COMMON/PREVMID/ to plain local arrays:
+<span class="ln">86</span>C declared only in this file (confirmed via a codebase-wide scan), so
+<span class="ln">87</span>C there&#x27;s nothing to share via COMMON. The existing blanket SAVE
+<span class="ln">88</span>C statement below already preserves their values across calls, same
+<span class="ln">89</span>C as COMMON did. LCP keeps its LOGICAL*4 type via the IMPLICIT
+<span class="ln">90</span>C LOGICAL*4(L) rule already in effect in this file.
+<span class="ln">91</span>      DIMENSION DDELP(JSON),DDELN(JSON),HRP(JSON),LCP(JSON)
+<span class="ln">92</span>      DIMENSION HCOMP(15,JSON),HD(JSON),HG(JSON),HJM(JSON),HL(JSON),
+<span class="ln">93</span>     *     HP(JSON),HR(JSON),HS(JSON),HS1(JSON),HS2(JSON),HT(JSON),
+<span class="ln">94</span>C      *     LC(JSON),LCZ(JSON),ETA2M(JSON),HDM(JSON),HGM(JSON),  ! KC 2025-05-31
+<span class="ln">95</span>     *     LC(JSON),ETA2M(JSON),HDM(JSON),HGM(JSON),
+<span class="ln">96</span>     *     HIM(JSON),HLM(JSON),HPM(JSON),HRM(JSON),HTM(JSON),
+<span class="ln">97</span>     *     LCM(JSON),LCZM(JSON),OMEGAM(JSON),R0M(JSON),QIWM(JSON),
+<span class="ln">98</span>     *     MRZONE(13,2),MXZONE(12,2)
+<span class="ln">99</span>C G Somers 3/17, ADDING NEW TAUCZ COMMON BLOCK
+<span class="ln">100</span>C 10/13/26 MHP via Claude: removed the unused COMMON/OVRTRN/ declaration
+<span class="ln">101</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">102</span>C MHP 3/09 ADDED FLAG TO ENFORCE SOLID BODY ROTATION AT ALL TIMES.
+<span class="ln">103</span>C JNT 09/25 FOR 05/15 ADD IMPJMOD
+<span class="ln">104</span>C MHP 06/02
+<span class="ln">105</span>      LOGICAL*4 LCHG(JSON)
+<span class="ln">106</span>C ADDED VECTOR FOR DEUTERIUM BURNING
+<span class="ln">107</span>      DIMENSION DRATEM(JSON),DRATEM0(JSON)
+<span class="ln">108</span>      SAVE
+<span class="ln">109</span>C IN GENERAL A DIFFUSION TIMESTEP IS LESS THAN A MODEL TIMESTEP.
+<span class="ln">110</span>C SR MIDMOD TAKES THE STRUCTURE AT THE BEGINNING AND END OF THE TIMESTEP
+<span class="ln">111</span>C AND ASSIGNS AN INTERMEDIATE STRUCTURE USING LINEAR INTERPOLATION IN TIME.
+<span class="ln">112</span>C NUCLEAR BURNING IS ACCOUNTED FOR HERE, AND THE CHANGES IN ANGULAR
+<span class="ln">113</span>C VELOCITY DUE TO CHANGES IN RADIUS AND CONSERVATION OF ANGULAR MOMENTUM
+<span class="ln">114</span>C ARE ALSO COMPUTED.
+<span class="ln">115</span>C MIDMOD ALSO LOCATES THE OUTER EDGE OF A CENTRAL CONVECTION ZONE AND THE INNER
+<span class="ln">116</span>C EDGE OF A SURFACE C.Z., AND DETERMINES THE MASS AND MOMENT OF INERTIA OF
+<span class="ln">117</span>C THE SURFACE C.Z.
+<span class="ln">118</span>      IEND = 11
+<span class="ln">119</span>      IF(LEXCOM) IEND = 15
+<span class="ln">120</span>C  INITIALIZE COMPOSITION ARRAY THE FIRST TIME THROUGH.
+<span class="ln">121</span>C  HCOMPM IS THE ARRAY OF CHANGES IN COMPOSITION DUE TO NUCLEAR BURNING
+<span class="ln">122</span>C  DURING THE COURSE OF THE MODEL TIMESTEP.
+<span class="ln">123</span>C MHP 06/02 SAVE CHANGES IN R, CZ DEPTH, DELAD-DELRAD FROM THE
+<span class="ln">124</span>C PRIOR STEP.
+<span class="ln">125</span>      IF(LFIRSTIT)THEN
+<span class="ln">126</span>         DO 20 J = 1,M
+<span class="ln">127</span>            LCP(J) = LCO(J)
+<span class="ln">128</span>            HRP(J) = HRO(J)
+<span class="ln">129</span>            DDELP(J) = DELAO(J)-DELRO(J)
+<span class="ln">130</span>            AMUM(J) = AMUO(J)
+<span class="ln">131</span>            DO 10 I = 1,IEND
+<span class="ln">132</span>               HCOMP(I,J) = HCOMPP(I,J)
+<span class="ln">133</span>   10       CONTINUE
+<span class="ln">134</span>   20    CONTINUE
+<span class="ln">135</span>      ELSE
+<span class="ln">136</span>         DO J = 1,M
+<span class="ln">137</span>            HRP(J) = HRM(J)
+<span class="ln">138</span>            DDELP(J) = DDELN(J)
+<span class="ln">139</span>            LCP(J) = LCM(J)
+<span class="ln">140</span>         END DO
+<span class="ln">141</span>      ENDIF
+<span class="ln">142</span>      LNEWCZ = .FALSE.
+<span class="ln">143</span>C  INTERPOLATE IN THE MODEL VARIABLES AND AUXILLARY PHYSICS.
+<span class="ln">144</span>      FAC2 = DT/DELTS
+<span class="ln">145</span>      DO 40 J = 1,M
+<span class="ln">146</span>         HDM(J) = HDO(J) + FX*(HD(J)-HDO(J))
+<span class="ln">147</span>         HLM(J) = HLO(J) + FX*(HL(J)-HLO(J))
+<span class="ln">148</span>         HPM(J) = HPO(J) + FX*(HP(J)-HPO(J))
+<span class="ln">149</span>         HRM(J) = HRO(J) + FX*(HR(J)-HRO(J))
+<span class="ln">150</span>         HTM(J) = HTO(J) + FX*(HT(J)-HTO(J))
+<span class="ln">151</span>C        DO 30 I = 1,IEND
+<span class="ln">152</span>C           HCOMP(I,J)=HCOMP(I,J)+FAC2*HCOMPM(I,J)
+<span class="ln">153</span>C           HCOMPP(I,J) = HCOMP(I,J)
+<span class="ln">154</span>C  30    CONTINUE
+<span class="ln">155</span>         HGM(J) = HGO(J) + FX*(HG(J) - HGO(J))
+<span class="ln">156</span>         DELAM(J) = DELAO(J) + FX*(SDEL(3,J)-DELAO(J))
+<span class="ln">157</span>         DELM(J) = DELO(J) + FX*(SDEL(2,J) - DELO(J))
+<span class="ln">158</span>         DELRM(J) = DELRO(J) + FX*(SDEL(1,J) - DELRO(J))
+<span class="ln">159</span>         ESUMM(J) = ESUMO(J) + FX*(SESUM(J) - ESUMO(J))
+<span class="ln">160</span>         VISCM(J) = VISCO(J) + FX*(VISC(J) - VISCO(J))
+<span class="ln">161</span>         THDIFM(J) = THDIFO(J) + FX*(THDIF(J) - THDIFO(J))
+<span class="ln">162</span>         CPM(J) = CPO(J) + FX*(CP(J) - CPO(J))
+<span class="ln">163</span>         QDTM(J) = QDTO(J) + FX*(SQDT(J) - QDTO(J))
+<span class="ln">164</span>         OM(J) = OO(J) + FX*(SO(J) - OO(J))
+<span class="ln">165</span>         AMUM(J) = AMUM(J) + FAC2*(HAMU(J) - AMUO(J))
+<span class="ln">166</span>C MHP 6/00 ADDED TOTAL ENERGY GENERATION
+<span class="ln">167</span>         TEMP = SESUM(J)+SEG(6,J)+SEG(7,J)
+<span class="ln">168</span>         EPSM(J) = EPSO(J)+FX*(TEMP-EPSO(J))
+<span class="ln">169</span>   40 CONTINUE
+<span class="ln">170</span>C  CHECK FOR ADVANCING OR RECEDING CONVECTIVE REGIONS.USE INTERPOLATED
+<span class="ln">171</span>C  RADIATIVE AND ADIABATIC TEMPERATURE GRADIENTS TO DETERMINE WHETHER
+<span class="ln">172</span>C  OR NOT A ZONE IS CONVECTIVE IF IT CHANGES STATE OVER THE COURSE OF A
+<span class="ln">173</span>C  TIMESTEP.
+<span class="ln">174</span>      DO 50 I = 1,M
+<span class="ln">175</span>         DDELN(I) = DELAM(I)-DELRM(I)
+<span class="ln">176</span>         IF(LC(I).EQV.LCP(I))THEN
+<span class="ln">177</span>            LCM(I) = LC(I)
+<span class="ln">178</span>            VELM(I) = VELO(I) + FX*(SVEL(I)-VELO(I))
+<span class="ln">179</span>            LCHG(I) = .FALSE.
+<span class="ln">180</span>         ELSE
+<span class="ln">181</span>            LCHG(I) = .TRUE.
+<span class="ln">182</span>            LNEWCZ = .TRUE.
+<span class="ln">183</span>            IF(DELAM(I).LT.DELRM(I)) THEN
+<span class="ln">184</span>               LCM(I) = .TRUE.
+<span class="ln">185</span>               VELM(I) = MAX(VELO(I),SVEL(I))
+<span class="ln">186</span>            ELSE
+<span class="ln">187</span>               LCM(I) = .FALSE.
+<span class="ln">188</span>               VELM(I) = 0.0D0
+<span class="ln">189</span>            ENDIF
+<span class="ln">190</span>         ENDIF
+<span class="ln">191</span>   50 CONTINUE
+<span class="ln">192</span>      LNEWCZ = .FALSE.
+<span class="ln">193</span>C MHP 06/02 IF THE CZ DEPTHS HAVE CHANGED, RESOLVE
+<span class="ln">194</span>C OUT WHEN A GIVEN ZONE &quot;DROPPED OUT&quot; OF THE CONVECTION
+<span class="ln">195</span>C ZONE OR ENTERED IT.  MODIFY THE SPECIFIC ANGULAR MOMENTUM
+<span class="ln">196</span>C ACCORDINGLY.
+<span class="ln">197</span>      IF(LNEWCZ)THEN
+<span class="ln">198</span>         LCC = .FALSE.
+<span class="ln">199</span>         LDO = .FALSE.
+<span class="ln">200</span>         DO I = 1,M-1
+<span class="ln">201</span>            IF(LCHG(I))THEN
+<span class="ln">202</span>               IF(.NOT.LCC)THEN
+<span class="ln">203</span>C START OF CHANGED REGION
+<span class="ln">204</span>                  LCC = .TRUE.
+<span class="ln">205</span>                  I0 = I
+<span class="ln">206</span>               ENDIF
+<span class="ln">207</span>            ENDIF
+<span class="ln">208</span>            IF(.NOT.LCHG(I))THEN
+<span class="ln">209</span>               IF(LCC)THEN
+<span class="ln">210</span>C END OF CHANGED REGION
+<span class="ln">211</span>               I1 = I - 1
+<span class="ln">212</span>               LCC = .FALSE.
+<span class="ln">213</span>               LDO = .TRUE.
+<span class="ln">214</span>               WRITE(*,*)I0,I1,DDELN(I0),DDELN(I0-1),
+<span class="ln">215</span>     *                   DDELN(I1+1)
+<span class="ln">216</span>C ONLY CHANGE IF THERE IS A RECEDING CONVECTION ZONE;
+<span class="ln">217</span>C WE CAN ASSUME LOCAL CONSERVATION OF J PRIOR TO HAVING
+<span class="ln">218</span>C A SHELL INCORPORATED INTO A CZ.
+<span class="ln">219</span>               IF (DDELN(I0).GT.0.0D0)THEN
+<span class="ln">220</span>                  IF(DDELN(I0-1).LT.0.0D0)THEN
+<span class="ln">221</span>C SUBTRACTED FROM A CORE CZ
+<span class="ln">222</span>                     IND = -1
+<span class="ln">223</span>                  ELSE IF(DDELN(I1+1).LT.0.0D0)THEN
+<span class="ln">224</span>C SUBTRACTED FROM AN ENVELOPE CZ
+<span class="ln">225</span>                     IND = 1
+<span class="ln">226</span>                  ELSE
+<span class="ln">227</span>                     LDO = .FALSE.
+<span class="ln">228</span>                  ENDIF
+<span class="ln">229</span>               ELSE
+<span class="ln">230</span>                  LDO = .FALSE.
+<span class="ln">231</span>               ENDIF
+<span class="ln">232</span>               ENDIF
+<span class="ln">233</span>            ENDIF
+<span class="ln">234</span>            IF(LDO)THEN
+<span class="ln">235</span>               LDO = .FALSE.
+<span class="ln">236</span>C CORE CZ
+<span class="ln">237</span>               IF(IND.LT.0)THEN
+<span class="ln">238</span>C LOCATE EDGES OF CURRENT LOWER CZ
+<span class="ln">239</span>                  ICZ1 = I0 - 1
+<span class="ln">240</span>                  DO II = I0-1,1,-1
+<span class="ln">241</span>                     IF(.NOT.LCM(II))THEN
+<span class="ln">242</span>                        ICZ0 = II + 1
+<span class="ln">243</span>                        GOTO 11
+<span class="ln">244</span>                     ENDIF
+<span class="ln">245</span>                  END DO
+<span class="ln">246</span>                  ICZ0 = 1
+<span class="ln">247</span> 11               CONTINUE
+<span class="ln">248</span>                  DO J = I1,I0,-1
+<span class="ln">249</span>                     IF(DDELN(J).LT.0.0D0)GOTO 13
+<span class="ln">250</span>                     CZI = 0.0D0
+<span class="ln">251</span>                     CZJ = 0.0D0
+<span class="ln">252</span>C FRACTION OF THE TIMESTEP SHELL WAS RADIATIVE
+<span class="ln">253</span>                     FX = DDELN(J)/(DDELN(J)-DDELP(J))
+<span class="ln">254</span>C FRACTION OF THE TIMESTEP THAT THE SHELL WAS CONVECTIVE
+<span class="ln">255</span>                     F2 = 1.0D0 - FX
+<span class="ln">256</span>                     DO II = ICZ0,J-1
+<span class="ln">257</span>                        HRR = HRP(II)+F2*(HR(II)-HRO(II))
+<span class="ln">258</span>                        CZI = CZI+CC23*HS2(II)*10.0D0**(2.0D0*HRR)
+<span class="ln">259</span>                        CZJ = CZJ + HJM(II)*HS2(II)
+<span class="ln">260</span>                     END DO
+<span class="ln">261</span>C GET THE CZ MOMENT OF INERTIA AND TOTAL J AT THE TIME THE
+<span class="ln">262</span>C SHELL WAS RELEASED; THIS GIVES A CORRECTED VALUE FOR
+<span class="ln">263</span>C J/M.  REDISTRIBUTE THE DIFFERENCE IN J BACK INTO THE CZ.
+<span class="ln">264</span>                     HRSH = 2.0D0*(HRP(J)+F2*(HR(J)-HRP(J)))
+<span class="ln">265</span>                     HJM2 = CC23*(CZJ/CZI)*10.0D0**HRSH
+<span class="ln">266</span>                     DELJ = (HJM(J)-HJM2)*HS2(J)
+<span class="ln">267</span>                     RATIO = (CZJ-DELJ)/CZJ
+<span class="ln">268</span>                     HJM(J)=HJM2
+<span class="ln">269</span>                     RR = HJM2/HJM(J)
+<span class="ln">270</span>                     WRITE(*,*)J,FX,RR,DELJ,RATIO
+<span class="ln">271</span>                     DO II = ICZ0,J-1
+<span class="ln">272</span>                        HJM(II) = HJM(II)*RATIO
+<span class="ln">273</span>                     END DO
+<span class="ln">274</span>                  END DO
+<span class="ln">275</span>               ELSE
+<span class="ln">276</span>C ENVELOPE CZ
+<span class="ln">277</span>C LOCATE EDGES OF CURRENT LOWER CZ
+<span class="ln">278</span>                  ICZ0 = I1 + 1
+<span class="ln">279</span>                  DO II = I1+2,M
+<span class="ln">280</span>                     IF(.NOT.LCM(II))THEN
+<span class="ln">281</span>                        ICZ1 = II - 1
+<span class="ln">282</span>                        GOTO 12
+<span class="ln">283</span>                     ENDIF
+<span class="ln">284</span>                  END DO
+<span class="ln">285</span>                  ICZ1 = M
+<span class="ln">286</span> 12               CONTINUE
+<span class="ln">287</span>                  DO J = I0,I1
+<span class="ln">288</span>                     IF(DDELN(J).LT.0.0D0)GOTO 13
+<span class="ln">289</span>                     CZI = 0.0D0
+<span class="ln">290</span>                     CZJ = 0.0D0
+<span class="ln">291</span>C FRACTION OF THE TIMESTEP SHELL WAS RADIATIVE
+<span class="ln">292</span>                     FX = DDELN(J)/(DDELN(J)-DDELP(J))
+<span class="ln">293</span>C FRACTION OF THE TIMESTEP THAT THE SHELL WAS CONVECTIVE
+<span class="ln">294</span>                     F2 = 1.0D0 - FX
+<span class="ln">295</span>                     DO II = J+1,ICZ1
+<span class="ln">296</span>                        HRR = HRP(II)+F2*(HR(II)-HRO(II))
+<span class="ln">297</span>                        CZI = CZI+CC23*HS2(II)*10.0D0**(2.0D0*HRR)
+<span class="ln">298</span>                        CZJ = CZJ + HJM(II)*HS2(II)
+<span class="ln">299</span>                     END DO
+<span class="ln">300</span>C GET THE CZ MOMENT OF INERTIA AND TOTAL J AT THE TIME THE
+<span class="ln">301</span>C SHELL WAS RELEASED; THIS GIVES A CORRECTED VALUE FOR
+<span class="ln">302</span>C J/M.  REDISTRIBUTE THE DIFFERENCE IN J BACK INTO THE CZ.
+<span class="ln">303</span>                     HRSH = 2.0D0*(HRP(J)+F2*(HR(J)-HRP(J)))
+<span class="ln">304</span>                     HJM2 = CC23*(CZJ/CZI)*10.0D0**HRSH
+<span class="ln">305</span>                     DELJ = (HJM(J)-HJM2)*HS2(J)
+<span class="ln">306</span>                     RATIO = (CZJ-DELJ)/CZJ
+<span class="ln">307</span>                     HJM(J)=HJM2
+<span class="ln">308</span>                     RR = HJM2/HJM(J)
+<span class="ln">309</span>                     WRITE(*,*)J,FX,RR,DELJ,RATIO
+<span class="ln">310</span>                     DO II = J+1,M
+<span class="ln">311</span>                        HJM(II) = HJM(II)*RATIO
+<span class="ln">312</span>                     END DO
+<span class="ln">313</span>                  END DO
+<span class="ln">314</span>               ENDIF
+<span class="ln">315</span> 13            CONTINUE
+<span class="ln">316</span>            ENDIF
+<span class="ln">317</span>         END DO
+<span class="ln">318</span>      ENDIF
+<span class="ln">319</span>C  CONVECTIVE OVERSHOOT APPLIED TO NORMAL CONVECTION ZONES.
+<span class="ln">320</span>      CALL <a href="../yrec-map/ovrot.f.html#def-OVROT" title="OVROT in ovrot.f">OVROT</a>(HCOMP,HDM,HPM,HRM,HS,HTM,LCM,M,LCZM,MRZONE,MXZONE,
+<span class="ln">321</span>     *                 NRZONE,NZONE)
+<span class="ln">322</span>C  REBURN THE ORIGINAL MIXTURE FOR THE SMALL DIFFUSION TIME STEP.
+<span class="ln">323</span>C MHP 6/00 - FOR THERMODYNAMIC CONSISTENCY USE CURRENT T, NOT END OF
+<span class="ln">324</span>C TIMESTEP T (REPLACED HT IN CALL WITH HTM)
+<span class="ln">325</span>C       CALL ROTMIX(DT,HCOMP,HS2,HTM,5,M,MRZONE,MXZONE,  ! KC 2025-05-31
+<span class="ln">326</span>      CALL <a href="../yrec-map/rotmix.f.html#def-ROTMIX" title="ROTMIX in rotmix.f">ROTMIX</a>(DT,HCOMP,HS2,HTM,M,MRZONE,MXZONE,
+<span class="ln">327</span>     *            NRZONE,NZONE
+<span class="ln">328</span>     *            ,HSTOT,HDM,HS,HRM,HPM,LCZM,HS1)
+<span class="ln">329</span>      DO I = 1,M
+<span class="ln">330</span>         DO J = 1,IEND
+<span class="ln">331</span>            HCOMPS(J,I) = HCOMP(J,I)
+<span class="ln">332</span>         END DO
+<span class="ln">333</span>      END DO
+<span class="ln">334</span>C MHP 05/02 ADDED DEUTERIUM BURNING
+<span class="ln">335</span>      IF(HCOMPP(12,M).GT.1.0D-14)THEN
+<span class="ln">336</span>C INCREMENT THE TIMESTEP
+<span class="ln">337</span>         IF(LFIRSTIT) THEN
+<span class="ln">338</span>            DO I = 1,M
+<span class="ln">339</span>               DRATEM(I) = DRATE0(I)+FAC2*(DRATE(I)-DRATE0(I))
+<span class="ln">340</span>               DRATEM0(I) = DRATE0(I)
+<span class="ln">341</span>            END DO
+<span class="ln">342</span>         ELSE
+<span class="ln">343</span>            DO I = 1,M
+<span class="ln">344</span>               DRATEM0(I) = DRATEM(I)
+<span class="ln">345</span>               DRATEM(I) = DRATEM(I)+FAC2*(DRATE(I)-DRATE0(I))
+<span class="ln">346</span>            END DO
+<span class="ln">347</span>         ENDIF
+<span class="ln">348</span>C RADIATIVE ZONES.
+<span class="ln">349</span>C
+<span class="ln">350</span>         DO K = 1,NRZONE
+<span class="ln">351</span>            DO J = MRZONE(K,1),MRZONE(K,2)
+<span class="ln">352</span>C EXIT LOOP ONCE T DROPS BELOW NUCLEAR REACTION T CUTOFF
+<span class="ln">353</span>               IF(HTM(J).LE.TCUT(1)) GOTO 190
+<span class="ln">354</span>               IBEGIN = J
+<span class="ln">355</span>               IEND = J
+<span class="ln">356</span>               CALL <a href="../yrec-map/dburnm.f.html#def-DBURNM" title="DBURNM in dburnm.f">DBURNM</a>(IBEGIN,IEND,M,HS2,HCOMP,DT,DRATEM,DRATEM0,
+<span class="ln">357</span>     *                     FAC2)
+<span class="ln">358</span>           END DO
+<span class="ln">359</span>        END DO
+<span class="ln">360</span> 190    CONTINUE
+<span class="ln">361</span>C
+<span class="ln">362</span>C CONVECTION ZONES.
+<span class="ln">363</span>C NOTE KEMCOM ALSO AUTOMATICALLY HOMOGENIZE CONVECTION ZONES.
+<span class="ln">364</span>C
+<span class="ln">365</span>         DO K = 1,NZONE
+<span class="ln">366</span>            IBEGIN = MXZONE(K,1)
+<span class="ln">367</span>            IEND = MXZONE(K,2)
+<span class="ln">368</span>            CALL <a href="../yrec-map/dburnm.f.html#def-DBURNM" title="DBURNM in dburnm.f">DBURNM</a>(IBEGIN,IEND,M,HS2,HCOMP,DT,DRATEM,DRATEM0,
+<span class="ln">369</span>     *                  FAC2)
+<span class="ln">370</span>         END DO
+<span class="ln">371</span>      ENDIF
+<span class="ln">372</span>C  DETERMINE EXTENT OF CENTRAL CONVECTION ZONE.
+<span class="ln">373</span>C  IMIN IS THE FIRST ZONE ABOVE A CENTRAL CONVECTION ZONE, AND THUS THE
+<span class="ln">374</span>C  FIRST ZONE CONSIDERED FOR STABILITY AGAINST ROTATIONAL INSTABILITIES.
+<span class="ln">375</span>      IF(LCZM(1))THEN
+<span class="ln">376</span>         DO 60 I = 2,M
+<span class="ln">377</span>            IF(.NOT.LCZM(I))GOTO 65
+<span class="ln">378</span>   60    CONTINUE
+<span class="ln">379</span>         I = M + 1
+<span class="ln">380</span>   65    IMIN = MAX(2,I-1)
+<span class="ln">381</span>      ELSE
+<span class="ln">382</span>         IMIN = 2
+<span class="ln">383</span>      ENDIF
+<span class="ln">384</span>C  DETERMINE EXTENT OF SURFACE CONVECTION ZONE.
+<span class="ln">385</span>      LALLCZ = .FALSE.
+<span class="ln">386</span>      IF(LCZM(M))THEN
+<span class="ln">387</span>C  SURFACE C.Z. EXISTS.  FIND LOWEST SHELL (IMAX), WHICH IS ALSO THE
+<span class="ln">388</span>C  UPPERMOST ZONE CONSIDERED FOR STABILITY AGAINST ROTATIONALLY INDUCED MIXING.
+<span class="ln">389</span>         DO 70 I = M-1,1,-1
+<span class="ln">390</span>            IF(.NOT.LCZM(I)) GOTO 80
+<span class="ln">391</span>   70    CONTINUE
+<span class="ln">392</span>         LALLCZ = .TRUE.
+<span class="ln">393</span>         I = 0
+<span class="ln">394</span>   80    IMAX = I + 1
+<span class="ln">395</span>C  HSTOP IS THE MASS AT THE TOP OF THE C.Z.
+<span class="ln">396</span>C  HSBOT IS THE MASS AT THE BOTTOM OF THE C.Z.
+<span class="ln">397</span>         HSTOP = EXP(CLN*HSTOT)
+<span class="ln">398</span>         IF(IMAX.GT.1)THEN
+<span class="ln">399</span>            HSBOT = 0.5D0*(HS1(IMAX)+HS1(IMAX-1))
+<span class="ln">400</span>         ELSE
+<span class="ln">401</span>            HSBOT = 0.0D0
+<span class="ln">402</span>         ENDIF
+<span class="ln">403</span>C  LCZSUR=T IF A SURFACE C.Z.DEEP ENOUGH FOR ANGULAR MOMENTUM LOSS EXISTS
+<span class="ln">404</span>         IF((HSTOP-HSBOT)/CMSUN.GT.0.0D0)THEN
+<span class="ln">405</span>            LCZSUR = .TRUE.
+<span class="ln">406</span>         ELSE
+<span class="ln">407</span>            LCZSUR= .FALSE.
+<span class="ln">408</span>         ENDIF
+<span class="ln">409</span>      ELSE
+<span class="ln">410</span>C  NO SURFACE C.Z.
+<span class="ln">411</span>         IMAX = M
+<span class="ln">412</span>         LCZSUR = .FALSE.
+<span class="ln">413</span>      ENDIF
+<span class="ln">414</span>C MHP 3/09 ADD ABILITY TO COMPUTE THE CONVECTIVE OVERTURN TIMESCALE &#x27;LOCALLY&#x27;.
+<span class="ln">415</span>C THIS IS DEFINED AS HP/V, WHERE HP IS THE PRESSURE SCALE HEIGHT AT THE BASE
+<span class="ln">416</span>C AND V IS THE CONVECTIVE VELOCITY ONE PRESSURE SCALE HEIGHT ABOVE THE BASE.
+<span class="ln">417</span>C FOR FULLY CONVECTIVE STARS THE CENTRAL PRESSURE SCALE HEIGHT DIVERGES, SO
+<span class="ln">418</span>C INSTEAD DEFINE V AT THE POINT WHERE HP = P/RHO*G = P*R^2/RHO*G*M = R.
+<span class="ln">419</span>C      IF(LCZSUR)THEN
+<span class="ln">420</span>C         IF(.NOT.LALLCZ)THEN
+<span class="ln">421</span>CC PINPOINT RCZ
+<span class="ln">422</span>C            DD2 = DELRM(IMAX-1)-DELAM(IMAX-1)
+<span class="ln">423</span>C            DD1 = DELRM(IMAX)-DELAM(IMAX)
+<span class="ln">424</span>C            FX = DD2/(DD2-DD1)
+<span class="ln">425</span>CC            WRITE(*,911)IMAX,FX,DD2,DD1
+<span class="ln">426</span>CC 911        FORMAT(I5,1P3E12.3)
+<span class="ln">427</span>CC INFER HP
+<span class="ln">428</span>C            ENVRL = HRM(IMAX-1)+FX*(HRM(IMAX)-HRM(IMAX-1))
+<span class="ln">429</span>C            ENVR = EXP(CLN*ENVRL)
+<span class="ln">430</span>C            PS2 = EXP(CLN*(HPM(IMAX)-HDM(IMAX)))/HGM(IMAX)
+<span class="ln">431</span>C            PS1 = EXP(CLN*(HPM(IMAX-1)-HDM(IMAX-1)))/HGM(IMAX-1)
+<span class="ln">432</span>C            PSCA = PS1 + FX*(PS2-PS1)
+<span class="ln">433</span>C            RTESTL = DLOG10(ENVR+PSCA)
+<span class="ln">434</span>CC FIND V
+<span class="ln">435</span>C            DO K = IMAX+1,M
+<span class="ln">436</span>C               IF(HRM(K).GT.RTESTL)THEN
+<span class="ln">437</span>C                  FX = (RTESTL-HRM(K-1))/(HRM(K)-HRM(K-1))
+<span class="ln">438</span>C                  CVEL = VELM(K-1)+FX*(VELM(K)-VELM(K-1))
+<span class="ln">439</span>C                  GOTO 85
+<span class="ln">440</span>C               ENDIF
+<span class="ln">441</span>C            END DO
+<span class="ln">442</span>C            CVEL = VELM(M)
+<span class="ln">443</span>C 85         CONTINUE
+<span class="ln">444</span>CC DEFINE TAUCZ
+<span class="ln">445</span>C            TAUCZ = PSCA/CVEL
+<span class="ln">446</span>CC            WRITE(*,911)K,PSCA,CVEL,TAUCZ
+<span class="ln">447</span>C         ELSE
+<span class="ln">448</span>CC INFER HP
+<span class="ln">449</span>C            PSCA2 = EXP(CLN*(HPM(1)-HDM(1)))/HGM(1)
+<span class="ln">450</span>C            RTEST2 = EXP(CLN*HR(1))
+<span class="ln">451</span>C            IF(PSCA2.LE.RTEST2)THEN
+<span class="ln">452</span>CC HP &lt; R AT THE FIRST POINT.  ASSUME V CONSTANT INSIDE AND HP = K/R FOR
+<span class="ln">453</span>CC SLOWLY VARYING DENSITY AND PRESSURE NEAR THE CENTER.
+<span class="ln">454</span>C               CVEL = VELM(1)
+<span class="ln">455</span>C               PSCA = (PSCA2*RTEST2)**0.5D0
+<span class="ln">456</span>C               TAUCZ = PSCA/CVEL
+<span class="ln">457</span>CC               WRITE(*,912)PSCA2,RTEST2,PSCA,CVEL,TAUCZ
+<span class="ln">458</span>CC 912           FORMAT(1P5E12.3)
+<span class="ln">459</span>C            ELSE
+<span class="ln">460</span>C               DO K = 2,M
+<span class="ln">461</span>C                  PSCA1 = PSCA2
+<span class="ln">462</span>C                  RTEST1 = RTEST2
+<span class="ln">463</span>C                  PSCA2 = EXP(CLN*(HPM(K)-HDM(K)))/HGM(K)
+<span class="ln">464</span>C                  RTEST2 = EXP(CLN*HR(K))
+<span class="ln">465</span>CC FIND LOCATION WHERE HP = R
+<span class="ln">466</span>C                  IF(PSCA2.LE.RTEST2)THEN
+<span class="ln">467</span>C                     FX = (RTEST1-PSCA1)/((PSCA2-RTEST2)-(PSCA1-RTEST1))
+<span class="ln">468</span>CC FIND V
+<span class="ln">469</span>C                     CVEL = VELM(K-1)+FX*(VELM(K)-VELM(K-1))
+<span class="ln">470</span>C                     PSCA = PSCA1+FX*(PSCA2-PSCA1)
+<span class="ln">471</span>CC DEFINE TAUCZ
+<span class="ln">472</span>C                     TAUCZ = PSCA/CVEL
+<span class="ln">473</span>C                     GOTO 95
+<span class="ln">474</span>C                  ENDIF
+<span class="ln">475</span>C               END DO
+<span class="ln">476</span>C               K = M
+<span class="ln">477</span>C               CVEL = VELM(M)
+<span class="ln">478</span>C               PSCA = PSCA2
+<span class="ln">479</span>C               TAUCZ = PSCA/CVEL
+<span class="ln">480</span>C 95            CONTINUE
+<span class="ln">481</span>CC               WRITE(*,911)K,PSCA,CVEL,TAUCZ
+<span class="ln">482</span>C            ENDIF
+<span class="ln">483</span>C         ENDIF
+<span class="ln">484</span>C      ENDIF
+<span class="ln">485</span>C JNT 09/25 FOR 05/15 IMPJMOD=1 IS THE SAME AS LSOLID
+<span class="ln">486</span>      IF(.NOT.LSOLID .AND. (IMPJMOD.NE.1))THEN
+<span class="ln">487</span>C  NOW FIND THE RUN OF ROTATION VARIABLES THAT ARE CONSISTENT WITH THE
+<span class="ln">488</span>C  INTERMEDIATE STRUCTURE AND THE RUN OF SPECIFIC ANGULAR MOMENTUM J/M.
+<span class="ln">489</span>C  J/M = I/M * OMEGA.
+<span class="ln">490</span>C  FIRST GUESS AT MOMENT OF INERTIA OF DISTORTED SPERICAL SHELLS:
+<span class="ln">491</span>C  I/M = 2/3 R**2.
+<span class="ln">492</span>         DO I = 1,M
+<span class="ln">493</span>            HIM(I) = CC23*EXP(CLN*2.0D0*HRM(I))
+<span class="ln">494</span>            OMEGAM(I) = HJM(I)/HIM(I)
+<span class="ln">495</span>            HIM(I) = HS2(I)*HIM(I)
+<span class="ln">496</span>         END DO
+<span class="ln">497</span>C  SOLVE FOR THE ANGULAR VELOCITIES OF THE SHELLS GIVEN THE SPECIFIC
+<span class="ln">498</span>C  ANGULAR MOMENTUM (HJM) AND A FIRST GUESS AT THE ANGULAR VELOCITY(OMEGAM)
+<span class="ln">499</span>C  AND MOMENT OF INERTIA (HIM).
+<span class="ln">500</span>         CALL <a href="../yrec-map/getrot.f.html#def-GETROT" title="GETROT in getrot.f">GETROT</a>(HDM,HJM,HRM,HS,HS2,LCZM,M,ETA2M,HIM,OMEGAM,QIWM,R0M)
+<span class="ln">501</span>C  FIND TOTAL MOMENT OF INERTIA OF THE SURFACE C.Z. IF APPLICABLE.
+<span class="ln">502</span>         IF(LCZSUR)THEN
+<span class="ln">503</span>            HICZ = HIM(M)
+<span class="ln">504</span>            DO I = M-1,1,-1
+<span class="ln">505</span>               IF(.NOT.LCZM(I))GOTO 110
+<span class="ln">506</span>               HICZ = HICZ + HIM(I)
+<span class="ln">507</span>            END DO
+<span class="ln">508</span>  110       CONTINUE
+<span class="ln">509</span>         ENDIF
+<span class="ln">510</span>      ELSE
+<span class="ln">511</span>         JSTART = 1
+<span class="ln">512</span>         JEND = M
+<span class="ln">513</span>         CALL <a href="../yrec-map/solid.f.html#def-SOLID" title="SOLID in solid.f">SOLID</a>(HDM,HJM,HRM,HS,HS2,JSTART,JEND,ETA2M,HIM,OMEGAM,
+<span class="ln">514</span>     *                 QIWM,R0M,M)
+<span class="ln">515</span>         IF(LCZSUR)THEN
+<span class="ln">516</span>            HICZ = HIM(1)
+<span class="ln">517</span>            DO I = 2,M
+<span class="ln">518</span>               HICZ = HICZ + HIM(I)
+<span class="ln">519</span>            END DO
+<span class="ln">520</span>         ENDIF
+<span class="ln">521</span>      ENDIF
+<span class="ln">522</span>      RETURN
+<span class="ln">523</span>      END</pre></details>
+<details class='py' id='py-midmod'><summary>Python version: midmod</summary><pre class='doc'>Build the structure at the fraction fx of the model step delts by
+linear interpolation in time between the old model (the *_mod arrays)
+and the new one (the arguments); burn and mix the composition over the
+diffusion step dt; find the convection-zone edges; and solve for the
+rotation consistent with the specific angular momentum hjm.
+
+Translates: midmod.f#MIDMOD (09c3b9b)
+
+Arguments: the new model (hcomp[k, j], hd, hg, hjm, hl, hp, hr, hs, hs1,
+hs2, ht, lc; log total mass hstot; m shells); lfirstit, True on the
+first diffusion step of the model step. Arrays (index 0 unused) set in
+place: hcomp (reset, burnt and mixed), hjm (only in the dead block),
+eta2m, hdm, hgm, him, hlm, hpm, hrm, htm, lcm, lczm, omegam, r0m, qiwm,
+mrzone, mxzone, hcomps (the composition after mixing) and the
+interpolated physics in mdphy_mod. Scalars set are passed in with any
+value.
+
+Returns (fx, hicz, hsbot, hstop, imin, imax, lallcz, lczsur, nrzone,
+nzone): fx (changed only in the dead block), the moment of inertia of
+the surface convection zone (unchanged without one), the masses at its
+bottom and top, the edges imin and imax, whether the star is all
+convective, whether a surface zone exists, and the numbers of radiative
+and mixed zones.</pre><pre class='src'><span class="ln">39</span>def midmod(delts, dt, fx, hcomp, hd, hg, hjm, hl, hp, hr, hs, hs1,
+<span class="ln">40</span>           hs2, hstot, ht, lc, lfirstit, m, eta2m, hdm, hgm, hicz, him,
+<span class="ln">41</span>           hlm, hpm, hrm, hsbot, hstop, htm, imin, imax, lallcz, lcm,
+<span class="ln">42</span>           lczm, lczsur, omegam, r0m, qiwm, mrzone, mxzone, nrzone,
+<span class="ln">43</span>           nzone, hcomps):
+<span class="ln">44</span>    &quot;&quot;&quot;Build the structure at the fraction fx of the model step delts by
+<span class="ln">45</span>    linear interpolation in time between the old model (the *_mod arrays)
+<span class="ln">46</span>    and the new one (the arguments); burn and mix the composition over the
+<span class="ln">47</span>    diffusion step dt; find the convection-zone edges; and solve for the
+<span class="ln">48</span>    rotation consistent with the specific angular momentum hjm.
+<span class="ln">49</span>
+<span class="ln">50</span>    Translates: midmod.f#MIDMOD (09c3b9b)
+<span class="ln">51</span>
+<span class="ln">52</span>    Arguments: the new model (hcomp[k, j], hd, hg, hjm, hl, hp, hr, hs, hs1,
+<span class="ln">53</span>    hs2, ht, lc; log total mass hstot; m shells); lfirstit, True on the
+<span class="ln">54</span>    first diffusion step of the model step. Arrays (index 0 unused) set in
+<span class="ln">55</span>    place: hcomp (reset, burnt and mixed), hjm (only in the dead block),
+<span class="ln">56</span>    eta2m, hdm, hgm, him, hlm, hpm, hrm, htm, lcm, lczm, omegam, r0m, qiwm,
+<span class="ln">57</span>    mrzone, mxzone, hcomps (the composition after mixing) and the
+<span class="ln">58</span>    interpolated physics in mdphy_mod. Scalars set are passed in with any
+<span class="ln">59</span>    value.
+<span class="ln">60</span>
+<span class="ln">61</span>    Returns (fx, hicz, hsbot, hstop, imin, imax, lallcz, lczsur, nrzone,
+<span class="ln">62</span>    nzone): fx (changed only in the dead block), the moment of inertia of
+<span class="ln">63</span>    the surface convection zone (unchanged without one), the masses at its
+<span class="ln">64</span>    bottom and top, the edges imin and imax, whether the star is all
+<span class="ln">65</span>    convective, whether a surface zone exists, and the numbers of radiative
+<span class="ln">66</span>    and mixed zones.
+<span class="ln">67</span>    &quot;&quot;&quot;
+<span class="ln">68</span>    c = constants_mod
+<span class="ln">69</span>    nml = nmlpar_mod
+<span class="ln">70</span>    om_ = oldmod_mod
+<span class="ln">71</span>    op = oldphy_mod
+<span class="ln">72</span>    md = mdphy_mod
+<span class="ln">73</span>    sc = scrtch_mod
+<span class="ln">74</span>    tp = temp_mod
+<span class="ln">75</span>    iend = 11
+<span class="ln">76</span>    if nml.lexcom:
+<span class="ln">77</span>        iend = 15
+<span class="ln">78</span>    # On the first diffusion step, start from the old composition; save the
+<span class="ln">79</span>    # radius, convective state and DELA - DELR of the prior step (MHP 06/02).
+<span class="ln">80</span>    if lfirstit:
+<span class="ln">81</span>        for j in range(1, m + 1):  # DO 20
+<span class="ln">82</span>            lcp[j] = om_.lco[j]
+<span class="ln">83</span>            hrp[j] = om_.hro[j]
+<span class="ln">84</span>            ddelp[j] = op.delao[j] - op.delro[j]
+<span class="ln">85</span>            md.amum[j] = op.amuo[j]
+<span class="ln">86</span>            for i in range(1, iend + 1):
+<span class="ln">87</span>                hcomp[i, j] = om_.hcompp[i, j]
+<span class="ln">88</span>    else:
+<span class="ln">89</span>        for j in range(1, m + 1):
+<span class="ln">90</span>            hrp[j] = hrm[j]
+<span class="ln">91</span>            ddelp[j] = ddeln[j]
+<span class="ln">92</span>            lcp[j] = lcm[j]
+<span class="ln">93</span>    lnewcz = False
+<span class="ln">94</span>    # Interpolate in the model variables and the auxiliary physics.
+<span class="ln">95</span>    # Question (see the page): AMUM is incremented, not interpolated.
+<span class="ln">96</span>    fac2 = dt / delts
+<span class="ln">97</span>    for j in range(1, m + 1):  # DO 40
+<span class="ln">98</span>        hdm[j] = om_.hdo[j] + fx * (hd[j] - om_.hdo[j])
+<span class="ln">99</span>        hlm[j] = om_.hlo[j] + fx * (hl[j] - om_.hlo[j])
+<span class="ln">100</span>        hpm[j] = om_.hpo[j] + fx * (hp[j] - om_.hpo[j])
+<span class="ln">101</span>        hrm[j] = om_.hro[j] + fx * (hr[j] - om_.hro[j])
+<span class="ln">102</span>        htm[j] = om_.hto[j] + fx * (ht[j] - om_.hto[j])
+<span class="ln">103</span>        hgm[j] = oldrot_mod.hgo[j] + fx * (hg[j] - oldrot_mod.hgo[j])
+<span class="ln">104</span>        md.delam[j] = op.delao[j] + fx * (sc.sdel[3, j] - op.delao[j])
+<span class="ln">105</span>        md.delm[j] = op.delo[j] + fx * (sc.sdel[2, j] - op.delo[j])
+<span class="ln">106</span>        md.delrm[j] = op.delro[j] + fx * (sc.sdel[1, j] - op.delro[j])
+<span class="ln">107</span>        md.esumm[j] = op.esumo[j] + fx * (sc.sesum[j] - op.esumo[j])
+<span class="ln">108</span>        md.viscm[j] = op.visco[j] + fx * (tp.visc[j] - op.visco[j])
+<span class="ln">109</span>        md.thdifm[j] = op.thdifo[j] + fx * (tp.thdif[j] - op.thdifo[j])
+<span class="ln">110</span>        md.cpm[j] = op.cpo[j] + fx * (tp.cp[j] - op.cpo[j])
+<span class="ln">111</span>        md.qdtm[j] = op.qdto[j] + fx * (tp.sqdt[j] - op.qdto[j])
+<span class="ln">112</span>        md.om[j] = op.oo[j] + fx * (sc.so[j] - op.oo[j])
+<span class="ln">113</span>        md.amum[j] = md.amum[j] + fac2 * (tp.hamu[j] - op.amuo[j])
+<span class="ln">114</span>        # MHP 6/00: the total energy generation.
+<span class="ln">115</span>        temp = sc.sesum[j] + sc.seg[6, j] + sc.seg[7, j]
+<span class="ln">116</span>        md.epsm[j] = op.epso[j] + fx * (temp - op.epso[j])
+<span class="ln">117</span>    # Shells that change state over the step are convective if
+<span class="ln">118</span>    # DELA &lt; DELR at the intermediate time.
+<span class="ln">119</span>    for i in range(1, m + 1):  # DO 50
+<span class="ln">120</span>        ddeln[i] = md.delam[i] - md.delrm[i]
+<span class="ln">121</span>        if lc[i] == lcp[i]:
+<span class="ln">122</span>            lcm[i] = lc[i]
+<span class="ln">123</span>            md.velm[i] = op.velo[i] + fx * (sc.svel[i] - op.velo[i])
+<span class="ln">124</span>            lchg[i] = False
+<span class="ln">125</span>        else:
+<span class="ln">126</span>            lchg[i] = True
+<span class="ln">127</span>            lnewcz = True
+<span class="ln">128</span>            if md.delam[i] &lt; md.delrm[i]:
+<span class="ln">129</span>                lcm[i] = True
+<span class="ln">130</span>                md.velm[i] = max(op.velo[i], sc.svel[i])
+<span class="ln">131</span>            else:
+<span class="ln">132</span>                lcm[i] = False
+<span class="ln">133</span>                md.velm[i] = 0.0
+<span class="ln">134</span>    # Question (see the page): this reset makes the block below dead code.
+<span class="ln">135</span>    lnewcz = False
+<span class="ln">136</span>    if lnewcz:
+<span class="ln">137</span>        fx = _receding_cz(m, fx, hjm, hr, hs2, lcm)
+<span class="ln">138</span>    # Convective overshoot applied to normal convection zones.
+<span class="ln">139</span>    nrzone, nzone = ovrot(hcomp, hdm, hpm, hrm, hs, htm, lcm, m, lczm,
+<span class="ln">140</span>                          mrzone, mxzone, nrzone, nzone)
+<span class="ln">141</span>    # Reburn the original mixture for the short step, at the current T
+<span class="ln">142</span>    # (MHP 6/00).
+<span class="ln">143</span>    rotmix(dt, hcomp, hs2, htm, m, mrzone, mxzone, nrzone, nzone,
+<span class="ln">144</span>           hstot, hdm, hs, hrm, hpm, lczm, hs1)
+<span class="ln">145</span>    for i in range(1, m + 1):
+<span class="ln">146</span>        for j in range(1, iend + 1):
+<span class="ln">147</span>            hcomps[j, i] = hcomp[j, i]
+<span class="ln">148</span>    # MHP 05/02: deuterium burning.
+<span class="ln">149</span>    if om_.hcompp[12, m] &gt; 1.0e-14:
+<span class="ln">150</span>        dr = deuter_mod
+<span class="ln">151</span>        if lfirstit:
+<span class="ln">152</span>            for i in range(1, m + 1):
+<span class="ln">153</span>                dratem[i] = dr.drate0[i] + fac2 * (dr.drate[i] - dr.drate0[i])
+<span class="ln">154</span>                dratem0[i] = dr.drate0[i]
+<span class="ln">155</span>        else:
+<span class="ln">156</span>            for i in range(1, m + 1):
+<span class="ln">157</span>                dratem0[i] = dratem[i]
+<span class="ln">158</span>                dratem[i] = dratem[i] + fac2 * (dr.drate[i] - dr.drate0[i])
+<span class="ln">159</span>        # Radiative zones, shell by shell, until T drops below the cutoff.
+<span class="ln">160</span>        # Question (see the page): the first cool shell ends both loops.
+<span class="ln">161</span>        done = False
+<span class="ln">162</span>        for k in range(1, nrzone + 1):
+<span class="ln">163</span>            for j in range(mrzone[k, 1], mrzone[k, 2] + 1):
+<span class="ln">164</span>                if htm[j] &lt;= nml.tcut[1]:
+<span class="ln">165</span>                    done = True  # GOTO 190
+<span class="ln">166</span>                    break
+<span class="ln">167</span>                ibegin = j
+<span class="ln">168</span>                iend = j
+<span class="ln">169</span>                dburnm(ibegin, iend, m, hs2, hcomp, dt, dratem, dratem0,
+<span class="ln">170</span>                       fac2)
+<span class="ln">171</span>            if done:
+<span class="ln">172</span>                break
+<span class="ln">173</span>        # label 190. Convection zones, zone by zone.
+<span class="ln">174</span>        for k in range(1, nzone + 1):
+<span class="ln">175</span>            ibegin = mxzone[k, 1]
+<span class="ln">176</span>            iend = mxzone[k, 2]
+<span class="ln">177</span>            dburnm(ibegin, iend, m, hs2, hcomp, dt, dratem, dratem0, fac2)
+<span class="ln">178</span>    # Extent of a central convection zone.
+<span class="ln">179</span>    # Question (see the page): IMIN is the last convective shell.
+<span class="ln">180</span>    if lczm[1]:
+<span class="ln">181</span>        i = m + 1
+<span class="ln">182</span>        for k in range(2, m + 1):  # DO 60
+<span class="ln">183</span>            if not lczm[k]:
+<span class="ln">184</span>                i = k
+<span class="ln">185</span>                break
+<span class="ln">186</span>        imin = max(2, i - 1)  # label 65
+<span class="ln">187</span>    else:
+<span class="ln">188</span>        imin = 2
+<span class="ln">189</span>    # Extent of a surface convection zone.
+<span class="ln">190</span>    lallcz = False
+<span class="ln">191</span>    if lczm[m]:
+<span class="ln">192</span>        i = 0
+<span class="ln">193</span>        lallcz = True
+<span class="ln">194</span>        for k in range(m - 1, 0, -1):  # DO 70
+<span class="ln">195</span>            if not lczm[k]:
+<span class="ln">196</span>                i = k
+<span class="ln">197</span>                lallcz = False
+<span class="ln">198</span>                break
+<span class="ln">199</span>        imax = i + 1  # label 80
+<span class="ln">200</span>        # HSTOP, HSBOT: the masses at the top and bottom of the zone.
+<span class="ln">201</span>        hstop = math.exp(c.cln * hstot)
+<span class="ln">202</span>        if imax &gt; 1:
+<span class="ln">203</span>            hsbot = 0.5 * (hs1[imax] + hs1[imax - 1])
+<span class="ln">204</span>        else:
+<span class="ln">205</span>            hsbot = 0.0
+<span class="ln">206</span>        # Question (see the page): true for any surface zone.
+<span class="ln">207</span>        if (hstop - hsbot) / c.cmsun &gt; 0.0:
+<span class="ln">208</span>            lczsur = True
+<span class="ln">209</span>        else:
+<span class="ln">210</span>            lczsur = False
+<span class="ln">211</span>    else:
+<span class="ln">212</span>        imax = m
+<span class="ln">213</span>        lczsur = False
+<span class="ln">214</span>    # (The MHP 3/09 local convective overturn time is commented out.)
+<span class="ln">215</span>    # JNT 09/25: IMPJMOD = 1 is the same as LSOLID.
+<span class="ln">216</span>    if not nml.lsolid and nml.impjmod != 1:
+<span class="ln">217</span>        # First guess: thin spherical shells, I/M = 2/3 r**2, Omega = J/I.
+<span class="ln">218</span>        for i in range(1, m + 1):
+<span class="ln">219</span>            him[i] = c.cc23 * math.exp(c.cln * 2.0 * hrm[i])
+<span class="ln">220</span>            omegam[i] = hjm[i] / him[i]
+<span class="ln">221</span>            him[i] = hs2[i] * him[i]
+<span class="ln">222</span>        getrot(hdm, hjm, hrm, hs, hs2, lczm, m, eta2m, him, omegam, qiwm,
+<span class="ln">223</span>               r0m)
+<span class="ln">224</span>        # Moment of inertia of the surface convection zone.
+<span class="ln">225</span>        if lczsur:
+<span class="ln">226</span>            hicz = him[m]
+<span class="ln">227</span>            for i in range(m - 1, 0, -1):
+<span class="ln">228</span>                if not lczm[i]:
+<span class="ln">229</span>                    break  # GOTO 110
+<span class="ln">230</span>                hicz = hicz + him[i]
+<span class="ln">231</span>    else:
+<span class="ln">232</span>        jstart = 1
+<span class="ln">233</span>        jend = m
+<span class="ln">234</span>        solid(hdm, hjm, hrm, hs, hs2, jstart, jend, eta2m, him, omegam,
+<span class="ln">235</span>              qiwm, r0m, m)
+<span class="ln">236</span>        # Question (see the page): the whole star for solid rotation.
+<span class="ln">237</span>        if lczsur:
+<span class="ln">238</span>            hicz = him[1]
+<span class="ln">239</span>            for i in range(2, m + 1):
+<span class="ln">240</span>                hicz = hicz + him[i]
+<span class="ln">241</span>    return (fx, hicz, hsbot, hstop, imin, imax, lallcz, lczsur, nrzone,
+<span class="ln">242</span>            nzone)</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_receding_cz'><summary>Python version: _receding_cz</summary><pre class='src'><span class="ln">245</span>def _receding_cz(m, fx, hjm, hr, hs2, lcm):
+<span class="ln">246</span>    # MHP 06/02: correct the specific angular momentum of shells that left a
+<span class="ln">247</span>    # convection zone during the step. Never run (LNEWCZ is reset first);
+<span class="ln">248</span>    # translated as written, its apparent bugs included (question 1 of the
+<span class="ln">249</span>    # page). Returns FX, which the Fortran overwrites.
+<span class="ln">250</span>    c = constants_mod
+<span class="ln">251</span>    hro = oldmod_mod.hro
+<span class="ln">252</span>    lcc = False
+<span class="ln">253</span>    ldo = False
+<span class="ln">254</span>    for i in range(1, m):
+<span class="ln">255</span>        if lchg[i]:
+<span class="ln">256</span>            if not lcc:
+<span class="ln">257</span>                lcc = True  # start of a changed region
+<span class="ln">258</span>                i0 = i
+<span class="ln">259</span>        if not lchg[i]:
+<span class="ln">260</span>            if lcc:
+<span class="ln">261</span>                i1 = i - 1  # end of a changed region
+<span class="ln">262</span>                lcc = False
+<span class="ln">263</span>                ldo = True
+<span class="ln">264</span>                print(i0, i1, ddeln[i0], ddeln[i0 - 1], ddeln[i1 + 1])
+<span class="ln">265</span>                # Only a receding convection zone changes J.
+<span class="ln">266</span>                if ddeln[i0] &gt; 0.0:
+<span class="ln">267</span>                    if ddeln[i0 - 1] &lt; 0.0:
+<span class="ln">268</span>                        ind = -1  # subtracted from a core zone
+<span class="ln">269</span>                    elif ddeln[i1 + 1] &lt; 0.0:
+<span class="ln">270</span>                        ind = 1  # subtracted from an envelope zone
+<span class="ln">271</span>                    else:
+<span class="ln">272</span>                        ldo = False
+<span class="ln">273</span>                else:
+<span class="ln">274</span>                    ldo = False
+<span class="ln">275</span>        if ldo:
+<span class="ln">276</span>            ldo = False
+<span class="ln">277</span>            if ind &lt; 0:
+<span class="ln">278</span>                # Core zone: locate its edges.
+<span class="ln">279</span>                icz1 = i0 - 1
+<span class="ln">280</span>                icz0 = 1
+<span class="ln">281</span>                for ii in range(i0 - 1, 0, -1):
+<span class="ln">282</span>                    if not lcm[ii]:
+<span class="ln">283</span>                        icz0 = ii + 1
+<span class="ln">284</span>                        break  # GOTO 11
+<span class="ln">285</span>                js = range(i1, i0 - 1, -1)
+<span class="ln">286</span>            else:
+<span class="ln">287</span>                # Envelope zone: locate its edges.
+<span class="ln">288</span>                icz0 = i1 + 1
+<span class="ln">289</span>                icz1 = m
+<span class="ln">290</span>                for ii in range(i1 + 2, m + 1):
+<span class="ln">291</span>                    if not lcm[ii]:
+<span class="ln">292</span>                        icz1 = ii - 1
+<span class="ln">293</span>                        break  # GOTO 12
+<span class="ln">294</span>                js = range(i0, i1 + 1)
+<span class="ln">295</span>            for j in js:
+<span class="ln">296</span>                if ddeln[j] &lt; 0.0:
+<span class="ln">297</span>                    break  # GOTO 13
+<span class="ln">298</span>                czi = 0.0
+<span class="ln">299</span>                czj = 0.0
+<span class="ln">300</span>                # Fractions of the step the shell was radiative, convective.
+<span class="ln">301</span>                fx = ddeln[j] / (ddeln[j] - ddelp[j])
+<span class="ln">302</span>                f2 = 1.0 - fx
+<span class="ln">303</span>                zone = range(icz0, j) if ind &lt; 0 else range(j + 1, icz1 + 1)
+<span class="ln">304</span>                for ii in zone:
+<span class="ln">305</span>                    hrr = hrp[ii] + f2 * (hr[ii] - hro[ii])
+<span class="ln">306</span>                    czi = czi + c.cc23 * hs2[ii] * 10.0**(2.0 * hrr)
+<span class="ln">307</span>                    czj = czj + hjm[ii] * hs2[ii]
+<span class="ln">308</span>                # The zone&#x27;s J/M when the shell was released; the
+<span class="ln">309</span>                # difference goes back into the zone.
+<span class="ln">310</span>                hrsh = 2.0 * (hrp[j] + f2 * (hr[j] - hrp[j]))
+<span class="ln">311</span>                hjm2 = c.cc23 * (czj / czi) * 10.0**hrsh
+<span class="ln">312</span>                delj = (hjm[j] - hjm2) * hs2[j]
+<span class="ln">313</span>                ratio = (czj - delj) / czj
+<span class="ln">314</span>                hjm[j] = hjm2
+<span class="ln">315</span>                rr = hjm2 / hjm[j]
+<span class="ln">316</span>                print(j, fx, rr, delj, ratio)
+<span class="ln">317</span>                rescale = range(icz0, j) if ind &lt; 0 else range(j + 1, m + 1)
+<span class="ln">318</span>                for ii in rescale:
+<span class="ln">319</span>                    hjm[ii] = hjm[ii] * ratio
+<span class="ln">320</span>            # label 13
+<span class="ln">321</span>    return fx</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li><strong>Missing.</strong> On the first diffusion step (<code>LFIRST</code>), MIDMOD resets <code>HCOMP</code> (rows 1–11, or 1–15 with <code>LEXCOM</code>) to the old model's composition <code>HCOMPP</code> and <code>AMUM</code> to <code>AMUO</code>, so mixing and burning start from the start of the model step. The note does not say so. Fix: add a step 0.</li>
+<li><strong>Wrong.</strong> "<code>IMIN</code> is the first shell above a central convection zone": the code sets <code>IMIN = MAX(2, I-1)</code>, where <code>I</code> is the first non-convective shell, so <code>IMIN</code> is the outermost shell of the convection zone; the comment says "first zone above". Fix: state what the code does, and add a question.</li>
+<li><strong>Unclear.</strong> The deuterium test uses <code>HCOMPP(12,M)</code>, the surface deuterium <em>at the start of the step</em>. Fix: say so.</li>
+</ol>
+<p>Revised: step 0 added; <code>IMIN</code> corrected; the deuterium test explained; question 7 added.</p></div></details>
+</main></body></html>

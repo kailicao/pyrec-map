@@ -1,0 +1,263 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>condopacpint.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ condopacpint.f</span></header><main>
+<h1>condopacpint.f</h1>
+<p class='muted'>109 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/condopacpint.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>condopacpint.py</code>, 91 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file computes the conductive opacity for a mixture of hydrogen, helium and metals from Potekhin's conductivity tables ("based on Chris Burke's conductive opacity code", LLP 5/31/04). <a href="../yrec-map/getopac.f.html#def-GETOPAC">GETOPAC</a> then adds it to the radiative opacity in harmonic sum.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>DL</code> ($\log\rho$), <code>TL</code> ($\log T$), <code>X</code>, <code>Z</code>, and <code>FXION</code>, the ionization fractions (of H; of He singly and doubly).</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/getopac.f.html#def-GETOPAC">GETOPAC</a>, when the Potekhin option (<code>LcondOpacP</code>) is on.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/condopacp.f.html#def-CONDOPACP">CONDOPACP</a>, for $Z_\mathrm{ion}$ = 1, 2 and 8.</li>
+<li><strong>Outputs:</strong> <code>OC</code> and <code>OCL</code> (the conductive opacity and its log), <code>QODC</code>, <code>QOTC</code> (its derivatives in $\log\rho$ and $\log T$), and <code>LCONDO</code> (true if computed). If <code>LCONDO</code> is false, GETOPAC falls back to the Hubbard–Lampe formula or uses no conductive opacity.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Number fractions of H, He and metals (taken as oxygen, $A = 16$), $w_k = (X_k/A_k)/\sum_j(X_j/A_j)$, then weighted by ionization: $w_\mathrm{H} f_\mathrm{H^+}$, $w_\mathrm{He}(f_\mathrm{He^+} + 2f_\mathrm{He^{2+}})/2$; metals are taken as fully ionized.</li>
+<li>Inside $3 \le \log T \le 9$, $-6 \le \log\rho \le 9.75$: the conductivity $K_k$ of each pure composition from CONDOPACP, combined as
+$$\frac{1}{K} = \sum_k \frac{w_k}{K_k},$$
+and the conductive opacity
+$$\kappa_\mathrm{cond} = \frac{16\,\sigma\,T^3}{3\,\rho\,K}, \qquad \log\kappa_\mathrm{cond} = -3.5194 + 3\log T - \log\rho - \log K,$$
+with $\log(16\sigma/3) = -3.5194$ in cgs. Its derivatives are $\partial\log\kappa/\partial\log\rho = -1 - \partial\log K/\partial\log\rho$ and $\partial\log\kappa/\partial\log T = 3 - \partial\log K/\partial\log T$.
+   These limits are the table's edges (see <a href="../yrec-map/condopacp.f.html#def-CONDOPACP">CONDOPACP</a>, question 1, for the upper ones).</li>
+<li>Below $\log\rho = -6$, where $\log R = \log\rho - 3(\log T - 6) \ge 0$ (so only for $\log T &lt; 4$): evaluate at $\log\rho = -6$ and extrapolate linearly in $\log\rho$ with the hydrogen table's slope; $\partial\log\kappa/\partial\log T$ is hydrogen's alone, at $\log\rho = -6$.</li>
+<li>Elsewhere, <code>LCONDO</code> stays false, and <code>OC</code> is left at $10^{9.9998}$ with <code>QODC = QOTC = OC</code>; GETOPAC then either returns before using them ($\log T &lt; 4.2$, or low density) or replaces them with the Hubbard–Lampe formula.</li>
+</ol>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>A sign in the extrapolation.</strong> In step 3, <code>CONDL = LOG10(…)</code>, while in step 2 <code>CONDL = -LOG10(…)</code>, with the same sum inside. Since $\sum w_k/K_k = 1/K$, step 2 gives $\log K$ but step 3 gives $-\log K$, so the extrapolated opacity has the conductivity's sign reversed. Probably a missing minus sign. The step of the extrapolation also looks reversed: <code>OCL = OCL + QODC*(-6.0D0-DL)</code> adds slope × $(-6 - \log\rho)$, where a linear extrapolation from $\log\rho = -6$ adds slope × $(\log\rho + 6)$.</li>
+<li><strong>The derivatives of the mixture.</strong> <code>QODC = CONDL * (WtH1*QODCX + …)</code> multiplies the weighted derivatives by $\log K$ itself. The derivative of the harmonic sum is $\partial\log K/\partial\log\rho = \sum_k (w_k K/K_k)\,\partial\log K_k/\partial\log\rho$; the factor $\log K$ looks wrong (the commented-out older lines have a different, also unusual, form).</li>
+<li><strong>A copy error.</strong> <code>QOTC</code> is computed from the density derivatives <code>QODCX</code>, <code>QODCY</code>, <code>QODCZ</code>, not from <code>QOTCX</code>, <code>QOTCY</code>, <code>QOTCZ</code>, so $\partial\log\kappa/\partial\log T$ is wrong.</li>
+<li><strong>The metals.</strong> All metals are represented by $Z_\mathrm{ion} = 8$ with $A = 16$ and full ionization; the comment justifies this by their low abundance. Fine for the Sun; for metal-rich or evolved cores (C/O), is it adequate?</li>
+<li><strong>Weights by number of ions.</strong> The comment says the weights count only charged atoms; for helium the weight $(f_1 + 2f_2)/2$ mixes ion number and charge. Is this what Chris Burke's code did?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+condOpacPInt -  Calculate  Conductive Opacities based on Chirs
+Burke&#x27;s conductive opacity code and callin
+on Potehkin code and table.
+
+LLP    5/31/04
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-CONDOPACPINT'>CONDOPACPINT</a> <span class='muted'>subroutine · CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-CONDOPACPINT'><h3><span class='kind'>subroutine</span>CONDOPACPINT</h3>
+<p class='muted'>lines 10–106 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/condopacpint.f#L10-L106'>GitHub</a></p>
+<pre>SUBROUTINE condOpacPInt(DL,TL,X,Z,OC,OCL,QODC,QOTC,FXION,LCONDO)</pre>
+<div class='notes'><p>Conductive opacity for an H/He/metal mixture: harmonic sum of Potekhin's conductivities for $Z_\mathrm{ion}$ = 1, 2, 8 weighted by ionized number fractions, then $\kappa_\mathrm{cond} = 16\sigma T^3/(3\rho K)$; linear extrapolation below $\log\rho = -6$.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+condOpacPInt -  Calculate  Conductive Opacities based on Chirs
+Burke&#x27;s conductive opacity code and callin
+on Potehkin code and table.
+
+LLP    5/31/04
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC</pre></details>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/condopacp.f.html#def-CONDOPACP'>CONDOPACP</a> <span class='muted'>(condopacp.f)</span> ×6</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/getopac.f.html#def-GETOPAC'>GETOPAC</a> <span class='muted'>(getopac.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">10</span>      SUBROUTINE condOpacPInt(DL,TL,X,Z,OC,OCL,QODC,QOTC,FXION,LCONDO)
+<span class="ln">11</span>C 10/20/26 MHP via Claude
+<span class="ln">12</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">13</span>C explicit declarations.
+<span class="ln">14</span>      IMPLICIT NONE
+<span class="ln">15</span>      REAL*8 AH1,AHE4,AOX,CONDL,CONDX,CONDXL,CONDY,CONDYL,CONDZ,CONDZL,
+<span class="ln">16</span>     *       CRAP,CRAP2,DL,OC,OCL,QODC,QODCX,QODCY,QODCZ,QOTC,QOTCX,
+<span class="ln">17</span>     *       QOTCY,QOTCZ,RL,TL,WTH1,WTH1BASE,WTHE4,WTHE4BASE,WTOX,
+<span class="ln">18</span>     *       WTOXBASE,X,Y,Z
+<span class="ln">19</span>      LOGICAL*4 LCONDO
+<span class="ln">20</span>      REAL*8 FXION(3)
+<span class="ln">21</span>      DATA AH1,AHe4,AOx /1.008D0,4.004D0,16D0/
+<span class="ln">22</span>      save
+<span class="ln">23</span>
+<span class="ln">24</span>C Get fractional abundances in nubers of atoms of H1, He4 and metals (Ox)
+<span class="ln">25</span>      Y=1.0D0-X-Z
+<span class="ln">26</span>      WtH1Base  = (X/AH1)  / (X/AH1 + Y/AHe4 + Z/AOx)
+<span class="ln">27</span>      WtHe4Base = (Y/AHe4) / (X/AH1 + Y/AHe4 + Z/AOx)
+<span class="ln">28</span>      WtOxBase  = (Z/AOx)  / (X/AH1 + Y/AHe4 + Z/AOx)
+<span class="ln">29</span>
+<span class="ln">30</span>C In addition we now weight the H1, He and Ox by oncly
+<span class="ln">31</span>C considering those atoms H1 and He4 atomos which are
+<span class="ln">32</span>C charged. FXION(1) is the fraction of H1 atoms that are
+<span class="ln">33</span>C (singly) charged. FXION(2) is the fraction of He4 atoms
+<span class="ln">34</span>C that are singly charged and FXION(3) the fractoin that
+<span class="ln">35</span>C are doubly charged.  It is presumed that the metals (Ox)
+<span class="ln">36</span>C are fully ionized in first approximation. Because of
+<span class="ln">37</span>C their low abundance (tyically less than 2% divided by
+<span class="ln">38</span>C the atomic mass
+<span class="ln">39</span>       WtH1 = WtH1Base * FXION(1) ! (FXION(1)/1D0 is the fraction
+<span class="ln">40</span>       WtHe4 = WtHe4Base * (FXION(2) + 2D0*FXION(3))/2D0
+<span class="ln">41</span>       WtOx = WtOxBase
+<span class="ln">42</span>
+<span class="ln">43</span>C We initially presume no significant conductive opacity
+<span class="ln">44</span>       LCONDO=.FALSE.
+<span class="ln">45</span>c       OC = 1D50
+<span class="ln">46</span>c       OCL = LOG10(OC)
+<span class="ln">47</span>       OCL = 9.9998D0
+<span class="ln">48</span>       OC = 10D0**OCL
+<span class="ln">49</span>       QODC = OC
+<span class="ln">50</span>       QOTC = OC
+<span class="ln">51</span>
+<span class="ln">52</span>       RL = DL - 3.0D0*(TL-6.0D0)
+<span class="ln">53</span>C     DO CONDUCTIVE OPACITY CORRECTION in fully ionized approximation
+<span class="ln">54</span>      IF(TL.GE.3.0D0.AND.TL.LE.9.0D0.AND.DL.LE.9.75D0) THEN
+<span class="ln">55</span>         IF (DL.GE.-6.0D0) THEN
+<span class="ln">56</span>           CALL <a href="../yrec-map/condopacp.f.html#def-CONDOPACP" title="CONDOPACP in condopacp.f">CondOpacP</a>(1.0D0,TL,DL,CONDXL,QODCX,QOTCX)
+<span class="ln">57</span>           CALL <a href="../yrec-map/condopacp.f.html#def-CONDOPACP" title="CONDOPACP in condopacp.f">CondOpacP</a>(2.0D0,TL,DL,CONDYL,QODCY,QOTCY)
+<span class="ln">58</span>           CALL <a href="../yrec-map/condopacp.f.html#def-CONDOPACP" title="CONDOPACP in condopacp.f">CondOpacP</a>(8.0D0,TL,DL,CONDZL,QODCZ,QOTCZ)
+<span class="ln">59</span>
+<span class="ln">60</span>           CONDX = 10.0D0**(-CONDXL)
+<span class="ln">61</span>           CONDY = 10.0D0**(-CONDYL)
+<span class="ln">62</span>           CONDZ = 10.0D0**(-CONDZL)
+<span class="ln">63</span>
+<span class="ln">64</span>           CONDL = -LOG10(WtH1*CONDX + WtHe4*CONDY + WtOx*CONDZ)
+<span class="ln">65</span>c           CONDL = LOG10( (X + 1D0) / 2D0 ) -
+<span class="ln">66</span>c     *             LOG10( X*CONDX + .5D0*Y*CONDY + .5D0*z*CONDZ)
+<span class="ln">67</span>
+<span class="ln">68</span>           QODC = CONDL * (WtH1*QODCX + WtHe4*QODCY + WtOx*QODCZ)
+<span class="ln">69</span>c           QODC = 2D0 * CONDL / ( 1D0 + X ) *
+<span class="ln">70</span>c     *          (X*CONDX*QODCX +.5D0*Y*CONDY*QODCY +.5D0*Z*COBDZ*QODCZ)
+<span class="ln">71</span>
+<span class="ln">72</span>            QOTC = CONDL * (WtH1*QODCX + WtHe4*QODCY + WtOx*QODCZ)
+<span class="ln">73</span>c           QOTC = 2D0 * CONDL / ( 1D0 + X ) *
+<span class="ln">74</span>c     *          (X*CONDX*QOTCX +.5D0*Y*CONDY*QOTCY +.5D0*Z*CONDZ*QOTCZ)
+<span class="ln">75</span>
+<span class="ln">76</span>         OCL = -3.5194D0+3.0D0*TL-DL-CONDL
+<span class="ln">77</span>           QODC = -1.0D0-QODC
+<span class="ln">78</span>           QOTC = 3.0D0-QOTC
+<span class="ln">79</span>           LCONDO=.TRUE.
+<span class="ln">80</span>           OC = 10.0D0**OCL
+<span class="ln">81</span>         END IF
+<span class="ln">82</span>         IF (DL.LT.-6.0D0.AND.RL.GE.0.0D0) THEN
+<span class="ln">83</span>C Extrapolate Conductive opacity
+<span class="ln">84</span>           CALL <a href="../yrec-map/condopacp.f.html#def-CONDOPACP" title="CONDOPACP in condopacp.f">CondOpacP</a>(1.0D0,TL,-6.0D0,CONDXL,QODC,QOTC)
+<span class="ln">85</span>           CALL <a href="../yrec-map/condopacp.f.html#def-CONDOPACP" title="CONDOPACP in condopacp.f">CondOpacP</a>(2.0D0,TL,-6.0D0,CONDYL,CRAP,CRAP2)
+<span class="ln">86</span>           CALL <a href="../yrec-map/condopacp.f.html#def-CONDOPACP" title="CONDOPACP in condopacp.f">CondOpacP</a>(8.0D0,TL,-6.0D0,CONDZL,CRAP,CRAP2)
+<span class="ln">87</span>
+<span class="ln">88</span>           CONDX = 10.0D0**(-CONDXL)
+<span class="ln">89</span>           CONDY = 10.0D0**(-CONDYL)
+<span class="ln">90</span>           CONDZ = 10.0D0**(-CONDZL)
+<span class="ln">91</span>
+<span class="ln">92</span>           CONDL = LOG10(WtH1*CONDX + WtHe4*CONDY + WtOx*CONDZ)
+<span class="ln">93</span>c           CONDL = LOG10( (X + 1D0) / 2D0 ) -
+<span class="ln">94</span>c     *            LOG10( X*CONDX + .5D0*Y*CONDY + .5D0*Z*CONDZ)
+<span class="ln">95</span>
+<span class="ln">96</span>           OCL = -3.5194D0+3.0D0*TL+6.0D0-CONDL
+<span class="ln">97</span>           QODC = -1.0D0-QODC
+<span class="ln">98</span>           QOTC = 3.0D0-QOTC
+<span class="ln">99</span>           OCL = OCL + QODC*(-6.0D0-DL)
+<span class="ln">100</span>           OC = 10.0D0**OCL
+<span class="ln">101</span>           LCONDO=.TRUE.
+<span class="ln">102</span>         END IF
+<span class="ln">103</span>      END IF
+<span class="ln">104</span>
+<span class="ln">105</span>      RETURN
+<span class="ln">106</span>      END</pre></details>
+<details class='py' id='py-condopacpint'><summary>Python version: condopacpint</summary><pre class='doc'>The conductive opacity of a mixture: Potekhin&#x27;s conductivities for
+Z_ion = 1, 2 and 8, summed harmonically with weights by ionized number
+fraction, then kappa = 16 sigma T^3 / (3 rho K); extrapolated linearly
+below log rho = -6.
+
+Translates: condopacpint.f#CONDOPACPINT (09c3b9b)
+
+Arguments: dl, log rho; tl, log T; x, z, the mass fractions of H and
+metals; fxion[1..3], the ionization fractions (H+, He+, He2+); oc,
+ocl, qodc, qotc, lcondo, passed in (with any value).
+
+Returns (oc, ocl, qodc, qotc, lcondo): the opacity and its log, its
+derivatives in log rho and log T, and True if computed (otherwise oc
+is 10**9.9998, with qodc = qotc = oc).</pre><pre class='src'><span class="ln">14</span>def condopacpint(dl, tl, x, z, oc, ocl, qodc, qotc, fxion, lcondo):
+<span class="ln">15</span>    &quot;&quot;&quot;The conductive opacity of a mixture: Potekhin&#x27;s conductivities for
+<span class="ln">16</span>    Z_ion = 1, 2 and 8, summed harmonically with weights by ionized number
+<span class="ln">17</span>    fraction, then kappa = 16 sigma T^3 / (3 rho K); extrapolated linearly
+<span class="ln">18</span>    below log rho = -6.
+<span class="ln">19</span>
+<span class="ln">20</span>    Translates: condopacpint.f#CONDOPACPINT (09c3b9b)
+<span class="ln">21</span>
+<span class="ln">22</span>    Arguments: dl, log rho; tl, log T; x, z, the mass fractions of H and
+<span class="ln">23</span>    metals; fxion[1..3], the ionization fractions (H+, He+, He2+); oc,
+<span class="ln">24</span>    ocl, qodc, qotc, lcondo, passed in (with any value).
+<span class="ln">25</span>
+<span class="ln">26</span>    Returns (oc, ocl, qodc, qotc, lcondo): the opacity and its log, its
+<span class="ln">27</span>    derivatives in log rho and log T, and True if computed (otherwise oc
+<span class="ln">28</span>    is 10**9.9998, with qodc = qotc = oc).
+<span class="ln">29</span>    &quot;&quot;&quot;
+<span class="ln">30</span>    # The number fractions of H1, He4 and the metals.
+<span class="ln">31</span>    y = 1.0 - x - z
+<span class="ln">32</span>    wth1base = (x / AH1) / (x / AH1 + y / AHE4 + z / AOX)
+<span class="ln">33</span>    wthe4base = (y / AHE4) / (x / AH1 + y / AHE4 + z / AOX)
+<span class="ln">34</span>    wtoxbase = (z / AOX) / (x / AH1 + y / AHE4 + z / AOX)
+<span class="ln">35</span>    # Weighted by ionization; the metals taken as fully ionized.
+<span class="ln">36</span>    # Question (see the page): (f1 + 2 f2)/2 for helium.
+<span class="ln">37</span>    wth1 = wth1base * fxion[1]
+<span class="ln">38</span>    wthe4 = wthe4base * (fxion[2] + 2.0 * fxion[3]) / 2.0
+<span class="ln">39</span>    wtox = wtoxbase
+<span class="ln">40</span>
+<span class="ln">41</span>    # No significant conductive opacity, to begin with.
+<span class="ln">42</span>    lcondo = False
+<span class="ln">43</span>    ocl = 9.9998
+<span class="ln">44</span>    oc = 10.0 ** ocl
+<span class="ln">45</span>    qodc = oc
+<span class="ln">46</span>    qotc = oc
+<span class="ln">47</span>
+<span class="ln">48</span>    rl = dl - 3.0 * (tl - 6.0)
+<span class="ln">49</span>    if tl &gt;= 3.0 and tl &lt;= 9.0 and dl &lt;= 9.75:
+<span class="ln">50</span>        if dl &gt;= -6.0:
+<span class="ln">51</span>            condxl, qodcx, qotcx = condopacp(1.0, tl, dl, 0.0, 0.0, 0.0)
+<span class="ln">52</span>            condyl, qodcy, qotcy = condopacp(2.0, tl, dl, 0.0, 0.0, 0.0)
+<span class="ln">53</span>            condzl, qodcz, qotcz = condopacp(8.0, tl, dl, 0.0, 0.0, 0.0)
+<span class="ln">54</span>
+<span class="ln">55</span>            condx = 10.0 ** (-condxl)
+<span class="ln">56</span>            condy = 10.0 ** (-condyl)
+<span class="ln">57</span>            condz = 10.0 ** (-condzl)
+<span class="ln">58</span>
+<span class="ln">59</span>            condl = -math.log10(wth1 * condx + wthe4 * condy + wtox * condz)
+<span class="ln">60</span>            # Question (see the page): the factor condl (log K).
+<span class="ln">61</span>            qodc = condl * (wth1 * qodcx + wthe4 * qodcy + wtox * qodcz)
+<span class="ln">62</span>            # Question (see the page): the density derivatives again.
+<span class="ln">63</span>            qotc = condl * (wth1 * qodcx + wthe4 * qodcy + wtox * qodcz)
+<span class="ln">64</span>
+<span class="ln">65</span>            ocl = -3.5194 + 3.0 * tl - dl - condl
+<span class="ln">66</span>            qodc = -1.0 - qodc
+<span class="ln">67</span>            qotc = 3.0 - qotc
+<span class="ln">68</span>            lcondo = True
+<span class="ln">69</span>            oc = 10.0 ** ocl
+<span class="ln">70</span>        if dl &lt; -6.0 and rl &gt;= 0.0:
+<span class="ln">71</span>            # Extrapolate from log rho = -6.
+<span class="ln">72</span>            condxl, qodc, qotc = condopacp(1.0, tl, -6.0, 0.0, 0.0, 0.0)
+<span class="ln">73</span>            condyl, crap, crap2 = condopacp(2.0, tl, -6.0, 0.0, 0.0, 0.0)
+<span class="ln">74</span>            condzl, crap, crap2 = condopacp(8.0, tl, -6.0, 0.0, 0.0, 0.0)
+<span class="ln">75</span>
+<span class="ln">76</span>            condx = 10.0 ** (-condxl)
+<span class="ln">77</span>            condy = 10.0 ** (-condyl)
+<span class="ln">78</span>            condz = 10.0 ** (-condzl)
+<span class="ln">79</span>
+<span class="ln">80</span>            # Question (see the page): no minus sign here, unlike above.
+<span class="ln">81</span>            condl = math.log10(wth1 * condx + wthe4 * condy + wtox * condz)
+<span class="ln">82</span>
+<span class="ln">83</span>            ocl = -3.5194 + 3.0 * tl + 6.0 - condl
+<span class="ln">84</span>            qodc = -1.0 - qodc
+<span class="ln">85</span>            qotc = 3.0 - qotc
+<span class="ln">86</span>            # Question (see the page): the step (-6 - dl) looks reversed.
+<span class="ln">87</span>            ocl = ocl + qodc * (-6.0 - dl)
+<span class="ln">88</span>            oc = 10.0 ** ocl
+<span class="ln">89</span>            lcondo = True
+<span class="ln">90</span>
+<span class="ln">91</span>    return oc, ocl, qodc, qotc, lcondo</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Missing question. The extrapolation in step 3 also has the wrong sign of the step: <code>OCL = OCL + QODC*(-6.0D0-DL)</code> adds slope × $(-6 - \log\rho)$, while a linear extrapolation from $\log\rho = -6$ down to $\log\rho$ adds slope × $(\log\rho + 6)$. Together with question 1's sign, the extrapolated opacity is doubly suspect. Fix: add to question 1.</li>
+<li>Missing. Step 3 is reached only for $\log T &lt; 4$ (it needs $\log\rho &lt; -6$ and $\log\rho - 3(\log T - 6) \ge 0$), and its $\partial\log\kappa/\partial\log T$ is hydrogen's alone at $\log\rho = -6$. Fix: a clause.</li>
+<li>Missing. When <code>LCONDO</code> stays false, the routine leaves <code>OC</code> $= 10^{9.9998}$ and sets <code>QODC = QOTC = OC</code>; GETOPAC then either returns before using them ($\log T &lt; 4.2$ or low density) or overwrites them with Hubbard–Lampe. Harmless; one clause.</li>
+<li>Missing (link). The tables span exactly the guards' range; see CONDOPACP's question 1 for the upper edges. Fix: a pointer.</li>
+</ol>
+<p>Revised: the reversed extrapolation step added to question 1; the region of step 3, its $T$ derivative, the fallback values and the pointer to CONDOPACP added.</p></div></details>
+</main></body></html>

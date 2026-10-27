@@ -1,0 +1,309 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>rhoofp06.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ rhoofp06.f</span></header><main>
+<h1>rhoofp06.f</h1>
+<p class='muted'>148 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/rhoofp06.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>rhoofp06.py</code>, 107 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> Inverts the OPAL 2006 equation of state: the density for a given $X$, $T_6$ and pressure. It follows the method of <code>RHOOFP</code> and <code>RHOOFP01</code>, the versions for the original and 2001 tables (both removed since <code>rp_1</code>), with a different treatment of radiation.</p>
+<p><strong>How it fits.</strong> Called by <a href="../yrec-map/oeqos06.f.html#def-OEQOS06"><code>OEQOS06</code></a>; calls <a href="../yrec-map/esac06.f.html#def-ESAC06"><code>ESAC06</code></a> for each trial density. Modules: <code>AEOS06_MOD</code> (tables and grids from <a href="../yrec-map/readcoeos06.f.html#def-READCOEOS06"><code>READCOEOS06</code></a>) and <code>EOS06MISC_MOD</code> (<code>EOS</code>, the results of <code>ESAC06</code>, and <code>NRA</code>, the last density index at each temperature, set by a <code>DATA</code> statement in the module and also used by <a href="../yrec-map/eqbound06.f.html#def-EQBOUND06"><code>EQBOUND06</code></a>). It returns the density, or $-999$.</p>
+<p><strong>The method.</strong></p>
+<ol>
+<li>Find the bracketing composition index <code>MLO</code> in <code>XA</code> and temperature index <code>KLO</code> in <code>T6LIST(1,·)</code>, by bisection.</li>
+<li>Estimate the table's pressure range at that temperature from the first stored quantity, read as $P/(\rho T_6)$: $P_\mathrm{max} = \texttt{XZ}(\cdot,1,k,n_k)\,T_6\,\rho_{n_k}$ and $P_\mathrm{min} = \texttt{XZ}(\cdot,1,k,1)\,T_6\,\rho_1$, with $n_k$ = <code>NRA(KLO)</code>. If $P_\mathrm{gas} &gt; 1.25\,P_\mathrm{max}$ or $P_\mathrm{gas} &lt; P_\mathrm{min}$, it fails.</li>
+<li>First guess $\rho_1 = \rho_{n_k} P_\mathrm{gas}/P_\mathrm{max}$; a second guess five times larger (capped at $\rho_{n_k}$) or five times smaller (floored at $10^{-14}$), depending on the side.</li>
+<li>Up to 11 steps of the secant method, keeping a bracket (regula falsi):
+   $$\rho_3 = \rho_1 + (\rho_2 - \rho_1)\,\frac{P_\mathrm{gas} - P_1}{P_2 - P_1}.$$</li>
+</ol>
+<p>Failures (out of the table, no convergence, an error return from <code>ESAC06</code>) all return $-999$ silently; the messages are commented out.</p>
+<p><strong>Differences from the removed <code>RHOOFP</code>.</strong></p>
+<ul>
+<li><strong>Radiation.</strong> When <code>irad</code> is 1, the radiation pressure is subtracted first,
+  $$P_\mathrm{gas} = P - \tfrac43\,\frac{\sigma}{c}\,T_6^4\quad(\text{in Mb}),$$
+  and the search matches $P_\mathrm{gas}$ against <code>ESAC06</code> called with <code>irad</code> = 0 (gas only), with $P_\mathrm{min}$ and $P_\mathrm{max}$ also without radiation. The other two versions matched the total pressure instead.</li>
+<li><strong>The edge <code>NRA</code></strong> comes from <code>EOS06MISC_MOD</code>, not from a local <code>DATA</code> list.</li>
+<li><strong>Tolerance.</strong> Convergence is $|P_3 - P|/P &lt; 10^{-5}$, changed from $5\times10^{-8}$ "to prevent array value eos(5) from growing without bound and crashing the program during certain model runs" (MR 2025-10-10).</li>
+</ul>
+<p><strong>KC's changes.</strong> The unused argument <code>ZTAB</code> was removed from the function and its calls to <code>ESAC06</code> (KC 2025-05-31; one marker sits, probably by mistake, on the line computing <code>rhog3</code>); the members of <code>/BEOS06/</code> were reordered (KC 2025-05-30).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> The first-call switch (<code>ITIME</code> in <code>/LREADCO/</code>) and the call to <code>ESAC06</code> at a fixed point that forced the tables to be read are removed (the tables are now read once by <code>SETEOS06</code>, from <code>SETUPS</code>); <code>SIGMACC</code> is a double-precision constant (<code>1.8914785D-3</code>), which settles former question 3; <code>RHOOFP</code> and <code>RHOOFP01</code> are removed, which settles former question 2 (making the three versions agree); COMMON blocks to modules, <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The looser tolerance.</strong> The 2025 change accepts a density whose pressure is off by up to $10^{-5}$ relative. Is that accurate enough for the hydrostatic solution, and is the underlying growth of <code>eos(5)</code> ($c_V$) understood?</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+RHOOFP06
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+function rhoofp06(x,ztab,t6,p,irad)  ! KC 2025-05-31</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-RHOOFP06'>RHOOFP06</a> <span class='muted'>function · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-RHOOFP06'><h3><span class='kind'>function</span>RHOOFP06</h3>
+<p class='muted'>lines 8–147 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/rhoofp06.f#L8-L147'>GitHub</a></p>
+<pre>function rhoofp06(x,t6,p,irad)</pre>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+RHOOFP06
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+function rhoofp06(x,ztab,t6,p,irad)  ! KC 2025-05-31</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/aeos06_mod.f.html#def-AEOS06_MOD'>AEOS06_MOD</a>, <a href='../yrec-map/eos06misc_mod.f.html#def-EOS06MISC_MOD'>EOS06MISC_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/esac06.f.html#def-ESAC06'>ESAC06</a> <span class='muted'>(esac06.f)</span> ×4</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/oeqos06.f.html#def-OEQOS06'>OEQOS06</a> <span class='muted'>(oeqos06.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">8</span>      function rhoofp06(x,t6,p,irad)
+<span class="ln">9</span>C 10/20/26 MHP via Claude
+<span class="ln">10</span>C code changed to convert COMMON/AEOS06/, COMMON/EOS06MISC/ into
+<span class="ln">11</span>C AEOS06_MOD, EOS06MISC_MOD.
+<span class="ln">12</span>      USE AEOS06_MOD
+<span class="ln">13</span>      USE EOS06MISC_MOD
+<span class="ln">14</span>C 10/20/26 MHP via Claude
+<span class="ln">15</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">16</span>C explicit declarations.
+<span class="ln">17</span>      IMPLICIT NONE
+<span class="ln">18</span>      REAL*8 P,P1,P2,P3,PMAX,PMIN,PNR,PR,RAT,RHOG1,RHOG2,RHOG3,RHOOFP06,
+<span class="ln">19</span>     *       SIGMACC,T6,X
+<span class="ln">20</span>      INTEGER ICOUNT,IHI,ILO,IMD,IRAD,KLO,MLO,MV,MX,NR,NT
+<span class="ln">21</span>
+<span class="ln">22</span>      parameter (mx=5,mv=10,nr=169,nt=197)
+<span class="ln">23</span>C 10/13/26 MHP via Claude
+<span class="ln">24</span>C code changed to remove COMMON/LREADCO/; the table is now read once by
+<span class="ln">25</span>C SETEOS06 from SETUPS, so this routine no longer needs the first-time
+<span class="ln">26</span>C switch or the fabricated ESAC06 call that used to force the read.
+<span class="ln">27</span>C 10/9/26 MHP via Claude
+<span class="ln">28</span>C code changed to rename AEOS06&#x27;s M member to MIDX: M is such a
+<span class="ln">29</span>C universally-used name elsewhere in this codebase (e.g. shell count
+<span class="ln">30</span>C in calcad.f) that keeping it here was just asking for a future
+<span class="ln">31</span>C collision. M is genuinely used (as a composition/mixture-axis
+<span class="ln">32</span>C index) in esac06.f and readcoeos06.f; declared but never read or
+<span class="ln">33</span>C written by name in this file.
+<span class="ln">34</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">35</span>C       common/beos06/ iri(10),index(10),nta(nr),zz(mx),nra(nt)
+<span class="ln">36</span>C 10/9/26 MHP via Claude
+<span class="ln">37</span>C code changed to merge COMMON/EEOS06/, COMMON/AAEOS06/, COMMON/BBEOS06/,
+<span class="ln">38</span>C and COMMON/BEOS06/ into COMMON/EOS06MISC/ (see esac06.f for the full
+<span class="ln">39</span>C rationale). AEOS06 (above) is left untouched.
+<span class="ln">40</span>      data sigmacc/1.8914785D-3/
+<span class="ln">41</span>c--------------------------------------------------------------------
+<span class="ln">42</span>
+<span class="ln">43</span>      save
+<span class="ln">44</span>      rat=sigmacc
+<span class="ln">45</span>      pr=0D0
+<span class="ln">46</span>      if(irad .eq. 1) pr=4D0/3D0*rat*t6**4   ! Mb
+<span class="ln">47</span>      pnr=p-pr
+<span class="ln">48</span>
+<span class="ln">49</span>        ilo=2
+<span class="ln">50</span>        ihi=mx
+<span class="ln">51</span>    8   if(ihi-ilo .gt. 1) then
+<span class="ln">52</span>          imd=(ihi+ilo)/2
+<span class="ln">53</span>            if(x .le. xa(imd)+1.D-7) then
+<span class="ln">54</span>              ihi=imd
+<span class="ln">55</span>            else
+<span class="ln">56</span>              ilo=imd
+<span class="ln">57</span>            endif
+<span class="ln">58</span>          go to 8
+<span class="ln">59</span>        endif
+<span class="ln">60</span>        mlo=ilo
+<span class="ln">61</span>
+<span class="ln">62</span>        ilo=nt
+<span class="ln">63</span>        ihi=2
+<span class="ln">64</span>   11     if(ilo-ihi .gt. 1) then
+<span class="ln">65</span>          imd=(ihi+ilo)/2
+<span class="ln">66</span>           if (t6 .eq. t6list(1,imd)) then
+<span class="ln">67</span>           ilo=imd
+<span class="ln">68</span>           go to 14
+<span class="ln">69</span>           endif
+<span class="ln">70</span>            if(t6 .le. t6list(1,imd)) then
+<span class="ln">71</span>              ihi=imd
+<span class="ln">72</span>            else
+<span class="ln">73</span>              ilo=imd
+<span class="ln">74</span>            endif
+<span class="ln">75</span>          go to 11
+<span class="ln">76</span>          endif
+<span class="ln">77</span>   14     klo=ilo
+<span class="ln">78</span>
+<span class="ln">79</span>      pmax=xz(mlo,1,klo,nra(klo))*t6*rho(nra(klo))
+<span class="ln">80</span>      pmin=xz(mlo,1,klo,1)*t6*rho(1)
+<span class="ln">81</span>      if((pnr .gt. 1.25D0*pmax) .or. (pnr .lt. pmin)) then
+<span class="ln">82</span>c      write (ISHORT,&#x27;(&quot; The requested pressure-temperature not in&quot;,
+<span class="ln">83</span>c     x   &quot; the OPAL 2006 EOS table&quot;)&#x27;)
+<span class="ln">84</span>c     stop
+<span class="ln">85</span>c      write (ISHORT,&#x27;(&quot;pnr, pmax,pmin=&quot;,3e14.4)&#x27;) pnr,pmax,pmin
+<span class="ln">86</span>        goto 999     !RHOOFP06 error exit
+<span class="ln">87</span>      endif
+<span class="ln">88</span>
+<span class="ln">89</span>      rhog1=rho(nra(klo))*pnr/pmax
+<span class="ln">90</span>C       call esac06 (x,ztab,t6,rhog1,1,0,*999)  ! KC 2025-05-31
+<span class="ln">91</span>      call <a href="../yrec-map/esac06.f.html#def-ESAC06" title="ESAC06 in esac06.f">esac06</a> (x,t6,rhog1,1,0,*999)
+<span class="ln">92</span>      p1=eos(1)
+<span class="ln">93</span>        if(p1 .gt. pnr) then
+<span class="ln">94</span>          p2=p1
+<span class="ln">95</span>          rhog2=rhog1
+<span class="ln">96</span>          rhog1=0.2D0*rhog1
+<span class="ln">97</span>          if(rhog1 .lt. 1.D-14) rhog1=1.D-14
+<span class="ln">98</span>C           call esac06 (x,ztab,t6,rhog1,1,0,*999)  ! KC 2025-05-31
+<span class="ln">99</span>          call <a href="../yrec-map/esac06.f.html#def-ESAC06" title="ESAC06 in esac06.f">esac06</a> (x,t6,rhog1,1,0,*999)
+<span class="ln">100</span>          p1=eos(1)
+<span class="ln">101</span>        else
+<span class="ln">102</span>          rhog2=5D0*rhog1
+<span class="ln">103</span>C          if(rhog2 .gt. rho(klo)) rhog2=rho(klo)  ! Corrected below   llp  8/19/08
+<span class="ln">104</span>          if(rhog2 .gt. rho(nra(klo))) rhog2=rho(nra(klo)) ! Had wrong pointer, see rhog1= ten lines up
+<span class="ln">105</span>C           call esac06 (x,ztab,t6,rhog2,1,0,*999)  ! KC 2025-05-31
+<span class="ln">106</span>          call <a href="../yrec-map/esac06.f.html#def-ESAC06" title="ESAC06 in esac06.f">esac06</a> (x,t6,rhog2,1,0,*999)
+<span class="ln">107</span>          p2=eos(1)
+<span class="ln">108</span>        endif
+<span class="ln">109</span>
+<span class="ln">110</span>      icount=0
+<span class="ln">111</span>    1 continue
+<span class="ln">112</span>      icount=icount+1
+<span class="ln">113</span>      rhog3=rhog1+(rhog2-rhog1)*(pnr-p1)/(p2-p1)  ! KC 2025-05-31
+<span class="ln">114</span>C       call esac06 (x,ztab,t6,rhog3,1,0,*999)
+<span class="ln">115</span>      call <a href="../yrec-map/esac06.f.html#def-ESAC06" title="ESAC06 in esac06.f">esac06</a> (x,t6,rhog3,1,0,*999)
+<span class="ln">116</span>      p3=eos(1)
+<span class="ln">117</span>C Changed the comparison below to use the commented-out value 1.D-5
+<span class="ln">118</span>C found here to prevent array value eos(5) from growing without bound
+<span class="ln">119</span>C and crashing the program during certain model runs. - MR 2025-10-10
+<span class="ln">120</span>      if (abs((p3-pnr)/pnr) .lt. 1.D-5) then
+<span class="ln">121</span>C      IF (DABS((P3-PNR)/PNR) .LT. 0.5D-7) THEN
+<span class="ln">122</span>        rhoofp06=rhog3
+<span class="ln">123</span>        return
+<span class="ln">124</span>      endif
+<span class="ln">125</span>      if (p3 .gt. pnr) then
+<span class="ln">126</span>        rhog2=rhog3
+<span class="ln">127</span>        p2=p3
+<span class="ln">128</span>        if (icount .lt. 11) go to 1
+<span class="ln">129</span>c        write (ISHORT,&#x27;(&quot;Rhoofp06: No convergence after 10 tries&quot;)&#x27;)
+<span class="ln">130</span>        goto 999     !RHOOFP06 error exit
+<span class="ln">131</span>c        stop
+<span class="ln">132</span>      else
+<span class="ln">133</span>        rhog1=rhog3
+<span class="ln">134</span>        p1=p3
+<span class="ln">135</span>        if (icount .lt. 11) go to 1
+<span class="ln">136</span>c        write (ISHORT,&#x27;(&quot;RHOOFP06: No convergence after 10 tries&quot;)&#x27;)
+<span class="ln">137</span>        goto 999   ! RHOOFP06 error exit
+<span class="ln">138</span>c        stop
+<span class="ln">139</span>      endif
+<span class="ln">140</span>
+<span class="ln">141</span>  999 CONTINUE
+<span class="ln">142</span>      RHOOFP06=-999.0D0
+<span class="ln">143</span>C      WRITE(ISHORT,&#x27;(&quot;RHOOFP06: FAILED TO FIND RHO&quot;)&#x27;)
+<span class="ln">144</span>      RETURN
+<span class="ln">145</span>
+<span class="ln">146</span>
+<span class="ln">147</span>      end</pre></details>
+<details class='py' id='py-rhoofp06'><summary>Python version: rhoofp06</summary><pre class='doc'>Invert the OPAL 2006 EOS: find the density whose gas pressure
+matches p (less the radiation pressure when irad is 1), by bisection
+in the table&#x27;s X and T6 grids, then up to 11 steps of regula falsi on
+esac06 called without radiation.
+
+Translates: rhoofp06.f#RHOOFP06 (09c3b9b)
+
+Arguments: x (X), t6 (T in 1e6 K), p (pressure, Mb), irad (1: p
+includes radiation). None is set.
+
+Returns the density, or -999.0 on failure (out of the table, no
+convergence, or esac06&#x27;s alternate return).</pre><pre class='src'><span class="ln">15</span>def rhoofp06(x, t6, p, irad):
+<span class="ln">16</span>    &quot;&quot;&quot;Invert the OPAL 2006 EOS: find the density whose gas pressure
+<span class="ln">17</span>    matches p (less the radiation pressure when irad is 1), by bisection
+<span class="ln">18</span>    in the table&#x27;s X and T6 grids, then up to 11 steps of regula falsi on
+<span class="ln">19</span>    esac06 called without radiation.
+<span class="ln">20</span>
+<span class="ln">21</span>    Translates: rhoofp06.f#RHOOFP06 (09c3b9b)
+<span class="ln">22</span>
+<span class="ln">23</span>    Arguments: x (X), t6 (T in 1e6 K), p (pressure, Mb), irad (1: p
+<span class="ln">24</span>    includes radiation). None is set.
+<span class="ln">25</span>
+<span class="ln">26</span>    Returns the density, or -999.0 on failure (out of the table, no
+<span class="ln">27</span>    convergence, or esac06&#x27;s alternate return).
+<span class="ln">28</span>    &quot;&quot;&quot;
+<span class="ln">29</span>    a = aeos06_mod
+<span class="ln">30</span>    eos = eos06misc_mod.eos
+<span class="ln">31</span>    nra = eos06misc_mod.nra
+<span class="ln">32</span>    rat = SIGMACC
+<span class="ln">33</span>    pr = 0.0
+<span class="ln">34</span>    if irad == 1:
+<span class="ln">35</span>        pr = 4.0 / 3.0 * rat * t6**4    # Mb
+<span class="ln">36</span>    pnr = p - pr
+<span class="ln">37</span>
+<span class="ln">38</span>    # Bisection for the composition index (label 8).
+<span class="ln">39</span>    ilo = 2
+<span class="ln">40</span>    ihi = MX
+<span class="ln">41</span>    while ihi - ilo &gt; 1:
+<span class="ln">42</span>        imd = (ihi + ilo) // 2
+<span class="ln">43</span>        if x &lt;= a.xa[imd] + 1.0e-7:
+<span class="ln">44</span>            ihi = imd
+<span class="ln">45</span>        else:
+<span class="ln">46</span>            ilo = imd
+<span class="ln">47</span>    mlo = ilo
+<span class="ln">48</span>
+<span class="ln">49</span>    # Bisection for the temperature index (label 11), from the top.
+<span class="ln">50</span>    ilo = NT
+<span class="ln">51</span>    ihi = 2
+<span class="ln">52</span>    while ilo - ihi &gt; 1:
+<span class="ln">53</span>        imd = (ihi + ilo) // 2
+<span class="ln">54</span>        if t6 == a.t6list[1, imd]:
+<span class="ln">55</span>            ilo = imd
+<span class="ln">56</span>            break                                   # go to 14
+<span class="ln">57</span>        if t6 &lt;= a.t6list[1, imd]:
+<span class="ln">58</span>            ihi = imd
+<span class="ln">59</span>        else:
+<span class="ln">60</span>            ilo = imd
+<span class="ln">61</span>    klo = ilo                                       # label 14
+<span class="ln">62</span>
+<span class="ln">63</span>    pmax = a.xz[mlo, 1, klo, nra[klo]] * t6 * a.rho[nra[klo]]
+<span class="ln">64</span>    pmin = a.xz[mlo, 1, klo, 1] * t6 * a.rho[1]
+<span class="ln">65</span>    if pnr &gt; 1.25 * pmax or pnr &lt; pmin:
+<span class="ln">66</span>        return -999.0                               # go to 999
+<span class="ln">67</span>
+<span class="ln">68</span>    rhog1 = a.rho[nra[klo]] * pnr / pmax
+<span class="ln">69</span>    if esac06(x, t6, rhog1, 1, 0):
+<span class="ln">70</span>        return -999.0
+<span class="ln">71</span>    p1 = eos[1]
+<span class="ln">72</span>    if p1 &gt; pnr:
+<span class="ln">73</span>        p2 = p1
+<span class="ln">74</span>        rhog2 = rhog1
+<span class="ln">75</span>        rhog1 = 0.2 * rhog1
+<span class="ln">76</span>        if rhog1 &lt; 1.0e-14:
+<span class="ln">77</span>            rhog1 = 1.0e-14
+<span class="ln">78</span>        if esac06(x, t6, rhog1, 1, 0):
+<span class="ln">79</span>            return -999.0
+<span class="ln">80</span>        p1 = eos[1]
+<span class="ln">81</span>    else:
+<span class="ln">82</span>        rhog2 = 5.0 * rhog1
+<span class="ln">83</span>        if rhog2 &gt; a.rho[nra[klo]]:
+<span class="ln">84</span>            rhog2 = a.rho[nra[klo]]
+<span class="ln">85</span>        if esac06(x, t6, rhog2, 1, 0):
+<span class="ln">86</span>            return -999.0
+<span class="ln">87</span>        p2 = eos[1]
+<span class="ln">88</span>
+<span class="ln">89</span>    # Regula falsi (label 1), at most 11 steps.
+<span class="ln">90</span>    icount = 0
+<span class="ln">91</span>    while True:
+<span class="ln">92</span>        icount = icount + 1
+<span class="ln">93</span>        rhog3 = rhog1 + (rhog2 - rhog1) * (pnr - p1) / (p2 - p1)
+<span class="ln">94</span>        if esac06(x, t6, rhog3, 1, 0):
+<span class="ln">95</span>            return -999.0
+<span class="ln">96</span>        p3 = eos[1]
+<span class="ln">97</span>        # Question (see the page): the tolerance 1e-5 (MR 2025-10-10).
+<span class="ln">98</span>        if abs((p3 - pnr) / pnr) &lt; 1.0e-5:
+<span class="ln">99</span>            return rhog3
+<span class="ln">100</span>        if p3 &gt; pnr:
+<span class="ln">101</span>            rhog2 = rhog3
+<span class="ln">102</span>            p2 = p3
+<span class="ln">103</span>        else:
+<span class="ln">104</span>            rhog1 = rhog3
+<span class="ln">105</span>            p1 = p3
+<span class="ln">106</span>        if icount &gt;= 11:
+<span class="ln">107</span>            return -999.0                           # no convergence</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ul>
+<li><strong>Format.</strong> The author's tag is "MR 2025-10-10" in the code, "mr" in the note. Fix.</li>
+<li><strong>Missing question (minor).</strong> <code>data sigmacc/1.8914785e-3/</code> is a single-precision literal (also in <code>RHOOFP01</code>); <code>RHOOFP</code> uses <code>D</code>. Fix: add a question.</li>
+</ul>
+<p>Revised: both applied.</p></div></details>
+</main></body></html>

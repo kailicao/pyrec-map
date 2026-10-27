@@ -1,0 +1,338 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Rotation and mass loss · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ New structure (Fortran and Python) / Rotation and mass loss</span></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='fortran.html'>Language and style</a></li><li><a href='common-map.html'>The COMMON-block map</a></li><li><a href='kernels.html'>Kernels and settings</a></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><a href='timestep.html'>Time stepping</a></li><li><a href='composition.html'>Composition and settling</a></li><li><strong>Rotation and mass loss</strong></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>Rotation and mass loss</h1>
+<p><em>In Python: <code>pyrec.rotation</code>, under Python below.</em></p>
+<h2>3.10 Rotation: <code>Distortion</code>, <code>RotationLaw</code>, <code>RotationTransport</code>, <code>WindLaw</code>, <code>RotationStep</code></h2>
+<p><strong>The design follows YREC's development branch (09c3b9b).</strong> It removed no rotation option, but deleted the uncalled <code>WCZ</code>, whose method <code>WCZIMP</code> now carries, and turned the COMMON blocks named here into modules or arguments (<a href="common-map.html">Section 6.4</a>).</p>
+<p><strong><code>RotationStep</code>. Responsibility:</strong> evolve the internal rotation over one model step, as <a href="../yrec-map/getw.f.html#def-GETW"><code>GETW</code></a> does: without instabilities, $\Omega$ from $j$ and the wind; with them, $N$ diffusion substeps, each with the structure interpolated in time, the wind, mixing of convection zones, and transport of angular momentum and composition.</p>
+<pre><code class="language-fortran">type :: RotationStep
+    type(Distortion) :: dist
+    type(RotationLaw) :: law
+    type(RotationTransport) :: transport
+    class(WindLaw), allocatable :: wind        !! Absent: no wind.
+contains
+    procedure :: run
+        !! (star, start, zones, dt, ierr) GETW. Substeps
+        !! N = min(ceil(DWMAX/DTDIF), ceil(DTWIND/DTDIF)).
+    procedure, private :: midstep   !! (star, start, f) MIDMOD at fraction f.
+    procedure, private :: check_j   !! CHECKJ: j &gt; 0, convergence, Omega.
+    procedure, private :: check_comp !! CHECKC: 0 &lt;= X &lt;= 1, cut substep.
+end type
+
+type :: Distortion
+contains
+    procedure :: factors   !! (star) FPFT with SHAPE, FUNC: f_P, f_T, &lt;g&gt;.
+    procedure :: inertia   !! (star) MOMI, INTMOM: I and dI/dOmega.
+    procedure :: quadrupole !! (star) GETQUA: the P2 potential (Zahn 1992).
+end type
+
+type :: RotationLaw
+contains
+    procedure :: omega_from_j  !! (star, lcz) GETROT; zones by WCZIMP.
+    procedure :: solid_body    !! (star, jstart, jend) SOLID.
+end type
+
+type :: RotationTransport
+    !! Diffusion coefficients and velocities on the interfaces (VCIRC);
+    !! factors FW, FC, FES, FGSF, FMU, FSS (NMLPAR_MOD), Config%rot.
+contains
+    procedure :: secular
+        !! (star, zones, dt, redo, ierr) SECULR: transport of j and of the
+        !! composition by meridional circulation, GSF, secular and dynamical
+        !! shear; redo : the substep must be shortened (LREDO).
+end type
+
+type, abstract :: WindLaw
+contains
+    procedure(dj_if), deferred :: domega
+        !! (star, dt, dw) Change of the surface zone's Omega [rad s-1].
+end type
+type, extends(WindLaw) :: KawalerWind     !! WIND, COWIND
+type, extends(WindLaw) :: MattWind        !! MWIND, MCOWIND, AMCALC
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../yrec-map/getw.f.html#def-GETW"><code>GETW</code></a>, <a href="../yrec-map/midmod.f.html#def-MIDMOD"><code>MIDMOD</code></a>, <a href="../yrec-map/checkj.f.html#def-CHECKJ"><code>CHECKJ</code></a>, <a href="../yrec-map/checkc.f.html#def-CHECKC"><code>CHECKC</code></a>, <a href="../yrec-map/rotmix.f.html#def-ROTMIX"><code>ROTMIX</code></a>, <a href="../yrec-map/bursmix.f.html#def-BURSMIX"><code>BURSMIX</code></a> and <a href="../yrec-map/bsrotmix.f.html#def-BSROTMIX"><code>BSROTMIX</code></a> (never run: <code>LBURS</code> is false; kept only if KC wants them, <a href="overview.html">Section 8</a>); <a href="../yrec-map/fpft.f.html#def-FPFT"><code>FPFT</code></a>, <a href="../yrec-map/shape.f.html#def-SHAPE"><code>SHAPE</code></a>, <a href="../yrec-map/func.f.html#def-FUNC"><code>FUNC</code></a>, <a href="../yrec-map/momi.f.html#def-MOMI"><code>MOMI</code></a>, <a href="../yrec-map/intmom.f.html#def-INTMOM"><code>INTMOM</code></a>, <a href="../yrec-map/getqua.f.html#def-GETQUA"><code>GETQUA</code></a>; <a href="../yrec-map/getrot.f.html#def-GETROT"><code>GETROT</code></a>, <a href="../yrec-map/wczimp.f.html#def-WCZIMP"><code>WCZIMP</code></a>, <a href="../yrec-map/solid.f.html#def-SOLID"><code>SOLID</code></a> (<code>WCZIMP</code> also does the work of <code>WCZ</code>, uncalled at <code>rp_1</code> and since removed); <a href="../yrec-map/seculr.f.html#def-SECULR"><code>SECULR</code></a>, <a href="../yrec-map/vcirc.f.html#def-VCIRC"><code>VCIRC</code></a>, <a href="../yrec-map/setupv.f.html#def-SETUPV"><code>SETUPV</code></a>, <a href="../yrec-map/codiff.f.html#def-CODIFF"><code>CODIFF</code></a>, <a href="../yrec-map/getfc.f.html#def-GETFC"><code>GETFC</code></a>, <a href="../yrec-map/dadcoeft.f.html#def-DADCOEFT"><code>DADCOEFT</code></a>, <a href="../yrec-map/dcoeft.f.html#def-DCOEFT"><code>DCOEFT</code></a>, <a href="../yrec-map/ccoeft.f.html#def-CCOEFT"><code>CCOEFT</code></a>, <a href="../yrec-map/rotgrid.f.html#def-ROTGRID"><code>ROTGRID</code></a>, <a href="../yrec-map/eq2mod.f.html#def-EQ2MOD"><code>EQ2MOD</code></a>, <a href="../yrec-map/ndifcom.f.html#def-NDIFCOM"><code>NDIFCOM</code></a>; <a href="../yrec-map/wind.f.html#def-WIND"><code>WIND</code></a>, <a href="../yrec-map/cowind.f.html#def-COWIND"><code>COWIND</code></a>, <a href="../yrec-map/mwind.f.html#def-MWIND"><code>MWIND</code></a>, <a href="../yrec-map/mcowind.f.html#def-MCOWIND"><code>MCOWIND</code></a>, <a href="../yrec-map/amcalc.f.html#def-AMCALC"><code>AMCALC</code></a>. Angular momentum and composition are transported by diffusion equations of the form
+$$\rho r^2\,\frac{\partial j}{\partial t} = \frac{1}{r^2}\frac{\partial}{\partial r}\Bigl(\rho r^4 D_J\,\frac{\partial\Omega}{\partial r}\Bigr),$$
+with $D_J$ from the instabilities' velocities, solved on the <code>ChiGrid</code>. The many work modules that <code>SETUPV</code> and <code>VCIRC</code> share (<a href="../yrec-map/intvar_mod.f.html#def-INTVAR_MOD"><code>INTVAR_MOD</code></a>, <a href="../yrec-map/vfact_mod.f.html#def-VFACT_MOD"><code>VFACT_MOD</code></a>, <a href="../yrec-map/taukh_mod.f.html#def-TAUKH_MOD"><code>TAUKH_MOD</code></a>, <a href="../yrec-map/difad2_mod.f.html#def-DIFAD2_MOD"><code>DIFAD2_MOD</code></a>, <a href="../yrec-map/difad3_mod.f.html#def-DIFAD3_MOD"><code>DIFAD3_MOD</code></a>; COMMON blocks at <code>rp_1</code>, where <code>/DIFAD4/</code> was a third, now gone) become components of <code>RotationTransport</code>, private to it.</p>
+<h2>3.11 Mass loss: <code>MassLossLaw</code>, <code>MassLoss</code></h2>
+<p><strong>Responsibility:</strong> set the rate $\dot M$ by a law, and apply the change of mass to the model, its convection zone and its angular momentum.</p>
+<pre><code class="language-fortran">type, abstract :: MassLossLaw
+contains
+    procedure(mdot_if), deferred :: rate
+        !! (star) -&gt; real(dp) dM/dt [Msun yr-1], &lt; 0 for loss.
+end type
+type, extends(MassLossLaw) :: ConstantMassLoss   !! DMDT0
+type, extends(MassLossLaw) :: ReimersMassLoss    !! CREIM, LREIMER
+
+type :: MassLoss
+    class(MassLossLaw), allocatable :: law
+    real(dp) :: comp_acc(NSP)          !! Accreted composition (COMPACC).
+contains
+    procedure :: apply
+        !! (star, dt, ierr) MASSLOSS, MDOT: limit the mass removed, rescale
+        !! the mass coordinates, remove J, mix accreted matter in the CZ.
+end type
+</code></pre>
+<p><strong>Replaces:</strong> <a href="../yrec-map/massloss.f.html#def-MASSLOSS"><code>MASSLOSS</code></a>, <a href="../yrec-map/mdot.f.html#def-MDOT"><code>MDOT</code></a>. The argument mismatch between them (MAIN question 2 at <code>rp_1</code>) cannot survive a checked interface; the development branch has already fixed it ("fix a CALL MDOT mismatch", <a href="overview.html">Section 7.3</a>). <code>MASSLOSS</code>'s header calls it "experimental code and valid for Allard atmospheres only"; the design keeps it as it is and says so in the type's docstring.</p>
+<h2>Python</h2>
+<p>The stubs of the new structure (signatures and docstrings, no bodies), each naming the routines it replaces in the current code.</p>
+<h3><code>pyrec/rotation/__init__.py</code></h3>
+<pre><code class="language-python">&quot;&quot;&quot;Rotation and mass loss over one step.
+
+Imports `kernels`, `config`, `physics`, `star` and `composition` (ChiGrid).
+
+Modules
+-------
+rotation : Distortion, RotationLaw, RotationTransport, WindLaw family, RotationStep.
+massloss : MassLossLaw family, MassLoss.
+
+&quot;&quot;&quot;
+from .massloss import MassLoss
+from .rotation import RotationStep
+</code></pre>
+<h3><code>pyrec/rotation/massloss.py</code></h3>
+<ul>
+<li><code>MassLoss</code> replaces <a href="../yrec-map/massloss.f.html#def-MASSLOSS"><code>MASSLOSS</code></a>, <a href="../yrec-map/mdot.f.html#def-MDOT"><code>MDOT</code></a>.</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;Mass loss: a law for the rate, and its application to the model.
+
+Classes
+-------
+MassLossLaw : Base of the laws.
+ConstantMassLoss : DMDT0.
+ReimersMassLoss : CREIM, LREIMER.
+MassLoss : Applies the change of mass.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+import numpy as np
+
+from ..star import Star
+
+
+class MassLossLaw:
+    &quot;&quot;&quot;Base of the mass-loss laws.&quot;&quot;&quot;
+
+    def rate(self, star: Star) -&gt; float:
+        &quot;&quot;&quot;dM/dt [Msun yr-1], &lt; 0 for loss.
+
+        This is a hook for derived classes. The base class does nothing.
+        &quot;&quot;&quot;
+        ...
+
+
+class ConstantMassLoss(MassLossLaw):
+    &quot;&quot;&quot;A constant rate, DMDT0.&quot;&quot;&quot;
+
+
+class ReimersMassLoss(MassLossLaw):
+    &quot;&quot;&quot;Reimers' law, CREIM.&quot;&quot;&quot;
+
+
+class MassLoss:
+    &quot;&quot;&quot;Applies the change of mass to the model, its convection zone and its angular momentum.
+
+    &quot;Experimental code and valid for Allard atmospheres only&quot;, as MASSLOSS's
+    header says; kept as it is.
+
+    Attributes
+    ----------
+    law : MassLossLaw
+    comp_acc : np.ndarray, shape: `(NSP,)`
+        Accreted composition (COMPACC).
+
+    Replaces: massloss.f#MASSLOSS, mdot.f#MDOT
+    &quot;&quot;&quot;
+
+    def __call__(self, star: Star, dt: float) -&gt; None:
+        &quot;&quot;&quot;Limit the mass removed, rescale the mass coordinates, remove J, mix accreted matter in the CZ.&quot;&quot;&quot;
+        ...
+</code></pre>
+<h3><code>pyrec/rotation/rotation.py</code></h3>
+<ul>
+<li><code>transport_coefficients</code> replaces <a href="../yrec-map/vcirc.f.html#def-VCIRC"><code>VCIRC</code></a>, <a href="../yrec-map/setupv.f.html#def-SETUPV"><code>SETUPV</code></a>, <a href="../yrec-map/codiff.f.html#def-CODIFF"><code>CODIFF</code></a>, <a href="../yrec-map/getfc.f.html#def-GETFC"><code>GETFC</code></a>, <a href="../yrec-map/dadcoeft.f.html#def-DADCOEFT"><code>DADCOEFT</code></a>, <a href="../yrec-map/dcoeft.f.html#def-DCOEFT"><code>DCOEFT</code></a>, <a href="../yrec-map/ccoeft.f.html#def-CCOEFT"><code>CCOEFT</code></a>.</li>
+<li><code>Distortion.factors</code> replaces <a href="../yrec-map/fpft.f.html#def-FPFT"><code>FPFT</code></a>, <a href="../yrec-map/shape.f.html#def-SHAPE"><code>SHAPE</code></a>, <a href="../yrec-map/func.f.html#def-FUNC"><code>FUNC</code></a>.</li>
+<li><code>Distortion.inertia</code> replaces <a href="../yrec-map/momi.f.html#def-MOMI"><code>MOMI</code></a>, <a href="../yrec-map/intmom.f.html#def-INTMOM"><code>INTMOM</code></a>.</li>
+<li><code>Distortion.quadrupole</code> replaces <a href="../yrec-map/getqua.f.html#def-GETQUA"><code>GETQUA</code></a>.</li>
+<li><code>RotationLaw.omega_from_j</code> replaces <a href="../yrec-map/getrot.f.html#def-GETROT"><code>GETROT</code></a>, <a href="../yrec-map/wczimp.f.html#def-WCZIMP"><code>WCZIMP</code></a> (and, at <code>rp_1</code>, the uncalled <code>WCZ</code>, since removed).</li>
+<li><code>RotationLaw.solid_body</code> replaces <a href="../yrec-map/solid.f.html#def-SOLID"><code>SOLID</code></a>.</li>
+<li><code>RotationTransport</code> replaces <a href="../yrec-map/seculr.f.html#def-SECULR"><code>SECULR</code></a>, <a href="../yrec-map/rotgrid.f.html#def-ROTGRID"><code>ROTGRID</code></a>, <a href="../yrec-map/ndifcom.f.html#def-NDIFCOM"><code>NDIFCOM</code></a>.</li>
+<li><code>KawalerWind</code> replaces <a href="../yrec-map/wind.f.html#def-WIND"><code>WIND</code></a>, <a href="../yrec-map/cowind.f.html#def-COWIND"><code>COWIND</code></a>.</li>
+<li><code>MattWind</code> replaces <a href="../yrec-map/mwind.f.html#def-MWIND"><code>MWIND</code></a>, <a href="../yrec-map/mcowind.f.html#def-MCOWIND"><code>MCOWIND</code></a>, <a href="../yrec-map/amcalc.f.html#def-AMCALC"><code>AMCALC</code></a>.</li>
+<li><code>RotationStep</code> replaces <a href="../yrec-map/getw.f.html#def-GETW"><code>GETW</code></a>, <a href="../yrec-map/rotmix.f.html#def-ROTMIX"><code>ROTMIX</code></a>, <a href="../yrec-map/bursmix.f.html#def-BURSMIX"><code>BURSMIX</code></a> (never run), <a href="../yrec-map/bsrotmix.f.html#def-BSROTMIX"><code>BSROTMIX</code></a> (never run).</li>
+<li><code>RotationStep._midstep</code> replaces <a href="../yrec-map/midmod.f.html#def-MIDMOD"><code>MIDMOD</code></a>.</li>
+<li><code>RotationStep._check_j</code> replaces <a href="../yrec-map/checkj.f.html#def-CHECKJ"><code>CHECKJ</code></a>.</li>
+<li><code>RotationStep._check_comp</code> replaces <a href="../yrec-map/checkc.f.html#def-CHECKC"><code>CHECKC</code></a>.</li>
+</ul>
+<pre><code class="language-python">r&quot;&quot;&quot;Internal rotation: distortion, rotation laws, transport, winds, and the step.
+
+Angular momentum is transported by
+$\rho r^2\,\partial_t j = r^{-2}\,\partial_r(\rho r^4 D_J\,\partial_r\Omega)$,
+with $D_J$ from the instabilities' velocities, on the ChiGrid.
+
+Functions
+---------
+transport_coefficients : Diffusion coefficients on the interfaces (Numba).
+
+Classes
+-------
+Distortion : f_P, f_T, moments of inertia, the quadrupole.
+RotationLaw : Omega from j; solid-body zones.
+RotationTransport : Transport of j and composition by the instabilities.
+WindLaw : Base of the wind laws.
+KawalerWind : WIND, COWIND.
+MattWind : MWIND, MCOWIND, AMCALC.
+RotationStep : The rotation over one model step.
+
+&quot;&quot;&quot;
+from __future__ import annotations
+
+import numpy as np
+from numba import njit
+
+from ..star import Star, StepStart
+from ..star.zones import ConvectionZones
+
+
+@njit(cache=True)
+def transport_coefficients(shell: np.ndarray, factors: np.ndarray, d_j: np.ndarray,
+                           d_comp: np.ndarray) -&gt; None:
+    &quot;&quot;&quot;Diffusion coefficients for j and composition on the interfaces, from the instabilities' velocities.
+
+    Notes
+    -----
+    Numba: hot loop.
+
+    Replaces: vcirc.f#VCIRC, setupv.f#SETUPV, codiff.f#CODIFF, getfc.f#GETFC, dadcoeft.f#DADCOEFT, dcoeft.f#DCOEFT, ccoeft.f#CCOEFT
+    &quot;&quot;&quot;
+    ...
+
+
+class Distortion:
+    &quot;&quot;&quot;The distortion of a rotating star.&quot;&quot;&quot;
+
+    def factors(self, star: Star) -&gt; None:
+        &quot;&quot;&quot;f_P, f_T and &lt;g&gt; on every shell.
+
+        Replaces: fpft.f#FPFT, shape.f#SHAPE, func.f#FUNC
+        &quot;&quot;&quot;
+        ...
+
+    def inertia(self, star: Star) -&gt; None:
+        &quot;&quot;&quot;I and dI/dOmega.
+
+        Replaces: momi.f#MOMI, intmom.f#INTMOM
+        &quot;&quot;&quot;
+        ...
+
+    def quadrupole(self, star: Star) -&gt; None:
+        &quot;&quot;&quot;The P2 potential (Zahn 1992).
+
+        Replaces: getqua.f#GETQUA
+        &quot;&quot;&quot;
+        ...
+
+
+class RotationLaw:
+    &quot;&quot;&quot;Omega from j, with convection zones in solid-body rotation.&quot;&quot;&quot;
+
+    def omega_from_j(self, star: Star, lcz: np.ndarray) -&gt; None:
+        &quot;&quot;&quot;Omega on every shell from j.
+
+        Replaces: getrot.f#GETROT, wczimp.f#WCZIMP
+        &quot;&quot;&quot;
+        ...
+
+    def solid_body(self, star: Star, jstart: int, jend: int) -&gt; None:
+        &quot;&quot;&quot;Solid-body rotation between two shells.
+
+        Replaces: solid.f#SOLID
+        &quot;&quot;&quot;
+        ...
+
+
+class RotationTransport:
+    &quot;&quot;&quot;Transport of j and composition by meridional circulation, GSF, secular and dynamical shear.
+
+    The work modules of SETUPV and VCIRC (INTVAR_MOD, VFACT_MOD, TAUKH_MOD, ...)
+    become private attributes.
+
+    Replaces: seculr.f#SECULR, rotgrid.f#ROTGRID, ndifcom.f#NDIFCOM
+    &quot;&quot;&quot;
+
+    ECOD_FAC = 0.2  # In ECOD3/ECOD4 (DADCOEFT); source to be confirmed.
+    VESN_FAC = 5.0  # In VESN (DADCOEFT).
+    MAX_CORR = 0.1  # Limit on corrections (DADCOEFT).
+    ZAHN_FIFTH = 0.2  # FAC = 0.2*4pi*FW, probably the 1/5 of Zahn 1992 (ROTGRID).
+
+    def secular(self, star: Star, zones: ConvectionZones, dt: float) -&gt; bool:
+        &quot;&quot;&quot;Transport over ``dt`` [s]; True if the substep must be shortened (LREDO).&quot;&quot;&quot;
+        ...
+
+
+class WindLaw:
+    &quot;&quot;&quot;Base of the wind laws.&quot;&quot;&quot;
+
+    def domega(self, star: Star, dt: float) -&gt; float:
+        &quot;&quot;&quot;Change of the surface zone's Omega [rad s-1].
+
+        This is a hook for derived classes. The base class does nothing.
+        &quot;&quot;&quot;
+        ...
+
+
+class KawalerWind(WindLaw):
+    &quot;&quot;&quot;The Kawaler wind law.
+
+    Replaces: wind.f#WIND, cowind.f#COWIND
+    &quot;&quot;&quot;
+
+
+class MattWind(WindLaw):
+    &quot;&quot;&quot;The Matt et al. wind law.
+
+    Replaces: mwind.f#MWIND, mcowind.f#MCOWIND, amcalc.f#AMCALC
+    &quot;&quot;&quot;
+
+
+class RotationStep:
+    &quot;&quot;&quot;Evolves the internal rotation over one model step, in substeps.
+
+    Attributes
+    ----------
+    dist : Distortion
+    law : RotationLaw
+    transport : RotationTransport
+    wind : WindLaw or None
+
+    Replaces: getw.f#GETW, rotmix.f#ROTMIX, bursmix.f#BURSMIX (never run), bsrotmix.f#BSROTMIX (never run)
+    &quot;&quot;&quot;
+
+    def __call__(self, star: Star, start: StepStart, zones: ConvectionZones, dt: float) -&gt; None:
+        &quot;&quot;&quot;N = min(ceil(DWMAX/DTDIF), ceil(DTWIND/DTDIF)) substeps.&quot;&quot;&quot;
+        ...
+
+    def _midstep(self, star: Star, start: StepStart, f: float) -&gt; None:
+        &quot;&quot;&quot;The structure at fraction ``f`` of the step.
+
+        Replaces: midmod.f#MIDMOD
+        &quot;&quot;&quot;
+        ...
+
+    def _check_j(self, star: Star) -&gt; None:
+        &quot;&quot;&quot;j &gt; 0, convergence, Omega.
+
+        Replaces: checkj.f#CHECKJ
+        &quot;&quot;&quot;
+        ...
+
+    def _check_comp(self, star: Star) -&gt; bool:
+        &quot;&quot;&quot;0 &lt;= X &lt;= 1; False cuts the substep.
+
+        Replaces: checkc.f#CHECKC
+        &quot;&quot;&quot;
+        ...
+</code></pre>
+
+</main></body></html>

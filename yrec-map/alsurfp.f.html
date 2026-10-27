@@ -1,0 +1,561 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>alsurfp.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ alsurfp.f</span></header><main>
+<h1>alsurfp.f</h1>
+<p class='muted'>327 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/alsurfp.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>alsurfp.py</code>, 170 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> This file gives the outer boundary condition from the Allard model atmospheres: for a star's $\log T_\mathrm{eff}$ and $\log g$, it returns the pressure (and temperature) at which the interior is joined to the atmosphere. By default it returns $\log P$ at the point where $T = T_\mathrm{eff}$; with the option <code>LALTPTau100</code>, $\log P$ and $\log T$ at $\tau = 100$.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the arguments <code>TEFFL</code> ($\log T_\mathrm{eff}$), <code>GL</code> ($\log g$) and <code>LPRT</code> (print to the model file); the table in <code>ALATM01_MOD</code> from <a href="../yrec-map/alfilein.f.html#def-ALFILEIN">ALFILEIN</a> and its limits in <code>ALATM02_MOD</code> from <a href="../yrec-map/altabinit.f.html#def-ALTABINIT">ALTABINIT</a>; the option <code>LALTPTau100</code> in <code>NMLPAR_MOD</code>, set in <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a>.</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a> (the envelope integration, for the surface boundary condition) and <a href="../yrec-map/massloss.f.html#def-MASSLOSS">MASSLOSS</a>.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/locate.f.html#def-LOCATE">LOCATE</a> (bisection in a table) and <a href="../yrec-map/polint.f.html#def-POLINT">POLINT</a> (polynomial interpolation through 4 points).</li>
+<li><strong>Outputs:</strong> <code>AP</code> ($\log P$) and <code>AT</code> ($\log T$) in <code>ATMPRT_MOD</code>, shared with ENVINT, <a href="../yrec-map/surfp.f.html#def-SURFP">SURFP</a>, <a href="../yrec-map/kcsurfp.f.html#def-KCSURFP">KCSURFP</a>, <a href="../yrec-map/qatm.f.html#def-QATM">QATM</a> and MASSLOSS; the flag <code>LAlFail</code>, which tells the caller that the point is outside the table. Its comment says the caller should then switch to a gray (<code>KTTAU = 0</code>) or Kurucz (<code>KTTAU = 3</code>) atmosphere.</li>
+<li><strong>What the callers do on failure:</strong> <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a> switches to a gray atmosphere (<code>KTTAU = 0</code>, <code>LTTAU = .TRUE.</code>); <a href="../yrec-map/massloss.f.html#def-MASSLOSS">MASSLOSS</a> (marked "experimental code … llp 06/15/2009") does not test <code>LAlFail</code> and uses <code>AT</code>, <code>AP</code> at once.</li>
+<li><strong>Text output:</strong> a line to <code>ISHORT</code> at every call, and to <code>ISTOR</code> as well when <code>LPRT</code> is true.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li>If $\log T_\mathrm{eff} \ge t_\mathrm{max}$, or $\log g$ is outside the overall range (<code>GLXmin</code>, <code>GLXmax</code>), set <code>LAlFail</code> and return. If $\log T_\mathrm{eff} \le t_\mathrm{min}$, stop the run.</li>
+<li>Find 4 rows in $\log T_\mathrm{eff}$ around the point, shifted to stay inside the table. In each row, find 4 valid columns in $\log g$ around the point; if $\log g$ is outside that row's allowed range, set <code>LAlFail</code> and return.</li>
+<li>
+<p>In each row $i$, interpolate in $\log g$ with the polynomial through the 4 points:
+$$y_i(g) = \sum_{k=1}^{4} y(t_i, g_k) \prod_{l \ne k} \frac{g - g_l}{g_k - g_l},$$
+for $y = \log P_\mathrm{eff}$, $\log P_{100}$ and $\log T_{100}$.</p>
+</li>
+<li>
+<p>Interpolate the 4 row values in $\log T_\mathrm{eff}$ the same way. Without the $\tau = 100$ option, <code>AP</code> is $\log P$ at $T = T_\mathrm{eff}$ and <code>AT</code> $= \log T_\mathrm{eff}$; with it, <code>AP</code> $= \log P_{100}$ and <code>AT</code> $= \log T_{100}$.</p>
+</li>
+</ol>
+<p>Since rows can have different valid columns, each row uses its own 4 values of $\log g$: the grid need not be rectangular.</p>
+<p><strong>Design.</strong> The routine stops the program below the table in $T_\mathrm{eff}$ but only flags the other failures. It writes to <code>ISHORT</code> on every call, which can make the short output long.</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (<code>/ALATM01/</code>, <code>/ALATM02/</code>, <code>/ATMPRT/</code>; <code>LALTPTau100</code> from <code>/ALATM03/</code> to <code>NMLPAR_MOD</code>, <code>/LUOUT/</code> to <code>IOUNITS_MOD</code>; the unused <code>/ALATM04/</code> dropped), <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>Asymmetric failure.</strong> Above the table in $T_\mathrm{eff}$ the caller is told to switch atmospheres; below it the run stops. Is a cool star leaving the table meant to end the run?</li>
+<li><strong>Output on failure.</strong> When <code>LAlFail</code> is set, <code>AP</code> and <code>AT</code> keep their previous values. ENVINT does; MASSLOSS does not, and would then use stale values. Should MASSLOSS test the flag?</li>
+<li><strong>A message on every call.</strong> When <code>LPRT</code> is false, the routine still writes two lines to <code>ISHORT</code> at every call. Was this meant for debugging only? The header also says the print goes to <code>ISHORT</code> and <code>IMODPT</code>, and that a point outside the table ends the program; the code writes the print to <code>ISTOR</code>, and stops only below the table.</li>
+<li><strong>The extended range.</strong> The header says the allowed range in $\log g$ extends one column's width beyond the table; <a href="../yrec-map/altabinit.f.html#def-ALTABINIT">ALTABINIT</a> sets four widths below. See the question there.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>Subroutine ALSURFP
+PURPOSE
+To obtain the desired properties of stellar and sub-stellar atmospheres from atmospheric
+tables developed by France Allard, et al. Given Log(Teff) and GL, ASURFP returns Log(P) at
+this Teff and GL, as well as Log(P) and Log(T) at Tau = 100 for this Teff and GL.
+Currently supported input formats include the old Allard, et al, circa 1999 NextGen format,
+to which we are adding the newer 2007 NextGen format. As other formats become available, we
+anticipate being able to handle those also.
+Results are obtained by doing 4-point Lagrange interpolation in two dimensions, in TeffL and
+GL. This means we will be interpolating (or extrapolating) over sixteen points in four rows
+of four. We require that the desired Teff and GL are within the limits of the extended range
+of the table. The extended range for GL is from one column&#x27;s width past the lowest GL on the
+left to one column&#x27;s width past the highest GL on the right for the current row. The extended
+range for TeffL is defined in the same manner as for the columns. Note that the limits are on
+a row by row and column by column basis. If the request TeffL, GL point is outside the table,
+the progam is terminated with a definitive error message.
+ARGUMENTS OF TABLE LOOKUP SUBROUTINE
+TeffL      - Input argument. Value of TL at which the results are desired.
+GL            - Input argument. Value of GL at which the results are desired.
+AP            - Output argument to COMMON /ATMPRT/. Value of Log(Pressure) for the
+associated input TeffL and GL If LATMTPTau100 is .FALSE. it is PL
+at TEFFL,GL. If .TRUE. it is PL at TAU=100 for the starting TEFFL,GL.
+AT            - Output argument to COMMON /ATMPRT/. Value of Log(Temperature) for the
+associated input TeffL and GL If LATMTPTau100 is .FALSE. it is TEFFL.
+If .TRUE. it is TL at TAU=100 for the starting TEFFL,GL.
+LPRT        Input argument: If .TRUE. print Log(P) at the associated Log(Teff)  to ISHORT and IMODPT.
+LAlFail   Output argument. If .TRUE. the specified TeffL/GL is outside the Allard tables. The
+calling routine should set KTTAU to 0 to change to a gray atmosphere, or KTTAU to 3 for
+aKurucz atmosphere.
+
+Internal Arrays
+TEFFLs      1-D Array of T=TeffL table elements - one for each TeffL. (Columns)
+GLs            1-D Array of G = GL table elements - one for each GL. (Rows)
+PLs            2-D array of assoiated PL&#x27;s for the matching T in TEFFLs and the matching G in GLA.
+- One for each TeffL by One for each GL
+P100Ls      2-D array of assoiated P100L&#x27;s for the matching T in TEFFLs and  the matching G in GLA.
+- One for each TeffL by One for each GL
+T100Ls      2-D array of assoiated T100L&#x27;s for the matching T in TEFFLs and  the matching G in GLA.
+- One for each TeffL by One for each GL
+In addition, we define the following auxiliarry arrays</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-ALSURFP'>ALSURFP</a> <span class='muted'>subroutine · Subroutine ALSURFP</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-ALSURFP'><h3><span class='kind'>subroutine</span>ALSURFP</h3>
+<p class='muted'>lines 81–321 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/alsurfp.f#L81-L321'>GitHub</a></p>
+<pre>SUBROUTINE ALSURFP(TEFFL,GL,LPRT,LAlFail)</pre>
+<div class='notes'><p>Two-dimensional 4×4 Lagrange interpolation (in $\log g$, then in $\log T_\mathrm{eff}$) in the Allard table; returns $\log P$ and $\log T$ at the fitting point in <code>ATMPRT_MOD</code>, or sets <code>LAlFail</code> outside the table.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>Subroutine ALSURFP
+PURPOSE
+To obtain the desired properties of stellar and sub-stellar atmospheres from atmospheric
+tables developed by France Allard, et al. Given Log(Teff) and GL, ASURFP returns Log(P) at
+this Teff and GL, as well as Log(P) and Log(T) at Tau = 100 for this Teff and GL.
+Currently supported input formats include the old Allard, et al, circa 1999 NextGen format,
+to which we are adding the newer 2007 NextGen format. As other formats become available, we
+anticipate being able to handle those also.
+Results are obtained by doing 4-point Lagrange interpolation in two dimensions, in TeffL and
+GL. This means we will be interpolating (or extrapolating) over sixteen points in four rows
+of four. We require that the desired Teff and GL are within the limits of the extended range
+of the table. The extended range for GL is from one column&#x27;s width past the lowest GL on the
+left to one column&#x27;s width past the highest GL on the right for the current row. The extended
+range for TeffL is defined in the same manner as for the columns. Note that the limits are on
+a row by row and column by column basis. If the request TeffL, GL point is outside the table,
+the progam is terminated with a definitive error message.
+ARGUMENTS OF TABLE LOOKUP SUBROUTINE
+TeffL      - Input argument. Value of TL at which the results are desired.
+GL            - Input argument. Value of GL at which the results are desired.
+AP            - Output argument to COMMON /ATMPRT/. Value of Log(Pressure) for the
+associated input TeffL and GL If LATMTPTau100 is .FALSE. it is PL
+at TEFFL,GL. If .TRUE. it is PL at TAU=100 for the starting TEFFL,GL.
+AT            - Output argument to COMMON /ATMPRT/. Value of Log(Temperature) for the
+associated input TeffL and GL If LATMTPTau100 is .FALSE. it is TEFFL.
+If .TRUE. it is TL at TAU=100 for the starting TEFFL,GL.
+LPRT        Input argument: If .TRUE. print Log(P) at the associated Log(Teff)  to ISHORT and IMODPT.
+LAlFail   Output argument. If .TRUE. the specified TeffL/GL is outside the Allard tables. The
+calling routine should set KTTAU to 0 to change to a gray atmosphere, or KTTAU to 3 for
+aKurucz atmosphere.
+
+Internal Arrays
+TEFFLs      1-D Array of T=TeffL table elements - one for each TeffL. (Columns)
+GLs            1-D Array of G = GL table elements - one for each GL. (Rows)
+PLs            2-D array of assoiated PL&#x27;s for the matching T in TEFFLs and the matching G in GLA.
+- One for each TeffL by One for each GL
+P100Ls      2-D array of assoiated P100L&#x27;s for the matching T in TEFFLs and  the matching G in GLA.
+- One for each TeffL by One for each GL
+T100Ls      2-D array of assoiated T100L&#x27;s for the matching T in TEFFLs and  the matching G in GLA.
+- One for each TeffL by One for each GL
+In addition, we define the following auxiliarry arrays
+For each row (or GL):
+GLmin      Minimum acceptable GL (including extrapolation) for this row.   - One for each TeffL
+GLmax      Maximum acceptable GL (including extrapolation) for this row.   - One for each TeffL
+IGLmin      Row index of first acceptable GL in table (excludes extrapolation) - One for each TeffL
+IGLmax      Row index of first acceptable GL in table (excludes extrapolation) - One for each TeffL
+For teh Table
+TEFFLmin            Minimum acceptable TeffL (Including extrapolation) for the table
+TEFFLmax            Maximum acceptable TeffL (including extrapolation) for the table.
+OVERALL LOGIC
+I      Determine if TeffL and GL are within overall limits of the table. If TEFFL is greater than the
+max of all table TL&#x27;s or less than the minimum, or GL is of the same nature, the program has
+failed.  To fail, write diagnostic message and go to error exit.
+II      Locate TL and GL in table. This gives us a column index, iGL, and a row index, iTL. The subtable
+used for Lagrange interpolation will        have four rows of four elements. Find indices such that
+each row is in the table.  Start with TeffL. If it is out of the table, adjust the TeffL index
+such that all four rows are in the table. Then for each row asjust the GL index such that the
+row is in the table. If this is not possible, the program has failed. To fail, write diagnostic
+message and go to error exit.
+III      Next we do four-point-Lagrange-interpolation in GL in the first row, then the second, then the
+third, then the fourth rows. We obtain, for each row, the associated Log(P), Log(P100) and
+Log(T100) for each row&#x27;s specific TL.
+IV      To get our desired results, we interpolate the results from III. PL is the result of 4-point
+Lagrange interpolation in TL using the four Log(P)&#x27;s obtained in III above. Likewist P100L and
+T100L.
+If LPRT  is .TRUE. print Log(P) at the associated Log(Teff) to ISHORT and IMODPT.</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/alatm01_mod.f.html#def-ALATM01_MOD'>ALATM01_MOD</a>, <a href='../yrec-map/alatm02_mod.f.html#def-ALATM02_MOD'>ALATM02_MOD</a>, <a href='../yrec-map/atmprt_mod.f.html#def-ATMPRT_MOD'>ATMPRT_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/locate.f.html#def-LOCATE'>LOCATE</a> <span class='muted'>(locate.f)</span> ×2</li>
+<li><a href='../yrec-map/polint.f.html#def-POLINT'>POLINT</a> <span class='muted'>(polint.f)</span> ×6</li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/envint.f.html#def-ENVINT'>ENVINT</a> <span class='muted'>(envint.f)</span></li>
+<li><a href='../yrec-map/massloss.f.html#def-MASSLOSS'>MASSLOSS</a> <span class='muted'>(massloss.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">81</span>      SUBROUTINE ALSURFP(TEFFL,GL,LPRT,LAlFail)
+<span class="ln">82</span>C 10/14/26 MHP via Claude
+<span class="ln">83</span>C code changed to convert COMMON/ATMPRT/ into ATMPRT_MOD.
+<span class="ln">84</span>      USE ATMPRT_MOD
+<span class="ln">85</span>C 10/14/26 MHP via Claude
+<span class="ln">86</span>C code changed to convert COMMON/ALATM02/ into ALATM02_MOD.
+<span class="ln">87</span>      USE ALATM02_MOD
+<span class="ln">88</span>C 10/14/26 MHP via Claude
+<span class="ln">89</span>C code changed to convert COMMON/ALATM01/ into ALATM01_MOD.
+<span class="ln">90</span>      USE ALATM01_MOD
+<span class="ln">91</span>C 10/14/26 MHP via Claude
+<span class="ln">92</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">93</span>      USE NMLPAR_MOD
+<span class="ln">94</span>C 10/14/26 MHP via Claude
+<span class="ln">95</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">96</span>      USE IOUNITS_MOD
+<span class="ln">97</span>C 10/20/26 MHP via Claude
+<span class="ln">98</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">99</span>C explicit declarations.
+<span class="ln">100</span>      IMPLICIT NONE
+<span class="ln">101</span>      REAL*8 DY,GL,P100L1,P100L2,PL1,PL2,T100L1,T100L2,TEFFL
+<span class="ln">102</span>      INTEGER I,I1,IGL,ITEFFL,J,J1,J2,J3,N
+<span class="ln">103</span>      LOGICAL*4 LALFAIL,LBADPOINT,LPRT
+<span class="ln">104</span>
+<span class="ln">105</span>C 10/14/26 MHP via Claude
+<span class="ln">106</span>C code changed to drop the redundant LOGICAL*4 LALTPTau100 declaration.
+<span class="ln">107</span>C LALTPTau100 is a COMMON/NMLPAR/ member, and explicitly typing a COMMON
+<span class="ln">108</span>C member is legal while doing the same to a USE-associated name is
+<span class="ln">109</span>C rejected, so it has to go before NMLPAR becomes a module.  Removing it
+<span class="ln">110</span>C changes nothing: IMPLICIT LOGICAL*4(L) already gives that type.
+<span class="ln">111</span>C 9/25/26 MHP via Claude
+<span class="ln">112</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">113</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">114</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">115</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">116</span>C COMMON/IOUNITS/
+<span class="ln">117</span>C 10/12/26 MHP via Claude
+<span class="ln">118</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">119</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">120</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">121</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">122</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">123</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">124</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">125</span>C
+<span class="ln">126</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">127</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">128</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">129</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">130</span>C 10/13/26 MHP via Claude
+<span class="ln">131</span>C code changed to remove COMMON/ALATM04/: its four members DUMMY1..DUMMY4
+<span class="ln">132</span>C are placeholders that no file references in executable code.  Removing
+<span class="ln">133</span>C it also retires the hazard behind the earlier alfilein.f fix, where a
+<span class="ln">134</span>C mis-indented EXTERNAL was absorbed into this declaration and renamed
+<span class="ln">135</span>C DUMMY4.
+<span class="ln">136</span>
+<span class="ln">137</span>      Dimension iGL(4),PL1(4),P100L1(4),
+<span class="ln">138</span>     x    T100L1(4),PL2(4),P100L2(4),T100L2(4)
+<span class="ln">139</span>
+<span class="ln">140</span>      SAVE
+<span class="ln">141</span>
+<span class="ln">142</span>C       Determine if TeffL and GL are within overall limits of the table. If TEFFL is greater than the
+<span class="ln">143</span>C    max of all table TL&#x27;s or GL is greater than the max or less than the min. Under these
+<span class="ln">144</span>C    circumstances we want to switch to another kind of atmosphere by changing KTTAU. Most likely
+<span class="ln">145</span>C    the calling routine should set KTTAU to 0, to specify a gray atmosphere.
+<span class="ln">146</span>
+<span class="ln">147</span>      LBadPoint = .false.       ! presume we have started at a good point
+<span class="ln">148</span>
+<span class="ln">149</span>      if(TEFFL .ge. TEFFLmax) then
+<span class="ln">150</span>         LBadPoint = .true.
+<span class="ln">151</span>         write(ISHORT,*)
+<span class="ln">152</span>         write(ISHORT,*)&#x27;ALSURFP: TEFFL greater than TeffLmax: &#x27;
+<span class="ln">153</span>         write(ISHORT,*)&#x27;    TEFFLmin,TEFFL,TEFFLmax; &#x27;,
+<span class="ln">154</span>     x         TEFFLmin,TEFFL,TEFFLmax
+<span class="ln">155</span>         Write(*,*)
+<span class="ln">156</span>         write(*,*)&#x27;ALSURFP: TEFFL greater than TeffLmax: &#x27;
+<span class="ln">157</span>         write(*,*)&#x27;    TEFFLmin,TEFFL,TEFFLmax; &#x27;,
+<span class="ln">158</span>     x         TEFFLmin,TEFFL,TEFFLmax
+<span class="ln">159</span>      endif
+<span class="ln">160</span>
+<span class="ln">161</span>
+<span class="ln">162</span>      if((GL .ge. GLXmax) .or. (GL .le. GLXmin)) then
+<span class="ln">163</span>         LBadPoint = .true.
+<span class="ln">164</span>         write(ISHORT,*)
+<span class="ln">165</span>         Write(*,*)
+<span class="ln">166</span>         write(ISHORT,*)&#x27;ALSURFP: GL out of max range: &#x27;
+<span class="ln">167</span>         write(ISHORT,*)&#x27;    GLXmin,GL,GLXmax; &#x27;,
+<span class="ln">168</span>     x         GLXmin,GL,GLXmax
+<span class="ln">169</span>         write(*,*)&#x27;ALSURFP: GL out of max range: &#x27;
+<span class="ln">170</span>         write(*,*)&#x27;    GLXmin,GL,GLXmax; &#x27;,
+<span class="ln">171</span>     x         GLXmin,GL,GLXmax
+<span class="ln">172</span>      endif
+<span class="ln">173</span>
+<span class="ln">174</span>      if(LBadPoint) then
+<span class="ln">175</span>         LAlFail = .TRUE.  ! We are above the table in Teffl, or outside the table in GL
+<span class="ln">176</span>                           ! Set LAlFail so calling routine can take appropiate action
+<span class="ln">177</span>           return
+<span class="ln">178</span>        else
+<span class="ln">179</span>         LAlFail = .FALSE.  ! We are not above the table in Teffl, and inside the table in GL
+<span class="ln">180</span>      endif
+<span class="ln">181</span>
+<span class="ln">182</span>C    If TeffL is less than TeffLmin, the program has failed.  We write a diagnostic message and go
+<span class="ln">183</span>C    to the error exit.
+<span class="ln">184</span>
+<span class="ln">185</span>      if(TEFFL .le. TEFFLmin) then
+<span class="ln">186</span>         write(ISHORT,*)
+<span class="ln">187</span>         write(ISHORT,*)&#x27;ALSURFP: TEFFL less than TEFFLmin: &#x27;
+<span class="ln">188</span>         write(ISHORT,*)&#x27;    TEFFLmin,TEFFL,TEFFLmax; &#x27;,
+<span class="ln">189</span>     x         TEFFLmin,TEFFL,TEFFLmax
+<span class="ln">190</span>         Write(*,*)
+<span class="ln">191</span>         write(*,*)&#x27;ALSURFP: TEFFL less than TEFFLmin: &#x27;
+<span class="ln">192</span>        write(*,*)&#x27;    TEFFLmin,TEFFL,TEFFLmax; &#x27;,
+<span class="ln">193</span>     x         TEFFLmin,TEFFL,TEFFLmax
+<span class="ln">194</span>        go to 9999        ! End program at Error Exit
+<span class="ln">195</span>      endif
+<span class="ln">196</span>
+<span class="ln">197</span>C II      Locate TEFFL and GL in table. This gives us a column index, iGL, and a row index, iTEFFL. The
+<span class="ln">198</span>C     subtable used for Lagrange interpolation will have four rows of four elements. Find indices such
+<span class="ln">199</span>C     that each row is in the table.  Start with TeffL. If it is out of the table, adjust the TeffL
+<span class="ln">200</span>C     index such that all four rows are in the table. Then for each row asjust the GL index such that the
+<span class="ln">201</span>C     row is in the table. If this is not possible, the program has failed. To fail, write diagnostic
+<span class="ln">202</span>C     message and go to error exit.
+<span class="ln">203</span>
+<span class="ln">204</span>C First locate TEFFL
+<span class="ln">205</span>      CALL <a href="../yrec-map/locate.f.html#def-LOCATE" title="LOCATE in locate.f">LOCATE</a>(TEFFLs,nTEFF,TEFFL,iTEFFL) ! returns row 2 in Teffs for 4x4 Lagrange
+<span class="ln">206</span>      iTEFFL = iTEFFL-1  ! Change to row 1 of 4x4 square in TEFFLs
+<span class="ln">207</span>      if(iTEFFL .lt. 1) iTEFFL = 1                ! Be sure it is safe to do 4-point Lagrange interpolation
+<span class="ln">208</span>      if(iTEFFL .gt. (nTEFF - 3)) iTEFFL = nTEFF - 3
+<span class="ln">209</span>
+<span class="ln">210</span>C Now find the right index for each row.
+<span class="ln">211</span>      do i = 1, 4      ! Start with iTEFFL and go up to iTEFFL=3
+<span class="ln">212</span>         i1 =  iTEFFL+i-1      ! current row pointer - index in TEFFLs aray (0 to 3)
+<span class="ln">213</span>         j1 = iGLmin(i1)         ! lowest valid entry in this row
+<span class="ln">214</span>         j2 = iGLmax(i1)         ! higest valid entry in this row
+<span class="ln">215</span>         n = j2-j1+1          ! number of OK columns
+<span class="ln">216</span>         call <a href="../yrec-map/locate.f.html#def-LOCATE" title="LOCATE in locate.f">locate</a>(GLs(j1),n,GL,j3)  ! Returns offset in GLs such that GL is &gt;= GLs(jl1+j3-1)
+<span class="ln">217</span>                        ! and GL,GLs(JL1+j3)
+<span class="ln">218</span>         iGL(i) = j1+j3-1      ! Save the offset
+<span class="ln">219</span>         iGL(i) = iGL(i)-1  ! Change from col 2 to column 1 in GLs direction of 4x4 square
+<span class="ln">220</span>C FIrst make sure it is safe to do 4-point Lagrange interpolaltion
+<span class="ln">221</span>         if(iGL(i) .lt. j1) iGL(i) = j1
+<span class="ln">222</span>         if(iGL(i) .gt. (j2 - 3)) iGL(i) = j2 - 3
+<span class="ln">223</span>
+<span class="ln">224</span>C Next, make sue that GL is in range in the current row.  If not, set out of table flag
+<span class="ln">225</span>         if((GL .lt. GLmin(i1)) .or. (GL .gt. GLmax(i1))) then      ! and exit
+<span class="ln">226</span>            LBadPoint = .true.
+<span class="ln">227</span>            write(ISHORT,*)
+<span class="ln">228</span>            write(ISHORT,*)&#x27;ALSURFP: GL out of extended range: &#x27;
+<span class="ln">229</span>            write(ISHORT,*)&#x27;    GLmin,GL,GLmax; &#x27;,
+<span class="ln">230</span>     x         GLmin(i1),GL,GLmax(i1)
+<span class="ln">231</span>            write(*,*)
+<span class="ln">232</span>            write(*,*)&#x27;ALSURFP: GL out of extended range: &#x27;
+<span class="ln">233</span>           write(*,*)&#x27;    GLmin,GL,GLmax; &#x27;,
+<span class="ln">234</span>     x         GLmin(i1),GL,GLmax(i1)
+<span class="ln">235</span>           LAlFail = .TRUE.
+<span class="ln">236</span>           return
+<span class="ln">237</span>        endif
+<span class="ln">238</span>      enddo
+<span class="ln">239</span>
+<span class="ln">240</span>
+<span class="ln">241</span>C III      Next we do four-point-Lagrange-interpolation in GL in the first row, then the second, then the
+<span class="ln">242</span>C     third, then the fourth rows. We obtain, for each row, the associated Log(P), Log(P100) and
+<span class="ln">243</span>C     Log(T100) for each row&#x27;s specific TL.
+<span class="ln">244</span>
+<span class="ln">245</span>C Do the Lagrange interpolation in GL
+<span class="ln">246</span>      do i = 1, 4      ! Start with iTEFFL and go up to iTEFFL=3, a row at a time
+<span class="ln">247</span>         i1 = iTEFFL + i -1   ! Index in TEFFL array (0 to 3)
+<span class="ln">248</span>         do j= 1, 4
+<span class="ln">249</span>            j1 = iGL(i) + j -1  ! Index in GL array - from iGL(i) to iGL(i)+3
+<span class="ln">250</span>            PL1(j) = PLs(i1,j1)        ! Get this row&#x27;s four working PL&#x27;s
+<span class="ln">251</span>            P100L1(j) = P100Ls(i1,j1)  ! Get this row&#x27;s four working P100L&#x27;s
+<span class="ln">252</span>            T100L1(j) = T100Ls(i1,j1)  ! Get this row&#x27;s four working T100L&#x27;s
+<span class="ln">253</span>         enddo
+<span class="ln">254</span>         j1 = iGL(i)
+<span class="ln">255</span>         CALL <a href="../yrec-map/polint.f.html#def-POLINT" title="POLINT in polint.f">POLINT</a>(GLs(j1),PL1,4,GL,PL2(i),dy)
+<span class="ln">256</span>         CALL <a href="../yrec-map/polint.f.html#def-POLINT" title="POLINT in polint.f">POLINT</a>(GLs(j1),P100L1,4,GL,P100L2(i),dy)
+<span class="ln">257</span>         CALL <a href="../yrec-map/polint.f.html#def-POLINT" title="POLINT in polint.f">POLINT</a>(GLs(j1),T100L1,4,GL,T100L2(i),dy)
+<span class="ln">258</span>      enddo
+<span class="ln">259</span>C Now do final 4-point Lagrange inerpolations in TEFFL
+<span class="ln">260</span>      IF(.NOT. LALTPTau100) THEN
+<span class="ln">261</span>C   Current standard alternative. PL for TEFFL,GL, TL=TEFFL
+<span class="ln">262</span>         CALL <a href="../yrec-map/polint.f.html#def-POLINT" title="POLINT in polint.f">POLINT</a>(TEFFLs(iTEFFL),PL2,4,TEFFL,AP,dy)
+<span class="ln">263</span>         AT = TEFFL
+<span class="ln">264</span>      ELSE
+<span class="ln">265</span>         CALL <a href="../yrec-map/polint.f.html#def-POLINT" title="POLINT in polint.f">POLINT</a>(TEFFLs(iTEFFL),P100L2,4,TEFFL,AP,dy)
+<span class="ln">266</span>         CALL <a href="../yrec-map/polint.f.html#def-POLINT" title="POLINT in polint.f">POLINT</a>(TEFFLs(iTEFFL),T100L2,4,TEFFL,AT,dy)
+<span class="ln">267</span>      ENDIF
+<span class="ln">268</span>
+<span class="ln">269</span>C We now have obtained the needed temparatures and pressures
+<span class="ln">270</span>
+<span class="ln">271</span>C If requested, WRITE OUT INFORMATION TO THE MODEL FILE.
+<span class="ln">272</span>      IF (LPRT) THEN
+<span class="ln">273</span>         IF(LALTPTau100) then
+<span class="ln">274</span>            WRITE(ISHORT,70)
+<span class="ln">275</span>            WRITE(ISTOR,70)
+<span class="ln">276</span>70          FORMAT(&#x27;********PL,TL at Tau=100 INTERPOLATED&#x27;
+<span class="ln">277</span>     *          , &#x27; FROM ALLARD TABULATED VALUES********&#x27;)
+<span class="ln">278</span>         ELSE
+<span class="ln">279</span>            WRITE(ISHORT,71)
+<span class="ln">280</span>            WRITE(ISTOR,71)
+<span class="ln">281</span>71          FORMAT(&#x27;********PL,TL at T=TEFF,GL INTERPOLATED &#x27;
+<span class="ln">282</span>     *         , &#x27;FROM ALLARD TABULATED VALUES********&#x27;)
+<span class="ln">283</span>         ENDIF
+<span class="ln">284</span>         WRITE(ISHORT,72) TEFFL,GL,AT,AP
+<span class="ln">285</span>         WRITE(ISTOR,72) TEFFL,GL,AT,AP
+<span class="ln">286</span>72       FORMAT(&#x27; &#x27;,20X,&#x27;LOG(Teffl) =&#x27;,F10.5,&#x27; ,LOG(G) =&#x27; ,F10.5,
+<span class="ln">287</span>     x       &#x27;, LOG(T) =&#x27;,F10.5,&#x27;, Log(P) =&#x27;, F10.5)
+<span class="ln">288</span>      ENDIF
+<span class="ln">289</span>
+<span class="ln">290</span>C If not requested via LPRT, WRITE OUT INFORMATION TO THE SHORT FILE.
+<span class="ln">291</span>      IF (.not. LPRT) THEN
+<span class="ln">292</span>        IF(LALTPTau100) then
+<span class="ln">293</span>           WRITE(ISHORT,73)
+<span class="ln">294</span>73         FORMAT(&#x27;ALSURFP:  PL,TL at Tau=100 INTERPOLATED&#x27;
+<span class="ln">295</span>     *         , &#x27; FROM ALLARD TABULATED VALUES:&#x27;)
+<span class="ln">296</span>        ELSE
+<span class="ln">297</span>           WRITE(ISHORT,74)
+<span class="ln">298</span>74         FORMAT(&#x27;ALSURFP: PL,TL at T=TEFF,GL INTERPOLATED &#x27;
+<span class="ln">299</span>     *         , &#x27;FROM ALLARD TABULATED VALUES:&#x27;)
+<span class="ln">300</span>        ENDIF
+<span class="ln">301</span>        WRITE(ISHORT,75) TEFFL,GL,AT,AP
+<span class="ln">302</span>75      FORMAT(&#x27; &#x27;,10X,&#x27;LOG(Teffl) =&#x27;,F10.5,&#x27;, LOG(G) =&#x27;,F10.5,
+<span class="ln">303</span>     x      &#x27;, LOG(T) =&#x27;,F10.5,&#x27;, Log(P) =&#x27;,F10.5)
+<span class="ln">304</span>      ENDIF
+<span class="ln">305</span>
+<span class="ln">306</span>
+<span class="ln">307</span>
+<span class="ln">308</span>
+<span class="ln">309</span>
+<span class="ln">310</span>      RETURN
+<span class="ln">311</span>
+<span class="ln">312</span> 9999      continue
+<span class="ln">313</span>       write(*,*)
+<span class="ln">314</span>       write(*,*)&#x27;******** ALSURFP: Program Terminated ********&#x27;
+<span class="ln">315</span>       write(*,*)
+<span class="ln">316</span>       write(ISHORT,*)
+<span class="ln">317</span>       write(ISHORT,*)&#x27;******** ALSURF: Program Terminated ********&#x27;
+<span class="ln">318</span>       write(ISHORT,*)
+<span class="ln">319</span>       STOP     ! eliminate for testing
+<span class="ln">320</span>
+<span class="ln">321</span>       END</pre></details>
+<details class='py' id='py-alsurfp'><summary>Python version: alsurfp</summary><pre class='doc'>Interpolate the Allard table at (log Teff, log g): log P at
+T = Teff (AT = log Teff), or, with LALTPTau100, log P and log T at
+tau = 100, into AP and AT of ATMPRT_MOD. Sets LAlFail above the table
+in Teff or outside it in log g; stops the run below it in Teff.
+
+Translates: alsurfp.f#ALSURFP (09c3b9b)
+
+Arguments: teffl (log Teff), gl (log g), lprt (print to ISTOR too) and
+lalfail (set here). Returns lalfail.</pre><pre class='src'><span class="ln">31</span>def alsurfp(teffl, gl, lprt, lalfail):
+<span class="ln">32</span>    &quot;&quot;&quot;Interpolate the Allard table at (log Teff, log g): log P at
+<span class="ln">33</span>    T = Teff (AT = log Teff), or, with LALTPTau100, log P and log T at
+<span class="ln">34</span>    tau = 100, into AP and AT of ATMPRT_MOD. Sets LAlFail above the table
+<span class="ln">35</span>    in Teff or outside it in log g; stops the run below it in Teff.
+<span class="ln">36</span>
+<span class="ln">37</span>    Translates: alsurfp.f#ALSURFP (09c3b9b)
+<span class="ln">38</span>
+<span class="ln">39</span>    Arguments: teffl (log Teff), gl (log g), lprt (print to ISTOR too) and
+<span class="ln">40</span>    lalfail (set here). Returns lalfail.
+<span class="ln">41</span>    &quot;&quot;&quot;
+<span class="ln">42</span>    a1 = alatm01_mod
+<span class="ln">43</span>    a2 = alatm02_mod
+<span class="ln">44</span>    at = atmprt_mod
+<span class="ln">45</span>    ltau100 = nmlpar_mod.laltptau100
+<span class="ln">46</span>    ishort = iounits_mod.ishort
+<span class="ln">47</span>    istor = iounits_mod.istor
+<span class="ln">48</span>
+<span class="ln">49</span>    lbadpoint = False  # presume we have started at a good point
+<span class="ln">50</span>    if teffl &gt;= a2.tefflmax:
+<span class="ln">51</span>        lbadpoint = True
+<span class="ln">52</span>        for show in (lambda t: iounits_mod.write(ishort, t), print):
+<span class="ln">53</span>            show(&quot;&quot;)
+<span class="ln">54</span>            show(&quot; ALSURFP: TEFFL greater than TeffLmax: &quot;)
+<span class="ln">55</span>            show(f&quot;     TEFFLmin,TEFFL,TEFFLmax;  {a2.tefflmin} {teffl}&quot;
+<span class="ln">56</span>                 f&quot; {a2.tefflmax}&quot;)
+<span class="ln">57</span>    if gl &gt;= a2.glxmax or gl &lt;= a2.glxmin:
+<span class="ln">58</span>        lbadpoint = True
+<span class="ln">59</span>        iounits_mod.write(ishort, &quot;&quot;)
+<span class="ln">60</span>        print(&quot;&quot;)
+<span class="ln">61</span>        for show in (lambda t: iounits_mod.write(ishort, t), print):
+<span class="ln">62</span>            show(&quot; ALSURFP: GL out of max range: &quot;)
+<span class="ln">63</span>            show(f&quot;     GLXmin,GL,GLXmax;  {a2.glxmin} {gl} {a2.glxmax}&quot;)
+<span class="ln">64</span>    if lbadpoint:
+<span class="ln">65</span>        # Above the table in Teff, or outside it in log g: the caller
+<span class="ln">66</span>        # takes action.
+<span class="ln">67</span>        return True
+<span class="ln">68</span>    lalfail = False
+<span class="ln">69</span>
+<span class="ln">70</span>    # Question (see the page): below the table in Teff the run stops.
+<span class="ln">71</span>    if teffl &lt;= a2.tefflmin:
+<span class="ln">72</span>        for show in (lambda t: iounits_mod.write(ishort, t), print):
+<span class="ln">73</span>            show(&quot;&quot;)
+<span class="ln">74</span>            show(&quot; ALSURFP: TEFFL less than TEFFLmin: &quot;)
+<span class="ln">75</span>            show(f&quot;     TEFFLmin,TEFFL,TEFFLmax;  {a2.tefflmin} {teffl}&quot;
+<span class="ln">76</span>                 f&quot; {a2.tefflmax}&quot;)
+<span class="ln">77</span>        _error_exit()
+<span class="ln">78</span>
+<span class="ln">79</span>    # The first of the 4 rows in log Teff, kept inside the table.
+<span class="ln">80</span>    iteffl = locate(a1.teffls, a1.nteff, teffl, 0)
+<span class="ln">81</span>    iteffl = iteffl - 1
+<span class="ln">82</span>    if iteffl &lt; 1:
+<span class="ln">83</span>        iteffl = 1
+<span class="ln">84</span>    if iteffl &gt; a1.nteff - 3:
+<span class="ln">85</span>        iteffl = a1.nteff - 3
+<span class="ln">86</span>
+<span class="ln">87</span>    # The first of the 4 columns in log g, in each row&#x27;s valid range.
+<span class="ln">88</span>    for i in range(1, 5):
+<span class="ln">89</span>        i1 = iteffl + i - 1
+<span class="ln">90</span>        j1 = a2.iglmin[i1]
+<span class="ln">91</span>        j2 = a2.iglmax[i1]
+<span class="ln">92</span>        n = j2 - j1 + 1
+<span class="ln">93</span>        # GLs(j1) passed as an array: the section whose index 1 is GLs(j1).
+<span class="ln">94</span>        j3 = locate(a1.gls[j1 - 1:], n, gl, 0)
+<span class="ln">95</span>        igl[i] = j1 + j3 - 1
+<span class="ln">96</span>        igl[i] = igl[i] - 1
+<span class="ln">97</span>        if igl[i] &lt; j1:
+<span class="ln">98</span>            igl[i] = j1
+<span class="ln">99</span>        if igl[i] &gt; j2 - 3:
+<span class="ln">100</span>            igl[i] = j2 - 3
+<span class="ln">101</span>        if gl &lt; a2.glmin[i1] or gl &gt; a2.glmax[i1]:
+<span class="ln">102</span>            for show in (lambda t: iounits_mod.write(ishort, t), print):
+<span class="ln">103</span>                show(&quot;&quot;)
+<span class="ln">104</span>                show(&quot; ALSURFP: GL out of extended range: &quot;)
+<span class="ln">105</span>                show(f&quot;     GLmin,GL,GLmax;  {a2.glmin[i1]} {gl}&quot;
+<span class="ln">106</span>                     f&quot; {a2.glmax[i1]}&quot;)
+<span class="ln">107</span>            return True
+<span class="ln">108</span>
+<span class="ln">109</span>    # Interpolate each row in log g.
+<span class="ln">110</span>    for i in range(1, 5):
+<span class="ln">111</span>        i1 = iteffl + i - 1
+<span class="ln">112</span>        for j in range(1, 5):
+<span class="ln">113</span>            j1 = igl[i] + j - 1
+<span class="ln">114</span>            pl1[j] = a1.pls[i1, j1]
+<span class="ln">115</span>            p100l1[j] = a1.p100ls[i1, j1]
+<span class="ln">116</span>            t100l1[j] = a1.t100ls[i1, j1]
+<span class="ln">117</span>        j1 = igl[i]
+<span class="ln">118</span>        xa = a1.gls[j1 - 1:]
+<span class="ln">119</span>        pl2[i], dy = polint(xa, pl1, 4, gl, pl2[i], 0.0)
+<span class="ln">120</span>        p100l2[i], dy = polint(xa, p100l1, 4, gl, p100l2[i], dy)
+<span class="ln">121</span>        t100l2[i], dy = polint(xa, t100l1, 4, gl, t100l2[i], dy)
+<span class="ln">122</span>
+<span class="ln">123</span>    # Then the 4 row values in log Teff.
+<span class="ln">124</span>    xa = a1.teffls[iteffl - 1:]
+<span class="ln">125</span>    if not ltau100:
+<span class="ln">126</span>        at.ap, dy = polint(xa, pl2, 4, teffl, at.ap, dy)
+<span class="ln">127</span>        at.at = teffl
+<span class="ln">128</span>    else:
+<span class="ln">129</span>        at.ap, dy = polint(xa, p100l2, 4, teffl, at.ap, dy)
+<span class="ln">130</span>        at.at, dy = polint(xa, t100l2, 4, teffl, at.at, dy)
+<span class="ln">131</span>
+<span class="ln">132</span>    # Question (see the page): two lines to ISHORT at every call.
+<span class="ln">133</span>    if lprt:
+<span class="ln">134</span>        if ltau100:
+<span class="ln">135</span>            text = (&quot;********PL,TL at Tau=100 INTERPOLATED&quot;
+<span class="ln">136</span>                    &quot; FROM ALLARD TABULATED VALUES********&quot;)  # 70
+<span class="ln">137</span>        else:
+<span class="ln">138</span>            text = (&quot;********PL,TL at T=TEFF,GL INTERPOLATED &quot;
+<span class="ln">139</span>                    &quot;FROM ALLARD TABULATED VALUES********&quot;)  # 71
+<span class="ln">140</span>        iounits_mod.write(ishort, text)
+<span class="ln">141</span>        iounits_mod.write(istor, text)
+<span class="ln">142</span>        line = (f&quot; {&#x27;&#x27;:20s}LOG(Teffl) ={teffl:10.5f} ,LOG(G) ={gl:10.5f}&quot;
+<span class="ln">143</span>                f&quot;, LOG(T) ={at.at:10.5f}, Log(P) ={at.ap:10.5f}&quot;)  # 72
+<span class="ln">144</span>        iounits_mod.write(ishort, line)
+<span class="ln">145</span>        iounits_mod.write(istor, line)
+<span class="ln">146</span>    if not lprt:
+<span class="ln">147</span>        if ltau100:
+<span class="ln">148</span>            text = (&quot;ALSURFP:  PL,TL at Tau=100 INTERPOLATED&quot;
+<span class="ln">149</span>                    &quot; FROM ALLARD TABULATED VALUES:&quot;)  # 73
+<span class="ln">150</span>        else:
+<span class="ln">151</span>            text = (&quot;ALSURFP: PL,TL at T=TEFF,GL INTERPOLATED &quot;
+<span class="ln">152</span>                    &quot;FROM ALLARD TABULATED VALUES:&quot;)  # 74
+<span class="ln">153</span>        iounits_mod.write(ishort, text)
+<span class="ln">154</span>        iounits_mod.write(ishort,
+<span class="ln">155</span>                          f&quot; {&#x27;&#x27;:10s}LOG(Teffl) ={teffl:10.5f}, LOG(G) =&quot;
+<span class="ln">156</span>                          f&quot;{gl:10.5f}, LOG(T) ={at.at:10.5f}, Log(P) =&quot;
+<span class="ln">157</span>                          f&quot;{at.ap:10.5f}&quot;)  # 75
+<span class="ln">158</span>    return lalfail</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_both'><summary>Python version: _both</summary><pre class='doc'>The same list-directed line to ISHORT and to the screen.</pre><pre class='src'><span class="ln">25</span>def _both(text):
+<span class="ln">26</span>    &quot;&quot;&quot;The same list-directed line to ISHORT and to the screen.&quot;&quot;&quot;
+<span class="ln">27</span>    iounits_mod.write(iounits_mod.ishort, text)
+<span class="ln">28</span>    print(text)</pre></details>
+<details class='py' id='py-_error_exit'><summary>Python version: _error_exit</summary><pre class='doc'>label 9999: the error exit (STOP).</pre><pre class='src'><span class="ln">161</span>def _error_exit():
+<span class="ln">162</span>    &quot;&quot;&quot;label 9999: the error exit (STOP).&quot;&quot;&quot;
+<span class="ln">163</span>    print(&quot;&quot;)
+<span class="ln">164</span>    print(&quot; ******** ALSURFP: Program Terminated ********&quot;)
+<span class="ln">165</span>    print(&quot;&quot;)
+<span class="ln">166</span>    iounits_mod.write(iounits_mod.ishort, &quot;&quot;)
+<span class="ln">167</span>    iounits_mod.write(iounits_mod.ishort,
+<span class="ln">168</span>                      &quot; ******** ALSURF: Program Terminated ********&quot;)
+<span class="ln">169</span>    iounits_mod.write(iounits_mod.ishort, &quot;&quot;)
+<span class="ln">170</span>    raise SystemExit</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><ol>
+<li>Missing. What the callers do with <code>LAlFail</code>: <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a> switches to a gray atmosphere (<code>KTTAU = 0</code>, <code>LTTAU = .TRUE.</code>); <a href="../yrec-map/massloss.f.html#def-MASSLOSS">MASSLOSS</a> ("experimental code … llp 06/15/2009") does not test it and uses <code>AT</code>, <code>AP</code> at once. Fix: state it under "How it fits", and make question 2 concrete (MASSLOSS).</li>
+<li>Missing. The header comment says the print goes to <code>ISHORT</code> and <code>IMODPT</code>, and that a point outside the table ends the program; the code writes to <code>ISTOR</code>, and only stops below the table. Fix: add to question 3.</li>
+</ol>
+<p>Revised: what ENVINT and MASSLOSS do with <code>LAlFail</code> added; questions 2 and 3 made concrete.</p></div></details>
+</main></body></html>

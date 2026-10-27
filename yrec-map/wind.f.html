@@ -1,0 +1,281 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>wind.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ wind.f</span></header><main>
+<h1>wind.f</h1>
+<p class='muted'>146 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/wind.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>wind.py</code>, 82 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>WIND</code> removes angular momentum from the surface convection zone by a magnetized wind, "a Weber–Davis magnetic wind model" (its comment), over one time step. It is the older loss law; <a href="../yrec-map/mwind.f.html#def-MWIND">MWIND</a> calls it when <code>LMWIND</code> is off, and otherwise uses its own law.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> $\log L$ (<code>BL</code>), the time step <code>DELTS</code> (s), the convection zone's mass range (<code>HSBOT</code>, <code>HSTOP</code>) and shells (<code>JSTART</code>, <code>JEND</code>), the switch <code>LJDOT</code>, the surface rate <code>OMEGAS</code>, the mass <code>SMASS</code> (in solar masses, probably), $\log T_\mathrm{eff}$, the zone's moment of inertia <code>HICZ</code>. Through modules: the law's constant and exponents (<code>NMLPAR_MOD</code>, formerly <code>COMMON/CWIND/</code>: <code>CONSTFACTOR</code>, <code>EXMD</code>, <code>EXW</code>, <code>EXR</code>, <code>EXM</code>, the saturation <code>WMAX</code>, set by <a href="../yrec-map/parmin.f.html#def-PARMIN">PARMIN</a>); the overturn time <code>TAUCZ</code> (<code>OVRTRN_MOD</code>, from <a href="../yrec-map/gettau.f.html#def-GETTAU">GETTAU</a>); <code>LINSTB</code> (<code>NMLPAR_MOD</code>, formerly <code>COMMON/ROT/</code>).</li>
+<li><strong>Who calls it:</strong> only <a href="../yrec-map/mwind.f.html#def-MWIND">MWIND</a>.</li>
+<li><strong>Output:</strong> <code>HJM</code>, each shell's specific angular momentum in the zone, reduced.</li>
+<li><strong>Modules:</strong> <code>NMLPAR_MOD</code>, <code>OVRTRN_MOD</code>, <code>CONSTANTS_MOD</code>, <code>DIMENSIONS_MOD</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Saturation.</strong> $\Omega_\mathrm{sat}$ = <code>WMAX</code>; but with angular momentum transport (<code>LINSTB</code>) and <code>WMAX</code> &gt; 1, <code>WMAX</code> is read as $\Omega_\mathrm{sat}\tau_\mathrm{cz}$ for the Sun, and $\Omega_\mathrm{sat} = $ <code>WMAX</code>$/\tau_\mathrm{cz}$ (MHP 3/09); the run stops if $\tau_\mathrm{cz} \le 1$.</li>
+<li><strong>The loss law.</strong> With $R = \sqrt{L/(4\pi\sigma T_\mathrm{eff}^4)}$ and the fixed mass-loss rate $\dot M = 2\times10^{-14}\,M_\odot$/yr,
+   $$I\,\frac{d\Omega}{dt} = -K\left(\frac{\dot M}{10^{-14}}\right)^{a}\left(\frac{R}{R_\odot}\right)^{c} M^{d}\;\Omega\,\min(\Omega, \Omega_\mathrm{sat})^{\,b-1},$$
+   with $K$ = <code>CONSTFACTOR</code>, $a$ = <code>EXMD</code>, $b$ = <code>EXW</code>, $c$ = <code>EXR</code>, $d$ = <code>EXM</code>.</li>
+<li><strong>Integration.</strong> If one explicit step would remove more than $\Omega$, the step is split into <code>NSTEP</code> substeps. In each, $\Omega_\mathrm{new}$ is found by iteration: the loss is evaluated at the mean of the start and the previous estimate, until the relative change is below $10^{-6}$ (at most 21 evaluations).</li>
+<li><strong>Removal.</strong> $\Delta j = (\Omega_\mathrm{s} - \Omega_\mathrm{new})\,I_\mathrm{cz}/\Delta M_\mathrm{cz}$, with $\Delta M_\mathrm{cz}$ = <code>HSTOP - HSBOT</code>, is subtracted from every shell of the zone.</li>
+</ol>
+<p><strong>KC's changes.</strong> The unused argument <code>SJTOT</code> was removed (2025-05-31).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> Declarations only: COMMON blocks to modules (<code>/CWIND/</code> and <code>/ROT/</code> to <code>NMLPAR_MOD</code>, <code>/OVRTRN/</code> to <code>OVRTRN_MOD</code>, the constants to <code>CONSTANTS_MOD</code>; the unused <code>/DEUTER/</code> dropped), <code>IMPLICIT NONE</code>; question 1 stands, <code>WNEW</code> now being <code>NMLPAR_MOD</code>'s.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong><code>WNEW</code> overwrites a module variable.</strong> <code>WNEW</code>, the iterated new rate, is also <code>NMLPAR_MOD</code>'s <code>WNEW</code> (formerly the first element of COMMON <code>ROT</code>), where it is the rate for converting a model to solid-body rotation (used by <a href="../yrec-map/starin.f.html#def-STARIN">STARIN</a> with <code>LWNEW</code>). Each call of <code>WIND</code> (and of <code>MWIND</code>, which does the same) changes it. A later run of the same job that sets up rotation from <code>WNEW</code> would get the last wind rate. A bug?</li>
+<li><strong>A fixed mass-loss rate.</strong> <code>DMDOT = 2.0D-14</code> is hard-coded, so the factor $(\dot M/10^{-14})^{a}$ is a constant $2^{a}$. Is this meant?</li>
+<li><strong>No convergence check.</strong> After 21 evaluations without convergence, the last estimate is used without a message.</li>
+<li><strong>The saturation's units.</strong> <code>WMAX &gt; 1</code> switches the meaning of <code>WMAX</code> (rad/s or rad/s × s). A rate above 1 rad/s is unphysical, so the test works, but a separate switch would be clearer.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>$$$$$$
+MHP 10/02 UNUSED LFIRST REMOVED FROM CALL</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-WIND'>WIND</a> <span class='muted'>subroutine · $$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-WIND'><h3><span class='kind'>subroutine</span>WIND</h3>
+<p class='muted'>lines 3–146 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/wind.f#L3-L146'>GitHub</a></p>
+<pre>SUBROUTINE WIND(BL,DELTS,HSBOT,HSTOP,JSTART,JEND,LJDOT,OMEGAS,</pre>
+<div class='notes'><p>The older wind braking law: $I\,d\Omega/dt \propto \Omega\,\min(\Omega,\Omega_\mathrm{sat})^{b-1}$ with fixed exponents, integrated over the step and taken from the surface convection zone's specific angular momentum.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>$$$$$$
+MHP 10/02 UNUSED LFIRST REMOVED FROM CALL</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/ovrtrn_mod.f.html#def-OVRTRN_MOD'>OVRTRN_MOD</a></p>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/mwind.f.html#def-MWIND'>MWIND</a> <span class='muted'>(mwind.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">3</span>      SUBROUTINE WIND(BL,DELTS,HSBOT,HSTOP,JSTART,JEND,LJDOT,OMEGAS,
+<span class="ln">4</span>C      *                SJTOT,SMASS,TEFFL,HICZ,HJM,LFIRST)  ! KC 2025-05-31
+<span class="ln">5</span>     *                SMASS,TEFFL,HICZ,HJM)
+<span class="ln">6</span>C 10/15/26 MHP via Claude
+<span class="ln">7</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">8</span>C PARAMETER(JSON=5000) here.
+<span class="ln">9</span>      USE DIMENSIONS_MOD
+<span class="ln">10</span>C 10/14/26 MHP via Claude
+<span class="ln">11</span>C code changed to convert COMMON/OVRTRN/ into OVRTRN_MOD.
+<span class="ln">12</span>      USE OVRTRN_MOD
+<span class="ln">13</span>C 10/14/26 MHP via Claude
+<span class="ln">14</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">15</span>      USE NMLPAR_MOD
+<span class="ln">16</span>C 10/14/26 MHP via Claude
+<span class="ln">17</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">18</span>      USE CONSTANTS_MOD
+<span class="ln">19</span>C 10/20/26 MHP via Claude
+<span class="ln">20</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">21</span>C explicit declarations.
+<span class="ln">22</span>      IMPLICIT NONE
+<span class="ln">23</span>      REAL*8 BL,CGRAV,DELTS,DM,DMDOT,DT,DW,DWTEST,FJDOM,HICZ,HJM,HSBOT,
+<span class="ln">24</span>     *       HSTOP,OMEGAS,RL,RTOT,SMASS,TEFFL,W,WNEW0,WS,WSAT
+<span class="ln">25</span>      INTEGER II,JEND,JSTART,K,N,NSTEP
+<span class="ln">26</span>      LOGICAL*4 LJDOT
+<span class="ln">27</span>
+<span class="ln">28</span>      DIMENSION HJM(JSON)
+<span class="ln">29</span>C 9/25/26 MHP via Claude
+<span class="ln">30</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">31</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">32</span>C 9/24/26 MHP via Claude
+<span class="ln">33</span>C code changed to remove dead, unused CMIXZ (never referenced) from
+<span class="ln">34</span>C COMMON/CONST3/
+<span class="ln">35</span>C MHP 8/17 ADDED EXCEN, C_2 TO COMMON BLOCK FOR MATT ET AL. 2012 CENT. TERM
+<span class="ln">36</span>C 10/12/26 MHP via Claude
+<span class="ln">37</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">38</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">39</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">40</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">41</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">42</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">43</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">44</span>C
+<span class="ln">45</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">46</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">47</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">48</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CWIND/ declaration
+<span class="ln">49</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">50</span>C      COMMON/CWIND/WMAX,EXMD,EXW,EXTAU,EXR,EXM,CONSTFACTOR,STRUCTFACTOR,LJDOT0
+<span class="ln">51</span>C MHP 3/09 ADDED OPTION TO SCALE THE SATURATION RATE BY THE OVERTURN TIMESCALE
+<span class="ln">52</span>C 10/13/26 MHP via Claude: removed the unused COMMON/DEUTER/ declaration
+<span class="ln">53</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">54</span>      SAVE
+<span class="ln">55</span>C IF DESIRED, REMOVE ANGULAR MOMENTUM FROM OUTER CONVECTION ZONE
+<span class="ln">56</span>C USING A WEBER-DAVIS MAGNETIC WIND MODEL
+<span class="ln">57</span>C MHP 3/09 IF WMAX &gt; 1 THEN ASSUME THAT THE PARAMETER WMAX IS DEFINED BY
+<span class="ln">58</span>C WMAX = WMAX(SUN)*TAUCZ(SUN) AND THE SATURATION THRESHOLD WSAT = WMAX/TAUCZ(STAR)
+<span class="ln">59</span>C ONLY APPLY THIS IF ANGULAR MOMENTUM TRANSPORT ENABLED
+<span class="ln">60</span>      IF(.NOT.LINSTB)THEN
+<span class="ln">61</span>         WSAT = WMAX
+<span class="ln">62</span>      ELSE IF(WMAX.GT.1.0D0)THEN
+<span class="ln">63</span>         IF(TAUCZ.GT.1.0D0)THEN
+<span class="ln">64</span>            WSAT = WMAX/TAUCZ
+<span class="ln">65</span>c            WRITE(*,912)WSAT,TAUCZ
+<span class="ln">66</span>c 912        FORMAT(&#x27;Omega sat, Tau&#x27;,1p2e12.3)
+<span class="ln">67</span>         ELSE
+<span class="ln">68</span>            WRITE(*,911)WMAX,TAUCZ
+<span class="ln">69</span> 911        FORMAT(&#x27;ERROR IN WIND - TAUCZ NOT DEFINED &#x27;,1P2E12.3,&#x27;STOPPED&#x27;)
+<span class="ln">70</span>            STOP
+<span class="ln">71</span>         ENDIF
+<span class="ln">72</span>      ELSE
+<span class="ln">73</span>         WSAT = WMAX
+<span class="ln">74</span>      ENDIF
+<span class="ln">75</span>      IF (LJDOT) THEN
+<span class="ln">76</span>C FIND TOTAL RADIUS OF STAR.
+<span class="ln">77</span>         CGRAV = DEXP(CLN*CGL)
+<span class="ln">78</span>         RL=0.5D0*(BL+CLSUNL-C4PIL-CSIGL-4.D0*TEFFL)
+<span class="ln">79</span>         RTOT = DEXP(CLN*RL)
+<span class="ln">80</span>C DMDOT IS THE MASS LOSS RATE IN SOLAR MASSES PER YEAR.
+<span class="ln">81</span>         DMDOT = 2.0D-14
+<span class="ln">82</span>C DJ/DT = DT*CONSTFACTOR*(DMDOT/1.0D-14)**EXMD*OMEGA**EXW*(M/MSUN)**EXM
+<span class="ln">83</span>C         *(R/RSUN)**EXR
+<span class="ln">84</span>C TEST : THE LOSS RATE DEPENDS ON OMEGA, AND FOR TIMESTESP THAT ARE
+<span class="ln">85</span>C TOO LARGE, ROTATION RATES THAT ARE TOO HIGH, AND THIN SURFACE C.Z.S
+<span class="ln">86</span>C NEGATIVE SURFACE ANGULAR VELOCITIES CAN BE PRODUCED.
+<span class="ln">87</span>C TO AVOID THIS, CHECK THAT THE TIMESTEP IS SMALL ENOUGH TO ALLOW
+<span class="ln">88</span>C A POSITIVE SOLUTION FOR OMEGA IN THE FIRST GUESS AT THE LOSS RATE.
+<span class="ln">89</span>C IF NOT, USE A SERIES OF SMALL STEPS.
+<span class="ln">90</span>C MHP 12/91 CAP LOSS RATE AT WSAT.
+<span class="ln">91</span>         DWTEST = (DELTS/HICZ)*CONSTFACTOR*(DMDOT/1.0D-14)**EXMD
+<span class="ln">92</span>     *          *OMEGAS*(RTOT/CRSUN)**EXR*SMASS**EXM
+<span class="ln">93</span>     *          *MIN(OMEGAS,WSAT)**(EXW-1.0D0)
+<span class="ln">94</span>         IF(DWTEST.GT.OMEGAS)THEN
+<span class="ln">95</span>            NSTEP = INT(DWTEST/OMEGAS)+1
+<span class="ln">96</span>            DT = DELTS/DFLOAT(NSTEP)
+<span class="ln">97</span>         ELSE
+<span class="ln">98</span>            NSTEP = 1
+<span class="ln">99</span>            DT = DELTS
+<span class="ln">100</span>         ENDIF
+<span class="ln">101</span>C         WRITE(*,3)NSTEP
+<span class="ln">102</span>C    3    FORMAT(5X,I5)
+<span class="ln">103</span>         WS = OMEGAS
+<span class="ln">104</span>         DO 100 N = 1,NSTEP
+<span class="ln">105</span>C  THE CONSTANT AND EXPONENTS ARE SET IN PARMIN BASED ON THE INPUT
+<span class="ln">106</span>C  INDEX ALFA;SEE PARMIN FOR DETAILS ON THE DEPENDENCE OF EACH ON ALFA.
+<span class="ln">107</span>C  ITERATIVE SOLUTION : FOR FIRST GUESS, USE OMEGA=INITIAL OMEGA IN
+<span class="ln">108</span>C  COMPUTING LOSS RATE. TO COMPUTE SUBSEQUENT RATES, USE THE AVERAGE OF THE
+<span class="ln">109</span>C  STARTING OMEGA AND THE *PREVIOUS* ENDING OMEGA (I.E. AVERAGE EXPLICIT
+<span class="ln">110</span>C  AND IMPLICIT SOLUTIONS).
+<span class="ln">111</span>            K = 0
+<span class="ln">112</span>            W = WS
+<span class="ln">113</span>            WNEW0 = WS
+<span class="ln">114</span>    5       CONTINUE
+<span class="ln">115</span>            K = K + 1
+<span class="ln">116</span>            WNEW = WS - (DT/HICZ)*CONSTFACTOR*(DMDOT/1.0D-14)**EXMD
+<span class="ln">117</span>     *             *W*(RTOT/CRSUN)**EXR*SMASS**EXM
+<span class="ln">118</span>     *             *MIN(W,WSAT)**(EXW-1.0D0)
+<span class="ln">119</span>            DW = 2.0D0*ABS((WNEW0-WNEW)/(WNEW0+WNEW))
+<span class="ln">120</span>C         WRITE(*,4)WS,W,WNEW,DW,HICZ
+<span class="ln">121</span>C    4    FORMAT(1X,1P5E14.6)
+<span class="ln">122</span>            IF(DW.GT.1.0D-6)THEN
+<span class="ln">123</span>               W = 0.5D0*(WS+WNEW)
+<span class="ln">124</span>               WNEW0 = WNEW
+<span class="ln">125</span>               IF(K.LE.20)GOTO 5
+<span class="ln">126</span>            ENDIF
+<span class="ln">127</span>            WS = WNEW
+<span class="ln">128</span>  100    CONTINUE
+<span class="ln">129</span>C        CON = DELTS*CONSTFACTOR*(DMDOT/1.0D-14)**EXMD*OMEGAS**(EXW-1.0D0)
+<span class="ln">130</span>C    *           *(RTOT/CRSUN)**EXR*SMASS**EXM
+<span class="ln">131</span>C        FJDOT = CON*OMEGAS/(1.0D0+(EXW*CON/HICZ))
+<span class="ln">132</span>C DM IS THE TOTAL MASS IN THE CONVECTION ZONE.
+<span class="ln">133</span>         DM = HSTOP - HSBOT
+<span class="ln">134</span>C FIND CHANGE IN ANGULAR MOMENTUM PER UNIT MASS AND SUBTRACT THIS
+<span class="ln">135</span>C NUMBER FROM THE J/M OF EACH SHELL IN THE SURFACE CONVECTION ZONE.
+<span class="ln">136</span>         FJDOM = (OMEGAS-WNEW)*HICZ/DM
+<span class="ln">137</span>C         WRITE(*,11)FJDOM,HJM(JSTART),HJM(JEND)
+<span class="ln">138</span>C   11    FORMAT(5X,1P3E14.6)
+<span class="ln">139</span>C        FJDOM=FJDOT/DM
+<span class="ln">140</span>C        TAUJ=SJTOT/(FJDOT/DELTS)/CSECYR
+<span class="ln">141</span>         DO 10 II = JSTART,JEND
+<span class="ln">142</span>            HJM(II) = HJM(II) - FJDOM
+<span class="ln">143</span>  10     CONTINUE
+<span class="ln">144</span>      ENDIF
+<span class="ln">145</span>      RETURN
+<span class="ln">146</span>      END</pre></details>
+<details class='py' id='py-wind'><summary>Python version: wind</summary><pre class='doc'>Remove angular momentum from the surface convection zone over one
+step by the Weber-Davis wind law
+I dOmega/dt = -K (Mdot/1e-14)^a (R/Rsun)^c M^d Omega min(Omega, Omega_sat)^(b-1),
+integrated in substeps by iteration, and subtract the loss of specific
+angular momentum from every shell of the zone.
+
+Translates: wind.f#WIND (09c3b9b)
+
+Arguments: log L bl; the step delts (s); the zone&#x27;s mass range hsbot,
+hstop and shells jstart..jend; ljdot, the switch; the surface rate
+omegas; smass; log Teff teffl; the zone&#x27;s moment of inertia hicz; hjm,
+the specific angular momentum (index 0 unused), changed in place.
+None is returned (but nmlpar_mod.wnew is overwritten).</pre><pre class='src'><span class="ln">11</span>def wind(bl, delts, hsbot, hstop, jstart, jend, ljdot, omegas,
+<span class="ln">12</span>         smass, teffl, hicz, hjm):
+<span class="ln">13</span>    &quot;&quot;&quot;Remove angular momentum from the surface convection zone over one
+<span class="ln">14</span>    step by the Weber-Davis wind law
+<span class="ln">15</span>    I dOmega/dt = -K (Mdot/1e-14)^a (R/Rsun)^c M^d Omega min(Omega, Omega_sat)^(b-1),
+<span class="ln">16</span>    integrated in substeps by iteration, and subtract the loss of specific
+<span class="ln">17</span>    angular momentum from every shell of the zone.
+<span class="ln">18</span>
+<span class="ln">19</span>    Translates: wind.f#WIND (09c3b9b)
+<span class="ln">20</span>
+<span class="ln">21</span>    Arguments: log L bl; the step delts (s); the zone&#x27;s mass range hsbot,
+<span class="ln">22</span>    hstop and shells jstart..jend; ljdot, the switch; the surface rate
+<span class="ln">23</span>    omegas; smass; log Teff teffl; the zone&#x27;s moment of inertia hicz; hjm,
+<span class="ln">24</span>    the specific angular momentum (index 0 unused), changed in place.
+<span class="ln">25</span>    None is returned (but nmlpar_mod.wnew is overwritten).
+<span class="ln">26</span>    &quot;&quot;&quot;
+<span class="ln">27</span>    c = constants_mod
+<span class="ln">28</span>    p = nmlpar_mod
+<span class="ln">29</span>    if not p.linstb:
+<span class="ln">30</span>        wsat = p.wmax
+<span class="ln">31</span>    elif p.wmax &gt; 1.0:
+<span class="ln">32</span>        # Question (see the page): wmax &gt; 1 switches its meaning.
+<span class="ln">33</span>        if ovrtrn_mod.taucz &gt; 1.0:
+<span class="ln">34</span>            wsat = p.wmax / ovrtrn_mod.taucz
+<span class="ln">35</span>        else:
+<span class="ln">36</span>            msg = (f&#x27;ERROR IN WIND - TAUCZ NOT DEFINED &#x27;
+<span class="ln">37</span>                   f&#x27;{p.wmax:12.3E}{ovrtrn_mod.taucz:12.3E}STOPPED&#x27;)
+<span class="ln">38</span>            print(msg)                     # WRITE(*,911)
+<span class="ln">39</span>            raise SystemExit(msg)
+<span class="ln">40</span>    else:
+<span class="ln">41</span>        wsat = p.wmax
+<span class="ln">42</span>    if ljdot:
+<span class="ln">43</span>        cgrav = math.exp(c.cln * c.cgl)    # noqa: F841 (unused, as in Fortran)
+<span class="ln">44</span>        rl = 0.5 * (bl + c.clsunl - c.c4pil - c.csigl - 4.0 * teffl)
+<span class="ln">45</span>        rtot = math.exp(c.cln * rl)
+<span class="ln">46</span>        # Question (see the page): a fixed mass-loss rate.
+<span class="ln">47</span>        dmdot = 2.0e-14
+<span class="ln">48</span>        dwtest = ((delts / hicz) * p.constfactor * (dmdot / 1.0e-14)**p.exmd
+<span class="ln">49</span>                  * omegas * (rtot / c.crsun)**p.exr * smass**p.exm
+<span class="ln">50</span>                  * min(omegas, wsat)**(p.exw - 1.0))
+<span class="ln">51</span>        if dwtest &gt; omegas:
+<span class="ln">52</span>            nstep = int(dwtest / omegas) + 1
+<span class="ln">53</span>            dt = delts / float(nstep)
+<span class="ln">54</span>        else:
+<span class="ln">55</span>            nstep = 1
+<span class="ln">56</span>            dt = delts
+<span class="ln">57</span>        ws = omegas
+<span class="ln">58</span>        for n in range(1, nstep + 1):      # loop 100
+<span class="ln">59</span>            k = 0
+<span class="ln">60</span>            w = ws
+<span class="ln">61</span>            wnew0 = ws
+<span class="ln">62</span>            while True:                    # label 5
+<span class="ln">63</span>                k = k + 1
+<span class="ln">64</span>                # Question (see the page): wnew is nmlpar_mod&#x27;s solid-body
+<span class="ln">65</span>                # rate, overwritten here.
+<span class="ln">66</span>                p.wnew = (ws - (dt / hicz) * p.constfactor
+<span class="ln">67</span>                          * (dmdot / 1.0e-14)**p.exmd
+<span class="ln">68</span>                          * w * (rtot / c.crsun)**p.exr * smass**p.exm
+<span class="ln">69</span>                          * min(w, wsat)**(p.exw - 1.0))
+<span class="ln">70</span>                dw = 2.0 * abs((wnew0 - p.wnew) / (wnew0 + p.wnew))
+<span class="ln">71</span>                if dw &gt; 1.0e-6:
+<span class="ln">72</span>                    w = 0.5 * (ws + p.wnew)
+<span class="ln">73</span>                    wnew0 = p.wnew
+<span class="ln">74</span>                    if k &lt;= 20:
+<span class="ln">75</span>                        continue
+<span class="ln">76</span>                    # Question (see the page): no message when it fails.
+<span class="ln">77</span>                break
+<span class="ln">78</span>            ws = p.wnew
+<span class="ln">79</span>        dm = hstop - hsbot
+<span class="ln">80</span>        fjdom = (omegas - p.wnew) * hicz / dm
+<span class="ln">81</span>        for ii in range(jstart, jend + 1):  # loop 10
+<span class="ln">82</span>            hjm[ii] = hjm[ii] - fjdom</pre></details>
+</section>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings.</p>
+<p>No change.</p></div></details>
+</main></body></html>

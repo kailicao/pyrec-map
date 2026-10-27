@@ -1,0 +1,365 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>A new design for YREC · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ New structure (Fortran and Python) / A new design for YREC</span></header><main>
+<nav class='pages'><ul class='toc'><li><strong>A new design for YREC</strong></li><li><a href='fortran.html'>Language and style</a></li><li><a href='common-map.html'>The COMMON-block map</a></li><li><a href='kernels.html'>Kernels and settings</a></li><li><a href='microphysics.html'>Microphysics: Physics and its families</a></li><li><a href='star.html'>The star and its state</a></li><li><a href='structure.html'>The structure solver</a></li><li><a href='timestep.html'>Time stepping</a></li><li><a href='composition.html'>Composition and settling</a></li><li><a href='rotation.html'>Rotation and mass loss</a></li><li><a href='run.html'>The run and calibrations</a></li><li><a href='io.html'>Input, output and analysis</a></li><li><a href='tunables.html'>Tunable numbers</a></li><li><a href='hooks.html'>Hooks for user-defined physics</a></li></ul></nav>
+<h1>A new design for YREC</h1>
+<p><em>Stage 2 of the overhaul: KC's coding style applied to YREC at the release <code>rp_1</code>, and an object-oriented framework designed from the code's real responsibilities, as the file notes describe them. Drafted by Claude (Oct 25, 2026) for Kaili Cao; nothing is refactored yet. The style is KC's coding style, with effortless as the model package. Its guide is written for Python; <a href="fortran.html">Section 6</a> says how each of its conventions carries over to modern Fortran, and where a Python interface fits. Where the guide says nothing, the choice made is stated, with its reason.</em></p>
+<p><strong>The design follows YREC's development branch (09c3b9b, Oct 20, 2026).</strong> It was written for <code>rp_1</code>; the development branch has since removed obsolete options (the MHD, OPAL 1995 and OPAL 2001 equations of state; the OPAL 1992, LAOL 1989, Alexander 1995 and Kurucz 1990 opacity tables, apart from LAOL's pure-$Z$ table; the Monte Carlo loop and its output, <code>WRTMONTE</code>), with the helper routines only they used, and has turned every COMMON block into a module. The design drops the same options (the pages below say which members of a family went), and names the modules where it used to name blocks (<a href="common-map.html">Section 6.4</a>).</p>
+<p>This design is split into pages, one per component; this page holds its goals, the package layout, the data flow, the migration and the open questions:</p>
+<ul>
+<li><a href="kernels.html">Kernels and settings</a> (Sections 3.1, 3.2)</li>
+<li><a href="microphysics.html">Microphysics</a> (<a href="microphysics.html">Section 3.3</a>)</li>
+<li><a href="star.html">The star and its state</a> (<a href="star.html">Section 3.4</a>)</li>
+<li><a href="structure.html">The structure solver</a> (Sections 3.5–3.7)</li>
+<li><a href="timestep.html">Time stepping</a> (<a href="timestep.html">Section 3.8</a>)</li>
+<li><a href="composition.html">Composition and settling</a> (<a href="composition.html">Section 3.9</a>)</li>
+<li><a href="rotation.html">Rotation and mass loss</a> (Sections 3.10, 3.11)</li>
+<li><a href="run.html">The run and calibrations</a> (Sections 3.12, 3.13)</li>
+<li><a href="io.html">Input, output and analysis</a> (<a href="io.html">Section 3.14</a>)</li>
+<li><a href="tunables.html">Tunable numbers</a> (<a href="tunables.html">Section 5</a>)</li>
+<li><a href="fortran.html">Language and style</a> (Sections 6.1–6.3)</li>
+<li><a href="common-map.html">The COMMON-block map</a> (<a href="common-map.html">Section 6.4</a>)</li>
+<li><a href="hooks.html">Hooks for user-defined physics</a> (<a href="hooks.html">Section 6.5</a>)</li>
+</ul>
+<p><em>In Python: <a href="overview.html">the Python version's overview</a>, under Python below.</em></p>
+<h2>1. What the design is for</h2>
+<p>YREC's physics is mature and validated, and its explanations show a code that works; its structure is what makes it hard to read, to test piece by piece and to extend. <strong>Global state:</strong> at <code>rp_1</code>, routines shared data through 243 COMMON blocks as much as through arguments; the constants alone (<code>/CONST1/</code>) were declared in 93 units, the output units (<code>/LUOUT/</code>) in 88, and <a href="../yrec-map/parmin.f.html#def-PARMIN"><code>PARMIN</code></a> declared 86 blocks and <a href="../yrec-map/main.f.html"><code>main.f</code></a> 60. The development branch has made them 87 modules, which names the data but keeps it global. Settings in COMMON are changed for good in the middle of a run: <a href="../yrec-map/mix.f.html#def-MIX"><code>MIX</code></a> switches settling off for the rest of the run (<code>LDIFY</code>), <a href="../yrec-map/htimer.f.html#def-HTIMER"><code>HTIMER</code></a> switches the structure time-step criterion off for the whole job (<code>LPTIME</code>), and <a href="../yrec-map/envint.f.html#def-ENVINT"><code>ENVINT</code></a> switches the run to gray atmospheres after one failed Allard lookup (<code>KTTAU = 0</code>). A block that was not declared became a silent local: at <code>rp_1</code>, <a href="../yrec-map/seculr.f.html#def-SECULR"><code>SECULR</code></a> tested <code>LCODM</code> and <code>CODM</code> without declaring <code>/MAG/</code> (the development branch, with <code>IMPLICIT NONE</code> everywhere, has fixed this). <strong>No checked interfaces:</strong> every routine is an external subprogram, so argument lists are never checked; at <code>rp_1</code>, <a href="../yrec-map/massloss.f.html#def-MASSLOSS"><code>MASSLOSS</code></a> passed <a href="../yrec-map/mdot.f.html#def-MDOT"><code>MDOT</code></a> one argument (<code>BL</code>) more than it takes (fixed in the development branch); <a href="../yrec-map/main.f.html"><code>main.f</code></a> still passes an undefined <code>IU</code> to <a href="../yrec-map/engeb.f.html#def-ENGEB"><code>ENGEB</code></a>, and <a href="../yrec-map/reduce.f.html#def-REDUCE"><code>REDUCE</code></a> takes 39 arguments. <strong>Procedures that are objects in disguise:</strong> state and the routines that use it are tied together only by COMMON and <code>SAVE</code>: <a href="../yrec-map/quadeos06.f.html#def-QUADEOS06"><code>QUADEOS06</code></a> keeps 30 cache slots that the caller must reuse with the same abscissas, <a href="../yrec-map/ratext.f.html#def-RATEXT"><code>RATEXT</code></a> depends on the previous call, and each table family (the OPAL equation of state, the opacity tables, three atmosphere tables) is a set of reader, set-up and lookup routines sharing hidden blocks. <strong>One long main program:</strong> <a href="../yrec-map/main.f.html"><code>main.f</code></a> runs the calibrations, the run cards and the evolution step in one routine with <code>GOTO</code>s across loop levels (at <code>rp_1</code>, the Monte Carlo loop too), and <a href="../yrec-map/parmin.f.html#def-PARMIN"><code>PARMIN</code></a> is 1,508 lines of defaults, namelist reading, derived settings, file opening and run cards. <strong>Duplicated code:</strong> at <code>rp_1</code>, the three OPAL equation-of-state versions repeated each routine (<code>ESAC</code>/<code>ESAC01</code>/<code>ESAC06</code>, <code>READCO…</code>, <code>RHOOFP…</code>, <code>T6RINTERP…</code>, <code>EQBOUND…</code>, <code>RADSUB…</code>, <code>QUAD…</code>), and the second-metallicity tables repeated theirs (<code>GTLAOL2</code>, <code>KURUCZ2</code>, <code>YLLO2D2</code>, <code>YLLO3D2</code>); the development branch removed both with their options; <a href="../yrec-map/rates.f.html#def-RATES"><code>RATES</code></a> repeats most of <a href="../yrec-map/engeb.f.html#def-ENGEB"><code>ENGEB</code></a>, "so a change to one must be copied to the other"; there are seven cubic-spline routines and three tridiagonal solvers; two settling solvers (<a href="../yrec-map/grsett.f.html#def-GRSETT"><code>GRSETT</code></a>, "retained for backwards compatability", and <a href="../yrec-map/microdiff.f.html#def-MICRODIFF"><code>MICRODIFF</code></a>); <a href="../yrec-map/putstore.f.html#def-PUTSTORE"><code>PUTSTORE</code></a> is "mostly a clone of wrtlst.f and putmodel2.f". <strong>Fixed sizes:</strong> at <code>rp_1</code>, 123 of the 254 files declared <code>JSON = 5000</code> shells (the comment in <code>main.f</code> still says to change it "by a global change"); the development branch declares it once, in <a href="../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD"><code>DIMENSIONS_MOD</code></a>, but it is still fixed when the code is compiled. Table sizes are typed into <code>DATA</code> statements or initial values (the grids of <a href="../yrec-map/ll95tbl.f.html"><code>LL95TBL</code></a>, now in <a href="../yrec-map/llot95a_mod.f.html#def-LLOT95A_MOD"><code>LLOT95A_MOD</code></a>; the edges <code>NTA</code>, <code>NRA</code> of the OPAL 2006 table in <a href="../yrec-map/eos06misc_mod.f.html#def-EOS06MISC_MOD"><code>EOS06MISC_MOD</code></a>; the dimensions repeated in the <code>OP95…</code> files). <strong>Hard exits and stray output:</strong> YREC has no interactive prompts (it reads two namelists and runs unattended), but errors end the program with <code>STOP</code> (for example <code>STOP 9999</code> in <a href="../yrec-map/starin.f.html#def-STARIN"><code>STARIN</code></a> and <a href="../yrec-map/alfilein.f.html#def-ALFILEIN"><code>ALFILEIN</code></a>, and a model that fails to converge, which <code>STARIN</code> stops), which would also end any Python process that called it, and several routines write to the terminal at every call (<a href="../yrec-map/massloss.f.html#def-MASSLOSS"><code>MASSLOSS</code></a>, <a href="../yrec-map/mdot.f.html#def-MDOT"><code>MDOT</code></a>, <a href="../yrec-map/rscale.f.html#def-RSCALE"><code>RSCALE</code></a>, <a href="../yrec-map/taucal.f.html#def-TAUCAL"><code>TAUCAL</code></a>, <a href="../yrec-map/bsrotmix.f.html#def-BSROTMIX"><code>BSROTMIX</code></a>). <strong>Dead paths:</strong> <code>LBURS</code> is always false, so <a href="../yrec-map/bursmix.f.html#def-BURSMIX"><code>BURSMIX</code></a> never runs; the receding-convection-zone block of <a href="../yrec-map/midmod.f.html#def-MIDMOD"><code>MIDMOD</code></a>, the old method of <a href="../yrec-map/chkcal.f.html#def-CHKCAL"><code>CHKCAL</code></a> and the output of <a href="../yrec-map/checkj.f.html#def-CHECKJ"><code>CHECKJ</code></a> are skipped; at <code>rp_1</code>, <code>WCZ</code> and four files were never called (the development branch has removed some of them: <a href="overview.html">Section 8</a>, question 5). The design below gives each piece of state one owner, each family of alternatives one base type, and each choice that users make one place to make it, so that each of these can be fixed once, and so that new physics can be added without editing the solver.</p>
+<h2>2. The package layout</h2>
+<p>The design keeps YREC's vocabulary (kind cards, the envelope triangle, <code>HCOMP</code>, levels of the Henyey iteration), so that its users can read the new code. The Fortran package is layered by dependency, from <code>kinds</code> at the bottom to <code>evolve</code> at the top (the tree lists the modules in that order, with <code>capi</code> above them all); a lower module never uses a higher one (the compiler enforces this, since modules cannot use each other in a circle). The Python package sits on top of the compiled library, and <code>drivers/</code> holds thin, run-specific scripts, as in effortless.</p>
+<pre><code class="language-text">yrec/                       # repo root: README.md, LICENSE, fpm.toml,
+│                           # pyproject.toml, .gitignore
+├── src/                    # the Fortran package (Fortran 2008)
+│   ├── kinds.f90           # dp, sp; species indices (I_H1, I_HE4, ...)
+│   ├── constants.f90       # physical constants, cgs, with sources
+│   ├── numerics.f90        # kernels: splines, tridiagonal, LU, quadrature
+│   ├── odeint.f90          # OdeRhs, Bulirsch-Stoer (BSSTEP, MMID, RATEXT)
+│   ├── logger.f90          # Logger: the .short file, levels, timing
+│   ├── config.f90          # Config and its parts; namelists; KindCard
+│   ├── eos.f90             # EosBase, YaleEos, ScvEos, OpalEos,
+│   │                       # EosBlend
+│   ├── opacity.f90         # OpacityTable family, ConductiveOpacity,
+│   │                       # OpacityBlend
+│   ├── atmosphere.f90      # AtmosphereBase, GrayAtmosphere,
+│   │                       # TableAtmosphere family
+│   ├── nuclear.f90         # ReactionRates, NuclearNetwork, Deuterium,
+│   │                       # LightElements, NeutrinoLosses
+│   ├── convection.f90      # Mlt (TPGRAD)
+│   ├── star.f90            # Physics, Star, ShellPhysics,
+│   │                       # EnvelopeSolution, StepStart
+│   ├── zones.f90           # ConvectionZones (CONVEC, OVERSH, FINDSH)
+│   ├── hooks.f90           # UserPhysics: hooks for user physics
+│   ├── envelope.f90        # EnvelopeIntegrator, SurfaceBC
+│   ├── structure.f90       # StructureSolver (Henyey)
+│   ├── rezone.f90          # Rezoner
+│   ├── timestep.f90        # TimeStepper, StepCriterion family
+│   ├── settling.f90        # SettlingBase, GrsettSettling,
+│   │                       # ThoulSettling, EqualGrid
+│   ├── mixing.f90          # CompositionStep (MIX), Semiconvection, ChiGrid
+│   ├── rotation.f90        # Distortion, RotationLaw, RotationTransport,
+│   │                       # WindLaw family, RotationStep
+│   ├── massloss.f90        # MassLossLaw family, MassLoss
+│   ├── io_model.f90        # ModelFile family: MODEL2, YREC7, .store
+│   ├── analysis.f90        # AcousticAnal, MilneAnal, OverturnAnal
+│   ├── io_output.f90       # TrackWriter, ShortWriter, PulsationWriter
+│   ├── calibr.f90          # SolarCalibr, StarCalibr
+│   ├── evolve.f90          # Run, Track, Step
+│   └── capi.f90            # bind(C) layer: handles for Python
+├── python/yrec/            # the Python package
+│   ├── __init__.py         # version; loads the library
+│   ├── _capi.py            # ctypes declarations of capi.f90
+│   ├── config.py           # Config as a dataclass; namelist I/O
+│   ├── star.py             # Star: NumPy views of the model arrays
+│   ├── run.py              # Run, Track: step-by-step control
+│   └── hooks.py            # user physics written in Python
+├── drivers/                # one short script per run; paths live here
+│   ├── yrec.f90            # the executable: reads nml1, nml2, runs
+│   ├── run_solar_calibr.py
+│   └── run_grid.py
+├── input/                  # tables and starting models (as today)
+└── tests/                  # pytest: references, analytic checks
+</code></pre>
+<p><code>yrec.f90</code> keeps today's command line (<code>yrec run.nml1 run.nml2</code>) and file outputs, so existing namelists, scripts and the test suite run unchanged. The name <code>capi.f90</code> and the Python modules are a proposal; their scope is <a href="fortran.html">Section 6.3</a>.</p>
+<h2>3. The classes</h2>
+<p>Each class is a Fortran derived type with type-bound procedures (<a href="fortran.html">Section 6.2</a> gives the conventions). Signatures are shown in short form: the procedure's header and a docstring of <code>!!</code> lines in NumPy style, with shapes and units; the declarations they imply follow <a href="fortran.html">Section 6.2</a> (<code>intent</code>, kind <code>dp</code> unless stated, <code>ierr</code> an integer error code, 0 for success). <code>m</code> is the number of shells, <code>nsp = 15</code> the number of species in <code>HCOMP</code> (in the order the code prints: $X$, $Y$, $Z$, ³He, ¹²C, ¹³C, ¹⁴N, ¹⁵N, ¹⁶O, ¹⁷O, ¹⁸O, ²H, ⁶Li, ⁷Li, ⁹Be). Arrays are allocated to <code>m</code>, not to <code>JSON</code>.</p>
+<p>Classes mirror the data, from the whole job down to the piece processed at a time:</p>
+<pre><code class="language-text">Run            # the job: Config, physics, run cards; replaces main.f
+├── Track      # one run card: a sequence of models
+│   ├── Star       # one stellar model; holds ShellPhysics, EnvelopeSolution
+│   └── Step       # one evolutionary step; holds StepStart
+└── Physics    # microphysics, set up once: Eos, opacity, atmosphere,
+               # nuclear, convection; shared by every Track
+</code></pre>
+<h3>3.15 How the classes relate</h3>
+<p>Composition (a type holds another) runs from the job down; inheritance only inside each family of alternatives.</p>
+<pre><code class="language-mermaid">classDiagram
+    Run *-- Config
+    Run *-- Physics
+    Run *-- Logger
+    Run *-- TrackWriter
+    Run o-- UserPhysics
+    Run o-- CalibrBase
+    Run *-- &quot;1..NUMRUN&quot; Track
+    Track *-- Star
+    Track *-- TimeStepper
+    Track *-- CompositionStep
+    Track *-- RotationStep
+    Track *-- MassLoss
+    Track *-- ConvectionZones
+    Track ..&gt; Step
+    Step *-- StepStart
+    Star *-- ShellPhysics
+    Star *-- EnvelopeSolution
+    Physics *-- EosBase
+    Physics *-- OpacityBlend
+    Physics *-- AtmosphereBase
+    Physics *-- ReactionRates
+    Physics *-- Mlt
+    Step ..&gt; StructureSolver
+    Step ..&gt; SurfaceBC
+    Step ..&gt; Rezoner
+    SurfaceBC ..&gt; EnvelopeIntegrator
+    EnvelopeIntegrator ..&gt; OdeRhs
+    CompositionStep *-- NuclearNetwork
+    CompositionStep o-- SettlingBase
+    RotationStep o-- WindLaw
+    MassLoss *-- MassLossLaw
+    TimeStepper *-- StepCriterion
+    EosBase &lt;|-- YaleEos
+    EosBase &lt;|-- OpalEos
+    EosBase &lt;|-- ScvEos
+    EosBase &lt;|-- EosBlend
+    OpacityBlend *-- OpacityTable
+    AtmosphereBase &lt;|-- GrayAtmosphere
+    AtmosphereBase &lt;|-- AtmosphereSwitch
+    SettlingBase &lt;|-- GrsettSettling
+    SettlingBase &lt;|-- ThoulSettling
+    WindLaw &lt;|-- KawalerWind
+    WindLaw &lt;|-- MattWind
+    CalibrBase &lt;|-- SolarCalibr
+    CalibrBase &lt;|-- StarCalibr
+</code></pre>
+<p><code>Physics</code> is defined in <code>star.f90</code>, above the families it holds, so that every stage from the envelope up can use it. The opacity, atmosphere and model-file families are drawn only by their base, to keep the diagram readable; their subclasses are listed above.</p>
+<h2>4. Data flow</h2>
+<p>A run goes through the new classes in the order of <a href="../yrec-map/main.f.html"><code>main.f</code></a> today; each step names the code it replaces.</p>
+<ol>
+<li><strong>Start.</strong> <code>drivers/yrec.f90</code> reads the two namelist paths from the command line (<code>GETARG</code> today) and calls <code>Run%init</code>: <code>Config%read_namelists</code> and <code>Config%derive</code> (<a href="../yrec-map/parmin.f.html#def-PARMIN"><code>PARMIN</code></a>, <a href="../yrec-map/remap.f.html#def-REMAP"><code>REMAP</code></a>), <code>Logger</code> and <code>TrackWriter</code> open their files, and <code>Physics%setup</code> reads the tables (<a href="../yrec-map/setups.f.html#def-SETUPS"><code>SETUPS</code></a>).</li>
+<li><strong>Calibration set-up.</strong> If the configuration asks for one, <code>Run</code> allocates a <code>SolarCalibr</code> or <code>StarCalibr</code> (<a href="../yrec-map/setcal.f.html#def-SETCAL"><code>SETCAL</code></a>, <a href="../yrec-map/setscal.f.html#def-SETSCAL"><code>SETSCAL</code></a>).</li>
+<li><strong>Tracks.</strong> For each kind card (<code>DO 200 NK</code>), <code>Run%run</code> creates a <code>Track</code>; <code>Track%start</code> reads or keeps the model through a <code>ModelFile</code> and rescales it (<a href="../yrec-map/starin.f.html#def-STARIN"><code>STARIN</code></a>, <a href="../yrec-map/rscale.f.html#def-RSCALE"><code>RSCALE</code></a>), finds the zones (<a href="../yrec-map/findsh.f.html#def-FINDSH"><code>FINDSH</code></a>), writes the headers (<a href="../yrec-map/wrthead.f.html#def-WRTHEAD"><code>WRTHEAD</code></a>), copies the model to the <code>ILAST</code> file when the helium flash is followed (<code>LKUTHE</code>, <a href="../yrec-map/wrtlst.f.html#def-WRTLST"><code>WRTLST</code></a>; MAIN question 4) and asks the <code>TimeStepper</code> for the first step (<a href="../yrec-map/htimer.f.html#def-HTIMER"><code>HTIMER</code></a>).</li>
+<li><strong>Steps.</strong> <code>Track%run</code> repeats <code>Step%run</code> (<code>DO 100 MODELN</code>) until <code>Track%done</code>; each <code>Step%run</code>:</li>
+<li>lets <code>PulsationWriter</code> decide on this model's pulsation output (<a href="../yrec-map/pdist.f.html#def-PDIST"><code>PDIST</code></a>), and copies the model into <code>StepStart</code> (<a href="../yrec-map/oldmod_mod.f.html#def-OLDMOD_MOD"><code>OLDMOD_MOD</code></a> today);</li>
+<li>if the model ages, <code>MassLoss%apply</code> (<a href="../yrec-map/massloss.f.html#def-MASSLOSS"><code>MASSLOSS</code></a>), then <code>CompositionStep%run</code> (<a href="../yrec-map/mix.f.html#def-MIX"><code>MIX</code></a>), and advances the age;</li>
+<li><code>Rezoner%rezone</code> (<a href="../yrec-map/hpoint.f.html#def-HPOINT"><code>HPOINT</code></a>);</li>
+<li>guesses the new structure from the rates of change in <code>StepStart</code>, and, for the light elements, has <code>LightElements</code> compute the rates at the start of the step (<a href="../yrec-map/lirate88.f.html#def-LIRATE88"><code>LIRATE88</code></a>, mode 1);</li>
+<li>calls <code>StructureSolver%solve</code> at levels 1 to 3 (<a href="../yrec-map/crrect.f.html#def-CRRECT"><code>CRRECT</code></a>), with <code>SurfaceBC</code> rebuilt at level 2, and stores the rates of change for the next guess; on divergence it returns an error, which ends the run as today (label 15; <a href="run.html">Section 3.12</a>);</li>
+<li>then, <code>ITDIF1</code> times with rotation (once without), restoring the start-of-step composition and $j$ before each repeat: level 4 of <code>StructureSolver%solve</code>, the convergence test, <code>ConvectionZones%homogenize</code> (<a href="../yrec-map/mixcz.f.html#def-MIXCZ"><code>MIXCZ</code></a>), <code>RotationStep%run</code> and <code>Distortion%factors</code> (<a href="../yrec-map/getw.f.html#def-GETW"><code>GETW</code></a>, <a href="../yrec-map/fpft.f.html#def-FPFT"><code>FPFT</code></a>);</li>
+<li><code>ConvectionZones%find_shell</code> (<a href="../yrec-map/findsh.f.html#def-FINDSH"><code>FINDSH</code></a>); the light elements, without rotational mixing: <code>ConvectionZones%find</code> (<a href="../yrec-map/convec.f.html#def-CONVEC"><code>CONVEC</code></a>), the rates at the end of the step and the burning (<code>LightElements</code>, <a href="../yrec-map/lirate88.f.html#def-LIRATE88"><code>LIRATE88</code></a> mode 2, <a href="../yrec-map/liburn.f.html#def-LIBURN"><code>LIBURN</code></a>); after a change of mass, <code>Rezoner%absorb_envelope</code> and <code>Distortion%factors</code> again (<a href="../yrec-map/getnewenv.f.html#def-GETNEWENV"><code>GETNEWENV</code></a>, <a href="../yrec-map/fpft.f.html#def-FPFT"><code>FPFT</code></a>);</li>
+<li><code>TimeStepper%next_dt</code> (<a href="../yrec-map/htimer.f.html#def-HTIMER"><code>HTIMER</code></a>), with the floor on the final step before <code>ENDAGE</code>;</li>
+<li><code>TrackWriter</code> writes the model (<a href="../yrec-map/wrtout.f.html#def-WRTOUT"><code>WRTOUT</code></a>), with the analyses it asks for; a <code>StarCalibr</code>'s <code>after_model</code> may end the track (<a href="../yrec-map/chkscal.f.html#def-CHKSCAL"><code>CHKSCAL</code></a>).</li>
+<li><strong>End of a track.</strong> <code>StoreFile%write</code> if asked (<a href="../yrec-map/putstore.f.html#def-PUTSTORE"><code>PUTSTORE</code></a>); a <code>SolarCalibr</code>'s <code>check</code> decides whether another cycle runs (<a href="../yrec-map/chkcal.f.html#def-CHKCAL"><code>CHKCAL</code></a>), and <code>KTTAU</code> and <code>LPTIME</code> return to their configured values for the next cycle (in the design, a new <code>AtmosphereSwitch</code> and <code>TimeStepper</code>).</li>
+<li><strong>End of the job.</strong> Calibration summaries (at <code>rp_1</code> also the Monte Carlo output, <code>WRTMONTE</code>, removed in the development branch); <code>Run%clear</code>. The driver, not the library, ends the program, with a nonzero exit code if <code>ierr</code> is not 0.</li>
+</ol>
+<p>In code, the step reads as its outline:</p>
+<pre><code class="language-fortran">subroutine step_run(self, ierr)
+    !! One evolutionary step (main.f, DO 100). ierr : 0, or STEP_DIVERGED
+    !! for the track to cut the step and retry.
+    class(Step), intent(inout) :: self
+    integer, intent(out) :: ierr
+    type(Track), pointer :: tr; tr =&gt; self%track  ! Shortcut.
+
+    ! Save the model at the start of the step.
+    call tr%star%copy_to(self%start)
+    ! Mass loss and composition, if the model ages.
+    if (self%dt &gt; 0) then
+        call tr%mloss%apply(tr%star, self%dt, ierr); if (ierr /= 0) return
+        call tr%comp%run(tr%star, self%start, tr%zones, self%dt, ierr)
+        if (ierr /= 0) return
+    end if
+    ! Rezone, guess, and solve the structure at four levels.
+    ...
+end subroutine
+</code></pre>
+<h2>7. Migration</h2>
+<h3>7.1 The benchmarks</h3>
+<p>Stage 3 of the overhaul refactors against benchmark data. YREC has it: the development branch carries a test suite of 298 cases (about five hours), a 17-case targeted set extended with cases for the path being changed (<code>F90_CONVERSION_PLAN.md</code>, Validation protocol), a comparison of output files with configurable rules for lines to ignore, and a rebaseline protocol (<code>REBASELINE_PROTOCOL.md</code>, <code>rebaseline.py</code>) for changes that are meant to change results. Two cautions from its <code>KNOWN_ISSUES.md</code>: the reference outputs are not under version control (issue 32, open), and on Oct 20, 2026, 296 of the 298 cases passed (issues 31 and 36). So the overhaul first freezes and archives its own reference set, made from its starting commit, with the failing cases recorded. It then uses the same protocol, with three levels of check:</p>
+<ul>
+<li><strong>Identical output</strong> for a step that only moves code (a routine into a type, a block into a component): the targeted set, and the full suite at the end of each stage.</li>
+<li><strong>Point comparisons</strong> for a merged family (one <code>EosBlend</code> for <code>EQSTAT</code> and <code>EQSTAT2</code>, one spline routine for seven): the new and old routines evaluated on the same grid of $(\log T, \log\rho, X, Z)$, or on the same random inputs, agreeing to round-off; then the targeted set.</li>
+<li><strong>A rebaseline</strong>, each in its own commit with its reason, for every change of behavior: a bug fix the experts confirm (the questions on each file's page), or a decision of Section 8. A restyle and a change of behavior never share a commit, as the guide asks.</li>
+</ul>
+<h3>7.2 The order</h3>
+<p>From the bottom of the layering to the top, so that each step builds on tested types:</p>
+<ol>
+<li><strong>Kernels.</strong> <code>kinds</code>, <code>constants</code>, <code>numerics</code>, <code>odeint</code>: merge the duplicate splines, solvers and interpolators, with unit tests on exact cases; then point comparisons against each routine they replace.</li>
+<li><strong>Settings.</strong> <code>Config</code> and <code>KindCard</code> replace <code>PARMIN</code>'s blocks; the namelist echo in the <code>.short</code> file must stay the same. Until the last routine that reads a block (or development's module) is converted, <code>Config%derive</code> also fills it, so that the code still runs after this step. <code>Logger</code> replaces the writes to <code>ISHORT</code>.</li>
+<li><strong>Physics, family by family.</strong> The equation of state, the opacities, the atmospheres, the nuclear rates, convection. Each family first gets its type behind the old call (a thin wrapper keeps the old routine's name and arguments), so the rest of the code does not change; the wrappers go when their callers are converted.</li>
+<li><strong>The model and its files.</strong> <code>Star</code>, <code>StepStart</code>, <code>ModelFile</code>: a model read and written again must give the same file.</li>
+<li><strong>The structure.</strong> <code>EnvelopeIntegrator</code> with <code>OdeRhs</code> (which ends the QENV/QATM constraint, Section 7.3), <code>SurfaceBC</code>, <code>StructureSolver</code>, <code>Rezoner</code>, <code>TimeStepper</code>.</li>
+<li><strong>Composition, settling, rotation, mass loss.</strong></li>
+<li><strong>The run.</strong> <code>Run</code>, <code>Track</code>, <code>Step</code> replace <code>main.f</code>; then the calibrations.</li>
+<li><strong>The interfaces.</strong> The executable reads the same namelists and writes the same files throughout; <code>capi.f90</code>, the Python package's in-process part and <code>UserPhysics</code> come last, once nothing calls <code>STOP</code>.</li>
+</ol>
+<p>Each step ends with the targeted set; each stage (one numbered item) with the full suite.</p>
+<h3>7.3 The other branches</h3>
+<p>rp_1 (Dec 17, 2025) is where the notes were written. Since then:</p>
+<table>
+<thead>
+<tr>
+<th>Branch</th>
+<th>Since rp_1</th>
+<th>Where it fits</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>development</code> (Oct 20, 2026)</td>
+<td>246 commits: obsolete options removed (the MHD EOS, OPAL 1992, LAOL 1989, Alexander 1995 and Kurucz 1990 opacities, the OPAL 1995 and 2001 EOS, the Monte Carlo loop, isochrone output), COMMON blocks consolidated, then every remaining block made a module (87 <code>…_MOD</code> modules, <code>F90_CONVERSION_PLAN.md</code> and <code>KNOWN_ISSUES.md</code> issue 37), <code>IMPLICIT NONE</code> in every unit, the <code>CALL MDOT</code> mismatch fixed, <code>KNOWN_ISSUES.md</code>, the test suite and rebaseline protocol</td>
+<td>The natural base for the overhaul (Section 8): its modules are the first half of <a href="common-map.html">Section 6.4</a>, and its removals are followed by the design, which drops the subclasses for the removed options (<a href="microphysics.html">Section 3.3</a>, <code>MonteCarlo</code>)</td>
+</tr>
+<tr>
+<td><code>main</code> (Oct 11, 2026)</td>
+<td>176 commits; development merged up to Oct 11</td>
+<td>Follows development</td>
+</tr>
+<tr>
+<td><code>spotevol</code> (Sep 24, 2026)</td>
+<td>162 commits: spot evolution (touches <code>PARMIN</code>, <code>SURFBC</code>, <code>TPGRAD</code>, <code>STARIN</code>, <code>STITCH</code>)</td>
+<td>A first client of <code>UserPhysics%surface_flux_factor</code> or a <code>SurfaceBC</code> option</td>
+</tr>
+<tr>
+<td><code>yrec_2026_release</code> (Sep 16, 2026)</td>
+<td>154 commits: a static-linking build target</td>
+<td>The build (<code>fpm.toml</code> or the Makefile)</td>
+</tr>
+<tr>
+<td><code>modern</code> (Apr 26, 2025)</td>
+<td>41 commits by KC, 121 behind rp_1: COMMON blocks absorbed into four <code>.f90</code> modules (<code>settings</code>, <code>tables</code>, <code>params</code>, <code>mmodel</code>)</td>
+<td>Superseded by development's conversion; its grouping by role (settings, tables) agrees with <a href="common-map.html">Section 6.4</a></td>
+</tr>
+<tr>
+<td><code>jvs0210</code> (Oct 2, 2025)</td>
+<td>none (36 behind)</td>
+<td>Already in rp_1</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The QENV/QATM constraint.</strong> Development's <code>KNOWN_ISSUES.md</code> (issue 7) records that the blocks serving <code>QENV</code> and <code>QATM</code> cannot become arguments, because the two are passed as <code>EXTERNAL</code> derivative routines to <code>BSSTEP</code> and <code>MMID</code> with a fixed argument list; <a href="../yrec-map/qenvmix_mod.f.html#def-QENVMIX_MOD"><code>QENVMIX_MOD</code></a> exists only to relay <code>CMIXL</code> to <code>QENV</code>. In the design the derivative is a type-bound procedure of an <code>OdeRhs</code> extension (<a href="kernels.html">Section 3.1</a>, <code>EnvelopeRhs</code>), which carries $X$, $Z$, the mixing length and a pointer to the physics as components, so the constraint and the relay module both go.</p>
+<h2>8. Open questions</h2>
+<p>Each question is tagged by who answers it: <em>Team</em>, the code's team (its authors and developers), or <em>KC</em>.</p>
+<ol>
+<li><em>[Team]</em> <strong>The base.</strong> Refactor from rp_1, as the notes describe it, or from the development branch, which has removed nine obsolete options and converted every COMMON block to a module? The pages of this design now follow development (09c3b9b). Proposal: development, after its open issue 29 (no procedure has an explicit interface; issue 27, the dependencies between modules, was resolved on Oct 20) is settled with its developers, since the overhaul would otherwise redo their conversion.</li>
+<li><em>[KC]</em> <strong>Working with YREC's developers.</strong> The development branch has its own plan (<code>F90_CONVERSION_PLAN.md</code>, stages 0–5, all done). Should this design be proposed to them as the next stages, and who decides on the interfaces they will maintain?</li>
+<li><em>[KC]</em> <strong>The language.</strong> Decided for now (Oct 25, 2026): Python first and modern Fortran last, the route on <a href="overview.html">the Python version's overview</a>, so this design is the last stage's target, reached through pyrec; <a href="fortran.html">Section 6.1</a> keeps the first sketch's reverse order for comparison. Still open: is the in-process interface wanted, beside the existing <code>yrec</code> package that runs the executable (<a href="fortran.html">Section 6.3</a>)?</li>
+<li><em>[Team]</em> <strong>Changes of behavior the design would make,</strong> each kept behind a flag that gives today's results until decided: the atmosphere chosen per model after an Allard failure rather than gray for the rest of the run (ENVINT question 9); settling switched off by <code>MIX</code> only for the current track; the ⁷Be screening of <code>RATES</code> against <code>ENGEB</code> (RATES question 5). (One more, <code>SUNL</code> against <code>CLSUN</code> in the Monte Carlo runs, is settled: the development branch removed the Monte Carlo option.) And one the design does not make: today a model that fails to converge ends the run (<code>STARIN</code> stops at label 15, although <code>main.f</code>'s comment speaks of time-step cutting); should <code>Track%run</code> instead cut the step and retry, and with what limit?</li>
+<li><em>[Team]</em> <strong>What to drop.</strong> Code that never runs or is never called: <code>BURSMIX</code> and <code>BSROTMIX</code> (<code>LBURS</code> always false), the receding-convection-zone block of <code>MIDMOD</code>, the old method of <code>CHKCAL</code>, <code>WCZ</code>, <code>PUTYREC7</code>, <code>SPLINNR</code>, <code>SPLNR</code>, and the <code>LNUTAB</code> block of <code>main.f</code>. Development has already removed <code>WCZ</code>, <code>SPLINNR</code> and <code>SPLNR</code> (commit da1887a) and kept <code>PUTYREC7</code> on purpose, at its developers' decision (<code>KNOWN_ISSUES.md</code>, issue 24). Proposal: drop the others, each with a line in the commit, unless an expert wants one back; keep <code>PUTYREC7</code> as development does.</li>
+<li><em>[Team]</em> <strong>Two settling solvers.</strong> Keep <code>GRSETT</code> ("retained for backwards compatability") as <code>GrsettSettling</code>, or keep only <code>MICRODIFF</code>?</li>
+<li><em>[Team]</em> <strong>Several interior opacity tables at once</strong> (SETUPOPAC question 1 at <code>rp_1</code>): the design allowed an array of them in <code>OpacityBlend</code>. Settled by the development branch: OPAL95 is now its only interior table, so <code>OpacityBlend</code> holds one.</li>
+<li><em>[Team]</em> <strong>Output files.</strong> Keep every format byte for byte through the refactoring (the proposal, so that the test suite can compare files), and change formats only afterwards?</li>
+<li><em>[Team]</em> <strong>Which hooks first.</strong> The six of <a href="hooks.html">Section 6.5</a> cover the additions found in the notes; which do YREC's users need first, and should spot evolution be the first one to use them?</li>
+<li><em>[Team]</em> <strong>Names.</strong> Keep YREC's names (<code>HCOMP</code>, <code>HTOLER</code>, <code>ATIME</code>) in the types and namelists, as this design does so that YREC's users can read the new code, or move to the "more intuitively named" ones that <code>REMAP</code> already accepts (<code>TIME_…</code>, <code>TOL_…</code>)?</li>
+</ol>
+<h2>The Python version</h2>
+<p><em>Drafted by Claude (Oct 25, 2026) for Kaili Cao from his plan.</em></p>
+<h3>Why Python first</h3>
+<p>Compiled code is hard to debug: a wrong value in YREC today is found with print statements and a rebuild. KC's plan therefore goes through Python, where every array can be inspected between two lines, and keeps the Fortran frozen meanwhile, as the reference that every Python result is checked against. The route, in KC's words:</p>
+<ol>
+<li>Fortran 77, old structure → Python (with Numba), old structure;</li>
+<li>→ Python, new structure (the framework of these stubs);</li>
+<li>→ modern Fortran, new structure (the <a href="overview.html">Fortran design</a>).</li>
+</ol>
+<p><strong>Move 1: the translation.</strong> The current code is translated routine by routine, keeping its structure, so that each Python routine has one Fortran original. Each routine is translated in one of two ways:</p>
+<ul>
+<li><strong>Plain Python,</strong> for most routines (input, output, set-up, the driver, the run's logic). The COMMON blocks become state objects, one per block or group of blocks, held as attributes and passed along, close to the old structure.</li>
+<li><strong>A plain-Python wrapper and a Numba kernel,</strong> for the numerics-heavy routines: the structure solver, the equation-of-state and opacity interpolation, nuclear burning, diffusion. The wrapper takes the arrays it needs from the state and passes them to an <code>@njit</code> kernel; kernels take and return arrays only, and never touch global state. Debugging still works with <code>NUMBA_DISABLE_JIT=1</code>, which runs the kernels as plain Python.</li>
+</ul>
+<p>The reason for the split: Numba treats module globals as compile-time constants, so a COMMON block cannot become a mutable module global in Numba code; the kernels see the state only through their arguments.</p>
+<p><strong>Move 2: the new structure.</strong> The translated code is restructured step by step toward the framework of the stubs (one owner for each piece of state, one base class for each family of alternatives), each step checked against the step before it. The state objects of move 1 are the first draft of the classes: a block's variables move into the class that owns them, as the <a href="common-map.html">COMMON-block map</a> lays out.</p>
+<p><strong>Move 3: modern Fortran.</strong> Once pyrec is mature, its modules move to modern Fortran one by one, called from Python through F2PY, so that the code runs whole after each move. In KC's experience Numba is not even as fast as C, so this stage is expected to be needed for speed, not left optional.</p>
+<h3>Conventions decided once</h3>
+<p>The translation meets the same Fortran idioms in every routine; each gets one convention, decided before the first routine and written down:</p>
+<ul>
+<li><strong>Indexing:</strong> Fortran counts from 1, Python from 0. Either shift every index (and every loop bound and stored index, such as zone edges) at translation, or keep a dummy element 0 during move 1; shifting once is cleaner, keeping is safer for differential tests.</li>
+<li><strong>GOTO flow,</strong> above all in <code>main.f</code>'s loops: into <code>while</code> loops, <code>break</code>, <code>continue</code> and early returns, with each label's role in a comment.</li>
+<li><strong>Column-major arrays:</strong> <code>HCOMP(NSP, M)</code> keeps one shell contiguous in Fortran; in NumPy's row-major order, <code>(NSP, m)</code> keeps one species contiguous. Keep YREC's index order and accept the other memory layout, or transpose; the kernels' loops follow the choice.</li>
+<li><strong>Implicit typing:</strong> every variable's type made explicit (names starting I–N are integers in Fortran 77), and single against double precision decided per variable.</li>
+<li><strong>COMMON blocks:</strong> into state objects, passed explicitly; never module globals in Numba code (above).</li>
+</ul>
+<h3>Testing</h3>
+<p><strong>Differential tests, routine by routine.</strong> A structure-preserving translation lets each Python routine be checked against its Fortran original on the same inputs, by calling the frozen Fortran through F2PY. A routine is done when it agrees on its inputs from real runs and on edge cases.</p>
+<p><strong>Bug for bug first.</strong> Move 1 reproduces the Fortran, apparent bugs included, and marks each one found in Stage 1 (the questions on each file's page) with a comment. Each is fixed later, in its own commit, with its own benchmark change.</p>
+<h3>Open questions</h3>
+<ol>
+<li><em>[KC]</em> <strong>Speed.</strong> Python loops over shells would be perhaps 100–1000 times slower than Fortran; NumPy over shells and the Numba kernels close much of the gap while keeping debugging possible. How slow may pyrec be while it is developed (a model a minute? a track an hour?), and which kernels are profiled first?</li>
+<li><em>[KC]</em> <strong>The benchmarks need a tolerance per quantity,</strong> not identical output: Python and Numba change the order of floating-point operations, so results agree to round-off, not bit for bit. Each output quantity (log L, log Teff, the central values, the surface abundances, the ages) needs its own tolerance. The development branch's 298-case suite could serve, if that branch is the frozen version.</li>
+<li><em>[KC]</em> <strong>Which version is frozen:</strong> rp_1, as the notes describe it, or the development branch, which has removed nine obsolete options and turned each COMMON block into a module (whose modules F2PY wraps more easily)?</li>
+<li><em>[KC]</em> <strong>Telling YREC's developers early,</strong> before move 1 starts: the plan takes a frozen copy of the code they maintain as its reference, and move 3 would hand them a new code.</li>
+</ol>
+<h2>Python</h2>
+<p>The stubs of the new structure (signatures and docstrings, no bodies), each naming the routines it replaces in the current code.</p>
+<h3><code>pyrec/__init__.py</code></h3>
+<ul>
+<li>The module replaces <a href="../yrec-map/main.f.html"><code>main.f</code></a>.</li>
+</ul>
+<pre><code class="language-python">&quot;&quot;&quot;pyrec: YREC in Python, a stub design parallel to the modern-Fortran design.
+
+The same classes and the same split as the Fortran design, as Python
+packages layered by dependency (a lower package never imports a higher
+one); shells are held as NumPy arrays, and hot loops are marked for Numba
+(debug with ``NUMBA_DISABLE_JIT=1``). Bodies are ``...``: this is the target
+framework, not code that runs.
+
+Packages
+--------
+kernels : Constants, species indices, numerical kernels, ODE stepping, Logger.
+config : Config and its parts; KindCard.
+physics : Physics, PointState and the microphysics families.
+star : Star, ShellPhysics, EnvelopeSolution, StepStart; ConvectionZones.
+structure : EnvelopeIntegrator, SurfaceBC, StructureSolver, Rezoner.
+timestep : StepCriterion family, TimeStepper.
+composition : CompositionStep, Semiconvection, ChiGrid; settling.
+rotation : RotationStep and its parts; MassLoss.
+io : Model files, writers, analyses.
+hooks : UserPhysics.
+evolve : Run, Track, Step; calibrations.
+
+
+Replaces: main.f
+&quot;&quot;&quot;
+__version__ = &quot;0.0.0&quot;
+</code></pre>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><h2>What was checked, and held</h2>
+<ul>
+<li><strong>COMMON-block map (6.4).</strong> A script over <code>callgraph.json</code> finds 243 distinct blocks; the map names each exactly once, with none missing and none extra. The counts in Section 1 hold: <code>/CONST1/</code> in 93 units, <code>/LUOUT/</code> in 88, <code>PARMIN</code> 86 blocks, <code>main.f</code> 60.</li>
+<li><strong>Routines replaced.</strong> Every <code>unit</code> link resolves to a unit in the call graph, and every unit of the call graph is named on the page (<code>BLOCK_DATA</code> through <code>blkdta000.f</code>).</li>
+<li><strong>Code claims spot-checked and right:</strong> <code>REDUCE</code> takes 39 arguments; <code>QUAD</code>'s 30 cache slots; <code>MIX</code> sets <code>LDIFY = .FALSE.</code>, <code>HTIMER</code> sets <code>LPTIME = .FALSE.</code>, <code>ENVINT</code> sets <code>KTTAU = 0</code>; <code>SECULR</code> tests <code>LCODM</code>, <code>CODM</code> without <code>/MAG/</code>; <code>LBURS = .FALSE.</code> in <code>GETW</code>; <code>ENGEB</code> called with the undefined <code>IU</code> in <code>main.f</code>; <code>STOP 9999</code> in <code>STARIN</code> and <code>ALFILEIN</code>; <code>/ALATM04/</code> holds only <code>DUMMY1</code>–<code>DUMMY4</code>; <code>GMASS01</code> and <code>GMASS06</code> differ only in name, case and a blank line; <code>PARMIN</code> is 1,461 lines; <code>GETW</code>'s substep count is the minimum of the two ceilings; <code>CRRECT</code>'s damping <code>FCORR = min(1, FCORR + FCORRI)</code>; <code>/QENVMIX/</code> is not in rp_1 (it is development's).</li>
+<li><strong>The other branches.</strong> Dates and commit counts hold (development Oct 20, 246 ahead of rp_1; main Oct 11, 176; spotevol Sep 24, 162; yrec_2026_release Sep 16, 154; modern Apr 26, 2025, 41 ahead and 121 behind, all 41 by Kaili Cao; jvs0210 Oct 2, 2025, 0 ahead and 36 behind). On development: <code>F90_CONVERSION_PLAN.md</code>, <code>KNOWN_ISSUES.md</code>, <code>REBASELINE_PROTOCOL.md</code>, <code>rebaseline.py</code>, <code>wrappers/</code> exist; no <code>COMMON</code> statement is left in <code>src/</code> (issue 37, resolved Oct 20); all 284 <code>.f</code> files contain <code>IMPLICIT NONE</code>; the full suite is 298 cases, "about five hours", with a 17-case targeted set (plan, Validation protocol); the <code>CALL MDOT</code> mismatch was fixed in b3b0601; <code>docs/source/python_package.md</code> documents <code>pip install yrec</code> and <code>yrec.run_parallel</code>; <code>YREC_INPUT</code> is used. Issues 7 (QENV/QATM) and 11 (<code>ENVSTRUCT</code>, <code>ATMSTRUCT</code> held for output) say what the page says.</li>
+<li><strong>Style.</strong> The conventions of the guide carry over sensibly (6.2): <code>init</code>/<code>run</code>/<code>clear</code>, <code>…Base</code> for private bases, <code>ierr</code> for errors, UPPERCASE parameters with the case-insensitivity caveat, hooks that do nothing in the base, one <code>Config</code> read once. The tree is at most 79 characters wide.</li>
+</ul>
+<h2>Findings and proposed fixes</h2>
+<h3>Wrong</h3>
+<ol>
+<li><strong>A divergence does not cut the step today; it ends the run.</strong> Sections 3.12 and 4 (step 5) say "<code>Track%run</code> cuts the step and tries again (label 15)". In rp_1, label 15 calls <code>STARIN</code> with <code>LARGE</code> set, and <code>STARIN</code> writes "MODEL FAILED TO CONVERGE" and <code>STOP</code>s (starin.f, lines 137–146), despite main.f's comment "STARIN called here for timestep cutting". (The main.f note, Steps 2, repeats the comment's claim; the starin.f note is right.) <strong>Fix:</strong> say that today a divergence ends the run; <code>Step%run</code> returns <code>STEP_DIVERGED</code>, and <code>Track%run</code> ends with that error, as today; cutting and retrying is a new behavior and goes into Section 8 (question 4).</li>
+<li><strong>The <code>MDOT</code> mismatch is in <code>massloss.f</code>, not <code>main.f</code>.</strong> Section 1: "<a href="../yrec-map/main.f.html">main.f</a> passes <code>MASSLOSS</code> one argument more than <code>MDOT</code> takes". <code>massloss.f</code> (line 176) calls <code>MDOT</code> with <code>BL</code> first; <code>MDOT</code> has no such argument. <strong>Fix:</strong> "<code>MASSLOSS</code> passes <code>MDOT</code> one argument (<code>BL</code>) more than it takes".</li>
+<li><strong>"Every file declares <code>JSON = 5000</code>"</strong> (Section 1, and Section 5 "in every file"): 123 of the 254 files do. <strong>Fix:</strong> "123 of the 254 files".</li>
+<li><strong><code>StarCalibr</code> checks every model, not a finished track.</strong> <code>main.f</code> calls <code>CHKSCAL</code> inside the model loop (line 975, on even kind cards after the first model) and may end the track there (<code>GOTO 200</code>); only <code>CHKCAL</code> runs at the end of a track. Section 3.13 (<code>check</code> "from a finished track's TrackSummary") and Section 4 (step 5) say otherwise. <strong>Fix:</strong> give <code>CalibrBase</code> a hook <code>after_model(summary, done)</code> (the base does nothing), used by <code>StarCalibr</code>; step 4 of the data flow calls it.</li>
+<li><strong>Layering: <code>ConvectionZones</code> cannot live in <code>convection.f90</code>.</strong> Its methods take a <code>Star</code>, but <code>convection.f90</code> sits below <code>star.f90</code>, which needs <code>Mlt</code> from it. <strong>Fix:</strong> move <code>ConvectionZones</code> to a new module <code>zones.f90</code> just above <code>star.f90</code>; drop "Overshoot" from the tree (no such type is defined; <code>OVERSH</code> is part of <code>ConvectionZones%find</code>).</li>
+<li><strong>Illegal Fortran in <code>Track</code>.</strong> It has a component <code>run</code> (pointer to <code>Run</code>) and a type-bound procedure <code>run</code>; a binding name may not equal a component name. <code>Run</code>'s component <code>log</code> shadows the intrinsic <code>LOG</code> (the guide's Fix list: names that shadow builtins). <strong>Fix:</strong> <code>type(Run), pointer :: job</code>; <code>type(Logger) :: logger</code>.</li>
+<li><strong>Development's open issues (Section 8, question 1).</strong> "after its open issues 27 and 29 … are settled": issue 27 was resolved on Oct 20; only 29 (no explicit interfaces) is open. <strong>Fix:</strong> name issue 29 only.</li>
+<li><strong>Module count.</strong> "86 <code>_MOD</code> modules" (7.3): development's <code>src/</code> has 87 (<code>MODULE …_MOD</code>), since issue 37 added three after the plan's count and issue 26 added <code>DIMENSIONS_MOD</code>. Section 6.4: "moved every block into a module of its own" is loose: development first removed options and consolidated the blocks, then made each remaining block a module. <strong>Fix:</strong> say so, with 87.</li>
+</ol>
+<h3>Missing</h3>
+<ol>
+<li><strong>Data flow (Section 4) skips parts of <code>main.f</code>'s run:</strong> the copy of the first model to <code>ILAST</code> with <code>WRTLST</code> (He flash, <code>LKUTHE</code>); <code>PDIST</code> at the start of each step; <code>LIRATE88</code> at the start of a step (rates before the step); the <code>ITROT = 1, ITDIF1</code> loop that repeats level 4, <code>MIXCZ</code>, <code>GETW</code> and <code>FPFT</code> with the start-of-step composition and $j$ restored (rotation); <code>CONVEC</code> before the light elements; the second <code>FPFT</code> after <code>GETNEWENV</code>; the end-age floor after <code>HTIMER</code>; <code>WRTMONTE</code>; <code>KTTAU</code> and <code>LPTIME</code> restored after each solar-calibration cycle. <strong>Fix:</strong> add them to the steps.</li>
+<li><strong>The Allard switch and calibrations.</strong> <code>main.f</code> restores <code>KTTAU</code> after each solar-calibration cycle (<code>kttau = kttausv</code>), so the gray switch lasts for the rest of the run, or of the cycle. <strong>Fix:</strong> say so in 3.3.</li>
+<li><strong><code>Run</code> does not list its <code>UserPhysics</code></strong> though 6.5 says it holds one. <strong>Fix:</strong> add the component.</li>
+<li><strong>Benchmarks (7.1):</strong> development's test references are not under version control (issue 32, open), and on Oct 20 296 of 298 cases passed (issues 31, 36). <strong>Fix:</strong> the overhaul first freezes and archives its own reference set, and records the two failing cases.</li>
+<li><strong>Migration testability (7.2, step 2):</strong> once <code>Config</code> replaces <code>PARMIN</code>, the routines not yet converted still read the old blocks (or development's modules). <strong>Fix:</strong> <code>Config%derive</code> also fills them until their last reader is converted, so each step leaves a runnable code.</li>
+<li><strong>What to drop (Section 8, question 5):</strong> development already removed <code>WCZ</code>, <code>SPLINNR</code>, <code>SPLNR</code> (da1887a) and kept <code>PUTYREC7</code> at its developers' decision (issue 24); <code>LPMM</code> and <code>PMMWMAX</code> were removed from the namelists, and the suite guards against them (3.2 says they are "still accepted, with a warning"). <strong>Fix:</strong> say so in both places.</li>
+</ol>
+<h3>Unclear</h3>
+<ol>
+<li><strong>Diagram:</strong> <code>Track *-- Step</code> while <code>Track</code> has no <code>Step</code> component (a <code>Step</code> is made per step). <strong>Fix:</strong> <code>Track ..&gt; Step</code>.</li>
+</ol>
+<h3>Format</h3>
+<p>No problem: headings, links (all resolve) and math render.</p>
+<h2>Revision</h2>
+<p>Revised: findings 1–15 applied to <code>notes/design.md</code> (Sections 1, 2, 3.2, 3.3, 3.12, 3.13, 3.15, 4, 5, 6.2, 6.4, 7.1, 7.2, 7.3, and Section 8's questions 1, 4 (now also asking whether a failed model should cut the step) and 5); site rebuilt (the file pages and the design page), with no link reported as pointing to nothing.</p></div></details>
+</main></body></html>

@@ -1,0 +1,1275 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>wrtout.f · PyREC scaffolding (from YREC development, 09c3b9b)</title><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><a href='../index.html'>PyREC scaffolding (from YREC development, 09c3b9b)</a><span class='muted'>/ wrtout.f</span></header><main>
+<h1>wrtout.f</h1>
+<p class='muted'>731 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/wrtout.f'>on GitHub (09c3b9b)</a></p>
+<p><strong>Python version</strong>: <code>wrtout.py</code>, 516 lines, shown under each definition it translates.</p>
+<h2>Explanation</h2>
+<div class='notes'><p><strong>Purpose.</strong> <code>WRTOUT</code> writes the output of each converged model: a summary block in the short output, one line (or block) per model in the track file, the last model for restarting, and, at the chosen intervals, the detailed profiles (through <code>PUTSTORE</code>, which also calls <code>STITCH</code>, and <code>WRTMOD</code>). On the way it computes the summary quantities: convection-zone masses and the zone's base, the central conditions, the radius and gravity, neutrino capture rates, moments of inertia and rotation period.</p>
+<p><strong>How it fits.</strong></p>
+<ul>
+<li><strong>Inputs:</strong> the model and its run data through arguments (from the main program; <code>CMIXL</code>, <code>XMSOL</code> and <code>COMPMIX</code> are only passed on), and through modules: the per-shell physics (<code>SCRTCH_MOD</code>), the neutrino fluxes (<code>FLUXES_MOD</code>, from <a href="../yrec-map/engeb.f.html#def-ENGEB">ENGEB</a>), the output switches and options (<code>NMLPAR_MOD</code>: <code>LTRACK</code>, <code>ITRVER</code>, <code>LSTORE</code>, <code>NPRTMOD</code>, <code>LPULSE</code>, <code>LMILNE</code>, <code>LROT</code>, <code>LSNU</code>, <code>LKUTHE</code>; <code>ACDPTH_MOD</code>: <code>LACOUT</code>, <code>LADON</code>, <code>LJLAST</code>), the composition (<code>COMP_MOD</code>, <code>LABEL_MOD</code>), the constants (<code>CONSTANTS_MOD</code>), $\tau_\mathrm{cz}$ and $P_\mathrm{phot}$ (<code>OVRTRN_MOD</code>).</li>
+<li><strong>Who calls it:</strong> the main program, <a href="../yrec-map/main.f.html#def-_file_level_">main.f</a>, after each model.</li>
+<li><strong>What it calls:</strong> <a href="../yrec-map/eqstat.f.html#def-EQSTAT">EQSTAT</a> (central conditions), <a href="../yrec-map/gettau.f.html#def-GETTAU">GETTAU</a> (track version 0), <a href="../yrec-map/wrtlst.f.html#def-WRTLST">WRTLST</a> (the last model, <code>ILAST</code>; also <code>IJLAST</code>), <a href="../yrec-map/putstore.f.html#def-PUTSTORE">PUTSTORE</a>, <a href="../yrec-map/wrtmil.f.html#def-WRTMIL">WRTMIL</a>, <a href="../yrec-map/wrtmod.f.html#def-WRTMOD">WRTMOD</a> and <a href="../yrec-map/calcad.f.html#def-CALCAD">CALCAD</a> (acoustic depths).</li>
+<li><strong>Outputs:</strong> <code>ISHORT</code> (summary block), <code>ITRACK</code> (track; the header comes from <a href="../yrec-map/wrthead.f.html#def-WRTHEAD">WRTHEAD</a>), and the files written by the routines it calls. In <code>CENT_MOD</code>, it stores $\log T_c$, $\log P_c$, $\log\rho_c$ and the convection zone's base (<code>CZsurf_M</code>, <code>CZsurf_R</code>, formerly <code>ENVLM</code>, <code>ENVR</code>), read by the main program for its <code>ISNU</code> output (WRTMONTE, which also read them, removed since <code>rp_1</code>); in <code>FLUXES_MOD</code>, the Cl and Ga rates <code>CLSNU</code>, <code>GASNU</code>; in <code>OVRTRN_MOD</code>, <code>TAUCZ0</code> and <code>PPHOT0</code>.</li>
+</ul>
+<p><strong>The method.</strong></p>
+<ol>
+<li><strong>Luminosity terms</strong> <code>TLUMX</code> (pp I–III, CNO, triple-α, He–C, gravity, neutrinos) are rescaled so that they sum to the surface luminosity (not during the helium flash).</li>
+<li><strong>Radius and gravity:</strong> $\log R = \tfrac12(\log L + \log L_\odot - \log 4\pi - \log\sigma - 4\log T_\mathrm{eff})$, $\log g = \log G + \log M - 2\log R$; $M_\mathrm{bol} = $ <code>CMBOL</code> $- 2.5\log(L/L_\odot)$.</li>
+<li><strong>Central conditions</strong>, extrapolated from shell 1 (mass $m_1$, radius $r_1$ from $m_1 = \tfrac{4\pi}{3}\rho_1 r_1^3$):
+   $$P_c = P_1 + \tfrac12\,\frac{G m_1 \rho_1}{r_1},\qquad \log T_c = \log T_1 + \log\!\left(1 + \nabla_1\,\frac{P_c - P_1}{P_1}\right),$$
+   then the equation of state (<a href="../yrec-map/eqstat.f.html#def-EQSTAT">EQSTAT</a>, with the Debye–Hückel composition set first when <code>LDH</code>) gives $\beta$, $\eta$ there.</li>
+<li><strong>Base of the surface convection zone:</strong> where $\nabla_\mathrm{rad} - \nabla_\mathrm{ad}$ (<code>SDEL(1)</code> − <code>SDEL(3)</code>) changes sign between shells <code>JENV-1</code> and <code>JENV</code>, by linear interpolation; its mass above (<code>CZsurf_M</code>, $M_\odot$), radius (<code>CZsurf_R</code>, $R_\odot$), $T$, $\rho$, $P$, $\kappa$ (the locals <code>CZsurf_T</code>, <code>CZsurf_D</code>, <code>CZsurf_P</code>, <code>CZsurf_O</code>).</li>
+<li><strong>Hydrogen shell</strong> (<code>LSHELL</code>): masses at its middle, its total and the helium core's, and the temperature maximum (for the helium flash, the first maximum above $\log T = 7.98$).</li>
+<li><strong>Neutrino detectors:</strong> capture rates as linear combinations of the eight fluxes (pp, pep, hep, $^7$Be, $^8$B, $^{13}$N, $^{15}$O, $^{17}$F) with cross sections (from Bahcall's book, p. 207, table 8.2, by the comment) for $^7$Li, $^{37}$Cl, $^{71}$Ga, $^{81}$Br, $^{98}$Mo, $^{115}$In; and for the track, Cl and Ga in SNU with a second table (<code>CLSNUF</code>, <code>GASNUF</code>, "Neutrino Astrophysics p. 207", with $^{37}$Cl changes after Bahcall &amp; Pinsonneault).</li>
+<li><strong>Track</strong> (<code>LTRACK</code>): the total moment of inertia (with rotation $\sum I_j$, otherwise $\sum \tfrac23 \Delta m_j r_j^2$), the surface zone's, the rotation period $P = 2\pi/\Omega_s$ in days and $v = \Omega_s R$ in km/s; then, by <code>ITRVER</code>, one line per model (0, after calling <code>GETTAU</code> for $\tau_\mathrm{cz}$ and $P_\mathrm{phot}$), or several lines (1, 2), or a short line (3).</li>
+<li><strong>Model files:</strong> the last model to <code>ILAST</code> every time; the detailed output through <code>PUTSTORE</code> every <code>NPRTMOD</code> models if <code>LSTORE</code> (with <code>LSTCH</code>, PUTSTORE also writes the stitched profile); otherwise, with <code>LPULSE</code>, <code>WRTMIL</code> and <code>WRTMOD</code>; with <code>LACOUT</code>, acoustic depths through <code>CALCAD</code> and a second track line (format 1800).</li>
+</ol>
+<p><strong>KC's changes.</strong> Removed the unused argument <code>NKK</code> (2025-05-31), and adjusted the calls to <code>MEQOS</code>, <code>GETTAU</code>, <code>CALCAD</code> and <code>WRTMOD</code> to their shorter argument lists (2025-05-31); reordered the elements of COMMON <code>ACDPTH</code> (2025-05-30).</p>
+<p><strong>Changed since <code>rp_1</code>.</strong> The MHD equation of state removed (EQSTAT always); the isochrone output (<code>LISO</code>, unit <code>IISO</code>) removed; the call to STITCH removed, since PUTSTORE makes it (it ran twice per stored model); the new arguments <code>CMIXL</code>, <code>XMSOL</code> (formerly in <code>/CONST3/</code> and <code>/PULSE/</code>) and <code>COMPMIX</code> (formerly <code>/I2O/</code>), passed on to GETTAU, WRTLST, PUTSTORE, WRTMOD and CALCAD; <code>ENVLM</code>, <code>ENVR</code> renamed <code>CZsurf_M</code>, <code>CZsurf_R</code> (and the other <code>ENV…</code> locals <code>CZsurf_…</code>); the track's format 1499 writes <code>E17.8E3</code> in place of <code>E16.8</code>, for three-digit exponents (MCR 12/25); the commented-out JVS block on the zone outside the fitting point deleted; COMMON blocks to modules (many unused ones dropped), <code>IMPLICIT NONE</code>.</p></div>
+<h2>Questions for the experts</h2>
+<div class='notes'><ol>
+<li><strong>The convective core's radius.</strong> <code>FX2 = (SDEL(3,JCORE+1)-SDEL(1,JCORE))/(SDEL(3,JCORE+1)-SDEL(1,JCORE))</code> is always 1 (or 0/0), and the next line uses <code>FX</code>, not <code>FX2</code>, which at that point is undefined or left from the previous model. <code>CORER</code> is then never used. Is this block (JVS 10/11) unfinished?</li>
+<li><strong>Two tables of cross sections.</strong> The $^{37}$Cl rate printed in the summary uses 1.09×10⁴ for $^8$B (<code>FL37CL</code>), the track's <code>CLSNU</code> 1.14×10⁴; the Ga values differ too (for example $^7$Be: 73.2 against 71.7). Which are current? And the summary line calls these rates "neutrino energies (1.E-36 erg)".</li>
+<li><strong>Stale values in the track.</strong> For <code>ITRVER</code> 1 and 2, <code>ROTP</code>, <code>ROTV</code> and <code>HICZ</code> are set only with rotation, but version 2 writes them always; <code>CLSNU</code> and <code>GASNU</code> in the <code>LACOUT</code> line (format 1800) are computed only when <code>LTRACK</code> is on; <code>CZsurf_RL</code> (formerly <code>ENVRL</code>), passed to <code>CALCAD</code>, is set only when the base of the convection zone is inside the model. Without these, the values come from earlier models.</li>
+<li><strong>Two line formats in one track file.</strong> With <code>LACOUT</code> and <code>ITRVER = 0</code>, each model writes a format-1499 line and a format-1800 line to <code>ITRACK</code>, with different columns (1800 has acoustic quantities in place of rotation ones, and <code>ICHECK</code>). Is the acoustic line meant for a separate file?</li>
+<li><strong><code>KSAHA</code> undefined.</strong> The call to <code>EQSTAT</code> for the central conditions passes <code>KSAHA</code>, never set here (now declared <code>INTEGER</code>, still unset).</li>
+<li><strong><code>FLUXTOT</code> zeroed.</strong> For <code>ITRVER = 0</code> without <code>LSNU</code>, the fluxes in COMMON <code>FLUXES</code> are set to zero, which changes what later routines (such as the main program's <code>ISNU</code> output) read.</li>
+<li><strong>Hard-coded values.</strong> The helium flash's temperature threshold ($\log T = 7.98$), and the period's old cap of 9999 days still applied in version 0 (removed in version 1, MHP 8/25).</li>
+<li><strong>Unused variable.</strong> <code>LTSCAL</code> is set and never used.</li>
+</ol></div>
+<h2>Header comments</h2>
+<pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+WRTOUT
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre>
+<h2>Contents</h2><ul class='toc'>
+<li><a href='#def-WRTOUT'>WRTOUT</a> <span class='muted'>subroutine · $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</span></li>
+</ul>
+<h2>Definitions</h2>
+<section class='def' id='def-WRTOUT'><h3><span class='kind'>subroutine</span>WRTOUT</h3>
+<p class='muted'>lines 5–731 · <a href='https://github.com/yreclab/yrec/blob/09c3b9b/src/wrtout.f#L5-L731'>GitHub</a></p>
+<pre>SUBROUTINE WRTOUT(HCOMP,HD,HL,HP,HR,HS,HS1,HT,LC,M,MODEL,DAGE,</pre>
+<div class='notes'><p>All per-model output: summary, track and isochrone lines, the last model, and the detailed profiles at intervals; with the central conditions, the convection zone's base and the neutrino capture rates computed on the way.</p></div>
+<details open><summary>Comments before it</summary><pre class='doc'>
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+WRTOUT
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$</pre></details>
+<p><strong>Uses modules</strong> <a href='../yrec-map/acdpth_mod.f.html#def-ACDPTH_MOD'>ACDPTH_MOD</a>, <a href='../yrec-map/cent_mod.f.html#def-CENT_MOD'>CENT_MOD</a>, <a href='../yrec-map/comp_mod.f.html#def-COMP_MOD'>COMP_MOD</a>, <a href='../yrec-map/constants_mod.f.html#def-CONSTANTS_MOD'>CONSTANTS_MOD</a>, <a href='../yrec-map/debhu_mod.f.html#def-DEBHU_MOD'>DEBHU_MOD</a>, <a href='../yrec-map/dimensions_mod.f.html#def-DIMENSIONS_MOD'>DIMENSIONS_MOD</a>, <a href='../yrec-map/fluxes_mod.f.html#def-FLUXES_MOD'>FLUXES_MOD</a>, <a href='../yrec-map/iounits_mod.f.html#def-IOUNITS_MOD'>IOUNITS_MOD</a>, <a href='../yrec-map/label_mod.f.html#def-LABEL_MOD'>LABEL_MOD</a>, <a href='../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD'>NMLPAR_MOD</a>, <a href='../yrec-map/ovrtrn_mod.f.html#def-OVRTRN_MOD'>OVRTRN_MOD</a>, <a href='../yrec-map/scrtch_mod.f.html#def-SCRTCH_MOD'>SCRTCH_MOD</a></p>
+<p><strong>Calls</strong></p><ul class='calls'>
+<li><a href='../yrec-map/calcad.f.html#def-CALCAD'>CALCAD</a> <span class='muted'>(calcad.f)</span></li>
+<li><a href='../yrec-map/eqstat.f.html#def-EQSTAT'>EQSTAT</a> <span class='muted'>(eqstat.f)</span></li>
+<li><a href='../yrec-map/gettau.f.html#def-GETTAU'>GETTAU</a> <span class='muted'>(gettau.f)</span></li>
+<li><a href='../yrec-map/putstore.f.html#def-PUTSTORE'>PUTSTORE</a> <span class='muted'>(putstore.f)</span></li>
+<li><a href='../yrec-map/wrtlst.f.html#def-WRTLST'>WRTLST</a> <span class='muted'>(wrtlst.f)</span> ×2</li>
+<li><a href='../yrec-map/wrtmil.f.html#def-WRTMIL'>WRTMIL</a> <span class='muted'>(wrtmil.f)</span></li>
+<li><a href='../yrec-map/wrtmod.f.html#def-WRTMOD'>WRTMOD</a> <span class='muted'>(wrtmod.f)</span></li>
+</ul>
+<p><strong>Called by</strong></p><ul class='calls'>
+<li><a href='../yrec-map/main.f.html#def-_file_level_'>(file level)</a> <span class='muted'>(main.f)</span></li>
+</ul>
+<details><summary>Source (Fortran)</summary><pre class='src'><span class="ln">5</span>      SUBROUTINE WRTOUT(HCOMP,HD,HL,HP,HR,HS,HS1,HT,LC,M,MODEL,DAGE,
+<span class="ln">6</span>     *DDAGE,SMASS,TEFFL,BL,GL,LSHELL,JXBEG,JXMID,JXEND,JCORE,JENV,
+<span class="ln">7</span>     *TLUMX,TRIT,TRIL,PS,TS,RS,CFENV,FTRI,HSTOT,OMEGA,LPUNCH,
+<span class="ln">8</span>C      * FP,FT,ETA2,R0,HJM,HI,SJTOT,SKEROT,HS2,NKK)  ! KC 2025-05-31
+<span class="ln">9</span>     * FP,FT,ETA2,R0,HJM,HI,SJTOT,SKEROT,HS2,CMIXL,XMSOL,COMPMIX)
+<span class="ln">10</span>C 10/15/26 MHP via Claude
+<span class="ln">11</span>C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+<span class="ln">12</span>C PARAMETER(JSON=5000) here.
+<span class="ln">13</span>      USE DIMENSIONS_MOD
+<span class="ln">14</span>C 10/14/26 MHP via Claude
+<span class="ln">15</span>C code changed to convert COMMON/LABEL/ into LABEL_MOD.
+<span class="ln">16</span>      USE LABEL_MOD
+<span class="ln">17</span>C 10/14/26 MHP via Claude
+<span class="ln">18</span>C code changed to convert COMMON/ACDPTH/ into ACDPTH_MOD.
+<span class="ln">19</span>      USE ACDPTH_MOD
+<span class="ln">20</span>C 10/14/26 MHP via Claude
+<span class="ln">21</span>C code changed to convert COMMON/SCRTCH/ into SCRTCH_MOD.
+<span class="ln">22</span>      USE SCRTCH_MOD
+<span class="ln">23</span>C 10/14/26 MHP via Claude
+<span class="ln">24</span>C code changed to convert COMMON/OVRTRN/ into OVRTRN_MOD.
+<span class="ln">25</span>      USE OVRTRN_MOD
+<span class="ln">26</span>C 10/14/26 MHP via Claude
+<span class="ln">27</span>C code changed to convert COMMON/FLUXES/ into FLUXES_MOD.
+<span class="ln">28</span>      USE FLUXES_MOD
+<span class="ln">29</span>C 10/14/26 MHP via Claude
+<span class="ln">30</span>C code changed to convert COMMON/DEBHU/ into DEBHU_MOD.
+<span class="ln">31</span>      USE DEBHU_MOD
+<span class="ln">32</span>C 10/14/26 MHP via Claude
+<span class="ln">33</span>C code changed to convert COMMON/COMP/ into COMP_MOD.
+<span class="ln">34</span>      USE COMP_MOD
+<span class="ln">35</span>C 10/14/26 MHP via Claude
+<span class="ln">36</span>C code changed to convert COMMON/CENT/ into CENT_MOD.
+<span class="ln">37</span>      USE CENT_MOD
+<span class="ln">38</span>C 10/14/26 MHP via Claude
+<span class="ln">39</span>C code changed to convert COMMON/NMLPAR/ into NMLPAR_MOD.
+<span class="ln">40</span>      USE NMLPAR_MOD
+<span class="ln">41</span>C 10/14/26 MHP via Claude
+<span class="ln">42</span>C code changed to convert COMMON/CONSTANTS/ into CONSTANTS_MOD.
+<span class="ln">43</span>      USE CONSTANTS_MOD
+<span class="ln">44</span>C 10/14/26 MHP via Claude
+<span class="ln">45</span>C code changed to convert COMMON/IOUNITS/ into IOUNITS_MOD.
+<span class="ln">46</span>      USE IOUNITS_MOD
+<span class="ln">47</span>C 10/20/26 MHP via Claude
+<span class="ln">48</span>C code changed to replace implicit typing with IMPLICIT NONE and
+<span class="ln">49</span>C explicit declarations.
+<span class="ln">50</span>      IMPLICIT NONE
+<span class="ln">51</span>      REAL*8 AMU,BETA,BETA14,BETAI,BL,BOLM,CFENV,CLSNUF,CMIXL,COREM,
+<span class="ln">52</span>     *       CORER,CORERL,CZSURF_D,CZSURF_DL,CZSURF_O,CZSURF_P,
+<span class="ln">53</span>     *       CZSURF_PL,CZSURF_RL,CZSURF_T,CZSURF_TL,D,DAGE,DD1,DD2,
+<span class="ln">54</span>     *       DDAGE,DELA,DL,EMU,ETA,ETA2,FITMAS,FL115IN,FL37CL,FL71GA,
+<span class="ln">55</span>     *       FL7LI,FL81BR,FL98MO,FP,FT,FTRI,FX,FX2,FXION,GASNUF,GL,
+<span class="ln">56</span>     *       HCOMP,HD,HI,HICZ,HITOT,HJM,HL,HP,HR,HS,HS1,HS2,HSB,HSTOT,
+<span class="ln">57</span>     *       HT,OMEGA,P,PL,PS,QAP,QAT,QCP,QCPP,QCPT,QDP,QDT,QDTP,QDTT,
+<span class="ln">58</span>     *       R0,RL,RLMAX,RMU,ROTP,ROTV,RRR1,RRR2,RRR3,RS,SJTOT,SKEROT,
+<span class="ln">59</span>     *       SMASS,SS1,SS2,SS3,SS4,SSS1,SSS2,SSS3,T,TEFFL,TEMP,THL,TL,
+<span class="ln">60</span>     *       TLMAX,TLUMX,TRIL,TRIT,TS,X,XMSOL,Z
+<span class="ln">61</span>      INTEGER I,ICHECK,ITMAX,IWRITE,J,JCORE,JENV,JXBEG,JXEND,JXMID,K,
+<span class="ln">62</span>     *       KSAHA,M,MODEL
+<span class="ln">63</span>      LOGICAL*4 LATMO,LC,LCMAX,LDERIV,LPUNCH,LSHELL,LTSCAL
+<span class="ln">64</span>C 10/13/26 MHP via Claude
+<span class="ln">65</span>C COMPMIX arrives as an argument now that COMMON/I2O/ is gone, and is
+<span class="ln">66</span>C passed on to PUTSTORE and WRTLST.  It must be declared CHARACTER here:
+<span class="ln">67</span>C implicit typing would make it REAL*8, since C falls in A-H, and nothing
+<span class="ln">68</span>C would flag that -- F77 does no cross-file interface checking.
+<span class="ln">69</span>      CHARACTER*4 COMPMIX
+<span class="ln">70</span>C MHP 8/25 Fscomp file depreciated,unused variables removed
+<span class="ln">71</span>C      CHARACTER*256 FLAST, FFIRST, FRUN, FSTAND, FFERMI,
+<span class="ln">72</span>C     1    FDEBUG, FTRACK, FSHORT, FMILNE, FMODPT,
+<span class="ln">73</span>C     2    FSTOR, FPMOD, FPENV, FPATM, FDYN, FISO,
+<span class="ln">74</span>C     3    FLLDAT, FSNU, FSCOMP, FKUR,
+<span class="ln">75</span>C     4    FMHD1, FMHD2, FMHD3, FMHD4, FMHD5, FMHD6, FMHD7, FMHD8
+<span class="ln">76</span>C JVS 0712 for call to envint:
+<span class="ln">77</span>C       REAL*8 DUM1(4),DUM2(3),DUM3(3),DUM4(3)
+<span class="ln">78</span>C JVS 10/13 for recalculation of taucz
+<span class="ln">79</span>C       REAL*8 DEL1(JSON), DEL2(JSON)
+<span class="ln">80</span>C end JVS
+<span class="ln">81</span>C 9/25/26 MHP via Claude
+<span class="ln">82</span>C code changed to consolidate all I/O logical unit numbers, previously
+<span class="ln">83</span>C scattered across COMMON/LUOUT/, COMMON/LUNUM/, COMMON/ALEX06/,
+<span class="ln">84</span>C COMMON/ACDPTH/, COMMON/NEWOPAC/, COMMON/LOPAL95/, COMMON/ATMOS2/,
+<span class="ln">85</span>C COMMON/ALATM03/, COMMON/OPALEOS/, and COMMON/SCV2/, into a single
+<span class="ln">86</span>C COMMON/IOUNITS/
+<span class="ln">87</span>C 9/24/26 MHP via Claude
+<span class="ln">88</span>C code changed to remove dead ILLDAT, IKUR from COMMON/LUNUM/
+<span class="ln">89</span>C 9/24/26 MHP via Claude
+<span class="ln">90</span>C code changed to remove dead IDYN from COMMON/LUNUM/
+<span class="ln">91</span>C 9/25/26 MHP via Claude
+<span class="ln">92</span>C code changed to remove dead COMMON/LUNUM/ISCOMP (declared,
+<span class="ln">93</span>C assigned a unit number, but never opened or read anywhere)
+<span class="ln">94</span>C      COMMON/LUFNM/ FLAST, FFIRST, FRUN, FSTAND, FFERMI,
+<span class="ln">95</span>C     1    FDEBUG, FTRACK, FSHORT, FMILNE, FMODPT,
+<span class="ln">96</span>C     2    FSTOR, FPMOD, FPENV, FPATM, FDYN,
+<span class="ln">97</span>C     3    FLLDAT, FSNU, FSCOMP, FKUR,
+<span class="ln">98</span>C     4    FMHD1, FMHD2, FMHD3, FMHD4, FMHD5, FMHD6, FMHD7, FMHD8
+<span class="ln">99</span>C 10/12/26 MHP via Claude
+<span class="ln">100</span>C code changed to extend COMMON/NMLPAR/ to 234 members, adding the
+<span class="ln">101</span>C namelist variables that the physics routines read from 27 COMMON
+<span class="ln">102</span>C blocks which also held derived or working members.  Those blocks keep
+<span class="ln">103</span>C only their non-namelist members; five of them -- NEWMX, VMULT,
+<span class="ln">104</span>C PMMWIND, CCOUT1 and ENVGEN -- had nothing left and are gone.
+<span class="ln">105</span>C Derivation-only namelist variables from the same blocks went to
+<span class="ln">106</span>C COMMON/NMLBYPASS/ instead, not here.
+<span class="ln">107</span>C
+<span class="ln">108</span>C Declared identically in all 121 files that hold any of these members.
+<span class="ln">109</span>C Generated from one member list, so every copy is byte-identical; the
+<span class="ln">110</span>C linker&#x27;s &#x27;size of symbol changed&#x27; warning is the check that they are.
+<span class="ln">111</span>C 10/13/26 MHP via Claude: removed the unused COMMON/CCOUT/ declaration
+<span class="ln">112</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">113</span>C 9/25/26 MHP via Claude
+<span class="ln">114</span>C code changed to merge COMMON/CONST/, COMMON/CONST1/, COMMON/CONST2/,
+<span class="ln">115</span>C and COMMON/CONST3/ into a single COMMON/CONSTANTS/
+<span class="ln">116</span>C DBG PULSE
+<span class="ln">117</span>C 10/13/26 MHP via Claude
+<span class="ln">118</span>C code changed to drop COMMON/PULSE/, declared here but never used.
+<span class="ln">119</span>C*** MHP 5/90 ADD COMMON BLOCK FOR GRAVITATIONAL SETTLING.
+<span class="ln">120</span>C*** MHP 7/91 ADD COMMON BLOCKS FOR SOLAR NEUTRINO I/O.
+<span class="ln">121</span>C MHP 8/25 Removed character file names from common block
+<span class="ln">122</span>C DBG 11/11/91
+<span class="ln">123</span>C 9/25/26 MHP via Claude
+<span class="ln">124</span>C code changed to remove the LISO isochrone-output option
+<span class="ln">125</span>C DBG 7/92 COMMON BLOCK ADDED TO COMPUTE DEBYE-HUCKEL CORRECTION.
+<span class="ln">126</span>C 10/13/26 MHP via Claude
+<span class="ln">127</span>C code changed to drop COMMON/ROTPRT/, declared here but never used.
+<span class="ln">128</span>C MHP 4/09 ADDED OPTION TO SCALE THE SATURATION RATE BY THE OVERTURN TIMESCALE
+<span class="ln">129</span>C 10/13/26 MHP via Claude: removed the unused COMMON/DEUTER/ declaration
+<span class="ln">130</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">131</span>C JVS 01/11 ACOUSTIC DEPTH
+<span class="ln">132</span>C KC 2025-05-30 reordered common block elements
+<span class="ln">133</span>C COMMON/ACDPTH/TAUCZN,DELADJ(JSON),TAUHE, TNORM, TCZ, WHE, ICLCD,
+<span class="ln">134</span>C 9/25/26 MHP via Claude
+<span class="ln">135</span>C code changed to remove dead IACAT, IJVS, IJENT, IJDEL unit
+<span class="ln">136</span>C reservations from COMMON/ACDPTH/ (declared but never opened anywhere)
+<span class="ln">137</span>C      *LCLCD, AGEOUT(5), IACAT, IJLAST, LJLAST, LJWRT, LADON,LAOLY, IJVS,
+<span class="ln">138</span>C JVS 08/13 IF THE CZ IS BEYOND THE FITTING POINT, STORE ITS LOCATION
+<span class="ln">139</span>C 10/13/26 MHP via Claude
+<span class="ln">140</span>C code changed to remove COMMON/ENVCZ/: ENVRCZ was written once in
+<span class="ln">141</span>C envint.f and read nowhere, and RINT was never referenced at all.  Its
+<span class="ln">142</span>C only reader was the commented-out JVS block deleted from wrtout.f
+<span class="ln">143</span>C earlier in this work, so the block died with it.
+<span class="ln">144</span>C 10/13/26 MHP via Claude: removed the unused COMMON/SOUND/ declaration
+<span class="ln">145</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">146</span>C G Somers 10/14, Add spot common block
+<span class="ln">147</span>C 10/13/26 MHP via Claude: removed the unused COMMON/TEMP2/ declaration
+<span class="ln">148</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">149</span>C 10/13/26 MHP via Claude: removed the unused COMMON/ROTEN/ declaration
+<span class="ln">150</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">151</span>C G Somers END
+<span class="ln">152</span>
+<span class="ln">153</span>
+<span class="ln">154</span>C JVS END
+<span class="ln">155</span>C JVS 10/11 Common block for He3+He3 luminosity
+<span class="ln">156</span>C 10/13/26 MHP via Claude: removed the unused COMMON/GRAB/ declaration
+<span class="ln">157</span>C (no member referenced here; residue of the obsolete-option removals).
+<span class="ln">158</span>C JVS end
+<span class="ln">159</span>C G Somers 3/17, ADDING NEW TAUCZ COMMON BLOCK
+<span class="ln">160</span>      DIMENSION FXION(3),TLUMX(8),HCOMP(15,JSON),HD(JSON),HL(JSON),
+<span class="ln">161</span>     *HP(JSON),HR(JSON),HS(JSON),HS1(JSON),HT(JSON),LC(JSON),
+<span class="ln">162</span>     *PS(3),TS(3),RS(3),CFENV(9),TRIT(3),TRIL(3),OMEGA(JSON),
+<span class="ln">163</span>     * FP(JSON),FT(JSON),ETA2(JSON),R0(JSON),HJM(JSON),HI(JSON),
+<span class="ln">164</span>     * HS2(JSON), CLSNUF(8),GASNUF(8)  ! ID(JSON)
+<span class="ln">165</span>C MHP 8/96 CROSS SECTIONS OF DIFFERENT NEUTRINOS TO THE CHLORINE
+<span class="ln">166</span>C AND GALLIUM EXPERIMENTS; TAKEN FROM NEUTRINO ASTROPHYSICS,P.207.
+<span class="ln">167</span>C note changes in cl37 cross sections (see bahcall and pinsonneault,
+<span class="ln">168</span>C REV.MOD.PHYS., P.895)
+<span class="ln">169</span>      DATA GASNUF/1.18D1,2.15D2,7.14D4,7.17D1,2.40D4,6.04D1,
+<span class="ln">170</span>     *            1.137D2,1.139D2/
+<span class="ln">171</span>      DATA CLSNUF/0.0D0,1.6D1,4.26D4,2.4D0,1.14D4,1.7D0,6.8D0,6.9D0/
+<span class="ln">172</span>
+<span class="ln">173</span>      DATA ICHECK/0/
+<span class="ln">174</span>      SAVE
+<span class="ln">175</span>
+<span class="ln">176</span>      LTSCAL=.FALSE.
+<span class="ln">177</span>C  RENORMALIZE LUMINOSITY TERMS TLUMX - SKIPPED FOR HE FLASH
+<span class="ln">178</span>      IF(.NOT.LKUTHE) THEN
+<span class="ln">179</span>       THL = TLUMX(1)+TLUMX(2)+TLUMX(3)+TLUMX(4)+TLUMX(5)+TLUMX(6)+
+<span class="ln">180</span>     *   TLUMX(7)+TLUMX(8)
+<span class="ln">181</span>       TEMP = HL(M)/THL
+<span class="ln">182</span>       DO 10 I = 1,8
+<span class="ln">183</span>          TLUMX(I) = TLUMX(I)*TEMP
+<span class="ln">184</span>   10    CONTINUE
+<span class="ln">185</span>      ENDIF
+<span class="ln">186</span>C  WRITE HEADER FILE DESCRIBING THE GLOBAL PROPERTIES OF THE STAR
+<span class="ln">187</span>C  AND THE CENTRAL CONDITIONS TO THE SHORT OUTPUT FILE
+<span class="ln">188</span>C  THIS INFORMATION IS ALSO WRITTEN TO THE MODEL OUTPUT FILE IF
+<span class="ln">189</span>C  A DETAILED BREAKDOWN OF THE STELLAR STRUCTURE IS TO BE PRINTED
+<span class="ln">190</span>C  FOR THIS MODEL.
+<span class="ln">191</span>C
+<span class="ln">192</span>      WRITE(ISHORT,21)
+<span class="ln">193</span>   20 FORMAT(1X,127(&#x27;*&#x27;))
+<span class="ln">194</span>   21 FORMAT(/,1X,127(&#x27;*&#x27;))
+<span class="ln">195</span>      IF(.NOT.LKUTHE) THEN
+<span class="ln">196</span>       WRITE(ISHORT,30)MODEL,SMASS,XNEW,ZNEW,DAGE,DDAGE
+<span class="ln">197</span>   30    FORMAT(1X,&#x27;MODEL NO.&#x27;,I5,2X,&#x27;MASS&#x27;,F13.7,2X,&#x27;(X,Z)=(&#x27;,F11.9,
+<span class="ln">198</span>     *   &#x27;,&#x27;,F11.9,&#x27;)&#x27;,2X,&#x27;AGE(GYRS)&#x27;,F14.8,&#x27; STEP(YRS)=&#x27;,F12.0)
+<span class="ln">199</span>      ELSE
+<span class="ln">200</span>       WRITE(ISHORT,40)MODEL,SMASS,XNEW,ZNEW,DAGE,DDAGE
+<span class="ln">201</span>   40    FORMAT(1X,&#x27;MODEL NO.&#x27;,I5,2X,&#x27;MASS&#x27;,F13.7,2X,&#x27;(X,Z)=(&#x27;,F11.9,
+<span class="ln">202</span>     *   &#x27;,&#x27;,F11.9,&#x27;)&#x27;,2X,&#x27;AGE(GYRS)&#x27;,F14.8,&#x27; STEP(YRS)=&#x27;,1PE12.4)
+<span class="ln">203</span>      ENDIF
+<span class="ln">204</span>C  CALCULATE MASS OF CENTRAL AND SURFACE CONVECTION ZONES
+<span class="ln">205</span>C  THESE MASSES ARE IN SOLAR UNITS
+<span class="ln">206</span>      IF(JCORE.GT.1) THEN
+<span class="ln">207</span>       COREM = HS1(JCORE)/CMSUN
+<span class="ln">208</span>      ELSE
+<span class="ln">209</span>       COREM = 0.0D0
+<span class="ln">210</span>      ENDIF
+<span class="ln">211</span>
+<span class="ln">212</span>C JVS 10/11 Be more care about the true boundary of the convective core
+<span class="ln">213</span>      IF (JCORE.GT.1) THEN
+<span class="ln">214</span>       FX2 = (SDEL(3,JCORE+1)-SDEL(1,JCORE))/
+<span class="ln">215</span>     *       (SDEL(3,JCORE+1)-SDEL(1,JCORE))
+<span class="ln">216</span>       CORERL = HR(JCORE)+FX*(HR(JCORE+1)-HR(JCORE))-CRSUNL
+<span class="ln">217</span>       CORER = DEXP(CLN*CORERL)
+<span class="ln">218</span>      ELSE
+<span class="ln">219</span>       CORER = 0.0D0
+<span class="ln">220</span>      ENDIF
+<span class="ln">221</span>C JVS end
+<span class="ln">222</span>
+<span class="ln">223</span>      BOLM = CMBOL-2.5D0*BL
+<span class="ln">224</span>      RL = 0.5D0*(BL + CLSUNL - C4PIL - CSIGL - 4.0D0*TEFFL)
+<span class="ln">225</span>      GL = CGL + STOTAL - RL - RL
+<span class="ln">226</span>C MHP 02/12 MOVED ABOVE SECTION WHERE THESE ARE USED
+<span class="ln">227</span>C  DETERMINE CENTRAL T,P, AND DENSITY USING THE FIRST SHELL VALUES.
+<span class="ln">228</span>C  CENTRAL ETA AND BETA ARE ALSO CALCULATED.
+<span class="ln">229</span>C  EXTRAPOLATE FROM INNER SHELL P AND T TO CENTRAL P AND T
+<span class="ln">230</span>      TEMP =0.5D0*DEXP(CLN*(CC13*(C4PI3L+HD(1)-HS(1))+HD(1)+CGL+HS(1)))
+<span class="ln">231</span>      P = DEXP(CLN*HP(1))
+<span class="ln">232</span>      PL = DLOG10(P + TEMP)
+<span class="ln">233</span>C  SDEL(2,1) IS THE ACTUAL T GRADIENT AT POINT 1( = DEL)
+<span class="ln">234</span>      TL = HT(1) + DLOG10(1.0D0+ TEMP*SDEL(2,1)/P)
+<span class="ln">235</span>      DL = HD(1)
+<span class="ln">236</span>      X = HCOMP(1,1)
+<span class="ln">237</span>      Z = HCOMP(3,1)
+<span class="ln">238</span>      LATMO = .TRUE.
+<span class="ln">239</span>      LDERIV = .FALSE.
+<span class="ln">240</span>C  CALL EQSTAT TO GET TRUE CENTRAL DENSITY, BETA, AND ETA.
+<span class="ln">241</span>C 9/22/26 MHP via Claude
+<span class="ln">242</span>C code changed to remove the MHD equation of state
+<span class="ln">243</span>      IF (LDH) THEN
+<span class="ln">244</span>         XXDH = HCOMP(1,1)
+<span class="ln">245</span>         YYDH = HCOMP(2,1)+HCOMP(4,1)
+<span class="ln">246</span>         ZZDH = HCOMP(3,1)
+<span class="ln">247</span>         ZDH(1) = HCOMP(5,1)+HCOMP(6,1)
+<span class="ln">248</span>         ZDH(2) = HCOMP(7,1)+HCOMP(8,1)
+<span class="ln">249</span>         ZDH(3) = HCOMP(9,1)+HCOMP(10,1)+HCOMP(11,1)
+<span class="ln">250</span>      END IF
+<span class="ln">251</span>      CALL <a href="../yrec-map/eqstat.f.html#def-EQSTAT" title="EQSTAT in eqstat.f">EQSTAT</a>(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">252</span>     *   AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP,
+<span class="ln">253</span>     *   LDERIV,LATMO,KSAHA)
+<span class="ln">254</span>C MHP 02/12 MOVED ABOVE TO WHERE FIRST USED
+<span class="ln">255</span>C STORE CENTRAL RHO,P,T FOR LATER USE
+<span class="ln">256</span>      PCENTER = PL
+<span class="ln">257</span>      TCENTER = TL
+<span class="ln">258</span>      DCENTER = DL
+<span class="ln">259</span>C MHP 02/12 FIXED MINOR GLITCH ON BASE OF THE CONVECTION ZONE
+<span class="ln">260</span>C PROPERTIES FOR FULLY CONVECTIVE STARS; TCENTER PCENTER RHOCENTER
+<span class="ln">261</span>C WERE BEING DEFINED AFTER THIS CODE SECTION
+<span class="ln">262</span>      IF(JENV.LT.M) THEN
+<span class="ln">263</span>       IF(JENV.GT.1) THEN
+<span class="ln">264</span>C  FIND MASS FRACTION OF THE ZONE EDGE AT BASE OF SURFACE C.Z.
+<span class="ln">265</span>C JVS 10/11/13 SDEL(1,JENV) IN DENOMINATOR WAS A TYPO. CHANGED TO SDEL(3,JENV)
+<span class="ln">266</span>C            FX = (SDEL(3,JENV)-SDEL(1,JENV-1))/
+<span class="ln">267</span>C     *           (SDEL(3,JENV)-SDEL(1,JENV-1))
+<span class="ln">268</span>            DD2 = SDEL(1,JENV-1)-SDEL(3,JENV-1)
+<span class="ln">269</span>            DD1 = SDEL(1,JENV)-SDEL(3,JENV)
+<span class="ln">270</span>            FX = DD2/(DD2-DD1)
+<span class="ln">271</span>c            HSB = 0.5D0*(HS1(JENV)+HS1(JENV-1))
+<span class="ln">272</span>            HSB = HS1(JENV-1)+FX*(HS1(JENV)-HS1(JENV-1))
+<span class="ln">273</span>            CZsurf_M = (EXP(CLN*HSTOT) - HSB)/CMSUN
+<span class="ln">274</span>C           ENVLM = SMASS-HS1(JENV-1)/CMSUN
+<span class="ln">275</span>C          HSR = 0.5D0*(10.0D0**HR(JENV)+10.0D0**HR(JENV-1))
+<span class="ln">276</span>C          ENVX = HSR/(10.0D0**RL)
+<span class="ln">277</span>C MHP 2/98 FIND RADIUS OF CZ BASE
+<span class="ln">278</span>            CZsurf_RL = HR(JENV-1)+FX*(HR(JENV)-HR(JENV-1))-CRSUNL
+<span class="ln">279</span>            CZsurf_R = EXP(CLN*CZsurf_RL)
+<span class="ln">280</span>            CZsurf_O = SO(JENV-1)+FX*(SO(JENV)-SO(JENV-1))
+<span class="ln">281</span>            CZsurf_TL = HT(JENV-1)+FX*(HT(JENV)-HT(JENV-1))
+<span class="ln">282</span>            CZsurf_DL = HD(JENV-1)+FX*(HD(JENV)-HD(JENV-1))
+<span class="ln">283</span>            CZsurf_PL = HP(JENV-1)+FX*(HP(JENV)-HP(JENV-1))
+<span class="ln">284</span>            CZsurf_T = EXP(CLN*CZsurf_TL)
+<span class="ln">285</span>            CZsurf_D = EXP(CLN*CZsurf_DL)
+<span class="ln">286</span>            CZsurf_P = EXP(CLN*CZsurf_PL)
+<span class="ln">287</span>       ELSE
+<span class="ln">288</span>          CZsurf_M = SMASS
+<span class="ln">289</span>          CZsurf_R = 0.0D0
+<span class="ln">290</span>            CZsurf_T = 10.0D0**TCENTER
+<span class="ln">291</span>            CZsurf_D = 10.0D0**DCENTER
+<span class="ln">292</span>            CZsurf_P = 10.0D0**PCENTER
+<span class="ln">293</span>            CZsurf_O = SO(1)
+<span class="ln">294</span>       ENDIF
+<span class="ln">295</span>      ELSE
+<span class="ln">296</span>       CZsurf_M = 0.0D0
+<span class="ln">297</span>       CZsurf_R = 0.0D0
+<span class="ln">298</span>         CZsurf_T = 0.0D0
+<span class="ln">299</span>         CZsurf_D = 0.0D0
+<span class="ln">300</span>         CZsurf_P = 0.0D0
+<span class="ln">301</span>         CZsurf_O = 0.0D0
+<span class="ln">302</span>      ENDIF
+<span class="ln">303</span>      WRITE(ISHORT,50)M,XENV0,ZENV0,COREM,CZsurf_M, CZsurf_R
+<span class="ln">304</span>   50 FORMAT(1X,&#x27;SHELLS=&#x27;,I5,2X,&#x27;(X0,Z0)=(&#x27;,F9.7,&#x27;,&#x27;,F9.7,&#x27;)&#x27;,2X,
+<span class="ln">305</span>     *&#x27;CONV. ZONE MASSES(MSUN): CORE&#x27;,F10.7,&#x27; ENV.&#x27;,F10.7,
+<span class="ln">306</span>     *&#x27; RAD. FRAC.&#x27;,F10.7)
+<span class="ln">307</span>      RL = RL - CRSUNL
+<span class="ln">308</span>      WRITE(ISHORT,60)TEFFL,BOLM,BL,RL,GL
+<span class="ln">309</span>   60 FORMAT(1X,&#x27;LOG(TEFF)=&#x27;,F11.8,&#x27;  M(BOL)=&#x27;,F11.7,&#x27;  LOG(L/LSUN)=&#x27;
+<span class="ln">310</span>     *,F12.8,&#x27;  LOG(R/RSUN)=&#x27;,F12.8,&#x27;  LOG(G) =&#x27;,F12.8)
+<span class="ln">311</span>C MHP 02/12 MOVED ABOVE SECTION WHERE THESE ARE USED
+<span class="ln">312</span>C  DETERMINE CENTRAL T,P, AND DENSITY USING THE FIRST SHELL VALUES.
+<span class="ln">313</span>C  CENTRAL ETA AND BETA ARE ALSO CALCULATED.
+<span class="ln">314</span>C  EXTRAPOLATE FROM INNER SHELL P AND T TO CENTRAL P AND T
+<span class="ln">315</span>C      TEMP =0.5D0*DEXP(CLN*(CC13*(C4PI3L+HD(1)-HS(1))+HD(1)+CGL+HS(1)))
+<span class="ln">316</span>C      P = DEXP(CLN*HP(1))
+<span class="ln">317</span>C      PL = DLOG10(P + TEMP)
+<span class="ln">318</span>C  SDEL(2,1) IS THE ACTUAL T GRADIENT AT POINT 1( = DEL)
+<span class="ln">319</span>C      TL = HT(1) + DLOG10(1.0D0+ TEMP*SDEL(2,1)/P)
+<span class="ln">320</span>C      DL = HD(1)
+<span class="ln">321</span>C      X = HCOMP(1,1)
+<span class="ln">322</span>C      Z = HCOMP(3,1)
+<span class="ln">323</span>C      LATMO = .TRUE.
+<span class="ln">324</span>C      LDERIV = .FALSE.
+<span class="ln">325</span>C  CALL EQSTAT TO GET TRUE CENTRAL DENSITY, BETA, AND ETA.
+<span class="ln">326</span>C YC  If LMHD then use MHD equation of state.
+<span class="ln">327</span>C      IF (LMHD) THEN
+<span class="ln">328</span>C         CALL MEQOS(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">329</span>C     *   AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP,
+<span class="ln">330</span>C     *   LDERIV,LATMO,KSAHA)
+<span class="ln">331</span>C      ELSE
+<span class="ln">332</span>C      IF (LDH) THEN
+<span class="ln">333</span>C         XXDH = HCOMP(1,1)
+<span class="ln">334</span>C         YYDH = HCOMP(2,1)+HCOMP(4,1)
+<span class="ln">335</span>C         ZZDH = HCOMP(3,1)
+<span class="ln">336</span>C         ZDH(1) = HCOMP(5,1)+HCOMP(6,1)
+<span class="ln">337</span>C         ZDH(2) = HCOMP(7,1)+HCOMP(8,1)
+<span class="ln">338</span>C         ZDH(3) = HCOMP(9,1)+HCOMP(10,1)+HCOMP(11,1)
+<span class="ln">339</span>C      END IF
+<span class="ln">340</span>C      CALL EQSTAT(TL,T,PL,P,DL,D,X,Z,BETA,BETAI,BETA14,FXION,RMU,
+<span class="ln">341</span>C     *AMU,EMU,ETA,QDT,QDP,QCP,DELA,QDTT,QDTP,QAT,QAP,QCPT,QCPP,LDERIV,
+<span class="ln">342</span>C     *LATMO,KSAHA)
+<span class="ln">343</span>C      END IF
+<span class="ln">344</span>      WRITE(ISHORT,70)PL,TL,DL,BETA,ETA,X,Z,HCOMP(9,1)
+<span class="ln">345</span>   70 FORMAT(1X,&#x27;CENTER: LOG P=&#x27;,F10.7,&#x27; LOG T=&#x27;,F10.8,&#x27; LOG D=&#x27;,
+<span class="ln">346</span>     *F10.6,&#x27; BETA=&#x27;,F9.7,&#x27; ETA=&#x27;,0PF10.5,&#x27;  X=&#x27;,0PF9.7,&#x27; Z=&#x27;,F9.7,
+<span class="ln">347</span>     *&#x27; O16=&#x27;,F9.7)
+<span class="ln">348</span>      WRITE(ISHORT,80)(TLUMX(J),J = 1,5),TLUMX(8),TLUMX(6),TLUMX(7)
+<span class="ln">349</span>   80 FORMAT(1X,&#x27;ENERGY: PPI&#x27;,1PE13.6,&#x27;  PPII&#x27;,E13.6,&#x27;  PPIII&#x27;,E13.6,
+<span class="ln">350</span>     *&#x27;  CNO&#x27;,E13.6,/,9X,&#x27;TRIPLE ALPHA&#x27;,E13.6,&#x27;  HE-C&#x27;,E13.6,
+<span class="ln">351</span>     *&#x27;  NEUTRINOS&#x27;,E13.6,&#x27;  GRAV&#x27;,E13.6)
+<span class="ln">352</span>      SS3 = 0.0D0
+<span class="ln">353</span>      SS4 = 0.0D0
+<span class="ln">354</span>      IF(LSHELL) THEN
+<span class="ln">355</span>C H-SHELL VALUES PRINTED OUT - MASSES IN SOLAR UNITS
+<span class="ln">356</span>C SS1 - MASS INTERIOR TO CENTER OF H SHELL; SS2 = MASS OF H SHELL;
+<span class="ln">357</span>C SS3 = HE CORE MASS; SS4 = MASS INTERIOR TO SHELL WITH MAXIMUM T
+<span class="ln">358</span>       SS1 = HS1(JXMID)/CMSUN
+<span class="ln">359</span>       SS2 = (HS1(JXEND) - HS1(JXBEG-1))/CMSUN
+<span class="ln">360</span>       SS3 = HS1(JXBEG-1)/CMSUN
+<span class="ln">361</span>       TLMAX = TL
+<span class="ln">362</span>C LOCATE MAXIMUM T - NOTE DIFFERENT METHOD USED FOR HE FLASH
+<span class="ln">363</span>       IF(.NOT.LKUTHE) THEN
+<span class="ln">364</span>          DO 100 I = 2,M
+<span class="ln">365</span>             IF(HT(I).LT.HT(I-1))GOTO 110
+<span class="ln">366</span>  100       CONTINUE
+<span class="ln">367</span>          I = M + 1
+<span class="ln">368</span>  110       ITMAX = I - 1
+<span class="ln">369</span>          IF(ITMAX.GT.1) THEN
+<span class="ln">370</span>             SS4 = HS1(ITMAX)/CMSUN
+<span class="ln">371</span>             TLMAX = HT(ITMAX)
+<span class="ln">372</span>          ELSE
+<span class="ln">373</span>             SS4 = 0.0D0
+<span class="ln">374</span>             TLMAX = HT(1)
+<span class="ln">375</span>          ENDIF
+<span class="ln">376</span>          WRITE(ISHORT,120)SS1,SS2,SS3,TLMAX,SS4
+<span class="ln">377</span>  120       FORMAT(1X,&#x27;H-SHELL MID-PT=&#x27;,F10.7,&#x27; MASS TOTAL=&#x27;,
+<span class="ln">378</span>     *         F10.7,2X,&#x27;HE-CORE MASS=&#x27;,F10.7,1X,&#x27;MAX-T=&#x27;,F10.7,
+<span class="ln">379</span>     *         &#x27; (MASS=&#x27;,F9.7,&#x27;)&#x27;)
+<span class="ln">380</span>       ELSE
+<span class="ln">381</span>C  HE FLASH
+<span class="ln">382</span>          DO 130 I = 2,M
+<span class="ln">383</span>             IF(HT(I).LT.HT(I-1) .AND. HT(I-1).GT.7.98D0) GOTO 140
+<span class="ln">384</span>  130       CONTINUE
+<span class="ln">385</span>          I = M + 1
+<span class="ln">386</span>  140       ITMAX = I - 1
+<span class="ln">387</span>          IF(ITMAX.GT.1) THEN
+<span class="ln">388</span>             SS4 = HS1(ITMAX)/CMSUN
+<span class="ln">389</span>             TLMAX = HT(ITMAX)
+<span class="ln">390</span>C  ADDITIONAL OUTPUT FOR HE FLASH
+<span class="ln">391</span>             RLMAX = HR(ITMAX)
+<span class="ln">392</span>             LCMAX = LC(ITMAX)
+<span class="ln">393</span>             WRITE(ISHORT,120)SS1,SS2,SS3,TLMAX,SS4
+<span class="ln">394</span>             WRITE(ISHORT,150)LCMAX,RLMAX
+<span class="ln">395</span>  150          FORMAT(1X,&#x27;CONVECTION = &#x27;,L1,5X,&#x27;LOG(R) MAX-T =&#x27;,F8.5)
+<span class="ln">396</span>          ENDIF
+<span class="ln">397</span>       ENDIF
+<span class="ln">398</span>C  END H-SHELL SECTION
+<span class="ln">399</span>      ENDIF
+<span class="ln">400</span>C     PRINT OUT NEUTRINO RATES FROM ENGEB CALCULATION
+<span class="ln">401</span>      WRITE(ISHORT,160) (FLUXTOT(I),I=1,8)
+<span class="ln">402</span>  160 FORMAT(1X,&#x27;NEUTRINOS 1E10ERG/CM^2 PP,PEP,HEP,BE7,&#x27;,
+<span class="ln">403</span>     *  &#x27;B8,N13,O15,F17:&#x27;, 1P8E9.2)
+<span class="ln">404</span>C DBG 7/93 from Bahcall&#x27;s book p 207 table 8.2
+<span class="ln">405</span>      FL7LI = 0.0D0*FLUXTOT(1)+665.0D0*FLUXTOT(2)+8.4D4*FLUXTOT(3)+
+<span class="ln">406</span>     *        9.6D0*FLUXTOT(4)+3.9D4*FLUXTOT(5)+42.4D0*FLUXTOT(6)+
+<span class="ln">407</span>     *        246.0D0*FLUXTOT(7)+249.0D0*FLUXTOT(8)
+<span class="ln">408</span>      FL37CL = 0.0D0*FLUXTOT(1)+16.0D0*FLUXTOT(2)+4.26D4*FLUXTOT(3)+
+<span class="ln">409</span>     *        2.4D0*FLUXTOT(4)+1.09D4*FLUXTOT(5)+1.7D0*FLUXTOT(6)+
+<span class="ln">410</span>     *        6.8D0*FLUXTOT(7)+6.9D0*FLUXTOT(8)
+<span class="ln">411</span>      FL71GA = 11.8D0*FLUXTOT(1)+215.0D0*FLUXTOT(2)+7.3D4*FLUXTOT(3)+
+<span class="ln">412</span>     *        73.2D0*FLUXTOT(4)+2.43D4*FLUXTOT(5)+61.8D0*FLUXTOT(6)+
+<span class="ln">413</span>     *        116.0D0*FLUXTOT(7)+117.0D0*FLUXTOT(8)
+<span class="ln">414</span>      FL81BR = 0.0D0*FLUXTOT(1)+75.0D0*FLUXTOT(2)+9.0D4*FLUXTOT(3)+
+<span class="ln">415</span>     *        18.3D0*FLUXTOT(4)+2.7D4*FLUXTOT(5)+14.5D0*FLUXTOT(6)+
+<span class="ln">416</span>     *        36.7D0*FLUXTOT(7)+37.0D0*FLUXTOT(8)
+<span class="ln">417</span>      FL98MO = 0.0D0*FLUXTOT(1)+0.0D0*FLUXTOT(2)+10.0D4*FLUXTOT(3)+
+<span class="ln">418</span>     *        0.0D0*FLUXTOT(4)+3.0D4*FLUXTOT(5)+0.0D0*FLUXTOT(6)+
+<span class="ln">419</span>     *        0.0D0*FLUXTOT(7)+0.0D0*FLUXTOT(8)
+<span class="ln">420</span>      FL115IN = 78.0D0*FLUXTOT(1)+576.0D0*FLUXTOT(2)+6.1D4*FLUXTOT(3)+
+<span class="ln">421</span>     *        248.0D0*FLUXTOT(4)+2.5D4*FLUXTOT(5)+224.0D0*FLUXTOT(6)+
+<span class="ln">422</span>     *        355.0D0*FLUXTOT(7)+356.0D0*FLUXTOT(8)
+<span class="ln">423</span>      WRITE(ISHORT,2160) FL7LI,FL37CL,FL71GA,FL81BR,FL98MO,FL115IN
+<span class="ln">424</span> 2160 FORMAT(1X,&#x27;NEUTRINO ENERGIES (1.E-36ERG): 7Li=&#x27;, 1PE9.2,
+<span class="ln">425</span>     * &#x27; 37Cl=&#x27;,1PE9.2,&#x27; 71Ga=&#x27;,1PE9.2,&#x27; 81Br=&#x27;,1PE9.2,&#x27; 98Mo=&#x27;,
+<span class="ln">426</span>     * 1PE9.2, &#x27; 115In=&#x27;, 1PE9.2)
+<span class="ln">427</span>      FITMAS = HS1(M)/CMSUN
+<span class="ln">428</span>      WRITE(ISHORT,170)FITMAS,HP(M),HT(M),HR(M)
+<span class="ln">429</span>  170 FORMAT(1X,&#x27;FIT-POINT    M/MSUN=&#x27;,F16.12,5X,&#x27;(P,T,R) =&#x27;,3F12.7)
+<span class="ln">430</span>      WRITE(ISHORT,20)
+<span class="ln">431</span>      IF(LTRACK) THEN
+<span class="ln">432</span>C MHP 02/12 MOVED ABOVE TO WHERE FIRST USED
+<span class="ln">433</span>C MHP 8/96
+<span class="ln">434</span>C STORE CENTRAL RHO,P,T FOR LATER USE
+<span class="ln">435</span>C         PCENTER = PL
+<span class="ln">436</span>C         TCENTER = TL
+<span class="ln">437</span>C         DCENTER = DL
+<span class="ln">438</span>c  Total moment of inertia
+<span class="ln">439</span>         HITOT = 0.0D0
+<span class="ln">440</span>         IF(.NOT.LROT)THEN
+<span class="ln">441</span>            DO I = 1,M
+<span class="ln">442</span>               HITOT = HITOT + CC23*HS2(I)*EXP(2.0D0*CLN*HR(I))
+<span class="ln">443</span>            END DO
+<span class="ln">444</span>         ELSE
+<span class="ln">445</span>            DO I = 1,M
+<span class="ln">446</span>               HITOT = HITOT + HI(I)
+<span class="ln">447</span>            END DO
+<span class="ln">448</span>         ENDIF
+<span class="ln">449</span>C MHP 12/09 NEW OPTION TO OUTPUT TRACK INFORMATION IN ONE LINE PER MODEL FORMAT.
+<span class="ln">450</span>         IF(ITRVER .EQ. 0) THEN
+<span class="ln">451</span>C MHP 8/96 ADD LINE TO COMPUTE SNU&#x27;s for Cl37 and Ga71.
+<span class="ln">452</span>            CLSNU = 0.0D0
+<span class="ln">453</span>            GASNU = 0.0D0
+<span class="ln">454</span>            IF(LSNU) THEN
+<span class="ln">455</span>               DO I = 1,8
+<span class="ln">456</span>                  CLSNU = CLSNU + CLSNUF(I)*FLUXTOT(I)
+<span class="ln">457</span>                  GASNU = GASNU + GASNUF(I)*FLUXTOT(I)
+<span class="ln">458</span>               END DO
+<span class="ln">459</span>            ELSE
+<span class="ln">460</span>               DO I = 1,10
+<span class="ln">461</span>                  FLUXTOT(I) = 0.0D0
+<span class="ln">462</span>               END DO
+<span class="ln">463</span>            ENDIF
+<span class="ln">464</span>C MHP 02/12
+<span class="ln">465</span>C ADDED SURFACE CZ MOMENT OF INERTIA CALCULATION TO NON-ROTATING
+<span class="ln">466</span>C MODELS, AND CORRECTLY ZERO OUT TERMS NOT COMPUTED IN SPHERICAL MODELS
+<span class="ln">467</span>C ROTATION I/O
+<span class="ln">468</span>            HICZ = 0.0D0
+<span class="ln">469</span>            IF(LROT) THEN
+<span class="ln">470</span>               ROTP = MIN(9999.0D0,0.5D0*C4PI/OMEGA(M)/8.64D4)
+<span class="ln">471</span>               ROTV = OMEGA(M)*EXP(CLN*(RL+CRSUNL))*1.0D-5
+<span class="ln">472</span>               IF(JENV.LT.M)THEN
+<span class="ln">473</span>                  DO K = JENV,M
+<span class="ln">474</span>                     HICZ = HICZ + HI(K)
+<span class="ln">475</span>                  END DO
+<span class="ln">476</span>               ENDIF
+<span class="ln">477</span>            ELSE
+<span class="ln">478</span>               ROTP = 0.0D0
+<span class="ln">479</span>               ROTV = 0.0D0
+<span class="ln">480</span>               IF(JENV.LT.M)THEN
+<span class="ln">481</span>                  DO K = JENV,M
+<span class="ln">482</span>                     HICZ = HICZ + CC23*HS2(K)*EXP(2.0D0*CLN*HR(K))
+<span class="ln">483</span>                  END DO
+<span class="ln">484</span>               ENDIF
+<span class="ln">485</span>            ENDIF
+<span class="ln">486</span>C END CHANGED SECTION
+<span class="ln">487</span>C        Get location of bottom, middle, top of B burning shell.
+<span class="ln">488</span>            IF(LSHELL) THEN
+<span class="ln">489</span>             SSS1 = HS1(JXBEG)/CMSUN
+<span class="ln">490</span>             SSS2 = HS1(JXMID)/CMSUN
+<span class="ln">491</span>             SSS3 = HS1(JXEND)/CMSUN
+<span class="ln">492</span>             RRR1 = EXP(CLN*(HR(JXBEG)-RL-CRSUNL))
+<span class="ln">493</span>             RRR2 = EXP(CLN*(HR(JXMID)-RL-CRSUNL))
+<span class="ln">494</span>             RRR3 = EXP(CLN*(HR(JXEND)-RL-CRSUNL))
+<span class="ln">495</span>          ELSE
+<span class="ln">496</span>             SSS1 = 0.0D0
+<span class="ln">497</span>             SSS2 = SSS1
+<span class="ln">498</span>             SSS3 = SSS1
+<span class="ln">499</span>             RRR1 = SSS1
+<span class="ln">500</span>             RRR2 = SSS1
+<span class="ln">501</span>             RRR3 = SSS1
+<span class="ln">502</span>             ENDIF
+<span class="ln">503</span>C JVS 0712 Drop sinkline to get pressure at photosphere (updates PPHOT)
+<span class="ln">504</span>C             ABEG0 = ATMBEG
+<span class="ln">505</span>C            AMIN0 = ATMMIN
+<span class="ln">506</span>C            AMAX0 = ATMMAX
+<span class="ln">507</span>C            EBEG0 = ENVBEG
+<span class="ln">508</span>C            EMIN0 = ENVMIN
+<span class="ln">509</span>C            EMAX0 = ENVMAX
+<span class="ln">510</span>C            ATMBEG = ATMSTP
+<span class="ln">511</span>C            ATMMIN = ATMSTP
+<span class="ln">512</span>C            ATMMAX = ATMSTP
+<span class="ln">513</span>C            ENVBEG = ENVSTP
+<span class="ln">514</span>C            ENVMIN = ENVSTP
+<span class="ln">515</span>C            ENVMAX = ENVSTP
+<span class="ln">516</span>C            IDUM = 0
+<span class="ln">517</span>C            B = DEXP(CLN*BL)
+<span class="ln">518</span>C            FPL = FP(M)
+<span class="ln">519</span>C             FTL = FT(M)
+<span class="ln">520</span>C            KATM = 0
+<span class="ln">521</span>C             KENV = 0
+<span class="ln">522</span>C             KSAHA = 0
+<span class="ln">523</span>CCCC            LPULPT=.FALSE.
+<span class="ln">524</span>C            IXX=0
+<span class="ln">525</span>C            LPRT=.FALSE.
+<span class="ln">526</span>C            LSBC0 = .FALSE.
+<span class="ln">527</span>C            X = HCOMP(1,M)
+<span class="ln">528</span>C             Z = HCOMP(3,M)
+<span class="ln">529</span>C            RLL = 0.5D0*(BL + CLSUNL - 4.0D0*TEFFL - C4PIL - CSIGL)
+<span class="ln">530</span>C            GL = CGL + HSTOT - RLL - RLL
+<span class="ln">531</span>C            PLIM = HP(M)
+<span class="ln">532</span>CC G Somers 10/14, FOR SPOTTED RUNS, FIND THE
+<span class="ln">533</span>CC PRESSURE AT THE AMBIENT TEMPERATURE ATEFFL
+<span class="ln">534</span>C            IF(JENV.EQ.M.AND.SPOTF.NE.0.0.AND.SPOTX.NE.1.0)THEN
+<span class="ln">535</span>C                   ATEFFL = TEFFL - 0.25*LOG10(SPOTF*SPOTX**4.0+1.0-SPOTF)
+<span class="ln">536</span>C            ELSE
+<span class="ln">537</span>C               ATEFFL = TEFFL
+<span class="ln">538</span>C            ENDIF
+<span class="ln">539</span>C            CALL ENVINT(B,FPL,FTL,GL,HSTOT,IXX,LPRT,LSBC0,
+<span class="ln">540</span>C     *            PLIM,RLL,ATEFFL,X,Z,DUM1,IDUM,KATM,KENV,KSAHA,
+<span class="ln">541</span>C     *            DUM2,DUM3,DUM4,LPULPT)
+<span class="ln">542</span>CC G Somers END
+<span class="ln">543</span>C
+<span class="ln">544</span>C 10/13/26 MHP via Claude
+<span class="ln">545</span>C code changed to remove a commented-out JVS block that tracked the CZ
+<span class="ln">546</span>C outside the envelope fitting point.  It was the only code referencing
+<span class="ln">547</span>C LJVS, whose COMMON/JTEST/ is removed in this change, and it also read
+<span class="ln">548</span>C ENVRCZ, which is why that COMMON/ENVCZ/ member has no live consumer.
+<span class="ln">549</span>C G Somers 3/17, ADDED CALL TO NEW TAUCZ AND PPHOT CALCULATION ROUTINE.
+<span class="ln">550</span>
+<span class="ln">551</span>C       CALL GETTAU(HCOMP,HR,HP,HD,HG,HS1,HT,FP,FT,TEFFL,  ! KC 2025-05-31
+<span class="ln">552</span>      CALL <a href="../yrec-map/gettau.f.html#def-GETTAU" title="GETTAU in gettau.f">GETTAU</a>(HCOMP,HR,HP,HD,HS1,HT,FP,FT,TEFFL,
+<span class="ln">553</span>     *            HSTOT,BL,M,LC,CZsurf_R,CMIXL)
+<span class="ln">554</span>      TAUCZ0 = TAUCZ
+<span class="ln">555</span>      PPHOT0 = PPHOT
+<span class="ln">556</span>
+<span class="ln">557</span>C JVS 02/12 Added PPHOT and SMASS to the output
+<span class="ln">558</span>            WRITE(ITRACK, 1499) MODEL,M,DAGE,BL,RL,GL,TEFFL,COREM,CZsurf_M,
+<span class="ln">559</span>     *      CZsurf_R,CZsurf_T,CZsurf_D,CZsurf_P,CZsurf_O,TL,DL,PL,BETA,ETA,HCOMP(1,1),HCOMP(2,1),
+<span class="ln">560</span>     1      HCOMP(3,1),(TLUMX(J),J = 1,5),TLUMX(8),TLUMX(7),TLUMX(6),
+<span class="ln">561</span>     2      CLSNU,GASNU,(FLUXTOT(I),I=1,10),(HCOMP(I,1),I=4,11),
+<span class="ln">562</span>     3      (HCOMP(I,M),I=4,15),(HCOMP(I,M),I=1,3),HCOMP(3,M)/HCOMP(1,M),
+<span class="ln">563</span>     4      SJTOT,SKEROT,HITOT,HICZ,OMEGA(M),OMEGA(1),ROTP,ROTV,TAUCZ,
+<span class="ln">564</span>     5      SSS1,SSS2,SSS3,RRR1,RRR2,RRR3,PPHOT,SMASS
+<span class="ln">565</span>C MHP 9/25 added more columns to cz depth to avoid overflow
+<span class="ln">566</span>C     1499       FORMAT(1X,2I8,1P7E16.8,0PF8.4,1P4E12.4,16E16.8,12E10.3,41E16.8)
+<span class="ln">567</span>C MCR 12/25 Preserve precision and &#x27;E&#x27; for values w/ 3-digit exponents
+<span class="ln">568</span> 1499       FORMAT(1X,2I8,1P7E17.8E3,1P5E12.4,16E17.8E3,12E10.3,41E17.8E3)
+<span class="ln">569</span>         ELSE IF(ITRVER .EQ.1 .OR. ITRVER .EQ.2) THEN
+<span class="ln">570</span>            WRITE(ITRACK,1500)MODEL,M,DAGE,BL,RL,GL,TEFFL,COREM,CZsurf_M,
+<span class="ln">571</span>     *                     CZsurf_R,CZsurf_T,CZsurf_D,CZsurf_P,CZsurf_O
+<span class="ln">572</span> 1500       FORMAT(1X,2I8,1P7E16.8,0PF8.4,1P4E12.4)
+<span class="ln">573</span>            WRITE(ITRACK,1509)TL,DL,PL,BETA,ETA,HCOMP(1,1),HCOMP(2,1),
+<span class="ln">574</span>     1                     HCOMP(3,1),HITOT
+<span class="ln">575</span> 1509       FORMAT(1X,1P9E16.8)
+<span class="ln">576</span> 1510       FORMAT(1X,1P8E16.8)
+<span class="ln">577</span>            WRITE(ITRACK,1510)(TLUMX(J),J = 1,5),
+<span class="ln">578</span>     1                     TLUMX(8),TLUMX(7),TLUMX(6)
+<span class="ln">579</span>
+<span class="ln">580</span>C MHP 8/96 ADD LINE TO COMPUTE SNU&#x27;s for Cl37 and Ga71.
+<span class="ln">581</span>            CLSNU = 0.0D0
+<span class="ln">582</span>            GASNU = 0.0D0
+<span class="ln">583</span>            DO I = 1,8
+<span class="ln">584</span>               CLSNU = CLSNU + CLSNUF(I)*FLUXTOT(I)
+<span class="ln">585</span>               GASNU = GASNU + GASNUF(I)*FLUXTOT(I)
+<span class="ln">586</span>            END DO
+<span class="ln">587</span>          WRITE(ITRACK, 1515) CLSNU,GASNU,(FLUXTOT(I),I=1,10)
+<span class="ln">588</span> 1515       FORMAT(1X,2F8.3,1P10E10.3)
+<span class="ln">589</span>            WRITE(ITRACK,1510)(HCOMP(I,1),I=4,11)
+<span class="ln">590</span>C ADD SURFACE X,Y,Z,Z/X.
+<span class="ln">591</span>            WRITE(ITRACK,1520)(HCOMP(I,M),I=4,15),
+<span class="ln">592</span>     *        (HCOMP(I,M),I=1,3),HCOMP(3,M)/HCOMP(1,M)
+<span class="ln">593</span> 1520       FORMAT(1X,1P8E16.8,/,1X,1P8E16.8)
+<span class="ln">594</span>C ROTATION I/O
+<span class="ln">595</span>            IF(LROT) THEN
+<span class="ln">596</span>C MHP 8/25 removed limit on rotation period output
+<span class="ln">597</span>C     ROTP = MIN(9999.0D0,0.5D0*C4PI/OMEGA(M)/8.64D4)
+<span class="ln">598</span>               ROTP = 0.5D0*C4PI/OMEGA(M)/8.64D4
+<span class="ln">599</span>               ROTV = OMEGA(M)*EXP(CLN*(RL+CRSUNL))*1.0D-5
+<span class="ln">600</span>               HICZ = 0.0D0
+<span class="ln">601</span>               IF(LC(M))THEN
+<span class="ln">602</span>                  DO K = JENV,M
+<span class="ln">603</span>                     HICZ = HICZ + HI(K)
+<span class="ln">604</span>                  END DO
+<span class="ln">605</span>               ELSE
+<span class="ln">606</span>                  HICZ = 0.0D0
+<span class="ln">607</span>               ENDIF
+<span class="ln">608</span>            ENDIF
+<span class="ln">609</span>C        Get location of bottom, middle, top of B burning shell.
+<span class="ln">610</span>            IF(LSHELL) THEN
+<span class="ln">611</span>             SSS1 = HS1(JXBEG)/CMSUN
+<span class="ln">612</span>             SSS2 = HS1(JXMID)/CMSUN
+<span class="ln">613</span>             SSS3 = HS1(JXEND)/CMSUN
+<span class="ln">614</span>             RRR1 = EXP(CLN*(HR(JXBEG)-RL-CRSUNL))
+<span class="ln">615</span>             RRR2 = EXP(CLN*(HR(JXMID)-RL-CRSUNL))
+<span class="ln">616</span>             RRR3 = EXP(CLN*(HR(JXEND)-RL-CRSUNL))
+<span class="ln">617</span>             ELSE
+<span class="ln">618</span>             SSS1 = 0.0D0
+<span class="ln">619</span>             SSS2 = SSS1
+<span class="ln">620</span>             SSS3 = SSS1
+<span class="ln">621</span>             RRR1 = SSS1
+<span class="ln">622</span>             RRR2 = SSS1
+<span class="ln">623</span>             RRR3 = SSS1
+<span class="ln">624</span>          ENDIF
+<span class="ln">625</span>            WRITE(ITRACK,1530)SSS1,SSS2,SSS3,RRR1,RRR2,RRR3
+<span class="ln">626</span> 1530       FORMAT(1X, 1P6E16.8)
+<span class="ln">627</span>         ENDIF
+<span class="ln">628</span>C        ROTATION STUFF
+<span class="ln">629</span>C 4/09 ADDED TAUCZ TO ROTATION INFORMATION
+<span class="ln">630</span>         IF (ITRVER .EQ. 2) THEN
+<span class="ln">631</span>
+<span class="ln">632</span>            WRITE(ITRACK,1540)SJTOT,SKEROT,HITOT,HICZ,OMEGA(M),
+<span class="ln">633</span>     *                     OMEGA(1),ROTP,ROTV,TAUCZ
+<span class="ln">634</span> 1540       FORMAT(1X, 1P6E13.5,0P,2F11.5,1E13.5)
+<span class="ln">635</span>         END IF
+<span class="ln">636</span>         IF (ITRVER .EQ. 3) THEN
+<span class="ln">637</span>C        RATIO OF GRAV TO TOTAL ENERGY
+<span class="ln">638</span>C       GROTOT = 100.0*TLUMX(7)/HL(M)
+<span class="ln">639</span>            WRITE(ITRACK,1501)MODEL,M,DAGE,BL,RL,GL,TEFFL,COREM,CZsurf_M,
+<span class="ln">640</span>     *      CZsurf_R, XNEW
+<span class="ln">641</span> 1501       FORMAT(1X,2I8,1P5E13.5, 1P2E11.3, 0PF8.4, 1PE13.5)
+<span class="ln">642</span>
+<span class="ln">643</span>         END IF
+<span class="ln">644</span>      ENDIF
+<span class="ln">645</span>
+<span class="ln">646</span>C 9/25/26 MHP via Claude
+<span class="ln">647</span>C code changed to remove the LISO isochrone-output option
+<span class="ln">648</span>C MHP 8/25 Fscomp depreciated, call commented out
+<span class="ln">649</span>C     WRITE OUT SURFACE COMPOSITIONS TO FILE ISCOMP IF extended comp MODEL.
+<span class="ln">650</span>C      IF(LEXCOM) THEN
+<span class="ln">651</span>C       OPEN(UNIT=ISCOMP,FILE=FSCOMP, FORM=&#x27;FORMATTED&#x27;,
+<span class="ln">652</span>C     *        STATUS=&#x27;UNKNOWN&#x27;,ACCESS=&#x27;APPEND&#x27;)
+<span class="ln">653</span>C       WRITE(ISCOMP,235)MODEL,DAGE,HCOMP(4,M),HCOMP(5,M),HCOMP(6,M),
+<span class="ln">654</span>C     *                HCOMP(7,M),HCOMP(14,M),HCOMP(15,M)
+<span class="ln">655</span>C  235    FORMAT(I4,F13.9,1P6E10.3)
+<span class="ln">656</span>c       CLOSE(ISCOMP)
+<span class="ln">657</span>C      ENDIF
+<span class="ln">658</span>C
+<span class="ln">659</span>C G Somers 11/14, WRITE THE LAST MODEL TO .LAST, AND IF LSTORE=T AND WE&#x27;RE ON
+<span class="ln">660</span>C A STORING TIMESTEP, WRITE THE EXTENDED INFORMATION TO LSTORE. IF NOT, GRAB
+<span class="ln">661</span>C THE PULSATION INFO IF LPULSE=TRUE.
+<span class="ln">662</span>C
+<span class="ln">663</span>C  STORE LAST CONVERGED MODEL IN LOGICAL UNIT ILAST
+<span class="ln">664</span>C  IF LSTORE = T, STORE EVERY NPUNCH MODELS IN LOGICAL UNIT ISTOR
+<span class="ln">665</span>C  IF LSTPCH = T, STORE THE LAST MODEL CALCULATED IN A RUN
+<span class="ln">666</span>      IWRITE = ILAST
+<span class="ln">667</span>      CALL <a href="../yrec-map/wrtlst.f.html#def-WRTLST" title="WRTLST in wrtlst.f">WRTLST</a>(IWRITE,HCOMP,HD,HL,HP,HR,HS,HT,LC,TRIT,TRIL,PS,
+<span class="ln">668</span>     *TS,RS,CFENV,FTRI,TLUMX,JCORE,JENV,MODEL,M,SMASS,TEFFL,BL,HSTOT,
+<span class="ln">669</span>     *DAGE,DDAGE,OMEGA,CMIXL,COMPMIX)
+<span class="ln">670</span>C
+<span class="ln">671</span>C  PRINT OUT MODEL DETAILS IF REQUESTED FOR THIS MODEL. THIS IS ALL DONE
+<span class="ln">672</span>C  IN THE SR PUTSTORE.
+<span class="ln">673</span>C
+<span class="ln">674</span>      IF(LSTORE.AND.MOD(MODEL,NPRTMOD).EQ.0) THEN
+<span class="ln">675</span>       CALL <a href="../yrec-map/putstore.f.html#def-PUTSTORE" title="PUTSTORE in putstore.f">PUTSTORE</a>(HCOMP,HD,HL,HP,HR,HS,HT,LC,TRIT,TRIL,PS,
+<span class="ln">676</span>     *   TS,RS,CFENV,FTRI,TLUMX,JCORE,JENV,MODEL,M,SMASS,TEFFL,BL,
+<span class="ln">677</span>     *   HSTOT,DAGE,DDAGE,OMEGA,HS1,ETA2,R0,FP,FT,HJM,HI,CMIXL,XMSOL,COMPMIX)
+<span class="ln">678</span>       LPUNCH = .FALSE.
+<span class="ln">679</span>      ENDIF
+<span class="ln">680</span>c the call to putstore above creates the necessary pulsation output for LPULSE.
+<span class="ln">681</span>c however, in the event that the above block is not executed and pulsation
+<span class="ln">682</span>c output is desired, call wrtmod.
+<span class="ln">683</span>      IF(.NOT.(LSTORE.AND.MOD(MODEL,NPRTMOD).EQ.0) .AND. LPULSE) THEN
+<span class="ln">684</span>       IF(LMILNE) CALL <a href="../yrec-map/wrtmil.f.html#def-WRTMIL" title="WRTMIL in wrtmil.f">WRTMIL</a>(HCOMP,HD,HL,HP,HR,HS1,M,MODEL)
+<span class="ln">685</span>C        CALL WRTMOD(M,LSHELL,JXBEG,JXEND,JCORE,JENV,HCOMP,HS1,HD,HL,
+<span class="ln">686</span>C      *   HP,HR,HT,LC,MODEL,BL,TEFFL,OMEGA,FP,FT,ETA2,R0,HJM,HI,HS,
+<span class="ln">687</span>C      *   DAGE)  ! KC 2025-05-31
+<span class="ln">688</span>       CALL <a href="../yrec-map/wrtmod.f.html#def-WRTMOD" title="WRTMOD in wrtmod.f">WRTMOD</a>(M,JENV,HCOMP,HS1,HD,HL,
+<span class="ln">689</span>     *   HP,HR,HT,MODEL,BL,TEFFL,FP,FT,HS,DAGE,CMIXL,XMSOL)
+<span class="ln">690</span>      ENDIF
+<span class="ln">691</span>C G Somers END
+<span class="ln">692</span>
+<span class="ln">693</span>C JVS 01/11 Added new track file output format, +manipulations for stitching
+<span class="ln">694</span>C together the interior and envelope pieces. Columns 68,69,70 are normalized
+<span class="ln">695</span>C acoustic depth, depth to CZ and acoustic crossing time, respectively.
+<span class="ln">696</span>        IF (LACOUT) THEN
+<span class="ln">697</span>            IF(JENV.GT.1 .AND. LADON) THEN
+<span class="ln">698</span>                  CALL <a href="../yrec-map/calcad.f.html#def-CALCAD" title="CALCAD in calcad.f">CALCAD</a>(HR, CZsurf_RL, M, HD, HP,HT,BL, FP, FT, HSTOT,
+<span class="ln">699</span>C      *            LPRT, TEFFL, HCOMP, NKK, DAGE, DDAGE, JENV)  ! KC 2025-05-31
+<span class="ln">700</span>     *            TEFFL, HCOMP, DAGE, JENV, CMIXL)
+<span class="ln">701</span>            ELSE IF (JENV.EQ.1) THEN
+<span class="ln">702</span>                  TAUCZN=0.0D0
+<span class="ln">703</span>            ENDIF
+<span class="ln">704</span>            IF (LC(M)) THEN
+<span class="ln">705</span>                  ICHECK=1
+<span class="ln">706</span>            ELSE IF (.NOT. LC(M)) THEN
+<span class="ln">707</span>                  ICHECK = 0
+<span class="ln">708</span>            ENDIF
+<span class="ln">709</span>
+<span class="ln">710</span>        IF (LJLAST) THEN
+<span class="ln">711</span>         IWRITE = IJLAST
+<span class="ln">712</span>         CALL <a href="../yrec-map/wrtlst.f.html#def-WRTLST" title="WRTLST in wrtlst.f">WRTLST</a>(IWRITE,HCOMP,HD,HL,HP,HR,HS,HT,LC,TRIT,TRIL,PS,
+<span class="ln">713</span>     *   TS,RS,CFENV,FTRI,TLUMX,JCORE,JENV,MODEL,M,SMASS,TEFFL,BL,HSTOT,
+<span class="ln">714</span>     *   DAGE,DDAGE,OMEGA,CMIXL,COMPMIX)
+<span class="ln">715</span>        ENDIF
+<span class="ln">716</span>
+<span class="ln">717</span>            WRITE(ITRACK, 1800) MODEL,M,DAGE,BL,RL,GL,TEFFL,COREM,CZsurf_M,
+<span class="ln">718</span>     *      CZsurf_R,CZsurf_T,CZsurf_D,CZsurf_P,CZsurf_O,TL,DL,PL,BETA,ETA,HCOMP(1,1),HCOMP(2,1),
+<span class="ln">719</span>     1      HCOMP(3,1),(TLUMX(J),J = 1,5),TLUMX(8),TLUMX(7),TLUMX(6),
+<span class="ln">720</span>     2      CLSNU,GASNU,(FLUXTOT(I),I=1,10),(HCOMP(I,1),I=4,11),
+<span class="ln">721</span>     3      (HCOMP(I,M),I=4,15),(HCOMP(I,M),I=1,3),HCOMP(3,M)/HCOMP(1,M),
+<span class="ln">722</span>     4      SJTOT,TAUCZN,TCZ,TNORM,TAUHE,WHE,TATMOS,ROTV,TAUCZ,
+<span class="ln">723</span>     5      SSS1,SSS2,SSS3,RRR1,RRR2,RRR3, ICHECK
+<span class="ln">724</span> 1800      FORMAT(1X,2I8,1P7E16.8,0PF8.4,1P4E12.4,16E16.8,12E10.3,
+<span class="ln">725</span>     *            39E16.8, I8)
+<span class="ln">726</span>
+<span class="ln">727</span>C JVS END
+<span class="ln">728</span>       ENDIF
+<span class="ln">729</span>
+<span class="ln">730</span>      RETURN
+<span class="ln">731</span>      END</pre></details>
+<details class='py' id='py-wrtout'><summary>Python version: wrtout</summary><pre class='doc'>Write the output of a converged model: the summary block to ISHORT,
+the track line(s) to ITRACK (by ITRVER), the last model to ILAST, and at
+intervals the detailed profiles (PUTSTORE, or WRTMIL and WRTMOD) and the
+acoustic depths (CALCAD). On the way it rescales the luminosity terms,
+finds the central conditions and the base of the surface convection
+zone (stored in CENT_MOD), and the neutrino capture rates.
+
+Translates: wrtout.f#WRTOUT (09c3b9b)
+
+Arguments: the model (hcomp, hd, hl, hp, hr, hs, hs1, ht, lc, m, the
+rotation arrays omega, fp, ft, eta2, r0, hjm, hi, hs2), its run data
+(model, dage, ddage, smass, teffl, bl, hstot, sjtot, skerot), the shell
+and zone indices (lshell, jxbeg, jxmid, jxend, jcore, jenv), the
+luminosity terms tlumx (rescaled in place), the envelope data passed to
+WRTLST/PUTSTORE (trit, tril, ps, ts, rs, cfenv, ftri), and cmixl, xmsol,
+compmix, passed on. Returns (gl, lpunch): log g, set here, and lpunch,
+cleared when the model is stored.</pre><pre class='src'><span class="ln">100</span>def wrtout(hcomp, hd, hl, hp, hr, hs, hs1, ht, lc, m, model, dage,
+<span class="ln">101</span>           ddage, smass, teffl, bl, gl, lshell, jxbeg, jxmid, jxend, jcore,
+<span class="ln">102</span>           jenv, tlumx, trit, tril, ps, ts, rs, cfenv, ftri, hstot, omega,
+<span class="ln">103</span>           lpunch, fp, ft, eta2, r0, hjm, hi, sjtot, skerot, hs2, cmixl,
+<span class="ln">104</span>           xmsol, compmix):
+<span class="ln">105</span>    &quot;&quot;&quot;Write the output of a converged model: the summary block to ISHORT,
+<span class="ln">106</span>    the track line(s) to ITRACK (by ITRVER), the last model to ILAST, and at
+<span class="ln">107</span>    intervals the detailed profiles (PUTSTORE, or WRTMIL and WRTMOD) and the
+<span class="ln">108</span>    acoustic depths (CALCAD). On the way it rescales the luminosity terms,
+<span class="ln">109</span>    finds the central conditions and the base of the surface convection
+<span class="ln">110</span>    zone (stored in CENT_MOD), and the neutrino capture rates.
+<span class="ln">111</span>
+<span class="ln">112</span>    Translates: wrtout.f#WRTOUT (09c3b9b)
+<span class="ln">113</span>
+<span class="ln">114</span>    Arguments: the model (hcomp, hd, hl, hp, hr, hs, hs1, ht, lc, m, the
+<span class="ln">115</span>    rotation arrays omega, fp, ft, eta2, r0, hjm, hi, hs2), its run data
+<span class="ln">116</span>    (model, dage, ddage, smass, teffl, bl, hstot, sjtot, skerot), the shell
+<span class="ln">117</span>    and zone indices (lshell, jxbeg, jxmid, jxend, jcore, jenv), the
+<span class="ln">118</span>    luminosity terms tlumx (rescaled in place), the envelope data passed to
+<span class="ln">119</span>    WRTLST/PUTSTORE (trit, tril, ps, ts, rs, cfenv, ftri), and cmixl, xmsol,
+<span class="ln">120</span>    compmix, passed on. Returns (gl, lpunch): log g, set here, and lpunch,
+<span class="ln">121</span>    cleared when the model is stored.
+<span class="ln">122</span>    &quot;&quot;&quot;
+<span class="ln">123</span>    global icheck, fx, czsurf_rl, rotp, rotv, hicz
+<span class="ln">124</span>    global sss1, sss2, sss3, rrr1, rrr2, rrr3
+<span class="ln">125</span>    n = nmlpar_mod
+<span class="ln">126</span>    c = constants_mod
+<span class="ln">127</span>    sc = scrtch_mod
+<span class="ln">128</span>    fl = fluxes_mod
+<span class="ln">129</span>    ac = acdpth_mod
+<span class="ln">130</span>    ce = cent_mod
+<span class="ln">131</span>    ishort = iounits_mod.ishort
+<span class="ln">132</span>    itrack = iounits_mod.itrack
+<span class="ln">133</span>    w = iounits_mod.write
+<span class="ln">134</span>
+<span class="ln">135</span>    # Question (see the page): LTSCAL is set and never used.
+<span class="ln">136</span>    ltscal = False
+<span class="ln">137</span>
+<span class="ln">138</span>    # Rescale the luminosity terms to the surface luminosity.
+<span class="ln">139</span>    if not n.lkuthe:
+<span class="ln">140</span>        thl = 0.0
+<span class="ln">141</span>        for i in range(1, 9):
+<span class="ln">142</span>            thl = thl + tlumx[i]
+<span class="ln">143</span>        temp = hl[m] / thl
+<span class="ln">144</span>        for i in range(1, 9):  # label 10
+<span class="ln">145</span>            tlumx[i] = tlumx[i] * temp
+<span class="ln">146</span>
+<span class="ln">147</span>    # The summary block on ISHORT: global properties and the center.
+<span class="ln">148</span>    w(ishort, &quot;\n &quot; + &#x27;*&#x27; * 127)  # 21
+<span class="ln">149</span>    if not n.lkuthe:
+<span class="ln">150</span>        step = _f(ddage, 12, 0)  # 30
+<span class="ln">151</span>    else:
+<span class="ln">152</span>        step = _e(ddage, 12, 4)  # 40
+<span class="ln">153</span>    w(ishort, f&quot; MODEL NO.{model:5d}  MASS{_f(smass, 13, 7)}  (X,Z)=(&quot;
+<span class="ln">154</span>              f&quot;{_f(comp_mod.xnew, 11, 9)},{_f(comp_mod.znew, 11, 9)})  &quot;
+<span class="ln">155</span>              f&quot;AGE(GYRS){_f(dage, 14, 8)} STEP(YRS)={step}&quot;)
+<span class="ln">156</span>
+<span class="ln">157</span>    # The convective core&#x27;s mass.
+<span class="ln">158</span>    if jcore &gt; 1:
+<span class="ln">159</span>        corem = hs1[jcore] / c.cmsun
+<span class="ln">160</span>    else:
+<span class="ln">161</span>        corem = 0.0
+<span class="ln">162</span>    # Its radius (JVS 10/11).
+<span class="ln">163</span>    if jcore &gt; 1:
+<span class="ln">164</span>        # Question (see the page): FX2 is 1 (or 0/0), and FX is used.
+<span class="ln">165</span>        fx2 = ((sc.sdel[3, jcore + 1] - sc.sdel[1, jcore])
+<span class="ln">166</span>               / (sc.sdel[3, jcore + 1] - sc.sdel[1, jcore]))
+<span class="ln">167</span>        corerl = hr[jcore] + fx * (hr[jcore + 1] - hr[jcore]) - c.crsunl
+<span class="ln">168</span>        corer = math.exp(c.cln * corerl)
+<span class="ln">169</span>    else:
+<span class="ln">170</span>        corer = 0.0
+<span class="ln">171</span>
+<span class="ln">172</span>    # Bolometric magnitude, radius and gravity.
+<span class="ln">173</span>    bolm = c.cmbol - 2.5 * bl
+<span class="ln">174</span>    rl = 0.5 * (bl + c.clsunl - c.c4pil - c.csigl - 4.0 * teffl)
+<span class="ln">175</span>    gl = c.cgl + comp_mod.stotal - rl - rl
+<span class="ln">176</span>
+<span class="ln">177</span>    # Central conditions, extrapolated from shell 1.
+<span class="ln">178</span>    temp = 0.5 * math.exp(c.cln * (c.cc13 * (c.c4pi3l + hd[1] - hs[1])
+<span class="ln">179</span>                                   + hd[1] + c.cgl + hs[1]))
+<span class="ln">180</span>    p = math.exp(c.cln * hp[1])
+<span class="ln">181</span>    pl = math.log10(p + temp)
+<span class="ln">182</span>    tl = ht[1] + math.log10(1.0 + temp * sc.sdel[2, 1] / p)
+<span class="ln">183</span>    dl = hd[1]
+<span class="ln">184</span>    x = hcomp[1, 1]
+<span class="ln">185</span>    z = hcomp[3, 1]
+<span class="ln">186</span>    latmo = True
+<span class="ln">187</span>    lderiv = False
+<span class="ln">188</span>    if n.ldh:
+<span class="ln">189</span>        dh = debhu_mod
+<span class="ln">190</span>        dh.xxdh = hcomp[1, 1]
+<span class="ln">191</span>        dh.yydh = hcomp[2, 1] + hcomp[4, 1]
+<span class="ln">192</span>        dh.zzdh = hcomp[3, 1]
+<span class="ln">193</span>        dh.zdh[1] = hcomp[5, 1] + hcomp[6, 1]
+<span class="ln">194</span>        dh.zdh[2] = hcomp[7, 1] + hcomp[8, 1]
+<span class="ln">195</span>        dh.zdh[3] = hcomp[9, 1] + hcomp[10, 1] + hcomp[11, 1]
+<span class="ln">196</span>    fxion = np.zeros(4)
+<span class="ln">197</span>    # Question (see the page): KSAHA is never set here.
+<span class="ln">198</span>    (t, p, dl, d, beta, betai, beta14, rmu, amu, emu, eta, qdt, qdp, qcp,
+<span class="ln">199</span>     dela, qdtt, qdtp, qat, qap, qcpt, qcpp, _) = eqstat(
+<span class="ln">200</span>        tl, 0.0, pl, p, dl, 0.0, x, z, 0.0, 0.0, 0.0, fxion, 0.0, 0.0,
+<span class="ln">201</span>        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+<span class="ln">202</span>        lderiv, latmo, ksaha)
+<span class="ln">203</span>    ce.pcenter = pl
+<span class="ln">204</span>    ce.tcenter = tl
+<span class="ln">205</span>    ce.dcenter = dl
+<span class="ln">206</span>
+<span class="ln">207</span>    # The base of the surface convection zone, where DEL_rad - DEL_ad
+<span class="ln">208</span>    # changes sign between JENV-1 and JENV.
+<span class="ln">209</span>    if jenv &lt; m:
+<span class="ln">210</span>        if jenv &gt; 1:
+<span class="ln">211</span>            dd2 = sc.sdel[1, jenv - 1] - sc.sdel[3, jenv - 1]
+<span class="ln">212</span>            dd1 = sc.sdel[1, jenv] - sc.sdel[3, jenv]
+<span class="ln">213</span>            fx = dd2 / (dd2 - dd1)
+<span class="ln">214</span>            hsb = hs1[jenv - 1] + fx * (hs1[jenv] - hs1[jenv - 1])
+<span class="ln">215</span>            ce.czsurf_m = (math.exp(c.cln * hstot) - hsb) / c.cmsun
+<span class="ln">216</span>            czsurf_rl = hr[jenv - 1] + fx * (hr[jenv] - hr[jenv - 1]) - c.crsunl
+<span class="ln">217</span>            ce.czsurf_r = math.exp(c.cln * czsurf_rl)
+<span class="ln">218</span>            czsurf_o = sc.so[jenv - 1] + fx * (sc.so[jenv] - sc.so[jenv - 1])
+<span class="ln">219</span>            czsurf_tl = ht[jenv - 1] + fx * (ht[jenv] - ht[jenv - 1])
+<span class="ln">220</span>            czsurf_dl = hd[jenv - 1] + fx * (hd[jenv] - hd[jenv - 1])
+<span class="ln">221</span>            czsurf_pl = hp[jenv - 1] + fx * (hp[jenv] - hp[jenv - 1])
+<span class="ln">222</span>            czsurf_t = math.exp(c.cln * czsurf_tl)
+<span class="ln">223</span>            czsurf_d = math.exp(c.cln * czsurf_dl)
+<span class="ln">224</span>            czsurf_p = math.exp(c.cln * czsurf_pl)
+<span class="ln">225</span>        else:
+<span class="ln">226</span>            # Fully convective.
+<span class="ln">227</span>            ce.czsurf_m = smass
+<span class="ln">228</span>            ce.czsurf_r = 0.0
+<span class="ln">229</span>            czsurf_t = 10.0 ** ce.tcenter
+<span class="ln">230</span>            czsurf_d = 10.0 ** ce.dcenter
+<span class="ln">231</span>            czsurf_p = 10.0 ** ce.pcenter
+<span class="ln">232</span>            czsurf_o = sc.so[1]
+<span class="ln">233</span>    else:
+<span class="ln">234</span>        # No surface convection zone.
+<span class="ln">235</span>        ce.czsurf_m = 0.0
+<span class="ln">236</span>        ce.czsurf_r = 0.0
+<span class="ln">237</span>        czsurf_t = 0.0
+<span class="ln">238</span>        czsurf_d = 0.0
+<span class="ln">239</span>        czsurf_p = 0.0
+<span class="ln">240</span>        czsurf_o = 0.0
+<span class="ln">241</span>    w(ishort, f&quot; SHELLS={m:5d}  (X0,Z0)=({_f(label_mod.xenv0, 9, 7)},&quot;
+<span class="ln">242</span>              f&quot;{_f(label_mod.zenv0, 9, 7)})  CONV. ZONE MASSES(MSUN): CORE&quot;
+<span class="ln">243</span>              f&quot;{_f(corem, 10, 7)} ENV.{_f(ce.czsurf_m, 10, 7)}&quot;
+<span class="ln">244</span>              f&quot; RAD. FRAC.{_f(ce.czsurf_r, 10, 7)}&quot;)  # 50
+<span class="ln">245</span>    rl = rl - c.crsunl
+<span class="ln">246</span>    w(ishort, f&quot; LOG(TEFF)={_f(teffl, 11, 8)}  M(BOL)={_f(bolm, 11, 7)}&quot;
+<span class="ln">247</span>              f&quot;  LOG(L/LSUN)={_f(bl, 12, 8)}  LOG(R/RSUN)={_f(rl, 12, 8)}&quot;
+<span class="ln">248</span>              f&quot;  LOG(G) ={_f(gl, 12, 8)}&quot;)  # 60
+<span class="ln">249</span>    w(ishort, f&quot; CENTER: LOG P={_f(pl, 10, 7)} LOG T={_f(tl, 10, 8)} LOG D=&quot;
+<span class="ln">250</span>              f&quot;{_f(dl, 10, 6)} BETA={_f(beta, 9, 7)} ETA={_f(eta, 10, 5)}&quot;
+<span class="ln">251</span>              f&quot;  X={_f(x, 9, 7)} Z={_f(z, 9, 7)} O16={_f(hcomp[9, 1], 9, 7)}&quot;)
+<span class="ln">252</span>    # FORMAT 80: PPI, PPII, PPIII, CNO; triple alpha, He-C, neutrinos, grav.
+<span class="ln">253</span>    w(ishort, f&quot; ENERGY: PPI{_e(tlumx[1], 13, 6)}  PPII{_e(tlumx[2], 13, 6)}&quot;
+<span class="ln">254</span>              f&quot;  PPIII{_e(tlumx[3], 13, 6)}  CNO{_e(tlumx[4], 13, 6)}\n&quot;
+<span class="ln">255</span>              f&quot;{&#x27;&#x27;:9s}TRIPLE ALPHA{_e(tlumx[5], 13, 6)}&quot;
+<span class="ln">256</span>              f&quot;  HE-C{_e(tlumx[8], 13, 6)}  NEUTRINOS{_e(tlumx[6], 13, 6)}&quot;
+<span class="ln">257</span>              f&quot;  GRAV{_e(tlumx[7], 13, 6)}&quot;)
+<span class="ln">258</span>
+<span class="ln">259</span>    # The hydrogen shell and the temperature maximum.
+<span class="ln">260</span>    ss3 = 0.0
+<span class="ln">261</span>    ss4 = 0.0
+<span class="ln">262</span>    if lshell:
+<span class="ln">263</span>        ss1 = hs1[jxmid] / c.cmsun
+<span class="ln">264</span>        ss2 = (hs1[jxend] - hs1[jxbeg - 1]) / c.cmsun
+<span class="ln">265</span>        ss3 = hs1[jxbeg - 1] / c.cmsun
+<span class="ln">266</span>        tlmax = tl
+<span class="ln">267</span>        line120 = None
+<span class="ln">268</span>        if not n.lkuthe:
+<span class="ln">269</span>            # The first temperature maximum from the center.
+<span class="ln">270</span>            for i in range(2, m + 1):  # label 100
+<span class="ln">271</span>                if ht[i] &lt; ht[i - 1]:
+<span class="ln">272</span>                    break
+<span class="ln">273</span>            else:
+<span class="ln">274</span>                i = m + 1
+<span class="ln">275</span>            itmax = i - 1  # label 110
+<span class="ln">276</span>            if itmax &gt; 1:
+<span class="ln">277</span>                ss4 = hs1[itmax] / c.cmsun
+<span class="ln">278</span>                tlmax = ht[itmax]
+<span class="ln">279</span>            else:
+<span class="ln">280</span>                ss4 = 0.0
+<span class="ln">281</span>                tlmax = ht[1]
+<span class="ln">282</span>            line120 = True
+<span class="ln">283</span>        else:
+<span class="ln">284</span>            # Helium flash: the first maximum above log T = 7.98.
+<span class="ln">285</span>            # Question (see the page): the threshold 7.98.
+<span class="ln">286</span>            for i in range(2, m + 1):  # label 130
+<span class="ln">287</span>                if ht[i] &lt; ht[i - 1] and ht[i - 1] &gt; 7.98:
+<span class="ln">288</span>                    break
+<span class="ln">289</span>            else:
+<span class="ln">290</span>                i = m + 1
+<span class="ln">291</span>            itmax = i - 1  # label 140
+<span class="ln">292</span>            if itmax &gt; 1:
+<span class="ln">293</span>                ss4 = hs1[itmax] / c.cmsun
+<span class="ln">294</span>                tlmax = ht[itmax]
+<span class="ln">295</span>                rlmax = hr[itmax]
+<span class="ln">296</span>                lcmax = lc[itmax]
+<span class="ln">297</span>                line120 = True
+<span class="ln">298</span>        if line120:
+<span class="ln">299</span>            w(ishort, f&quot; H-SHELL MID-PT={_f(ss1, 10, 7)} MASS TOTAL=&quot;
+<span class="ln">300</span>                      f&quot;{_f(ss2, 10, 7)}  HE-CORE MASS={_f(ss3, 10, 7)} MAX-T=&quot;
+<span class="ln">301</span>                      f&quot;{_f(tlmax, 10, 7)} (MASS={_f(ss4, 9, 7)})&quot;)  # 120
+<span class="ln">302</span>            if n.lkuthe:
+<span class="ln">303</span>                w(ishort, f&quot; CONVECTION = {_l(lcmax)}     LOG(R) MAX-T =&quot;
+<span class="ln">304</span>                          f&quot;{_f(rlmax, 8, 5)}&quot;)  # 150
+<span class="ln">305</span>
+<span class="ln">306</span>    # Neutrino fluxes and detector capture rates.
+<span class="ln">307</span>    fluxtot = fl.fluxtot
+<span class="ln">308</span>    w(ishort, &quot; NEUTRINOS 1E10ERG/CM^2 PP,PEP,HEP,BE7,B8,N13,O15,F17:&quot;
+<span class="ln">309</span>              + _es(fluxtot[1:9], 9, 2))  # 160
+<span class="ln">310</span>    # Question (see the page): these cross sections differ from CLSNUF and
+<span class="ln">311</span>    # GASNUF, and the line calls the rates &quot;energies&quot;.
+<span class="ln">312</span>    f = fluxtot
+<span class="ln">313</span>    fl7li = (0.0 * f[1] + 665.0 * f[2] + 8.4e4 * f[3] + 9.6 * f[4]
+<span class="ln">314</span>             + 3.9e4 * f[5] + 42.4 * f[6] + 246.0 * f[7] + 249.0 * f[8])
+<span class="ln">315</span>    fl37cl = (0.0 * f[1] + 16.0 * f[2] + 4.26e4 * f[3] + 2.4 * f[4]
+<span class="ln">316</span>              + 1.09e4 * f[5] + 1.7 * f[6] + 6.8 * f[7] + 6.9 * f[8])
+<span class="ln">317</span>    fl71ga = (11.8 * f[1] + 215.0 * f[2] + 7.3e4 * f[3] + 73.2 * f[4]
+<span class="ln">318</span>              + 2.43e4 * f[5] + 61.8 * f[6] + 116.0 * f[7] + 117.0 * f[8])
+<span class="ln">319</span>    fl81br = (0.0 * f[1] + 75.0 * f[2] + 9.0e4 * f[3] + 18.3 * f[4]
+<span class="ln">320</span>              + 2.7e4 * f[5] + 14.5 * f[6] + 36.7 * f[7] + 37.0 * f[8])
+<span class="ln">321</span>    fl98mo = (0.0 * f[1] + 0.0 * f[2] + 10.0e4 * f[3] + 0.0 * f[4]
+<span class="ln">322</span>              + 3.0e4 * f[5] + 0.0 * f[6] + 0.0 * f[7] + 0.0 * f[8])
+<span class="ln">323</span>    fl115in = (78.0 * f[1] + 576.0 * f[2] + 6.1e4 * f[3] + 248.0 * f[4]
+<span class="ln">324</span>               + 2.5e4 * f[5] + 224.0 * f[6] + 355.0 * f[7] + 356.0 * f[8])
+<span class="ln">325</span>    w(ishort, f&quot; NEUTRINO ENERGIES (1.E-36ERG): 7Li={_e(fl7li, 9, 2)}&quot;
+<span class="ln">326</span>              f&quot; 37Cl={_e(fl37cl, 9, 2)} 71Ga={_e(fl71ga, 9, 2)}&quot;
+<span class="ln">327</span>              f&quot; 81Br={_e(fl81br, 9, 2)} 98Mo={_e(fl98mo, 9, 2)}&quot;
+<span class="ln">328</span>              f&quot; 115In={_e(fl115in, 9, 2)}&quot;)  # 2160
+<span class="ln">329</span>    fitmas = hs1[m] / c.cmsun
+<span class="ln">330</span>    w(ishort, f&quot; FIT-POINT    M/MSUN={_f(fitmas, 16, 12)}     (P,T,R) =&quot;
+<span class="ln">331</span>              f&quot;{_f(hp[m], 12, 7)}{_f(ht[m], 12, 7)}{_f(hr[m], 12, 7)}&quot;)
+<span class="ln">332</span>    w(ishort, &quot; &quot; + &#x27;*&#x27; * 127)  # 20
+<span class="ln">333</span>
+<span class="ln">334</span>    if n.ltrack:
+<span class="ln">335</span>        # The total moment of inertia.
+<span class="ln">336</span>        hitot = 0.0
+<span class="ln">337</span>        if not n.lrot:
+<span class="ln">338</span>            for i in range(1, m + 1):
+<span class="ln">339</span>                hitot = hitot + c.cc23 * hs2[i] * math.exp(2.0 * c.cln * hr[i])
+<span class="ln">340</span>        else:
+<span class="ln">341</span>            for i in range(1, m + 1):
+<span class="ln">342</span>                hitot = hitot + hi[i]
+<span class="ln">343</span>
+<span class="ln">344</span>        if n.itrver == 0:
+<span class="ln">345</span>            # The Cl and Ga rates in SNU.
+<span class="ln">346</span>            fl.clsnu = 0.0
+<span class="ln">347</span>            fl.gasnu = 0.0
+<span class="ln">348</span>            if n.lsnu:
+<span class="ln">349</span>                for i in range(1, 9):
+<span class="ln">350</span>                    fl.clsnu = fl.clsnu + CLSNUF[i] * fluxtot[i]
+<span class="ln">351</span>                    fl.gasnu = fl.gasnu + GASNUF[i] * fluxtot[i]
+<span class="ln">352</span>            else:
+<span class="ln">353</span>                # Question (see the page): FLUXTOT zeroed for later readers.
+<span class="ln">354</span>                for i in range(1, 11):
+<span class="ln">355</span>                    fluxtot[i] = 0.0
+<span class="ln">356</span>            # Rotation period (days), velocity (km/s), the zone&#x27;s inertia.
+<span class="ln">357</span>            hicz = 0.0
+<span class="ln">358</span>            if n.lrot:
+<span class="ln">359</span>                # Question (see the page): the old cap of 9999 days.
+<span class="ln">360</span>                rotp = min(9999.0, 0.5 * c.c4pi / omega[m] / 8.64e4)
+<span class="ln">361</span>                rotv = omega[m] * math.exp(c.cln * (rl + c.crsunl)) * 1.0e-5
+<span class="ln">362</span>                if jenv &lt; m:
+<span class="ln">363</span>                    for k in range(jenv, m + 1):
+<span class="ln">364</span>                        hicz = hicz + hi[k]
+<span class="ln">365</span>            else:
+<span class="ln">366</span>                rotp = 0.0
+<span class="ln">367</span>                rotv = 0.0
+<span class="ln">368</span>                if jenv &lt; m:
+<span class="ln">369</span>                    for k in range(jenv, m + 1):
+<span class="ln">370</span>                        hicz = hicz + c.cc23 * hs2[k] * math.exp(
+<span class="ln">371</span>                            2.0 * c.cln * hr[k])
+<span class="ln">372</span>            _shell_location(lshell, jxbeg, jxmid, jxend, hs1, hr, rl)
+<span class="ln">373</span>            # tau_cz and P_phot; GETTAU also sets CZsurf_R.
+<span class="ln">374</span>            ce.czsurf_r = gettau(hcomp, hr, hp, hd, hs1, ht, fp, ft, teffl,
+<span class="ln">375</span>                                 hstot, bl, m, lc, ce.czsurf_r, cmixl)
+<span class="ln">376</span>            ovrtrn_mod.taucz0 = ovrtrn_mod.taucz
+<span class="ln">377</span>            ovrtrn_mod.pphot0 = ovrtrn_mod.pphot
+<span class="ln">378</span>            # FORMAT 1499 (MCR 12/25: E17.8E3 for three-digit exponents).
+<span class="ln">379</span>            w(itrack, _model_block(model, m, dage, bl, rl, gl, teffl, corem,
+<span class="ln">380</span>                                   ce.czsurf_m, 17, 8, 3)
+<span class="ln">381</span>                      + _es([ce.czsurf_r, czsurf_t, czsurf_d, czsurf_p,
+<span class="ln">382</span>                             czsurf_o], 12, 4)
+<span class="ln">383</span>                      + _es([tl, dl, pl, beta, eta, hcomp[1, 1], hcomp[2, 1],
+<span class="ln">384</span>                             hcomp[3, 1]] + list(tlumx[1:6])
+<span class="ln">385</span>                            + [tlumx[8], tlumx[7], tlumx[6]], 17, 8, 3)
+<span class="ln">386</span>                      + _es([fl.clsnu, fl.gasnu] + list(fluxtot[1:11]), 10, 3)
+<span class="ln">387</span>                      + _es(_hcomp_columns(hcomp, m)
+<span class="ln">388</span>                            + [sjtot, skerot, hitot, hicz, omega[m], omega[1],
+<span class="ln">389</span>                               rotp, rotv, ovrtrn_mod.taucz,
+<span class="ln">390</span>                               sss1, sss2, sss3, rrr1, rrr2, rrr3,
+<span class="ln">391</span>                               ovrtrn_mod.pphot, smass], 17, 8, 3))
+<span class="ln">392</span>        elif n.itrver == 1 or n.itrver == 2:
+<span class="ln">393</span>            w(itrack, _model_block(model, m, dage, bl, rl, gl, teffl, corem,
+<span class="ln">394</span>                                   ce.czsurf_m, 16, 8, 2)
+<span class="ln">395</span>                      + _f(ce.czsurf_r, 8, 4)
+<span class="ln">396</span>                      + _es([czsurf_t, czsurf_d, czsurf_p, czsurf_o],
+<span class="ln">397</span>                            12, 4))  # 1500
+<span class="ln">398</span>            w(itrack, &quot; &quot; + _es([tl, dl, pl, beta, eta, hcomp[1, 1],
+<span class="ln">399</span>                                 hcomp[2, 1], hcomp[3, 1], hitot], 16, 8))
+<span class="ln">400</span>            w(itrack, &quot; &quot; + _es(list(tlumx[1:6])
+<span class="ln">401</span>                                + [tlumx[8], tlumx[7], tlumx[6]], 16, 8))
+<span class="ln">402</span>            fl.clsnu = 0.0
+<span class="ln">403</span>            fl.gasnu = 0.0
+<span class="ln">404</span>            for i in range(1, 9):
+<span class="ln">405</span>                fl.clsnu = fl.clsnu + CLSNUF[i] * fluxtot[i]
+<span class="ln">406</span>                fl.gasnu = fl.gasnu + GASNUF[i] * fluxtot[i]
+<span class="ln">407</span>            w(itrack, f&quot; {_f(fl.clsnu, 8, 3)}{_f(fl.gasnu, 8, 3)}&quot;
+<span class="ln">408</span>                      + _es(fluxtot[1:11], 10, 3))  # 1515
+<span class="ln">409</span>            w(itrack, &quot; &quot; + _es([hcomp[i, 1] for i in range(4, 12)], 16, 8))
+<span class="ln">410</span>            surf = _hcomp_columns(hcomp, m)[8:]
+<span class="ln">411</span>            w(itrack, &quot; &quot; + _es(surf[:8], 16, 8) + &quot;\n &quot;
+<span class="ln">412</span>                      + _es(surf[8:], 16, 8))  # 1520
+<span class="ln">413</span>            # Question (see the page): without rotation ROTP, ROTV and HICZ
+<span class="ln">414</span>            # keep earlier values, and version 2 writes them.
+<span class="ln">415</span>            if n.lrot:
+<span class="ln">416</span>                rotp = 0.5 * c.c4pi / omega[m] / 8.64e4
+<span class="ln">417</span>                rotv = omega[m] * math.exp(c.cln * (rl + c.crsunl)) * 1.0e-5
+<span class="ln">418</span>                hicz = 0.0
+<span class="ln">419</span>                if lc[m]:
+<span class="ln">420</span>                    for k in range(jenv, m + 1):
+<span class="ln">421</span>                        hicz = hicz + hi[k]
+<span class="ln">422</span>                else:
+<span class="ln">423</span>                    hicz = 0.0
+<span class="ln">424</span>            _shell_location(lshell, jxbeg, jxmid, jxend, hs1, hr, rl)
+<span class="ln">425</span>            w(itrack, &quot; &quot; + _es([sss1, sss2, sss3, rrr1, rrr2, rrr3],
+<span class="ln">426</span>                                16, 8))  # 1530
+<span class="ln">427</span>        if n.itrver == 2:
+<span class="ln">428</span>            # FORMAT 1540, (1X,1P6E13.5,0P,2F11.5,1E13.5): the last field
+<span class="ln">429</span>            # is under 0P, so it prints as 0.ddddd.
+<span class="ln">430</span>            w(itrack, &quot; &quot; + _es([sjtot, skerot, hitot, hicz, omega[m],
+<span class="ln">431</span>                                 omega[1]], 13, 5)
+<span class="ln">432</span>                      + _f(rotp, 11, 5) + _f(rotv, 11, 5)
+<span class="ln">433</span>                      + _e(ovrtrn_mod.taucz, 13, 5, scale=0))
+<span class="ln">434</span>        if n.itrver == 3:
+<span class="ln">435</span>            w(itrack, f&quot; {model:8d}{m:8d}&quot;
+<span class="ln">436</span>                      + _es([dage, bl, rl, gl, teffl], 13, 5)
+<span class="ln">437</span>                      + _es([corem, ce.czsurf_m], 11, 3)
+<span class="ln">438</span>                      + _f(ce.czsurf_r, 8, 4)
+<span class="ln">439</span>                      + _e(comp_mod.xnew, 13, 5))  # 1501
+<span class="ln">440</span>
+<span class="ln">441</span>    # The last model, every time.
+<span class="ln">442</span>    iwrite = iounits_mod.ilast
+<span class="ln">443</span>    wrtlst(iwrite, hcomp, hd, hl, hp, hr, hs, ht, lc, trit, tril, ps,
+<span class="ln">444</span>           ts, rs, cfenv, ftri, tlumx, jcore, jenv, model, m, smass, teffl,
+<span class="ln">445</span>           bl, hstot, dage, ddage, omega, cmixl, compmix)
+<span class="ln">446</span>
+<span class="ln">447</span>    # The detailed output every NPRTMOD models (PUTSTORE also writes the
+<span class="ln">448</span>    # stitched profile); otherwise the pulsation files.
+<span class="ln">449</span>    stored = n.lstore and model % n.nprtmod == 0
+<span class="ln">450</span>    if stored:
+<span class="ln">451</span>        putstore(hcomp, hd, hl, hp, hr, hs, ht, lc, trit, tril, ps,
+<span class="ln">452</span>                 ts, rs, cfenv, ftri, tlumx, jcore, jenv, model, m, smass,
+<span class="ln">453</span>                 teffl, bl, hstot, dage, ddage, omega, hs1, eta2, r0, fp, ft,
+<span class="ln">454</span>                 hjm, hi, cmixl, xmsol, compmix)
+<span class="ln">455</span>        lpunch = False
+<span class="ln">456</span>    if not stored and n.lpulse:
+<span class="ln">457</span>        if n.lmilne:
+<span class="ln">458</span>            wrtmil(hcomp, hd, hl, hp, hr, hs1, m, model)
+<span class="ln">459</span>        wrtmod(m, jenv, hcomp, hs1, hd, hl, hp, hr, ht, model, bl, teffl,
+<span class="ln">460</span>               fp, ft, hs, dage, cmixl, xmsol)
+<span class="ln">461</span>
+<span class="ln">462</span>    # Acoustic depths (JVS), and a second track line.
+<span class="ln">463</span>    if ac.lacout:
+<span class="ln">464</span>        if jenv &gt; 1 and ac.ladon:
+<span class="ln">465</span>            # Question (see the page): CZsurf_RL may be from an earlier model.
+<span class="ln">466</span>            calcad(hr, czsurf_rl, m, hd, hp, ht, bl, fp, ft, hstot, teffl,
+<span class="ln">467</span>                   hcomp, dage, jenv, cmixl)
+<span class="ln">468</span>        elif jenv == 1:
+<span class="ln">469</span>            ac.tauczn = 0.0
+<span class="ln">470</span>        if lc[m]:
+<span class="ln">471</span>            icheck = 1
+<span class="ln">472</span>        elif not lc[m]:
+<span class="ln">473</span>            icheck = 0
+<span class="ln">474</span>        if ac.ljlast:
+<span class="ln">475</span>            iwrite = iounits_mod.ijlast
+<span class="ln">476</span>            wrtlst(iwrite, hcomp, hd, hl, hp, hr, hs, ht, lc, trit, tril, ps,
+<span class="ln">477</span>                   ts, rs, cfenv, ftri, tlumx, jcore, jenv, model, m, smass,
+<span class="ln">478</span>                   teffl, bl, hstot, dage, ddage, omega, cmixl, compmix)
+<span class="ln">479</span>        # FORMAT 1800. Question (see the page): a second line format in the
+<span class="ln">480</span>        # track file, with values that may be from earlier models.
+<span class="ln">481</span>        w(itrack, _model_block(model, m, dage, bl, rl, gl, teffl, corem,
+<span class="ln">482</span>                               ce.czsurf_m, 16, 8, 2)
+<span class="ln">483</span>                  + _f(ce.czsurf_r, 8, 4)
+<span class="ln">484</span>                  + _es([czsurf_t, czsurf_d, czsurf_p, czsurf_o], 12, 4)
+<span class="ln">485</span>                  + _es([tl, dl, pl, beta, eta, hcomp[1, 1], hcomp[2, 1],
+<span class="ln">486</span>                         hcomp[3, 1]] + list(tlumx[1:6])
+<span class="ln">487</span>                        + [tlumx[8], tlumx[7], tlumx[6]], 16, 8)
+<span class="ln">488</span>                  + _es([fl.clsnu, fl.gasnu] + list(fluxtot[1:11]), 10, 3)
+<span class="ln">489</span>                  + _es(_hcomp_columns(hcomp, m)
+<span class="ln">490</span>                        + [sjtot, ac.tauczn, ac.tcz, ac.tnorm, ac.tauhe,
+<span class="ln">491</span>                           ac.whe, ac.tatmos, rotv, ovrtrn_mod.taucz,
+<span class="ln">492</span>                           sss1, sss2, sss3, rrr1, rrr2, rrr3], 16, 8)
+<span class="ln">493</span>                  + f&quot;{icheck:8d}&quot;)
+<span class="ln">494</span>    return gl, lpunch</pre></details>
+</section>
+<h2>Python version: other definitions</h2>
+<details class='py' id='py-_e'><summary>Python version: _e</summary><pre class='doc'>Fortran Ew.d (Ee) under the scale factor 1P (scale=1: d.ddd) or 0P
+(scale=0: 0.ddd). With e = 2 an exponent beyond 99 drops the &#x27;E&#x27;, as
+Fortran does; a field too narrow is filled with &#x27;*&#x27;.</pre><pre class='src'><span class="ln">49</span>def _e(v, w, d, e=2, scale=1):
+<span class="ln">50</span>    &quot;&quot;&quot;Fortran Ew.d (Ee) under the scale factor 1P (scale=1: d.ddd) or 0P
+<span class="ln">51</span>    (scale=0: 0.ddd). With e = 2 an exponent beyond 99 drops the &#x27;E&#x27;, as
+<span class="ln">52</span>    Fortran does; a field too narrow is filled with &#x27;*&#x27;.&quot;&quot;&quot;
+<span class="ln">53</span>    digits = d + 1 if scale == 1 else d
+<span class="ln">54</span>    m, x = f&quot;{v:.{digits - 1}E}&quot;.split(&#x27;E&#x27;)
+<span class="ln">55</span>    x = int(x)
+<span class="ln">56</span>    if scale == 0:
+<span class="ln">57</span>        sign = &#x27;-&#x27; if m.startswith(&#x27;-&#x27;) else &#x27;&#x27;
+<span class="ln">58</span>        m = sign + &#x27;0.&#x27; + m.lstrip(&#x27;-&#x27;).replace(&#x27;.&#x27;, &#x27;&#x27;)
+<span class="ln">59</span>        x = 0 if v == 0 else x + 1
+<span class="ln">60</span>    if e == 2 and abs(x) &gt; 99:
+<span class="ln">61</span>        text = f&quot;{m}{x:+04d}&quot;
+<span class="ln">62</span>    else:
+<span class="ln">63</span>        text = f&quot;{m}E{x:+0{e + 1}d}&quot;
+<span class="ln">64</span>    return text.rjust(w) if len(text) &lt;= w else &#x27;*&#x27; * w</pre></details>
+<details class='py' id='py-_es'><summary>Python version: _es</summary><pre class='doc'>A repeated E descriptor.</pre><pre class='src'><span class="ln">67</span>def _es(values, w, d, e=2, scale=1):
+<span class="ln">68</span>    &quot;&quot;&quot;A repeated E descriptor.&quot;&quot;&quot;
+<span class="ln">69</span>    return &#x27;&#x27;.join(_e(v, w, d, e, scale) for v in values)</pre></details>
+<details class='py' id='py-_f'><summary>Python version: _f</summary><pre class='doc'>Fortran Fw.d (Fw.0 keeps its decimal point).</pre><pre class='src'><span class="ln">72</span>def _f(v, w, d):
+<span class="ln">73</span>    &quot;&quot;&quot;Fortran Fw.d (Fw.0 keeps its decimal point).&quot;&quot;&quot;
+<span class="ln">74</span>    text = f&quot;{v:.{d}f}&quot; + (&#x27;.&#x27; if d == 0 else &#x27;&#x27;)
+<span class="ln">75</span>    return text.rjust(w) if len(text) &lt;= w else &#x27;*&#x27; * w</pre></details>
+<details class='py' id='py-_l'><summary>Python version: _l</summary><pre class='src'><span class="ln">78</span>def _l(flag):
+<span class="ln">79</span>    return &#x27;T&#x27; if flag else &#x27;F&#x27;</pre></details>
+<details class='py' id='py-_model_block'><summary>Python version: _model_block</summary><pre class='doc'>The common start of FORMATs 1499, 1500, 1800: 1X,2I8, then seven E
+fields (DAGE ... CZsurf_M).</pre><pre class='src'><span class="ln">84</span>def _model_block(model, m, dage, bl, rl, gl, teffl, corem, czsurf_m,
+<span class="ln">85</span>                 w, d, e):
+<span class="ln">86</span>    &quot;&quot;&quot;The common start of FORMATs 1499, 1500, 1800: 1X,2I8, then seven E
+<span class="ln">87</span>    fields (DAGE ... CZsurf_M).&quot;&quot;&quot;
+<span class="ln">88</span>    return (f&quot; {model:8d}{m:8d}&quot;
+<span class="ln">89</span>            + _es([dage, bl, rl, gl, teffl, corem, czsurf_m], w, d, e))</pre></details>
+<details class='py' id='py-_hcomp_columns'><summary>Python version: _hcomp_columns</summary><pre class='doc'>HCOMP(4..11,1), HCOMP(4..15,M), HCOMP(1..3,M), Z/X at the surface.</pre><pre class='src'><span class="ln">92</span>def _hcomp_columns(hcomp, m):
+<span class="ln">93</span>    &quot;&quot;&quot;HCOMP(4..11,1), HCOMP(4..15,M), HCOMP(1..3,M), Z/X at the surface.&quot;&quot;&quot;
+<span class="ln">94</span>    return ([hcomp[i, 1] for i in range(4, 12)]
+<span class="ln">95</span>            + [hcomp[i, m] for i in range(4, 16)]
+<span class="ln">96</span>            + [hcomp[i, m] for i in range(1, 4)]
+<span class="ln">97</span>            + [hcomp[3, m] / hcomp[1, m]])</pre></details>
+<details class='py' id='py-_shell_location'><summary>Python version: _shell_location</summary><pre class='doc'>The hydrogen shell&#x27;s base, middle and top, in mass (Msun) and in
+radius (fraction of R), for the track (the block both track versions
+repeat).</pre><pre class='src'><span class="ln">497</span>def _shell_location(lshell, jxbeg, jxmid, jxend, hs1, hr, rl):
+<span class="ln">498</span>    &quot;&quot;&quot;The hydrogen shell&#x27;s base, middle and top, in mass (Msun) and in
+<span class="ln">499</span>    radius (fraction of R), for the track (the block both track versions
+<span class="ln">500</span>    repeat).&quot;&quot;&quot;
+<span class="ln">501</span>    global sss1, sss2, sss3, rrr1, rrr2, rrr3
+<span class="ln">502</span>    c = constants_mod
+<span class="ln">503</span>    if lshell:
+<span class="ln">504</span>        sss1 = hs1[jxbeg] / c.cmsun
+<span class="ln">505</span>        sss2 = hs1[jxmid] / c.cmsun
+<span class="ln">506</span>        sss3 = hs1[jxend] / c.cmsun
+<span class="ln">507</span>        rrr1 = math.exp(c.cln * (hr[jxbeg] - rl - c.crsunl))
+<span class="ln">508</span>        rrr2 = math.exp(c.cln * (hr[jxmid] - rl - c.crsunl))
+<span class="ln">509</span>        rrr3 = math.exp(c.cln * (hr[jxend] - rl - c.crsunl))
+<span class="ln">510</span>    else:
+<span class="ln">511</span>        sss1 = 0.0
+<span class="ln">512</span>        sss2 = sss1
+<span class="ln">513</span>        sss3 = sss1
+<span class="ln">514</span>        rrr1 = sss1
+<span class="ln">515</span>        rrr2 = sss1
+<span class="ln">516</span>        rrr3 = sss1</pre></details>
+<details class='review'><summary>Review (round 1)</summary><div class='notes'><p>No findings.</p>
+<p>No change.</p></div></details>
+</main></body></html>
