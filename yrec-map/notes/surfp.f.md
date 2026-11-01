@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `SURFP` gives the pressure at $T = T_\mathrm{eff}$ in a model atmosphere, by interpolating a table of $\log P$ in $\log T_\mathrm{eff}$ and $\log g$. It is the outer boundary of the envelope integration with Kurucz atmospheres (`KTTAU = 3`).
+**Purpose.** `SURFP` gives the pressure at $T = T_\mathrm{eff}$ in a model atmosphere, by interpolating a table of $\log P$ in $\log T_\mathrm{eff}$ and $\log g$. It is the outer boundary of the envelope integration with Kurucz atmospheres (`KTTAU = 3`). With `KTTAU = 4` `SETUPS` reads the same table, but `SURFP` is not called: a run with Allard atmospheres that leaves their table falls back to the gray atmosphere, not to this one ([[atmos2_mod.f#ATMOS2_MOD|`ATMOS2_MOD`]], question 1).
 
 **How it fits.**
 - **Inputs:** $\log T_\mathrm{eff}$ (`TEFFL`) and $\log g$ (`GL`); the table in `ATMOS2_MOD` (`ATMPL(57,11)`, the grids `ATMTL`, `ATMGL`), read by [[setups.f#SETUPS|SETUPS]]; and in `FAC_MOD`, the lowest and highest valid gravity index for each temperature (`IMIN`, `IMINMAX`), also set by `SETUPS`.

@@ -13,7 +13,7 @@
 3. $\Delta M = \dot M\,\Delta t$ (g).
 4. **Accretion** ($\Delta M > 0$):
    - the new mean thermal energy $\bar e = (e_\mathrm{acc}\Delta M + \bar e_\mathrm{th}M'_\mathrm{cz})/(\Delta M + M'_\mathrm{cz})$ and `FAC` = $\log_{10}(\bar e/\bar e_\mathrm{th})$ are computed but not used (their use is commented out);
-   - `RMU` = $P\beta/(\rho T)$ (the gas constant over $\mu$) is recomputed at `JENV`, and a scale factor $\Delta\ln E = (\Delta M/M_\mathrm{cz})\,s_\mathrm{cen}/(\mathcal{R}/\mu)$, with $s_\mathrm{cen}$ = `SCEN`, gives $\Delta\log r = \tfrac23\Delta\ln E/\ln 10$, $\Delta\log T = -\Delta\log r$, $\Delta\log P = -4\Delta\log r$ (the mass term `DLNM` is set to zero);
+   - `RMU` = $P\beta/(\rho T)$ (the gas constant over $\mu$) is recomputed at `JENV`, and a scale factor $\Delta\ln E = (\Delta M/M_\mathrm{cz})\,s_\mathrm{cen}/(\mathcal{R}/\mu)$, with $s_\mathrm{cen}$ = `SCEN`, gives $\Delta\log r = \tfrac23\Delta\ln E/\ln 10$, $\Delta\log T = -\Delta\log r$, $\Delta\log P = -4\Delta\log r$ (homologous expansion of the envelope: $P \propto r^{-4}$, $T \propto r^{-1}$ at fixed $m$; the mass term `DLNM` is set to zero);
    - if `JENV` = 1 (fully convective), $\log r$, $\log P$, $\log T$ of every point change by these amounts; otherwise only $P$ and $T$ at `JENV`, and the radii above it are stretched about $r_\mathrm{b} = r_\mathrm{JENV}$: $r \leftarrow r_\mathrm{b} + 10^{\Delta\log r}(r - r_\mathrm{b})$.
    
    `MASSLOSS` sets `SCEN` = 0, so these changes are zero in practice.
@@ -26,15 +26,19 @@
 
 **KC's changes.** 2025-05-30: the variables of COMMON `MASSCHG3` reordered (the logical `LSOLWIND` moved to the end). The block is gone since.
 
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) lists `LMDOT`, "experimental mass-loss module", and `LSOLWIND`, mass loss scaled to the solar wind, "not implemented", among the experimental options.
+
 **Changed since `rp_1`.** COMMON blocks to modules, `IMPLICIT NONE`; `MASSCHG3` dropped (its three reals now zeroed locals, `LSOLWIND` from the namelist); the solar-wind branch guarded by `DMWSUN` > 0 (a bug fix: it would have given $\dot M$ = NaN). The call from `MASSLOSS` now matches the interface (fixed in massloss.f), which settles former question 1; former question 2 (`MASSCHG3` set nowhere) is settled by the authors' fix, which confirms it and keeps the option inert until the three parameters are given a source.
 
 ## Questions for the experts
 
-1. **Inert code.** With `SCEN` = 0 and `DLNM` = 0, the structure changes of step 4 vanish, and `ETHNEW` and `FAC` are not used; so `EACC`, `ETHAV` and the `RMU` argument have no effect. Is the code kept for later work?
+1. **Inert code.** With `SCEN` = 0 and `DLNM` = 0, the structure changes of step 4 vanish, and `ETHNEW` and `FAC` are not used; so `EACC`, `ETHAV` and the `RMU` argument have no effect. Is the code kept for later work, and was the entropy of the accreted matter relative to the envelope's (`SACC - SCEN`) meant to decide whether accretion expands the envelope? If it is revived, note that an expansion scaled by `SCEN` alone, rather than by an entropy difference, depends on the units, since the entropy is defined only up to an additive constant (it contains $\ln T$ and $\ln\rho$ in cgs): is `SACC - SCEN` the intended form?
 2. **Hard stop.** `IF(JENV.EQ.M) STOP911` (that is, `STOP 911`) ends the run with only the stop code 911 when there is no surface convection zone.
 3. **Angular momentum of accreted matter.** For accretion `HJM` is not changed while `HS2(M)` grows, so the accreted matter implicitly takes the outer point's specific angular momentum. Intended?
 4. **Out-of-bounds read (apparent bug).** The loop `DO I = JENV,M-1: HS2(I) = 0.5D0*(HS1(I+1)-HS1(I-1))` (lines 249–250) reads `HS1(0)` when `JENV` = 1, a case the routine handles elsewhere (lines 118 and 174). Should it start at `MAX(JENV,2)`, with the central shell treated apart?
 5. **The sign of `WALPCZ`.** Line 209 sets $\Omega_\mathrm{surf} \propto r^{-\alpha}$ with $\alpha$ = `WALPCZ`, the opposite sign to `WCZ`'s $\Omega = C\,r^{\alpha}$ (wcz.f line 58 at `rp_1`; `WCZ` has since been removed as unreachable); see [[getnewenv.f#GETNEWENV|GETNEWENV]], question 7. Which sign is meant?
+6. **Angular momentum removed twice? (apparent bug)** Step 5 scales the zone's `HJM` by `RATIO` $=(J_\mathrm{cz}+\Delta J)/J_\mathrm{cz}$, with $\Delta J < 0$ for a loss. Steps 6–7 then compress the zone (`HS1` by `FX` $=(M_\mathrm{cz}+\Delta M)/M_\mathrm{cz}$) and recompute `HS2`, so the zone's shell masses shrink by about `FX` while `HJM`, per unit mass, is kept. The zone's angular momentum becomes about $(J_\mathrm{cz}+\Delta J)\,\mathrm{FX} \approx J_\mathrm{cz} + \Delta J - \bar j\,|\Delta M|$: the lost mass seems to be charged both $j_s$ and the zone's mean $\bar j$. Should `RATIO` be $(J_\mathrm{cz}+\Delta J)/(J_\mathrm{cz}\,\mathrm{FX})$, or `HJM` be scaled after the shell masses change, so that exactly $\Delta J$ leaves?
+7. **All accreted mass in the last shell.** For accretion (step 6) `HS1` is unchanged and the gain goes to `HS2(M)`, which over many steps grows unless rezoning redistributes it. The main program calls [[hpoint.f#HPOINT|HPOINT]] after every step (except in helium-flash runs, `LKUTHE`). Does its criterion split a growing outermost shell, so that the surface resolution survives long accretion?
 
 ### MDOT
 

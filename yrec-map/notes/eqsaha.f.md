@@ -5,7 +5,7 @@
 **How it fits.**
 - **Who calls it:** only `EQSTAT2`, below the temperature `TSCUT`. It is called even when the SCV tables are used, since "this EOS replaces the call to EQSAHA, except for derivative purposes"; [[eqscve.f#EQSCVE|EQSCVE]] then overwrites what it can.
 - **Inputs:** `FX`, the number fractions of the twelve species (set by `EQSTAT2` from `FXENV` in `/COMP/`); `TL`, `PL`; `BETA` and its relatives; `AMU`; `LATMO` (skip the derivatives, for atmospheres); `LDERIV` (also compute second derivatives).
-- **Outputs:** `D`, `DL`, `EMU`, `RMU` = $R(\mu_\mathrm{ion}^{-1}+\mu_e^{-1})$, `FXION` (H$^+$, He$^+$, He$^{++}$ fractions), `QDT`, `QDP`, `QCP`, `DELA` and, with `LDERIV`, their derivatives. `KSAHA` is the caller's iteration counter, to which this call adds its iterations.
+- **Outputs:** `D`, `DL`, `EMU`, `RMU` = $R(\mu_\mathrm{ion}^{-1}+\mu_e^{-1}) = \mathcal{R}/\mu$, the gas constant over the mean molecular weight, so that $P_\mathrm{gas} = \rho\,(\mathcal{R}/\mu)\,T$ (`AMU` $=\mu_\mathrm{ion}^{-1}$ and `EMU` $=\mu_e^{-1}$ are its two terms), `FXION` (H$^+$, He$^+$, He$^{++}$ fractions), `QDT`, `QDP`, `QCP`, `DELA` and, with `LDERIV`, their derivatives. `KSAHA` is the caller's iteration counter, to which this call adds its iterations.
 - **Modules:** only `CONSTANTS_MOD` (with `CMKH` the constant term of the Saha equation) and `IOUNITS_MOD` (the unit `ISHORT`).
 
 **The method.**
@@ -18,6 +18,8 @@ with the helium fractions $x_1, x_2$ from their own Saha equations. The routine 
 3. **Density:** $\mu_e^{-1} = E\,\mu_\mathrm{ion}^{-1}$ and $\rho = \beta P / [R(\mu_\mathrm{ion}^{-1} + \mu_e^{-1})T]$.
 4. **Derivatives.** Differentiating the Saha system gives $\partial\ln E/\partial\ln T$ and $\partial\ln E/\partial\ln P$, then $Q_{\rho T}$, $Q_{\rho P}$, the energy derivative $\partial U/\partial T$ (including ionization energy), $c_P = \partial U/\partial T - (P/\rho T)Q_{\rho T}$ and $\nabla_\mathrm{ad} = -(P/\rho T)Q_{\rho T}/c_P$.
 
+**What it leaves out.** The solver has no molecules (H$_2$), no H$^-$, no pressure ionization and no Coulomb terms, and treats the electrons as a classical gas. With the code's defaults (`LOPALE06` and `LSCV` false) it nevertheless gives the equation of state of every layer below `TSCUT`, including the cool, dense envelopes of M dwarfs and brown dwarfs (whether that is adequate there, where molecules and degeneracy would be expected to matter, is question 4). The documentation calls OPAL 2006 "strongly recommended", and 45 of the 51 test-suite runs set `LOPALE06` (47 set `LSCV`), so in practice this solver is used mainly outside those tables and for the second derivatives; whether the default should change is question 8 of [[eqstat2.f#EQSTAT2|EQSTAT2]].
+
 **KC's changes.** Three `DO` loops that ended on an assignment were rewritten to end on `CONTINUE` (2025-05-30); the arithmetic is unchanged.
 
 **Changed since `rp_1`.** Declarations (COMMON blocks to modules, `IMPLICIT NONE`), and the constants `SAHAU` are now double-precision literals (`-.01D0`, …): before, they were single-precision values (relative errors below $10^{-7}$), so the Saha constants change very slightly. No question is settled.
@@ -27,6 +29,7 @@ with the helium fractions $x_1, x_2$ from their own Saha equations. The routine 
 1. **No-convergence path.** After 20 iterations the routine writes "SAHA FAILURE" and continues with the unconverged $E$. Is that acceptable, or should the caller be told?
 2. **State between calls.** `E`, `SAHEX1` and `SAHEX2` persist between calls (`SAVE` and `DATA`). The result can then depend slightly on the order of calls (for example during the numerical derivatives in [[eqstat.f#EQSTAT|EQSTAT]]). Is that a concern at the tolerance used?
 3. **The constants $u_i$.** `SAHAU` has no comment; they are probably the logarithms of the partition-function ratios. Could their source be cited?
+4. **Low-mass stars with the default equation of state.** With `LOPALE06` and `LSCV` false, the cool, dense envelopes of M dwarfs and brown dwarfs get this solver, which has no molecules, no pressure ionization and classical electrons. How large are the errors there, and should the default switch on the tables (see [[eqstat2.f#EQSTAT2|EQSTAT2]], question 8)?
 
 ### EQSAHA
 

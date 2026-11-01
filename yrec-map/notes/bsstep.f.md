@@ -13,6 +13,8 @@ $$\max_j \frac{|\epsilon_j|}{y_{\mathrm{scal},j}} < \mathrm{EPS}.$$
 The next step is $0.95H$ if it took `NUSE` sequences, $1.2H$ if one fewer, otherwise $H\,n_{\mathrm{NUSE}-1}/n_i$. If all $I_\mathrm{max}$ sequences fail, retry with
 $$H \leftarrow \frac{H/4}{2^{\lfloor (I_\mathrm{max} - N_\mathrm{use})/2 \rfloor}}.$$
 
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) describes `IMAX` and `NUSE` (defaults 11 and 7) together: the integrators of the envelope and the atmosphere start with a large step, divide it into smaller ones and extrapolate to zero step size; `IMAX` is the largest number of such divisions, `NUSE` the number of earlier steps used in the extrapolation.
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/INTPAR/` to `INTPAR_MOD`), `IMPLICIT NONE`.
 
 ## Questions for the experts

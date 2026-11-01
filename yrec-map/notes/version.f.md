@@ -8,6 +8,8 @@
 
 **Design.** The strings first went through a `COMMON/VERSION/`; since they are CHARACTER, "which does not belong in a COMMON block" (the comment), the main program now holds them and passes them as arguments (MHP via Claude, 10/13/26).
 
+**For users** (from YREC's [Python Package](https://yrec.readthedocs.io/en/latest/python_package.html) page). The Fortran code's version is written `YYYYMM` (`202602`); the Python wrapper, which bundles a built executable and downloads the input tables and starting models on its first import, has versions `YYYY.MM.n` (the month not zero-padded, `n` the wrapper's own revision) and reports both this version and the git hash of the source it was built from (`yrec.__version__`, `yrec.__commit__`).
+
 **Changed since `rp_1`.** New file (the version banner did not exist at `rp_1`): `SETVERSION` sets the version and git hash, passed as arguments since 10/13/26; `IMPLICIT NONE`.
 
 ### SETVERSION

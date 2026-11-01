@@ -7,7 +7,7 @@
 - `T6LIST(NR,NT)`, `RHO(NR)`, `T6A(NT)`: the grids, from `READCOEOS06`; read by `ESAC06`, `RHOOFP06`, [[eqbound06.f#EQBOUND06|`EQBOUND06`]] and [[t6rinteos06.f#T6RINTEOS06|`T6RINTEOS06`]].
 - `DFSX(MX)`, `DFS(NT)`, `DFSR(NR)`: inverse grid spacings in $X$, $T_6$ and $\rho$, set by `READCOEOS06`; read by `ESAC06` and `T6RINTEOS06`.
 - `ESK(NT,NR)`, `ESK2(NT,NR)`: values interpolated in $X$, set by `ESAC06` and read by it and `T6RINTEOS06`.
-- `MIDX`: read from the table file by `READCOEOS06`; `MF`: the $X$ index, set in `ESAC06`.
+- `MIDX`: a loop index over the $X$ tables, in `READCOEOS06` (as it reads each table) and `ESAC06`; `MF`: the $X$ index, set in `ESAC06`.
 - `XA(MX)`: the five $X$ values, 0, 0.2, 0.4, 0.6, 0.8 (a `DATA` statement moved from `ESAC06`); read by `ESAC06` and `RHOOFP06`.
 
 **Design.** A blanket `USE AEOS06_MOD`; the table alone holds $5 \times 10 \times 197 \times 169$ values (about 13 MB).

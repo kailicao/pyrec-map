@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `GETALEX06` returns the low-temperature (molecular) opacity from the Ferguson–Alexander 2006 tables ("Alexander low T opacities", per its header, MHP 3/09) for a given $\rho$, $T$, $X$, $Z$, with its logarithmic derivatives.
+**Purpose.** `GETALEX06` returns the low-temperature (molecular) opacity from the low-temperature opacities of Ferguson et al. (2005), called ALEX06 in the code ([[readalex06.f#READALEX06|`READALEX06`]]; "Alexander low T opacities", per its header, MHP 3/09) for a given $\rho$, $T$, $X$, $Z$, with its logarithmic derivatives.
 
 **How it fits.**
 - **Who calls it:** only [[getopac.f#GETOPAC|GETOPAC]], when $\log T \le$ `TMOLMAX` and `LALEX06` is set.
@@ -27,4 +27,4 @@ $$\left.\frac{\partial\log\kappa}{\partial\log T}\right|_\rho = \left.\frac{\par
 
 ### GETALEX06
 
-Ferguson–Alexander 2006 molecular opacity: four-point Lagrange interpolation in $\log T$ and $\log R$, with the derivative converted to fixed $\rho$ (method above).
+Ferguson et al. (2005) molecular opacity (ALEX06): four-point Lagrange interpolation in $\log T$ and $\log R$, with the derivative converted to fixed $\rho$ (method above).

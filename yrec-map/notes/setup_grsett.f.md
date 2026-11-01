@@ -19,6 +19,8 @@
    with $\nabla$ = `SDEL(2,I)` and $Z$ = `HCOMP(3)` + `HCOMP(4)`. With `LTHOUL` (Thoul et al.): $D_1 = c\,F\,\frac{d\ln P}{dr}\,X\,(A_P + A_T)$ and $D_2 = c\,F\,A_C$, where $A_P$, $A_T$ come from `THDIFF` or from the quadratic fits in $X$ (`LTHOULFIT`), $A_C = 1.15 - 1.42X + 0.647X^2$, and $c$ = `CSTMIXING` ("FD 10/09, mimic mixing to reduce settling"). `QCOD1X`, `QCOD2X` are the derivatives with respect to $X$; with `ILAMBDA = 2`, `QCOD1X` gets an extra term from the $X$-dependence of $\ln\Lambda$.
 5. **Metals** (with `LDIFZ` and `LTHOUL`): the same form with Thoul's coefficients for fully ionized iron, $f_Z$ = `FGRZ`, and the factor `CSTDIFFMIX` on $D_1$.
 
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) (Gravitational settling & microscopic diffusion): `LDIFY`, `LDIFZ`, `LDIFLI` turn on the settling of helium, metals and the light species; `FGRY`, `FGRZ` (default 1) scale the diffusion coefficients of helium and metals (for example 0.75 without rotational mixing); `XMIN` and `YMIN` (1.0D-3) turn diffusion off at low central $X$ (and, the documentation says, low surface $Y$). `ILAMBDA` chooses the Coulomb logarithm of the collision integrals: the documentation's line reads "4 (recommended) is a constant, 2.2". Among the rarely used options: `LTHOUL`, the formalism of Thoul et al., and `LTHOULFIT`, its published fit instead of the full solution (not recommended).
+
 **Changed since `rp_1`.** The metals' coefficients `COD1Z`, `COD2Z`, `QCOD1Z`, `QCOD2Z` are arguments (formerly `/GRAVSZ/`); the unused `/GSCOF/` is dropped; otherwise declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 
 ## Questions for the experts
@@ -30,3 +32,5 @@
 5. **Metal coefficients only with `LTHOUL`.** With `LDIFZ` true and `LTHOUL` false, `COD1Z` and the others are not set and keep earlier values. Should this combination be refused?
 6. **Comment.** The comment before the helium check's exit says "HYDROGEN-FREE MODEL"; the test is on helium (`YMIN`), and the printed message says so.
 7. **`IEND` not reset.** After label 47, the shell found with $Y >$ `YMIN` is not stored: unlike the hydrogen check (`IBEGIN = I`), there is no `IEND = I`. Is that line missing, so that a helium-poor surface is never excluded?
+8. **`ILAMBDA`.** In the code, 2 is Noerdlinger's formula, 3 Loeb's, 4 (in the Thoul solution) a value from the local density and temperature, and any other value the constant 2.2; the default is 1, the constant. The documentation recommends 4 and calls it "a constant, 2.2". Which value is recommended, and should the default follow? (`LDIFLI` sets `ILAMBDA = 4` in [[parmin.f#PARMIN|PARMIN]]; `LTHOUL`, "rarely used" in the documentation, is also forced on by `LDIFZ` and `LDIFLI` there.)
+

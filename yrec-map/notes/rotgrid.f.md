@@ -16,7 +16,7 @@
 4. **The Jacobian.** The mesh coordinate is defined by the comment as
    $$\chi = \frac{\log m}{\delta_m} + \frac{L}{\delta_L} - \frac{\log P}{\delta_P},$$
    with $\delta_m$ = `HPTTOL(2)`, $\delta_L$ = `HPTTOL(9)` times the surface luminosity, $\delta_P$ = `HPTTOL(11)`, so that
-   $$\frac{d\chi}{dr} = \frac{4\pi\rho r^2}{\ln 10\;\delta_m\,m} + \frac{4\pi\rho r^2\,\varepsilon}{\delta_L} + \frac{G m \rho}{\ln 10\;\delta_P\,P\,r^2}.$$
+   $$\frac{d\chi}{dr} = \frac{4\pi\rho r^2}{\ln 10\;\delta_m\,m} + \frac{4\pi\rho r^2\,\epsilon}{\delta_L} + \frac{G m \rho}{\ln 10\;\delta_P\,P\,r^2}.$$
    The composition coefficient is multiplied by $\rho r^2\,d\chi/dr$, and the angular-momentum coefficients by $\rho r^2\,(I/m)\,d\chi/dr$ (for a thin spherical shell, $I/m = \tfrac23 r^2$, the comment notes), each interpolated in $\log_{10}$.
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/EGRID/`, `/SPLIN/`, `/MDPHY/`, `/DIFAD/`, `/DIFAD2/` to their `_MOD` modules; the settings of `/CTOL/`, `/VARFC/` and `/VMULT/` to `NMLPAR_MOD`; `/CONST/`–`/CONST2/` to `CONSTANTS_MOD`), `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.

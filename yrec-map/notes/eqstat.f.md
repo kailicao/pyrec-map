@@ -11,9 +11,11 @@
 
 **The method.** If `LDERIV` and `LNumDeriv` are both set, `EQSTAT2` is called four times without derivatives, at $\log T \pm h_T$ and $\log P \pm h_P$, with $h_T = 3\times10^{-4}$ and $h_P = 1.5\times10^{-3}$ (the "approximate table intervals", 0.03 and 0.15, scaled down by 100: "empirically, scaling the intervals down by 100 seemed to work best"). Central differences give the second derivatives, for example
 $$\frac{\partial Q_{\rho T}}{\partial\ln T} = \frac{Q_{\rho T}^{+} - Q_{\rho T}^{-}}{2h_T\ln 10},\qquad \frac{\partial\log c_P}{\partial\log T} = \frac{\log c_P^{+} - \log c_P^{-}}{2h_T},\qquad \frac{\partial\log\nabla_\mathrm{ad}}{\partial\log T} = \frac{\log\nabla_\mathrm{ad}^{+} - \log\nabla_\mathrm{ad}^{-}}{2h_T},$$
-and the same in $\log P$. A last call at the point itself, without derivatives, gives the values; its derivative outputs go to dummy variables so they cannot overwrite the numerical ones. Otherwise `EQSTAT2` is called once, with analytic derivatives if `LDERIV` is set.
+and the same in $\log P$. A last call at the point itself, without derivatives, gives the values; its derivative outputs go to dummy variables so they cannot overwrite the numerical ones. Otherwise `EQSTAT2` is called once, with analytic derivatives if `LDERIV` is set. The second derivatives are needed because the Henyey method linearizes the structure equations in $\ln P$ and $\ln T$: [[tpgrad.f#TPGRAD|TPGRAD]] differentiates the temperature gradient (`QAT`, `QAP` $=\partial\ln\nabla_\mathrm{ad}/\partial\ln T, \partial\ln P$, and `QCPT`, `QDTT`, `QDTP` for the convective gradient), and [[coefft.f#COEFFT|COEFFT]] differentiates $\epsilon_\mathrm{grav}$, which contains $Q_{\rho T}$ and $\nabla_\mathrm{ad}$ (`QDTT`, `QDTP`, `QAT`, `QAP`). The symbols are in the overview's Notation: $Q_{\rho T}$ = `QDT` $= -\delta$ and $Q_{\rho P}$ = `QDP` $= \alpha$ in the notation of Kippenhahn, Weigert & Weiss.
 
 **KC's changes.** Unused arrays and DATA statements were commented out (2025-05-31), and the elements of `/OPALEOS/` were reordered (2025-05-30).
+
+**From YREC's documentation.** [Microphysics in YREC](https://yrec.readthedocs.io/en/latest/microphysics.html): `LNUMDERIV` (default false) replaces YREC's semi-analytic EOS derivatives by numerical ones from the OPAL tables, at about three times the cost and with little effect on the solution.
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`; the unused COMMON blocks copied from `EQSTAT2` are gone, which settles the former question 3.
 

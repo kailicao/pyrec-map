@@ -13,9 +13,9 @@
 1. **Find the zone.** From shell `IBEG` (first 1) upward: pass the convective core, if any (its top `JCORE`), then the first convective shell above a radiative region is `IMAX`. From the surface downward, the base of the outermost zone is `JMAX`: the first point `J` below a convective point `J+1` that is radiative, plus one, so that radiative points at the surface are passed over (JvS 02/2026; if no such point exists, `JMAX` = 1). A star with no such zone is radiative ($\tau_\mathrm{cz} = 0$); one convective throughout is fully convective.
 2. **Reject false zones** and search again from above: a zone less than one decade in pressure above the core, $\log P(\mathrm{JCORE}) - \log P(\mathrm{IMAX}) < 1$ (unless the profile is the interior only); a zone fewer than 3 shells thick; in the interior-only case with two zones (`IJMAX` ≠ 0, `M = MINT`), `IMAX` is set to `JMAX`; and, at the end, a result $\tau_\mathrm{cz} > 10^{20}$.
 3. **The base:** $r_b$ where $\nabla_1 - \nabla_2$ changes sign, by linear interpolation in $\log r$ (for a fully convective star, $\log r_b = 1$, a very small radius in cm).
-4. **One zone** (`IMAX = JMAX`): go up from the base to where $r - r_b = H_P$, with $H_P = P/(\rho g)$. Around that point, four shells give $\delta_k = (r_k - r_b) - H_{P,k}$, and natural cubic splines in $\delta$ evaluated at $\delta = 0$ give $v$ and $H_P$; then
-   $$\tau_\mathrm{cz} = \frac{H_P}{v}\bigg|_{\,r - r_b = H_P} .$$
-5. **Several cells, or $r_b + H_P$ outside the star:** the lowest zone's top $r_t$ (again where $\nabla_1 - \nabla_2$ changes sign), its width $\Delta r = r_t - r_b$, and $v$ at its middle, $r_b + \Delta r/2$, from a four-point spline in $r$:
+4. **One zone** (`IMAX = JMAX`): go up from the base to where $r - r_b = H_p$, with $H_p = P/(\rho g)$. Around that point, four shells give $\delta_k = (r_k - r_b) - H_{p,k}$, and natural cubic splines in $\delta$ evaluated at $\delta = 0$ give $v$ and $H_p$; then
+   $$\tau_\mathrm{cz} = \frac{H_p}{v}\bigg|_{\,r - r_b = H_p} .$$
+5. **Several cells, or $r_b + H_p$ outside the star:** the lowest zone's top $r_t$ (again where $\nabla_1 - \nabla_2$ changes sign), its width $\Delta r = r_t - r_b$, and $v$ at its middle, $r_b + \Delta r/2$, from a four-point spline in $r$:
    $$\tau_\mathrm{cz} = \frac{\Delta r}{v(r_b + \Delta r/2)} .$$
 
 **KC's changes.** Removed the unused arguments `HCOMP`, `HS2` and `HSTOT`, and the `RECURSIVE` attribute (2025-05-31); added the check `IMAX .GT. 0 .AND. JCORE .GT. 0` before using `HP(JCORE)` "to avoid runtime error" (2025-05-30); moved an `ENDIF` "to avoid block mismatch" (2025-05-31); reordered the elements of COMMON `ENVSTRUCT` (2025-05-30).
@@ -34,4 +34,4 @@
 
 ### TAUINTNEW
 
-The newer overturn time (G. Somers 3/17): finds the base of the main surface convection zone from both directions, then $H_P/v$ one pressure scale height above the base (by four-point splines), or the lowest cell's width over its central velocity; also returns the base's radius in solar units.
+The newer overturn time (G. Somers 3/17): finds the base of the main surface convection zone from both directions, then $H_p/v$ one pressure scale height above the base (by four-point splines), or the lowest cell's width over its central velocity; also returns the base's radius in solar units.

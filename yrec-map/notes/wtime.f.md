@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `WTIME` limits the time step of a rotating model by the change of the angular velocity since the previous model: if $\Omega$ changed by more than the user's fraction `DTWIND` somewhere (the comment gives a default of 0.08; `NMLPAR_MOD` initializes it to 10), the step shrinks; if less, it grows.
+**Purpose.** `WTIME` limits the time step of a rotating model by the change of the angular velocity since the previous model: if $\Omega$ changed by more than the user's fraction `DTWIND` somewhere (the comment gives a default of 0.08; `NMLPAR_MOD` initializes it to 10), the step shrinks; if less, it grows. Which value a run uses: `DTWIND` is a namelist variable of [[parmin.f#PARMIN|PARMIN]], initialized to 10; [[remap.f#REMAP|REMAP]] replaces it with `TIME_DW_GLOBAL` (initialized to 0.08 in `NMLBYPASS_MOD`) only when `LNEWVARS` is set, and `LNEWVARS` is `.FALSE.` by default. A run that sets neither thus has `DTWIND` = 10, a tenfold change of $\Omega$ in one step, so that rotation almost never limits the step; with `LNEWVARS` it is 0.08, and it often does.
 
 **How it fits.**
 - **Inputs:** the previous step `DELTS`, `M`, the current `OMEGA`; through modules, the previous model's rates `WOLD` (`OLDROT_MOD`, saved by [[starin.f#STARIN|STARIN]] and the rotation routines), `DTWIND` (`NMLPAR_MOD`, read from the namelist by [[parmin.f#PARMIN|PARMIN]]; [[remap.f#REMAP|REMAP]] may reset it) and the step-change limit `ATIME(13)` (`NMLPAR_MOD`).

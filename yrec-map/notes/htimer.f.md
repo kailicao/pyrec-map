@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `HTIMER` sets the time step of the next model. Several criteria each propose a step, and it takes the most restrictive one (its comment): structure changes ([[ptime.f#PTIME|`PTIME`]]), angular-velocity changes for rotating models ([[wtime.f#WTIME|`WTIME`]]), hydrogen burning ([[xtime.f#XTIME|`XTIME`]]), helium burning ([[ytime.f#YTIME|`YTIME`]]) and, since 04/14, the motion of the model in the envelope-fitting "triangle" ([[entime.f#ENTIME|`ENTIME`]]); and the step may not grow by more than a factor `ATIME(13)` from the previous one.
+**Purpose.** `HTIMER` sets the time step of the next model. Several criteria each propose a step, and it takes the most restrictive one (its comment): structure changes ([[ptime.f#PTIME|`PTIME`]]: the change of $T$, $P$, $r$ and $L$ at any point since the previous model), angular-velocity changes for rotating models ([[wtime.f#WTIME|`WTIME`]]: the largest fractional change of $\Omega$), hydrogen burning ([[xtime.f#XTIME|`XTIME`]]: the hydrogen burnt in the core, or in the shell once the core is exhausted), helium burning ([[ytime.f#YTIME|`YTIME`]]: the helium burnt at the temperature maximum) and, since 04/14, the motion of the model in the envelope-fitting "triangle" ([[entime.f#ENTIME|`ENTIME`]]: the change of $\log T_\mathrm{eff}$ and $\log L$); and the step may not grow by more than a factor `ATIME(13)` from the previous one (default 1.5, "originally = 1.5" by [[parmin.f#PARMIN|PARMIN]]'s comment; under its newer name `TIME_MAX_DT_FRAC`, also 1.5, when [[remap.f#REMAP|REMAP]] applies the newer names).
 
 **How it fits.**
 - **Who calls it:** the main program, [[main.f#(file level)|main.f]]: at the start of each kind card, and after each converged model to set the next step. main.f always passes $|\Delta t|$ after a model (`DELTS = DABS(DELTS)`), and makes the step negative itself before a relaxation step.
@@ -22,13 +22,15 @@ leaving out the first term when $\Delta t_\mathrm{prev} \le 1$ s.
 
 **KC's changes.** 2025-05-31: the unused arguments `LC`, `QDT` and `QDP` removed from the interface; `JXBEG` no longer passed to `XTIME`, and `QDP`, `QDT` no longer passed to `YTIME`.
 
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) (Timestep criteria): `LTRIST` "restricts the timestep during the Hertzsprung gap"; in the code it keeps the model from moving more than `TRIDT` in $\log T_\mathrm{eff}$ or `TRIDL` in $\log L$ in a step (the size of the envelope triangle), at any phase, when the structural criterion (`LPTIME`, `LSTRUCT_TIME`) is off. The step limits `ATIME` are documented under their newer names on [[remap.f#REMAP|REMAP's page]]; `ENDAGE` ([Control Options](https://yrec.readthedocs.io/en/latest/namelist_control.html)) ends a run at an age.
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`; the unused `/CONST/` and `/FLAG/` are gone.
 
 ## Questions for the experts
 
 1. **The relaxation branch.** The comment says a negative `DELTS` marks a model being relaxed, but main.f passes `DABS(DELTS)` after every model, so the branch can only be reached at the first call of a kind card (with the step from `STARIN`); relaxation steps otherwise go through all the criteria. The routine also returns `ABS(DELTS)`, and the `ENDAGE` truncation applies to every branch. Is the negative branch still needed?
 2. **Unchecked proposals.** Only $\Delta t_P$ and $\Delta t_\Omega$ are protected against values below 1 s; a zero or negative step from `XTIME`, `YTIME` or `ENTIME` would pass through the minimum.
-3. **The `LPTIME` switch-off.** Its comment is cut short ("this is done when"). Why $\log T_c > 7.1$ with a negative gravitational luminosity, and should it last for all later kind cards of the job (it is restored only in solar calibrations)?
+3. **The `LPTIME` switch-off.** Its comment is cut short ("this is done when"). Why $\log T_c > 7.1$ with a negative gravitational luminosity, and should it last for all later kind cards of the job (it is restored only in solar calibrations)? Is it meant to let the main sequence take long steps once the star burns hydrogen and contracts slowly, and if so, why should it stay off through the subgiant branch, where the structure changes fast?
 4. **Thresholds.** The cut $10^{-34}\,L_\odot$ for "no burning" and $10^{20}$ s for "no limit" are hard-coded.
 
 ### HTIMER

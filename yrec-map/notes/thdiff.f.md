@@ -18,10 +18,12 @@
    and the mass ratios $x_{st} = A_t/(A_s + A_t)$, $y_{st} = A_s/(A_s + A_t)$, $z_{st} = 3y_{st} + 1.3\,x_{st}A_t/A_s$ (`XX`, `Y`, `YY`).
 3. The $N = 2M + 2$ equations ($M$ momentum equations, $M$ heat-flow equations, current neutrality and zero mass flow), written as the code's comment does,
    $$\alpha_s\,\frac{d\ln p}{dr} + \nu_s\,\frac{d\ln T}{dr} + \sum_{t \ne 2, M} \gamma_{st}\,\frac{d\ln C_t}{dr} = \sum_t \delta_{st}\,w_t ,$$
-   in the $N$ unknowns: $M$ diffusion velocities, $M$ heat fluxes, the electric field and the gravitational term. The matrix $\delta$ is assembled with the coefficients 0.6, 1.5, 1.6, 0.8 and 2.7 of Burgers' equations.
+   in the $N$ unknowns: $M$ diffusion velocities, $M$ heat fluxes, the electric field and the gravitational term. The matrix $\delta$ is assembled with the coefficients 0.6, 1.5, 1.6, 0.8 and 2.7 of Burgers' equations. The sum leaves out the electrons and helium because their gradients are not independent: the concentrations are normalised to the electrons, so $C_M = 1$ and $d\ln C_M/dr = 0$, and charge neutrality, $\sum_{t<M} Z_t C_t = 1$, gives helium's gradient in terms of the others, which is how its terms enter $\gamma_{st}$ (`GAMMA(I,J) = -C(J)/CC + C(2)/CC*Z(J)*C(J)/Z(2)/C(2)`, then 1 added when $t = s$, a term subtracted when $s = 2$, and the whole multiplied by $C_s/C$). In full, for $t \ne 2, M$,
+   $$\gamma_{st} = \frac{C_s}{C}\Bigl[\mathbb{1}_{s=t} - \frac{C_t}{C} + \frac{Z_tC_t}{Z_2C_2}\Bigl(\frac{C_2}{C} - \mathbb{1}_{s=2}\Bigr)\Bigr],\qquad \alpha_s = \frac{C_s}{C},\qquad \nu_s = 0,$$
+   where $C = \sum_t C_t$ (`CC`) and $\mathbb{1}_{s=t}$ is 1 if $s = t$ and 0 otherwise (written so, to keep it apart from the matrix $\delta$).
 4. `LUDCMP` factorises $\delta$ once; `LUBKSB` solves it for the right-hand sides $\alpha$, $\nu$ and each column of $\gamma$, which gives the coefficients
    $$w_s = A^{(p)}_s\,\frac{d\ln p}{dr} + A^{(T)}_s\,\frac{d\ln T}{dr} + \sum_t A^{(C)}_{st}\,\frac{d\ln C_t}{dr},$$
-   multiplied by `KO*AC*CC` $= K_0 \left(\sum_s A_s C_s\right)\left(\sum_s C_s\right)$ with $K_0 = 2$; $\sum_s A_s C_s$ is only proportional to $\rho$ (the comment: "multiplied by $p/K_0$").
+   multiplied by `KO*AC*CC` $= K_0 \left(\sum_s A_s C_s\right)\left(\sum_s C_s\right)$ with $K_0 = 2$; $\sum_s A_s C_s$ is only proportional to $\rho$ (the comment: "multiplied by $p/K_0$"). The callers then multiply the coefficients by $r^2T^{5/2}/\ln\Lambda$ ($r$ in $R_\odot$, $T$ in $10^7$ K; `FAC` in [[setup_grsett.f#SETUP_GRSETT|SETUP_GRSETT]] and [[microdiff_cod.f#MICRODIFF_COD|MICRODIFF_COD]]), which gives the flux in the units of the settling equation on [[grsett.f#GRSETT|GRSETT]]'s page.
 
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`.
 
@@ -30,6 +32,8 @@
 1. **No check of the array sizes.** The work arrays hold at most `MMAX = 20` species (`NMAX = 42` equations), with no test that `M` ≤ 20.
 2. **`X(M)` is overwritten.** The electrons' mass fraction is written into the caller's array. Do the callers expect it?
 3. **The normalisation comment.** The comment says the results "must be multiplied by p/K_0", while the code multiplies by `KO*AC*CC` ($K_0 \sum A_s C_s \sum C_s$). Which units do the callers assume?
+4. **Is the Coulomb logarithm counted twice?** `THDIFF` puts the Coulomb logarithms `CL` into $K_{st}$, so its coefficients already scale as $1/\ln\Lambda$. [[microdiff_cod.f#MICRODIFF_COD|MICRODIFF_COD]] computes `TCL` per pair (a fit in the Debye length or interionic distance), passes it to `THDIFF`, and then multiplies by `FAC`, divided by a fixed `LN_LAMBDA = 2.2D0`; [[setup_grsett.f#SETUP_GRSETT|SETUP_GRSETT]] with `LTHOUL` (not `LTHOULFIT`) passes `TCL` = `LN_LAMBDA` (or the fitted `TCL` with `ILAMBDA = 4`) and again divides `FAC` by `LN_LAMBDA`; and the time unit of both callers "includes factor of 2.2 from ln lambda". Only the fitted branch (`LTHOULFIT`) is clearly free of $\ln\Lambda$. Do `THDIFF`'s outputs need the division by $\ln\Lambda$ again, or does `KO*AC*CC` normalise them to $\ln\Lambda = 1$? If not, settling with the full Thoul solution would be too slow by a factor of about $\ln\Lambda$ (to be checked against Thoul et al. 1994 before calling it an error).
+5. **A mixed treatment.** In `SETUP_GRSETT` the concentration coefficient `AC = 1.15 - 1.42X + 0.647X^2`, the metals' `AH` and the derivatives `QAPX`, `QATX` always come from the fits, even when $A_P$ and $A_T$ come from `THDIFF`. Intended?
 
 ### THDIFF
 

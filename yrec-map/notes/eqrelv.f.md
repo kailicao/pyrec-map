@@ -21,12 +21,16 @@ $$c_P = -\frac{P}{\rho T}Q_{\rho T}\,\chi_T + \frac{U}{T}\,\frac{\partial\ln U}{
 
 **KC's changes.** The unused argument `X` was removed (2025-05-31).
 
+**From YREC's documentation.** [Microphysics in YREC](https://yrec.readthedocs.io/en/latest/microphysics.html) (The Base YREC EOS) and [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html): `LDH` applies the Debye–Hückel correction, the reduction of pressure by the mutual repulsion of electrons, within the degeneracy range set by `ETADH0` and `ETADH1`; the documentation recommends the defaults and gives them as `LDH` = TRUE, `ETADH0` = −2, `ETADH1` = 1.
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`. This settles two former questions: `/DEBHU/`'s X element, named `XXDY` in EQSTAT, now has the one name `XXDH` in `DEBHU_MOD`, and the unused `/CONST3/` is gone.
 
 ## Questions for the experts
 
 1. **Unconverged return.** After 20 iterations without convergence the routine writes a message and returns at once (the `STOP` is commented out). It returns before `DL = DL8`, so `DL` and `D` keep the caller's starting guess, and the derivatives (all arguments) keep whatever the caller's variables held. Is this fallback intended, and does any caller check for it?
 2. **Table edges.** The temperature index is forced into the table (`JT1` between 1 and 18) and the density index into 1..261; outside the table the values are extrapolated silently. Should a warning be written?
+3. **Debye–Hückel defaults.** The documentation gives `LDH` = TRUE and `ETADH0` = −2 as the (recommended) defaults; the code's initializers in `NMLPAR_MOD` are `LDH = .FALSE.` and `ETADH0 = -1.0D0` (`ETADH1 = 1.0D0` agrees). Which should the defaults be?
+
 
 ### EQRELV
 

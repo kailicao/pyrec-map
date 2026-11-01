@@ -1,8 +1,8 @@
 # A new design for YREC
 
-*Stage 2 of the overhaul: KC's coding style applied to YREC at the release `rp_1`, and an object-oriented framework designed from the code's real responsibilities, as the file notes describe them. Drafted by Claude (Oct 25, 2026) for Kaili Cao; nothing is refactored yet. The style is KC's coding style, with effortless as the model package. Its guide is written for Python; [Section 6](fortran.md) says how each of its conventions carries over to modern Fortran, and where a Python interface fits. Where the guide says nothing, the choice made is stated, with its reason.*
+*Stage 2 of the overhaul: KC's coding style applied to YREC at the release `rp_1`, and an object-oriented framework designed from the code's real responsibilities, as the file notes describe them. Nothing is refactored yet. The style is Kaili Cao's (KC's) coding style, with effortless as the model package. Its guide is written for Python; [Section 6](fortran.md) says how each of its conventions carries over to modern Fortran, and where a Python interface fits. Where the guide says nothing, the choice made is stated, with its reason.*
 
-**The design follows YREC's development branch (09c3b9b, Oct 20, 2026).** It was written for `rp_1`; the development branch has since removed obsolete options (the MHD, OPAL 1995 and OPAL 2001 equations of state; the OPAL 1992, LAOL 1989, Alexander 1995 and Kurucz 1990 opacity tables, apart from LAOL's pure-$Z$ table; the Monte Carlo loop and its output, `WRTMONTE`), with the helper routines only they used, and has turned every COMMON block into a module. The design drops the same options (the pages below say which members of a family went), and names the modules where it used to name blocks ([Section 6.4](common-map.md)).
+**The design follows YREC's development branch (09c3b9b, Oct 20, 2026; a8a5950, Oct 30, changes none of its points).** It was written for `rp_1`; the development branch has since removed obsolete options (the MHD, OPAL 1995 and OPAL 2001 equations of state; the OPAL 1992, LAOL 1989, Alexander 1995 and Kurucz 1990 opacity tables, apart from LAOL's pure-$Z$ table; the Monte Carlo loop and its output, `WRTMONTE`), with the helper routines only they used, and has turned every COMMON block into a module. The design drops the same options (the pages below say which members of a family went), and names the modules where it used to name blocks ([Section 6.4](common-map.md)).
 
 This design is split into pages, one per component; this page holds its goals, the package layout, the data flow, the migration and the open questions:
 
@@ -252,40 +252,34 @@ Each question is tagged by who answers it: *Team*, the code's team (its authors 
 7. *[Team]* **Several interior opacity tables at once** (SETUPOPAC question 1 at `rp_1`): the design allowed an array of them in `OpacityBlend`. Settled by the development branch: OPAL95 is now its only interior table, so `OpacityBlend` holds one.
 8. *[Team]* **Output files.** Keep every format byte for byte through the refactoring (the proposal, so that the test suite can compare files), and change formats only afterwards?
 9. *[Team]* **Which hooks first.** The six of [Section 6.5](hooks.md) cover the additions found in the notes; which do YREC's users need first, and should spot evolution be the first one to use them?
-10. *[Team]* **Names.** Keep YREC's names (`HCOMP`, `HTOLER`, `ATIME`) in the types and namelists, as this design does so that YREC's users can read the new code, or move to the "more intuitively named" ones that `REMAP` already accepts (`TIME_…`, `TOL_…`)?
+10. *[Team]* **Names.** Keep YREC's names (`HCOMP`, `HTOLER`, `ATIME`) in the types and namelists, as this design does so that YREC's users can read the new code, or move to the "more intuitively named" ones that `REMAP` already accepts (`TIME_…`, `TOL_…`)? Decided for pyrec and this site (KC, Oct 31, 2026): YREC's names are kept, in lower case, and explained in the [glossary](../glossary.html) rather than renamed; the glossary is also the inventory for the new data structures. The question stays open for the types and namelists the team would maintain.
+11. *[KC]* **KC's own changes.** 86 of the 284 source files carry "KC 20…" comments, with the old lines kept as comments beside the changes, and each page's explanation ends with a "KC's changes" line listing them. Is that the treatment wanted?
+12. *[KC]* **What is mapped.** Only `src/`; the `.f` files under `input/`, tools for the data tables, are left out. Map them too?
 
 ## The Python version
 
-*Drafted by Claude (Oct 25, 2026) for Kaili Cao from his plan.*
-
 ### Why Python first
 
-Compiled code is hard to debug: a wrong value in YREC today is found with print statements and a rebuild. KC's plan therefore goes through Python, where every array can be inspected between two lines, and keeps the Fortran frozen meanwhile, as the reference that every Python result is checked against. The route, in KC's words:
+Compiled code is hard to debug: a wrong value in YREC today is found with print statements and a rebuild. KC's plan therefore goes through Python, where every array can be inspected between two lines, and keeps the Fortran at a chosen commit meanwhile, as the reference that every Python result is checked against. The route, in KC's words:
 
-1. Fortran 77, old structure → Python (with Numba), old structure;
+1. Fortran 77, old structure → Python, old structure;
 2. → Python, new structure (the framework of these stubs);
 3. → modern Fortran, new structure (the [Fortran design](overview.md)).
 
-**Move 1: the translation.** The current code is translated routine by routine, keeping its structure, so that each Python routine has one Fortran original. Each routine is translated in one of two ways:
+**Move 1: the translation.** The current code is translated routine by routine, keeping its structure, so that each Python routine has one Fortran original: each Fortran file becomes one Python file and each routine one function, and a Fortran module becomes a Python module of the same name (pyrec's README, Conventions). Numba kernels behind plain-Python wrappers come later, for the numerics-heavy routines (the structure solver, the equation-of-state and opacity interpolation, nuclear burning, diffusion), once a routine agrees with its Fortran; kernels take and return arrays only, since Numba treats module globals as compile-time constants.
 
-- **Plain Python,** for most routines (input, output, set-up, the driver, the run's logic). The COMMON blocks become state objects, one per block or group of blocks, held as attributes and passed along, close to the old structure.
-- **A plain-Python wrapper and a Numba kernel,** for the numerics-heavy routines: the structure solver, the equation-of-state and opacity interpolation, nuclear burning, diffusion. The wrapper takes the arrays it needs from the state and passes them to an `@njit` kernel; kernels take and return arrays only, and never touch global state. Debugging still works with `NUMBA_DISABLE_JIT=1`, which runs the kernels as plain Python.
-
-The reason for the split: Numba treats module globals as compile-time constants, so a COMMON block cannot become a mutable module global in Numba code; the kernels see the state only through their arguments.
-
-**Move 2: the new structure.** The translated code is restructured step by step toward the framework of the stubs (one owner for each piece of state, one base class for each family of alternatives), each step checked against the step before it. The state objects of move 1 are the first draft of the classes: a block's variables move into the class that owns them, as the [COMMON-block map](common-map.md) lays out.
+**Move 2: the new structure.** The translated code is restructured step by step toward the framework of the stubs (one owner for each piece of state, one base class for each family of alternatives), each step checked against the step before it. The modules of move 1 are the first draft of the classes: a module's variables move into the class that owns them, as the [COMMON-block map](common-map.md) lays out.
 
 **Move 3: modern Fortran.** Once pyrec is mature, its modules move to modern Fortran one by one, called from Python through F2PY, so that the code runs whole after each move. In KC's experience Numba is not even as fast as C, so this stage is expected to be needed for speed, not left optional.
 
 ### Conventions decided once
 
+pyrec's README (Conventions) records the choices made for move 1: Fortran's index values (index 0 unused) and index order; one Python module per Fortran module, its variables read as `comp_mod.xenv`; arguments changed in place, set scalars returned; the Fortran's apparent bugs reproduced and marked.
+
 The translation meets the same Fortran idioms in every routine; each gets one convention, decided before the first routine and written down:
 
-- **Indexing:** Fortran counts from 1, Python from 0. Either shift every index (and every loop bound and stored index, such as zone edges) at translation, or keep a dummy element 0 during move 1; shifting once is cleaner, keeping is safer for differential tests.
 - **GOTO flow,** above all in `main.f`'s loops: into `while` loops, `break`, `continue` and early returns, with each label's role in a comment.
-- **Column-major arrays:** `HCOMP(NSP, M)` keeps one shell contiguous in Fortran; in NumPy's row-major order, `(NSP, m)` keeps one species contiguous. Keep YREC's index order and accept the other memory layout, or transpose; the kernels' loops follow the choice.
 - **Implicit typing:** every variable's type made explicit (names starting I–N are integers in Fortran 77), and single against double precision decided per variable.
-- **COMMON blocks:** into state objects, passed explicitly; never module globals in Numba code (above).
 
 ### Testing
 
@@ -296,8 +290,8 @@ The translation meets the same Fortran idioms in every routine; each gets one co
 ### Open questions
 
 1. *[KC]* **Speed.** Python loops over shells would be perhaps 100–1000 times slower than Fortran; NumPy over shells and the Numba kernels close much of the gap while keeping debugging possible. How slow may pyrec be while it is developed (a model a minute? a track an hour?), and which kernels are profiled first?
-2. *[KC]* **The benchmarks need a tolerance per quantity,** not identical output: Python and Numba change the order of floating-point operations, so results agree to round-off, not bit for bit. Each output quantity (log L, log Teff, the central values, the surface abundances, the ages) needs its own tolerance. The development branch's 298-case suite could serve, if that branch is the frozen version.
-3. *[KC]* **Which version is frozen:** rp_1, as the notes describe it, or the development branch, which has removed nine obsolete options and turned each COMMON block into a module (whose modules F2PY wraps more easily)?
+2. *[KC]* **The benchmarks need a tolerance per quantity,** not identical output: Python and Numba change the order of floating-point operations, so results agree to round-off, not bit for bit. Each output quantity (log L, log Teff, the central values, the surface abundances, the ages) needs its own tolerance. The development branch's 298-case suite can serve, since that branch is the reference (question 3).
+3. *[KC]* **Which version is frozen:** decided (Nov 1, 2026): the development branch, at the commit KC chooses (a8a5950 since Oct 31), held as the reference and moved only when the work needs a later one, rather than following every commit.
 4. *[KC]* **Telling YREC's developers early,** before move 1 starts: the plan takes a frozen copy of the code they maintain as its reference, and move 3 would hand them a new code.
 
 ## Python

@@ -13,7 +13,9 @@
    $$A = -V/\Gamma_1 + V\left(\frac{\partial\ln\rho}{\partial\ln P} + \nabla\,\frac{\partial\ln\rho}{\partial\ln T}\right)$$
    (the code's `XX4`; probably the buoyancy term, by its form), $U$, and $c_s = \sqrt{\Gamma_1 P/\rho}$ in km/s. Between shells it also writes $dP/dr$-like and $d\rho/dr$-like terms (`QPR`, `QDR`) and their differences scaled by $\Gamma_1 P\,\Delta r$ and $\rho\,\Delta r$.
 2. **Envelope.** The integration steps are set to the output steps, `ENVINT` integrates from the surface to the last shell's pressure (for a spotted star at the ambient temperature, as in [[starin.f|starin.f]]), and the steps are restored afterwards.
-3. **Pulsation model** (`LPULSE`). A header (`LPULSE` alone), then, only when both `LPULSE` and `LSTORE` are set, for each shell in the list `ID(1..IDM)`: $\log r$, $m/M$, $L$, $\log T$, $\log\rho$, $\log P$, $\varepsilon$, $\kappa$ and the derivatives, in format 1, 2 or 3 (version 3 adds the MLT quantities).
+3. **Pulsation model** (`LPULSE`). A header (`LPULSE` alone), then, only when both `LPULSE` and `LSTORE` are set, for each shell in the list `ID(1..IDM)`: $\log r$, $m/M$, $L$, $\log T$, $\log\rho$, $\log P$, $\epsilon$, $\kappa$ and the derivatives, in format 1, 2 or 3 (version 3 adds the MLT quantities).
+
+**For users** (from YREC's [Quick Start](https://yrec.readthedocs.io/en/latest/quickstart.html)). With `LPULSE`, the pulsation output: the interior model on `IOPMOD` (`.pmod`, written here) and the envelope and atmosphere on `IOPENV` and `IOPATM` (`.penv`, `.patm`, written by [[envint.f#ENVINT|`ENVINT`]] when called from here); the Quick Start names the last `.atm`, the test suite's namelists `.patm`. `IMODPT` is the `.full` file (`FMODPT`), see question 6.
 
 **KC's changes.** Removed the unused arguments `LSHELL`, `JXBEG`, `JXEND`, `JCORE`, `LC`, `OMEGA`, `ETA2`, `R0`, `HJM` and `HI` (2025-05-31); removed `DATA IHEADR/4H****/`, which drew compiler warnings (2025-05-30).
 
@@ -26,6 +28,7 @@
 3. **Debugging prints.** `print*,'wrtmod LSOUND 1: '` (and `2`) write to the screen at every call.
 4. **`Csound.dat`'s header.** The header line is written again at every call, so a run that writes several models repeats it between their tables.
 5. **`LPRT` may be unset.** `LPRT` is set to true only if `LSTORE`; otherwise `ENVINT` gets its `SAVE`d or undefined value.
+6. **The deprecated `.full` file.** YREC's Quick Start lists `.full` (`FMODPT`) as a deprecated output, and the test suite's namelists say "No longer used", but PARMIN still opens it (and writes the run's description to it), and WRTMOD (with `LSOUND`), [[checkj.f#CHECKJ|`CHECKJ`]] and [[seculr.f#SECULR|`SECULR`]] still write to it. Remove these writes, or document what the file now holds?
 
 ### WRTMOD
 

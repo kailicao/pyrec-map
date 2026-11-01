@@ -10,8 +10,8 @@
 
 **The method.**
 - **Helium flash** ($\log\rho_c \ge 5$): find the shell of maximum temperature, compute its energy rates with `ENGEB`, and take
-  $$\Delta t = \frac{10^{15}}{\varepsilon_5},$$
-  with $\varepsilon_5$ = `EG(5)` (probably the triple-α rate, by the order in `ENGEB`), at least $10^{-22}$.
+  $$\Delta t = \frac{10^{15}}{\epsilon_5},$$
+  with $\epsilon_5$ = `EG(5)` (probably the triple-α rate, by the order in `ENGEB`), at least $10^{-22}$.
 - **Otherwise:** with $Y_\mathrm{core}$ at `JCORE` and $q = 5.85\times10^{17}$ erg/g (the commented-out `Q3A`), if $Y_\mathrm{core} \ge$ `ATIME(1)`,
   $$\Delta Y = \min(\texttt{ATIME(4)},\ \texttt{ATIME(5)}\,Y_\mathrm{core}),\qquad \Delta t = \frac{q}{L_\odot}\,\frac{m}{L/L_\odot}\,\Delta Y$$
   at `JCORE`; otherwise the same with $m$ and $L$ just below the hydrogen shell (`JXBEG-1`).
@@ -29,4 +29,4 @@
 
 ### YTIME
 
-The helium-burning time step: during the helium flash $10^{15}/\varepsilon_{3\alpha}$ at the temperature maximum; otherwise the time to burn a fraction of the core's helium.
+The helium-burning time step: during the helium flash $10^{15}/\epsilon_{3\alpha}$ at the temperature maximum; otherwise the time to burn a fraction of the core's helium.

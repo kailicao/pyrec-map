@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `GETTAU` computes the convective overturn timescale $\tau_\mathrm{cz}$ one pressure scale height above the base of the surface convection zone ("G Somers, 3/17"; its comment calls it "a new, systematic method"). Depending on where that point lies, it uses the interior model, the envelope integration, or the two stitched together.
+**Purpose.** `GETTAU` computes the convective overturn timescale $\tau_\mathrm{cz}$ one pressure scale height above the base of the surface convection zone ("G Somers, 3/17"; its comment calls it "a new, systematic method"). Depending on where that point lies, it uses the interior model, the envelope integration, or the two stitched together. In the new method ([[tauintnew.f#TAUINTNEW|TAUINTNEW]]) the timescale is local, $\tau_\mathrm{cz} = H_p/v_\mathrm{conv}$ (`PSCA/CVEL`), evaluated one $H_p$ above the base; for a zone thinner than $H_p$ it is the crossing time $\Delta r/v_\mathrm{conv}$ (`DELR/CVEL`, with $\Delta r$ the zone's width and $v_\mathrm{conv}$ at its middle), and with no surface convection zone it is 0.
 
 **How it fits.**
 - **Who calls it:** [[getw.f#GETW|GETW]], [[starin.f#STARIN|STARIN]] and [[wrtout.f#WRTOUT|WRTOUT]].
@@ -14,7 +14,7 @@
 2. If $\log P_\mathrm{base} - \log P_\mathrm{surf} < 1$ (or the old method is chosen), the point one scale height up may be in the envelope, so `LCALCENV` is set and the envelope's structure kept.
 3. Integrate the envelope with `ENVINT` from the surface conditions (radius and gravity from $L$ and $T_\mathrm{eff}$, as in [[getnewenv.f#GETNEWENV|GETNEWENV]], with the starspot correction to $T_\mathrm{eff}$). In the old method, `ENVINT` sets `TAUCZ` itself and the routine ends there.
 4. Copy the interior into work arrays, with $g = Gm/r^2$, the velocities and gradients from `SCRTCH_MOD`: `DELF1` = $\nabla_\mathrm{rad}$ (`SDEL(1,·)`) and `DELF2` = $\nabla_\mathrm{ad}$ (`SDEL(3,·)`, as PHYSIC stores them). With the new method and `LCALCENV`, append the envelope points 2 to `NUMENV` (the first is the last interior point), taking the same two gradients from `EDELS(1,·)` and `EDELS(2,·)`, which QENV stores in the order $\nabla_\mathrm{rad}$, $\nabla_\mathrm{ad}$, $\nabla$.
-5. `TAUINTNEW` (new method) or `TAUINT` (old) integrates the overturn time over these arrays.
+5. `TAUINTNEW` (new method) evaluates the overturn time from these arrays, as above; `TAUINT` (old) computes it its own way.
 6. `LCALCENV` is reset to true.
 
 **KC's changes.** The unused arguments `HG` (here), `HCOMPF`, `HS2` and `HSTOT` (in the calls to `TAUINTNEW` and `TAUINT`) were removed (2025-05-31); the elements of `/ENVSTRUCT/` (now `ENVSTRUCT_MOD`) were reordered (2025-05-30).
@@ -27,6 +27,7 @@
 2. **"At least 3 pressure scale heights".** The comment says a difference of 1 in $\log P$ means "at least 3 PSCAS", but one dex in $P$ is $\ln 10 \approx 2.3$ scale heights. Is the threshold of 1 meant to be safe for one scale height, or should the comment change?
 3. **Stale interior velocities.** `SVEL` and `SDEL` come from `SCRTCH_MOD`, written by whichever routine ran the physics last. Are they guaranteed to belong to the current model when `GETTAU` is called from `STARIN` and `WRTOUT`?
 4. **Unused variable.** `LALLCZ` (fully convective star) is set but never used.
+5. **Why one $H_p$ above the base.** The timescale is evaluated one $H_p$ above the base of the convection zone. Why this point rather than, say, half a mixing length above the base, or a global, integrated $\tau = \int dr/v$? Is it the convention of the calibration the wind law uses (`PMMSOLTAU`), so that the two must be computed the same way?
 
 ### GETTAU
 

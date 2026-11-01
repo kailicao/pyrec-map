@@ -10,7 +10,7 @@
 
 **The method.** The scale height returned is the hydrostatic one,
 
-$$H_P = \frac{P}{\rho g} = \frac{P\,r^2}{\rho\,G\,m},$$
+$$H_p = \frac{P}{\rho g} = \frac{P\,r^2}{\rho\,G\,m},$$
 
 computed in logs: `PSCAHE` $= 10^{\log P + 2\log r - \log\rho - \log G - \log m}$. Here $\log\rho$ is not the model's `HD(JEDGE)`: `DL` is an output argument of [[eqstat.f#EQSTAT|`EQSTAT`]], which recomputes the density from $P$, $T$, $X$, $Z$, and `PSCAHE` uses that value. The EOS call also returns `RMU` (probably $\mathcal{R}/\mu$), which goes only into a second, ideal-gas estimate `PSCAP` $= (\mathcal{R}/\mu)\,T r^2/(G m)$, which is never returned.
 
@@ -23,4 +23,4 @@ computed in logs: `PSCAHE` $= 10^{\log P + 2\log r - \log\rho - \log G - \log m}
 
 ### HSUBP
 
-Returns $H_P = P r^2/(\rho G m)$ at point `JEDGE`, with $\rho$ from the EOS (above).
+Returns $H_p = P r^2/(\rho G m)$ at point `JEDGE`, with $\rho$ from the EOS (above).

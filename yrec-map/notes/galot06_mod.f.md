@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `GALOT06_MOD` holds the grids of the Alexander et al. 2006 low-temperature opacity tables: $\log T$, $\log R$, $X$ and $Z$, shared by [[readalex06.f#READALEX06|`READALEX06`]], [[getalex06.f#GETALEX06|`GETALEX06`]] and [[alex06tab.f#ALEX06TAB|`ALEX06TAB`]]. It replaces `COMMON/GALOT06/` (MHP via Claude, 10/14/26). The table dimensions `NUMD` = 19, `NUMT` = 85, `NUMX` = 9, `NUMZ` = 16 are `PRIVATE`, since other tables use the same names with other values.
+**Purpose.** `GALOT06_MOD` holds the grids of the low-temperature opacities of Ferguson et al. (2005), called ALEX06 in the code: $\log T$, $\log R$, $X$ and $Z$, shared by [[readalex06.f#READALEX06|`READALEX06`]], [[getalex06.f#GETALEX06|`GETALEX06`]] and [[alex06tab.f#ALEX06TAB|`ALEX06TAB`]]. It replaces `COMMON/GALOT06/` (MHP via Claude, 10/14/26). The table dimensions `NUMD` = 19, `NUMT` = 85, `NUMX` = 9, `NUMZ` = 16 are `PRIVATE`, since other tables use the same names with other values.
 
 **What its variables hold, who sets them, who reads them.** All four carry initial values, moved from the `DATA` statements of `READALEX06`; nothing changes them at run time.
 - `TGR06(NUMT)`: $\log T$ from 2.70 to 4.50 (steps of 0.05, 0.01 between 2.90 and 3.50, then 0.05).

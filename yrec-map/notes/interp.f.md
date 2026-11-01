@@ -8,13 +8,14 @@
 
 $$B_i(x) = \prod_{j\ne i}\frac{x-a_j}{a_i-a_j},\qquad C_i(x) = \frac{dB_i}{dx},$$
 
-returned in `B` and `C`; then $f(x)\approx\sum_i B_i f(a_i)$ and $f'(x)\approx\sum_i C_i f(a_i)$.
+returned in `B` and `C`; then $f(x)\approx\sum_i B_i f(a_i)$ and $f'(x)\approx\sum_i C_i f(a_i)$. Used in a table, the interpolant is piecewise: it is continuous where the four-point stencil shifts from one cell to the next, but its derivative, and so the derivative weights `C` the equation of state and opacities use, jump there (question 2).
 
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`. One caller, `YALO3D`, is removed with the obsolete opacity options.
 
 ## Questions for the experts
 
 1. **Stale comment.** The comment calls it "the interpolation routine for the VandenBerg opacity tables (CAPPA)"; it now serves the EOS, several opacity tables and the diffusion grids.
+2. **Derivative jumps.** Piecewise four-point Lagrange interpolation gives derivatives (such as $\partial\ln\kappa/\partial\ln T$) that jump where the stencil shifts. Do these jumps affect the convergence of the Henyey iteration, which uses them, and would a smoother interpolation (such as the splines some other tables use) be preferable?
 
 ### INTERP
 

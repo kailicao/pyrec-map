@@ -4,7 +4,7 @@
 
 **How it fits.**
 - **Who calls it:** [[mix.f#MIX|MIX]] (twice, to use the explicit hydrogen burning rate) and [[xtime.f#XTIME|XTIME]], which turns `DXDT` into a nuclear time step limit.
-- **Inputs:** the reaction-rate arrays `HR1`…`HR12`, which both callers compute with [[rates.f#RATES|RATES]] just before the call. [[kemcom.f#KEMCOM|KEMCOM]]'s header gives their units: rates "per gigayear per amu", to be multiplied by the reactants' mass fractions and the product's atomic weight; so `DXDT` and the other outputs are changes of mass fraction per Gyr, the shell masses `HS2`, the temperatures `HT` ($\log T$), and the range `IBEGIN..IEND`. The abundances come from the previous model, `HCOMPP` in `OLDMOD_MOD`.
+- **Inputs:** the reaction-rate arrays `HR1`…`HR12`, which both callers compute with [[rates.f#RATES|RATES]] just before the call. [[kemcom.f#KEMCOM|KEMCOM]]'s header gives their units: rates "per gigayear per amu", to be multiplied by the reactants' mass fractions and the product's atomic weight; so `DXDT` and the other outputs are changes of mass fraction per Gyr. Also: the shell masses `HS2`, the temperatures `HT` ($\log T$), and the range `IBEGIN..IEND`. The abundances come from the previous model, `HCOMPP` in `OLDMOD_MOD`.
 - **Outputs:** the rates `DXDT`, `DYDT`, `DCDT`, `DODT` (hydrogen, helium, $^{12}$C, $^{16}$O) and the zone's mean `X`, `Z`, `XC12`, `XO16`.
 - **Modules:** [[nmlpar_mod.f#NMLPAR_MOD|`NMLPAR_MOD`]] gives the temperature cutoffs `TCUT(1..4)` (cutoffs in $\log T$, settings read in [[parmin.f#PARMIN|PARMIN]]; the defaults are 6.5, 6.5, 6.82, 7.7; formerly `/CTLIM/`); [[oldmod_mod.f#OLDMOD_MOD|`OLDMOD_MOD`]] (formerly `/OLDMOD/`) holds the previous model, written by the main program and read by many routines (listed on the modules page).
 
@@ -23,6 +23,8 @@ $$\dot Y = -4(r_{12\alpha} + 3r_{3\alpha}),\quad \dot X_{12} = 12(r_{3\alpha} - 
 
 **KC's changes.** Unused arguments removed (2025-05-31): `HF1`, `HR8`, `HR9`, `HR11`; their uses were already commented out.
 
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) lists `TCUT(2)` and `TCUT(3)` under "Unused parameters", as the former thresholds for pp-chain and CNO-cycle equilibrium; `TCUT(1)` (6.5) is the threshold for computing $\epsilon_\mathrm{nuc}$.
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 
 ## Questions for the experts
@@ -30,6 +32,8 @@ $$\dot Y = -4(r_{12\alpha} + 3r_{3\alpha}),\quad \dot X_{12} = 12(r_{3\alpha} - 
 1. **Equilibrium CN abundances returned.** `XC12` is overwritten by its CN-equilibrium value in step 4 and returned to the caller. Do `MIX` and `XTIME` expect the actual abundance or the equilibrium one? The helium-burning step also uses this equilibrium `XC12` for $^{12}$C + $\alpha$, except when $X \le 10^{-10}$, where the code jumps past the CN step and uses the actual abundance.
 2. **Division by a rate.** Step 3 divides by `GR2`, and step 4 by `GR4` and `GR5`. Are these rates guaranteed nonzero above the cutoffs?
 3. **Factor 2 for $^{16}$O.** The $^{16}$O + p term counts two protons per reaction, like $^{14}$N + p. Is that the intended accounting for the ON branch?
+4. **`TCUT(2)`, `TCUT(3)` "not used".** The documentation lists them as unused, but `EQBURN` tests them (`HT(IBEGIN).GT.TCUT(2)` for the equilibrium He3 and pp burning, `TCUT(3)` for the CN cycle), and [[mix.f#MIX|`MIX`]] calls `EQBURN` for each radiative shell and convection zone at `ITLVL = 1`. So they still matter there (defaults 6.5 and 6.82). Is the documentation out of date, or is that call meant to go?
+
 
 ### EQBURN
 

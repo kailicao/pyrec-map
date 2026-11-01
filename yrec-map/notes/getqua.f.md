@@ -12,7 +12,7 @@
 $$\frac{1}{r}\frac{d^2}{dr^2}(r\phi) - \frac{6\phi}{r^2} - 4\pi G\rho\frac{d\rho}{dP}\,\phi = -\frac{4\pi G}{3}\frac{r^2}{g}\frac{d}{dr}\left(\rho\Omega^2\right),$$
 and the code discretizes, per point,
 $$\phi'' + \frac{2}{r}\phi' - \frac{6}{r^2}\phi - \frac{4\pi G}{g}\frac{d\rho}{dr}\,\phi = -\frac{4\pi G\,r^2}{3g}\,\frac{d(\rho\Omega^2)}{dr},$$
-with $\phi$ = `QUAD`. Derivatives are centred on the smaller of the two neighbouring intervals (weights `FPL`, `FMI`). Boundary conditions: $\phi \to 0$ at the centre; at the surface, $\phi \propto r^{-3}$ outside the star ("D PHI/DR + 3 PHI/R = 0"). The tridiagonal system is solved by the Thomas algorithm ("from Numerical Recipes"); the run stops on a zero pivot.
+with $\phi$ = `QUAD` (with $dP/dr = -\rho g$, the sign of the $d\rho/dr$ term differs from the comment's; question 3). Derivatives are centred on the smaller of the two neighbouring intervals (weights `FPL`, `FMI`). Boundary conditions: $\phi \to 0$ at the centre; at the surface, $\phi \propto r^{-3}$ outside the star ("D PHI/DR + 3 PHI/R = 0"). The tridiagonal system is solved by the Thomas algorithm ("from Numerical Recipes"); the run stops on a zero pivot.
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 

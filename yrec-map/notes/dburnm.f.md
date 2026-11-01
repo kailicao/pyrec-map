@@ -7,7 +7,7 @@
 - **Who calls it:** [[midmod.f#MIDMOD|MIDMOD]].
 - **Output:** `HCOMP` (H, $^3$He, D) over the shell or zone.
 
-**The method.** As in DBURN: mass-weighted means over the zone, substeps with $X_D \leftarrow X_D e^{-2r_k\Delta t/n}$, then $\Delta X = \tfrac12\Delta X_D$ and $\Delta X_3 = -\tfrac32\Delta X_D$. The differences from DBURN:
+**The method.** As in DBURN: mass-weighted means over the zone, substeps with $X_D \leftarrow X_D e^{-2r_k\Delta t/n}$ (the factor 2 as in DBURN, whose question 5 asks what it is for), then $\Delta X = \tfrac12\Delta X_D$ and $\Delta X_3 = -\tfrac32\Delta X_D$. The differences from DBURN:
 - the threshold for zeroing deuterium is $10^{-14}$ (DBURN: $10^{-11}$) and does not include the accreted D;
 - with accretion, the substep's share of the accreted matter is $f_a$ = `FAC2*FMASSACC`, and the new mean is
 $$X_D = \frac{X_{D,\mathrm{old}} + f_a X_{D,\mathrm{acc}}}{1 + f_a},$$

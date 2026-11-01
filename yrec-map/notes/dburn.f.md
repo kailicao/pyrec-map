@@ -12,6 +12,7 @@
 2. If $X_D$ (with the accreted D, at the surface) is below $10^{-11}$, set it to zero and return (leaving $X$ and $^3$He as they are).
 3. Burn in `ISTEP` = $\lfloor r\Delta t/0.1\rfloor + 1$ substeps, the rate rising linearly, with $r_k$ the rate at the substep's midpoint:
 $$X_D \leftarrow X_D\,e^{-2 r_k\,\Delta t/n}.$$
+The code does not say what the factor 2 is for; `DRATE` is divided by the deuteron's mass `AMDEUT` ("Avagadros number divided by the mass of the deuteron in amu", [[deutrate.f#DEUTRATE|DEUTRATE]]), so question 5 asks.
 4. Mass bookkeeping of D + p $\to$ $^3$He: with $\Delta X_D < 0$ the change of deuterium,
 $$\Delta X = \tfrac12\,\Delta X_D, \qquad \Delta X_3 = -\tfrac32\,\Delta X_D.$$
 5. **Accretion** (`LMDOT`, surface zone): matter accreted earlier in the step burns fully, new matter is exposed to half a substep's burning; then the zone's values are mass-weighted means of the old and the accreted matter.
@@ -24,6 +25,7 @@ $$\Delta X = \tfrac12\,\Delta X_D, \qquad \Delta X_3 = -\tfrac32\,\Delta X_D.$$
 2. **`SUMM` for one shell.** When `IBEGIN = IEND`, `SUMM` is never set, but the accretion branch uses it (if the surface zone is a single shell); it keeps a value from an earlier call (`SAVE`).
 3. **The substep size.** The comment says the burning per substep is limited to 0.5 in the natural log; the code limits $r\,\Delta t/n$ to 0.1, that is $2r\Delta t/n \le 0.2$. Only the comment is off.
 4. **Accretion branch under mass loss.** MDOT sets `FMASSACC` only when mass is gained. The zeroing test checks `DMDT0 > 0`, but the accretion branch of the burning (`LMDOT .AND. IEND.EQ.M`) does not, so with mass loss it mixes in a stale `FMASSACC` from an earlier accreting step (or 0). Should it test `DMDT0 > 0` too?
+5. **The factor 2 in the burning.** The substeps use $X_D \leftarrow X_D e^{-2r\Delta t}$. `DRATE` carries $N_A/A_D$ with $A_D \approx 2$, so $2\,$`DRATE` $\approx X\rho N_A\langle\sigma v\rangle$ per Gyr, which is the destruction rate per deuteron by protons: is that what the factor 2 is for? If so, $N_A/A_p$ with $A_p \approx 1$ would be the natural factor, and the 2 and `AMDEUT` differ slightly ($2/2.013553$); DBURNM uses the same factor.
 
 ### DBURN
 

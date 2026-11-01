@@ -17,7 +17,7 @@
    with $T$ in K at `JMAX` (the code multiplies by `CSECYR` to get `TSCALE` in seconds, the unit of `DELTS`), and the step is divided into `NSTEP` substeps of at most `DT_GS` $\times\,t_\mathrm{settle}$. The pressure gradient passed to the settling routine is
    $$\frac{d\ln P}{dr} = -\frac{G m \rho}{P r^2}\quad(\texttt{HQPR}).$$
    During the settling, `SDEL(2,·)` holds `DELM` and is restored afterwards.
-3. **Renormalization.** Every abundance is clipped to $[0, 1]$; $Z$ (`HCOMP(3)`) is capped at $1 - X - X_4$, and $Y$ is set to $1 - X - Z - X_4$, where $X_4$ is the fourth species, He3 (as [[starin.f#STARIN|`STARIN`]] fills it).
+3. **Renormalization.** Every abundance is clipped to $[0, 1]$; $Z$ (`HCOMP(3)`) is capped at $1 - X - X_3$, and $Y$ is set to $1 - X - Z - X_3$, where $X_3$ is ³He, the fourth species `HCOMP(4,·)` (as [[starin.f#STARIN|`STARIN`]] fills it).
 
 **KC's changes.** The unused argument `ITLVL` was removed (KC 2025-05-31), with the calls in `MIDMOD` and `BURSMIX`; the calls to `KEMCOM` drop `HR9`, `HR13` and `ITLVL` to match its new signature (KC 2025-05-31).
 

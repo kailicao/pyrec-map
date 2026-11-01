@@ -13,9 +13,22 @@
 2. **Stitched format** (`LSTCH`): on the first call (`LPHHD`) a header key, the flags line and the column titles; then `STITCH` (with `CMIXL`).
 3. **Old format:** the `MOD2` header line, the flags, the `TLUMX` line (converted to erg s⁻¹ in place if the largest is $\le 10^{20}$, as in [[putmodel2.f#PUTMODEL2|PUTMODEL2]]), three `ENV` lines; then, with `LSTMOD`, one line per selected shell: the basic columns, led by the model number; with `LSTPHYS` opacity, gravity $g = Gm/r^2$, $\nabla_\mathrm{rad}$, $\nabla$, $\nabla_\mathrm{ad}$, convective velocity, $\Gamma_1$, `SBETA`, `SETA` and the energy generation terms; with `LSTROT` (and `LROT`) the distortion parameter and the ratio of polar to equatorial radius,
 $$A = \frac{5}{3}\,\frac{\Omega^2 r_0^3}{G m\,(2+\eta_2)},\qquad \frac{R_p}{R_e} = \frac{1 - A}{1 + A/2},$$
-then `FP`, `FT`, $j$, $I$, the rotational kinetic energy change, and the mixing velocities $v_\mathrm{ES}$, $v_\mathrm{GSF}$, $v_\mathrm{SS}$ and their sum. Missing groups are written as zeros.
+where $A$ is the amplitude of the $P_2$ distortion of the level surface, $r(\theta) = r_0\,[1 - A\,P_2(\cos\theta)]$, in the Clairaut–Radau treatment of [[fpft.f#FPFT|FPFT]] and [[shape.f#SHAPE|SHAPE]] (Kippenhahn & Thomas 1970): $P_2 = 1$ at the pole and $-\tfrac12$ at the equator, hence $r_0(1 - A)$ and $r_0(1 + A/2)$; then `FP`, `FT`, $j$, $I$, the rotational kinetic energy change, and the mixing velocities $v_\mathrm{ES}$, $v_\mathrm{GSF}$, $v_\mathrm{SS}$ and their sum. Missing groups are written as zeros.
+
+**For users** (from YREC's [Quick Start](https://yrec.readthedocs.io/en/latest/quickstart.html)). This is the `.store` file (`FSTOR`): snapshots of the model's structure during the run. Which snapshots, and what they contain, the control namelist decides: `LSTORE` (`NPRTMOD`, every how many models; `NPRTPT`, every how many shells), `LSTPCH` (the final model), and `LSTATM`, `LSTENV`, `LSTPHYS`, `LSTROT` (the atmosphere, the envelope, the microphysics, the rotation), with `LSTCH` for the stitched format.
 
 **KC's changes.** 2025-05-30: `/OPALEOS/` reordered; 2025-05-31: unused arguments removed from the call to `WRTMOD`.
+
+**From YREC's documentation.** [Control Options](https://yrec.readthedocs.io/en/latest/namelist_control.html) (Output):
+
+| variable | meaning (documentation) |
+| --- | --- |
+| `LSTORE` | store model structures to the `.store` file at the chosen points (`LSTMOD` should be set the same; it may be redundant) |
+| `LSTCH` | write interior, envelope and atmosphere in one consistent format (recommended) |
+| `LSTATM`, `LSTENV` | add the atmosphere, the envelope; with both off nothing beyond the fitting point is written |
+| `LSTPHYS` | add the microphysics ($\epsilon$, $\kappa$, …) |
+| `LSTROT` | add the rotation data |
+| `LSTPCH` | write the final model's details |
 
 **Changed since `rp_1`.** `CMIXL`, `XMSOL` and `COMPMIX` are new arguments (`COMPMIX` was `/I2O/`, `CMIXL` was in `/CONST3/`), passed on: `CMIXL` to `STITCH`, both to `WRTMOD`; the labels of the removed options (the OPAL 1995 and 2001 equations of state, the OPAL92, LAOL89, Alexander 1995 and Kurucz 1990 opacities) are gone; each shell's line now starts with the model number, which fixes a crash (format 62 already expected it), and formats 62 and 63 put spaces between some columns; `LMILNE` now comes from `NMLPAR_MOD` (bug fix), so `WRTMIL` is called when it is set, which settles former question 2 (questions 3–7 are now 2–6); COMMON blocks to modules (eleven unused blocks dropped), `IMPLICIT NONE`. New question 7 (the low-temperature label).
 

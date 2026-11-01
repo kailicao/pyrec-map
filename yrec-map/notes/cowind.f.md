@@ -8,7 +8,7 @@
 - **Outputs:** `WIND1`, `WIND2`, the change of $\Omega$ over the step computed with $\Omega$ at its start and at its end. The comment says they enter the diffusion equations and are averaged: [[seculr.f#SECULR|SECULR]], which calls MCOWIND, passes them to [[dcoeft.f#DCOEFT|DCOEFT]] or [[dadcoeft.f#DADCOEFT|DADCOEFT]], where the surface boundary takes $-\tfrac12(\mathtt{WIND1}+\mathtt{WIND2})$ times the moment of inertia.
 
 **The method.**
-1. **Saturation.** If `WMAX` $> 1$, it is read as $\Omega_\mathrm{sat,\odot}\,\tau_\odot$ and $\Omega_\mathrm{sat} = \mathtt{WMAX}/\tau_\mathrm{CZ}$ (MHP 3/09; the run stops if $\tau_\mathrm{CZ}$ is not defined); otherwise $\Omega_\mathrm{sat} = \mathtt{WMAX}$.
+1. **Saturation.** If `WMAX` $> 1$, it is read as $\Omega_\mathrm{sat,\odot}\,\tau_\odot$ and $\Omega_\mathrm{sat} = \mathtt{WMAX}/\tau_\mathrm{cz}$ (MHP 3/09; the run stops if $\tau_\mathrm{cz}$ is not defined); otherwise $\Omega_\mathrm{sat} = \mathtt{WMAX}$.
 2. The radius from $L$ and $T_\mathrm{eff}$: $\log R = \tfrac12(\log(L/L_\odot) + \log L_\odot - \log 4\pi - \log\sigma - 4\log T_\mathrm{eff})$, in cm.
 3. The comment's law, $dJ/dt \propto K\,(\dot M/10^{-14})^{a}\,\Omega^{n}\,(M/M_\odot)^{c}(R/R_\odot)^{b}$, gives
 $$C = \frac{\Delta t}{I_\mathrm{CZ}}\,K\left(\frac{\dot M}{10^{-14}\,M_\odot\,\mathrm{yr}^{-1}}\right)^{a}\left(\frac{R}{R_\odot}\right)^{b}\left(\frac{M}{M_\odot}\right)^{c},$$

@@ -13,6 +13,8 @@
 - **Equation of state:** `SAHA`, plus `DH` (Debye–Hückel), `SCV`, and the OPAL 2006 tables (`O6`) in six-character combinations: `SAHA`, `SAH+DH`, `SCV`, `SCV+DH`, `SCDHO6`, `OPAL06`, `OP6+DH`.
 - **Low-temperature opacity** `ALOK`: always `NONE` now; **high-temperature** `HIK`: `OP95` or `NONE`.
 
+**For users** (from YREC's [Quick Start](https://yrec.readthedocs.io/en/latest/quickstart.html)). Through the unit `ILAST`, this is the `.last` file (`FLAST` in the control namelist): the last converged model, in the same format as a starting model, so that a later job can start from it (`FFIRST`).
+
 **KC's changes.** The elements of COMMON `OPALEOS` were reordered (2025-05-30); the block is no longer declared here.
 
 **Changed since `rp_1`.** COMMON blocks to modules, `IMPLICIT NONE`; `CMIXL` and `COMPMIX` (formerly COMMON `CONST3` and `I2O`) are now arguments; the labels of the removed options are gone (OPAL 1995 and 2001 EOS, Alexander 1995 and Kurucz 1990 low-temperature opacities, OPAL92 and LAOL89 high-temperature opacities); `WRTMONTE`, a former caller, is deleted.

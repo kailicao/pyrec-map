@@ -18,6 +18,8 @@
 
 **KC's changes.** 2025-05-30: the integer divisions `MAXZ/2+1` etc. rewritten as `INT(MAXZ/2.)+1` to silence the compiler warning `-Winteger-division`; the result is the same.
 
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html): `LCONDOPACP` uses the updated conductive opacity tables, whose path is `FcondOpacP` ([Control Options](https://yrec.readthedocs.io/en/latest/namelist_control.html)).
+
 **Changed since `rp_1`.** Declarations only: `/MISCOPAC/` to `IOUNITS_MOD`, `IMPLICIT NONE` in all three units.
 
 ## Questions for the experts

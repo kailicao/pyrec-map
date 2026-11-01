@@ -7,7 +7,7 @@
 - `TGR(NUMT)`, `R0GR(NUMD)`: the $\log T$ and $\log R$ grids, read from the tables by `LL95TBL`; used by `GETOPAL95` to locate a point.
 - `XXG(NUMX)`, `ZZG(NUMZ)`: the $X$ values (0 to 1) and $Z$ values (0 to 0.10) of the tables; `LL95TBL` checks each table's header against them, `OP95XTAB`, `OP95ZTAB` and `GETOPAL95` interpolate in them. (For the last $X$, LL95TBL's check uses $1 - Z$ instead of `XXG(NUMX)`.)
 - `NZ(NUMZ)`: the offset of each $Z$'s tables in `CAPPA2`'s first index (0, 10, … , 118).
-- `NUMXM(NUMZ)`: the number of $X$ tables for each $Z$ (10, but 9 and 8 for the two largest); read nowhere.
+- `NUMXM(NUMZ)`: the number of $X$ tables for each $Z$ (10, but 9, 9 and 8 for the three largest, $Z$ = 0.06, 0.08, 0.1); read nowhere.
 - `XXG`, `ZZG`, `NZ` and `NUMXM` carry initial values, moved from LL95TBL's `DATA` statements.
 
 **Design.** A blanket `USE LLOT95A_MOD`. The module's header says its initializers came from PARMIN's `DATA` statements and are namelist variables; at `rp_1` they were in LL95TBL, and they are in no namelist. At `rp_1`, `main.f` declared the block with its own `NUMTT` (also 70); that declaration is gone.

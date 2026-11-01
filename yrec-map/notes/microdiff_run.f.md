@@ -27,6 +27,8 @@ The loop repeats until the largest change between iterations is below `GRTOL`, a
 
 **KC's changes.** 2025-05-31: unused arguments `NLIGHT` and `CSLIGHT` removed.
 
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html): `GRTOL` (default 1.0D-8) is the numerical tolerance on the abundance changes from diffusion, and `NITER_GS` (10) the largest number of iterations of the solver.
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 
 ## Questions for the experts

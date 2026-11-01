@@ -20,6 +20,8 @@
 
 **KC's changes.** 2025-05-31: the unused argument `LPRT` removed.
 
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html): `DJOK` (default 1.0D-4) is the numerical tolerance of rotational mixing; `ITDIF2` (1) the number of iterations between nuclear burning and rotational mixing (1 = none). [Control Options](https://yrec.readthedocs.io/en/latest/namelist_control.html): `NPRTPT` writes details for every `NPRTPT`-th point. The per-shell file `FMODPT` is "no longer used"; CHECKJ's writes to it are skipped (`IF(.TRUE.)GOTO 240`), though PARMIN still opens it.
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 
 ## Questions for the experts

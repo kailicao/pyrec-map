@@ -11,14 +11,14 @@
 **The method.**
 1. Going down from the surface, find the first convective shell, then the base of that zone, `IMAX`; note whether a second, deeper convective zone exists (`LTWOCZ`, its top `ICZTOP`).
 2. Locate the base $r_b$ where $\nabla_1 - \nabla_2$ changes sign, by linear interpolation between shells `IMAX-1` and `IMAX` (factor $f$), and the pressure scale height there,
-   $$H_P = \frac{P}{\rho\,g},\qquad g = \frac{G m}{r^2}\ \text{(computed here only without rotation)},$$
+   $$H_p = \frac{P}{\rho\,g},\qquad g = \frac{G m}{r^2}\ \text{(computed here only without rotation)},$$
    interpolated with the same $f$.
 3. If the zone is thin, that is, with $r_\mathrm{top}$ the radius of shell `ICZTOP`,
-   $$\left|1 - \frac{r_b + H_P - r_\mathrm{IMAX}}{r_\mathrm{top} - r_\mathrm{IMAX}}\right| < 0.5,$$
-   so that the point $r_b + H_P$ lies between the zone's middle and half a width above its top, or there are two zones, the mass-weighted mean velocity over shells `IMAX` to `ICZTOP` is used:
+   $$\left|1 - \frac{r_b + H_p - r_\mathrm{IMAX}}{r_\mathrm{top} - r_\mathrm{IMAX}}\right| < 0.5,$$
+   so that the point $r_b + H_p$ lies between the zone's middle and half a width above its top, or there are two zones, the mass-weighted mean velocity over shells `IMAX` to `ICZTOP` is used:
    $$\bar v = \frac{\sum_j \Delta m_j\,\tfrac12 (v_j + v_{j+1})}{\sum_j \Delta m_j},\qquad \tau_\mathrm{cz} = \frac{|r_\mathrm{top} - r_\mathrm{IMAX}|}{\bar v}.$$
-4. Otherwise (the original method), the velocity at one pressure scale height above the base, $v(r_b + H_P)$, by linear interpolation in $\log r$, gives
-   $$\tau_\mathrm{cz} = \frac{H_P}{v(r_b + H_P)} .$$
+4. Otherwise (the original method), the velocity at one pressure scale height above the base, $v(r_b + H_p)$, by linear interpolation in $\log r$, gives
+   $$\tau_\mathrm{cz} = \frac{H_p}{v(r_b + H_p)} .$$
 5. With no convective zone the code sets `IMAX = M` and, unless `LALLCZ` is set, computes $\tau_\mathrm{cz}$ at the surface anyway (from shells `M-1` and `M`). $\tau_\mathrm{cz} = 0$ only when `LALLCZ` is set, by the test `IMAX .LT. 1`, which depends on a value of `IMAX` left from an earlier call (question 1).
 
 **Design.** The routine prints "TauCal" to the screen at every call. A large commented-out block handled fully convective cases.
@@ -38,4 +38,4 @@
 
 ### TAUCAL
 
-The convective overturn time near the base of a surface convection zone within the envelope, $H_P/v$ one scale height above the base, or a zone's width over its mean velocity for thin or double zones.
+The convective overturn time near the base of a surface convection zone within the envelope, $H_p/v$ one scale height above the base, or a zone's width over its mean velocity for thin or double zones.

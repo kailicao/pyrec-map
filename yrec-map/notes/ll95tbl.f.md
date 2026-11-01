@@ -14,6 +14,8 @@
 3. The file is ordered by $X$ and, within each $X$, by $Z$; fewer $Z$ values exist for the high $X$ (10 for $X = 0.95$, 12 for $X = 1-Z$). Table $(Z_i, X_j)$ is stored at index $N = \texttt{NZ}(i) + j$. It stops after 126 tables.
 4. Build the fixed-$Z$ table: `OP95ZTAB(ZOPAL951)`.
 
+**From YREC's documentation.** [Control Options](https://yrec.readthedocs.io/en/latest/namelist_control.html): `FLIV95` is the path of the atomic opacity table; `ZOPAL951` makes it build a table for the surface mixture at this $Z$, which speeds up models without diffusion.
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`; the grids' and indices' `DATA` moved into `LLOT95A_MOD` and `OP95INTERP_MOD`; `NEWOPAC` dropped, `ZOPAL951` now from `NMLPAR_MOD`, which settles former question 1 (the authors' change notes confirm the layout mismatch).
 
 ## Questions for the experts

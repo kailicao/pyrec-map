@@ -24,6 +24,8 @@ $$\mathtt{STRUCTFACTOR} = M^{a_M}\,\left(\frac{R}{R_\odot}\right)^{a_R}\left(\fr
 
 **KC's changes.** 2025-05-30: the elements of `/PMMWIND/` reordered (reals first, then logicals and the character `AWIND`); the old order is kept as a comment. Since then `/PMMWIND/` is gone, its members moved to `NMLPAR_MOD`.
 
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html): `PMMSOLP` (default 4.9304) is $\log P$ at $T_\mathrm{eff}$ in the solar model, for the magnetic field's calibration, and `PMMSOLTAU` (9.4805D5 s) the Sun's convective overturn time; `LROSSBY` scales the loss with the Rossby number.
+
 **Changed since `rp_1`.** `STRUCTFACTOR` is now an output argument (`/CWIND/` retired); COMMON blocks to modules, `IMPLICIT NONE`; the unused constants and `AWIND` are gone, which settles the former question on them.
 
 ## Questions for the experts

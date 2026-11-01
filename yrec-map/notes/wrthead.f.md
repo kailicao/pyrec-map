@@ -9,6 +9,10 @@
 
 **Design.** The column names depend on `ITRVER`: 0, one long line of names (G. Somers 11/14); 1, a description in comment lines (except two lines of format 1505, " Neutrinos …" and '    "        " cont: …', which do not start with `#`); 2, the same plus the rotation columns (whose line, format 1510, does not start with `#` either); 3, a short list.
 
+**For users** (from YREC's [User Guide](https://yrec.readthedocs.io/en/latest/userguide.html)). The track file is the run's history, one line per model with `ITRVER` = 0, the format recommended. The two lines of `DESCRIP` in the control namelist, the run's description, head the track file too, but [[parmin.f#PARMIN|`PARMIN`]] writes them, before this header.
+
+**From YREC's documentation.** [Control Options](https://yrec.readthedocs.io/en/latest/namelist_control.html): `ITRVER` chooses the format of the `.track` file; 0 (one line per model) is strongly recommended, though the default is 1.
+
 **Changed since `rp_1`.** `CMIXL` and `NK` are now arguments (from the main program) instead of COMMON members; the isochrone header (the `LISO` option, on `IISO`) is removed with the option; declarations: COMMON blocks to modules, `IMPLICIT NONE`.
 
 ## Questions for the experts

@@ -4,6 +4,6 @@
 
 **Who uses it.** 144 files: the routines that dimension arrays by the number of shells, and, since 10/20/26, the 36 block modules sized on `JSON` (such as [[deuter_mod.f#DEUTER_MOD|`DEUTER_MOD`]]), which used to declare private copies. The module must be compiled before them (the Makefile says so).
 
-**Design.** The header explains what stays out: the dimensions of the input tables (such as `NUMT`, 70 for the OPAL95 opacities and 85 for Alexander 2006) differ between tables and stay `PRIVATE` in each table's module, and scratch bounds such as `NMAX` stay local to their routines. A file that gains `USE DIMENSIONS_MOD` must drop its own `PARAMETER(JSON=5000)`.
+**Design.** The header explains what stays out: the dimensions of the input tables (such as `NUMT`, 70 for the OPAL95 opacities and 85 for the ALEX06 tables of Ferguson et al. 2005) differ between tables and stay `PRIVATE` in each table's module, and scratch bounds such as `NMAX` stay local to their routines. A file that gains `USE DIMENSIONS_MOD` must drop its own `PARAMETER(JSON=5000)`.
 
 **Changed since `rp_1`.** New file: the repeated `PARAMETER(JSON=5000)` as a module.

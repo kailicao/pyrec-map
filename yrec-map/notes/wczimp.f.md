@@ -18,6 +18,8 @@
 - **Otherwise the power law** for the zone alone, as in `WCZ`.
 After each assignment, `SOLID` is called on single shells to make $\Omega$, $I$ and $j$ consistent.
 
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html): `IMPJMOD` sets the global coupling of angular momentum (0 no effect, 1 solid body everywhere, 2 solid-body core with a decoupled convection zone, 3 solid-body core coupled at the zone's base), and `WALPCZ` the profile in the convection zone, $\Omega \propto r^{\mathrm{WALPCZ}}$ (0 solid body, −2 uniform specific angular momentum).
+
 **Changed since `rp_1`.** The solid-body test is $\alpha \ge 0$ again (`GT` reverted to `GE`, JVS 2026/02/13), as in `WCZ`, which settles the former question 4 ($\alpha = 0$); declarations: COMMON blocks to modules, `IMPLICIT NONE`.
 
 ## Questions for the experts

@@ -8,7 +8,7 @@
 - **What it calls:** [[solid.f#SOLID|SOLID]] (for a single radiative shell) and [[wczimp.f#WCZIMP|WCZIMP]] (for a convection zone; "JNT 09/25 for 05/15 call WCZIMP instead of WCZ").
 - **Outputs:** `OMEGA`, `HI` (moments of inertia of the shells), `ETA2`, `QIW`, `R0`, filled by `SOLID` and `WCZIMP`; and `HJM`, which both rewrite as $j = I\Omega/\Delta m$, so that in a convection zone, where `WCZIMP` imposes the rotation law, $j$ is redistributed.
 
-**The method.** Scanning outward: each radiative shell is passed to `SOLID` alone; a run of convective shells is collected and passed to `WCZIMP` when the next radiative shell (or the surface) is reached (but see question 2).
+**The method.** Scanning outward: each radiative shell is passed to `SOLID` alone, which finds the $\Omega$ for which $\Omega\,I(\Omega) = j\,\Delta m$, iterating SHAPE and MOMI, since the shell's moment of inertia depends on $\Omega$ through its distortion; a run of convective shells is collected and passed to `WCZIMP` when the next radiative shell (or the surface) is reached (but see question 2).
 
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`, and the array size `JSON` from `DIMENSIONS_MOD`.
 

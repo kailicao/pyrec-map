@@ -6,7 +6,7 @@
 - **Who calls it:** the routines that move quantities between the model grid and an equally spaced grid: [[mixcom.f#MIXCOM|MIXCOM]], [[mixgrid.f#MIXGRID|MIXGRID]], [[rotgrid.f#ROTGRID|ROTGRID]], [[getgrid.f#GETGRID|GETGRID]], [[eq2mod.f#EQ2MOD|EQ2MOD]] and [[hpoint.f#HPOINT|HPOINT]].
 - **What it calls:** [[slopes.f#SLOPES|SLOPES]] (the derivatives $m_i$ at the data points) and [[meval.f#MEVAL|MEVAL]] (the evaluation; `EPS` $=10^{-4}$ is a relative error tolerance passed on to MEVAL's internal routine `CHOOSE`).
 
-**The method.** The spline is quadratic between the data points, matches the values and the slopes $m_i$ there, and preserves the data's monotonicity and convexity (hence "shape-preserving"); the details are in `SLOPES` and `MEVAL`. The arrays are dimensioned `JSON` (from `DIMENSIONS_MOD`), the model's maximum number of shells.
+**The method.** The spline is made of quadratic pieces, with one or two knots added between data points where needed (`CASES`, `CHOOSE`), matches the values and the slopes $m_i$ at the data, and preserves the data's monotonicity and convexity wherever the data allow (hence "shape-preserving"); the details are in `SLOPES` and `MEVAL`. That is why it is used to move the diffusion coefficients, $\Omega$ and the abundances between grids: it does not overshoot, so regridding creates no new extrema, negative coefficients or negative abundances. The arrays are dimensioned `JSON` (from `DIMENSIONS_MOD`), the model's maximum number of shells.
 
 **Changed since `rp_1`.** Declarations only: `JSON` from `DIMENSIONS_MOD` instead of a local `PARAMETER`, `IMPLICIT NONE`.
 

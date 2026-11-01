@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `ALOT06_MOD` holds the Ferguson et al. (2006) low-temperature opacity table for the current composition, with the composition and the starting indices of the search. It replaces `COMMON/ALOT06/` (MHP via Claude, 10/14/26); the sizes `NUMD` = 19 and `NUMT` = 85 are private. Five members carry initial values, moved from PARMIN's `DATA` statements.
+**Purpose.** `ALOT06_MOD` holds the table, for the current composition, of the low-temperature opacities of Ferguson et al. (2005), called ALEX06 in the code ([[readalex06.f#READALEX06|`READALEX06`]]), with the composition and the starting indices of the search. It replaces `COMMON/ALOT06/` (MHP via Claude, 10/14/26); the sizes `NUMD` = 19 and `NUMT` = 85 are private. Five members carry initial values, moved from PARMIN's `DATA` statements.
 
 **What its variables hold, who sets them, who reads them.**
 - `CAPALEX06(NUMT,NUMD)`: $\log\kappa$ on the $(T, R)$ grid, interpolated to `XE`, `ZE` by [[alex06tab.f#ALEX06TAB|`ALEX06TAB`]] ([[readalex06.f#READALEX06|`READALEX06`]] first fills it with the first composition's table); read by [[getalex06.f#GETALEX06|`GETALEX06`]].

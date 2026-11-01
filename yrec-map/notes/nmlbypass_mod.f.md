@@ -12,8 +12,12 @@
 
 **Design.** A blanket `USE NMLBYPASS_MOD` in the three routines; STARIN uses none of the members, and declares the module so that its isotope code can reach them later (the conversion's commit message says so).
 
+**From YREC's documentation.** [Where Namelist Variables Live](https://yrec.readthedocs.io/en/latest/namelist_modules.html) explains the split by consumer: `NMLPAR_MOD` holds what the physics routines read, this module what only `PARMIN` reads to derive something else, so that `USE NMLPAR_MOD` imports only names a physics routine could use; a new namelist variable goes in one or the other by that test. `CONSTANTS_MOD` keeps `CLSUN`, `CRSUN` beside their logarithms, and `INTPAR_MOD` keeps the three settings of the one integrator that uses them; the 32 `CHARACTER` variables are in no module and travel as arguments. The page counts 110 `CONTROL`, 237 `PHYSICS` and 36 `DERIVED` variables, 234 of them in `NMLPAR_MOD` and 83 here.
+
 **Changed since `rp_1`.** New file: the derivation-only namelist variables of six COMMON blocks as one module, with their defaults moved from PARMIN's `DATA` statements.
 
 ## Questions for the experts
 
 1. **Unused inputs.** `LENVG` (removed from every input file as dead) and `PMMMD` are read nowhere, and `FO` is only written out. Can they leave the namelist?
+2. **The documentation's counts and users.** It says `PARMIN` alone reads this module and `NMLPAR_MOD` has 234 members; here [[remap.f#REMAP|REMAP]] and [[starin.f#STARIN|STARIN]] also use the module, and `NMLPAR_MOD` now has 235 (with `L_ZERODT_PREMS`). Minor: update the page?
+

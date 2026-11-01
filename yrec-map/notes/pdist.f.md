@@ -11,6 +11,8 @@
 $$\ell^2 \mathrel{+}= (a\,\Delta\log L)^2 + (b\,\Delta\log T_\mathrm{eff})^2 + (c\,\Delta t)^2 .$$
 When $\ell^2 \ge$ `POMAX`, the files are opened and $\ell^2$ is reset to zero; otherwise the three units are closed and `LPULSE` is set false.
 
+**From YREC's documentation.** [Control Options](https://yrec.readthedocs.io/en/latest/namelist_control.html) (Output): `LPULSE` writes pulsation output, to `FPMOD` (the interior), `FPENV` (the envelope) and `FPATM` (the atmosphere), and needs `LSTATM` and `LSTENV` for the outer two; `IPVER` chooses its format.
+
 **Changed since `rp_1`.** `NK` and `DAGE` are now arguments (from `/ZRAMP/` and `/THEAGE/` before; main.f is the only caller); the other COMMON blocks to modules, `IMPLICIT NONE`; the unused `/PULSE/` members and dead `/LUNUM/` units dropped.
 
 ## Questions for the experts

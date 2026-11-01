@@ -10,11 +10,11 @@
 - **Modules:** `CONFAC_MOD`, `NMLPAR_MOD` (`LDIFZ`, `LDIFLI`), `DIMENSIONS_MOD` (`JSON`).
 
 **The method.**
-1. **Central region** (points `1..IBEGIN`, the convective core or the hydrogen-exhausted centre): the change at the first grid point is added to each point: $X \to \max(X + \Delta X_1, 0)$, the light elements likewise floored at zero, and $Z \to \min(Z + \Delta Z_1,\ 1 - X - X_4)$.
-2. **Radiative interior** (points `IBEGIN+1..IEND-1`): the change is interpolated with four-point Lagrange weights $w_k$ over the grid points around the model radius, $\Delta X(r) = \sum_k w_k\,\Delta X_{k_0+k-1}$, and $X \to \min(X + \Delta X, 1 - Z - X_4)$.
+1. **Central region** (points `1..IBEGIN`, the convective core or the hydrogen-exhausted centre): the change at the first grid point is added to each point: $X \to \max(X + \Delta X_1, 0)$, the light elements likewise floored at zero, and $Z \to \min(Z + \Delta Z_1,\ 1 - X - X_3)$.
+2. **Radiative interior** (points `IBEGIN+1..IEND-1`): the change is interpolated with four-point Lagrange weights $w_k$ over the grid points around the model radius, $\Delta X(r) = \sum_k w_k\,\Delta X_{k_0+k-1}$, and $X \to \min(X + \Delta X, 1 - Z - X_3)$.
 3. **Envelope** (points `IEND..M`): the change at the last grid point is added, with $X$ capped as above and $Z$ floored at zero.
-4. **Metals** are scaled as a whole: with $Z' = Z + \Delta Z$ (capped at $1 - X - X_4$ in the centre and the interior), the individual metal rows 5–11 of `HCOMP` (¹²C, ¹³C, ¹⁴N, ¹⁵N, ¹⁶O, ¹⁷O, ¹⁸O, as STARIN names them) are multiplied by $Z'/Z$.
-5. **Helium** follows from closure: $Y = 1 - X - Z - X_4$, where $X_4$ is `HCOMP(4,·)`, ³He ([[starin.f#STARIN|STARIN]] fills it from `XHE3_INI`).
+4. **Metals** are scaled as a whole: with $Z' = Z + \Delta Z$ (capped at $1 - X - X_3$ in the centre and the interior), the individual metal rows 5–11 of `HCOMP` (¹²C, ¹³C, ¹⁴N, ¹⁵N, ¹⁶O, ¹⁷O, ¹⁸O, as STARIN names them) are multiplied by $Z'/Z$.
+5. **Helium** follows from closure: $Y = 1 - X - Z - X_3$, where $X_3$ is ³He, `HCOMP(4,·)` ([[starin.f#STARIN|STARIN]] fills it from `XHE3_INI`).
 
 **KC's changes.** 2025-05-30: `CSLIGHT` declared `INTEGER` (fixing `-Wconversion`).
 

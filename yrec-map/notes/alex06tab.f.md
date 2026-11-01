@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** This file builds the low-temperature opacity table of Alexander (the 2006 tables, as the names `ALEX06`/`ALOT06` say) for one composition $(X, Z)$, by interpolating between the stored tables of the grid in $X$ and $Z$. The result is a single table of opacity against $\log T$ and $\log R$ that [[getalex06.f#GETALEX06|GETALEX06]] then interpolates in.
+**Purpose.** This file builds the table of the low-temperature opacities of Ferguson et al. (2005), called ALEX06 in the code (read by [[readalex06.f#READALEX06|READALEX06]]), for one composition $(X, Z)$, by interpolating between the stored tables of the grid in $X$ and $Z$. The result is a single table of opacity against $\log T$ and $\log R$ that [[getalex06.f#GETALEX06|GETALEX06]] then interpolates in.
 
 **How it fits.**
 - **Inputs:** the full set of tables, `CAPTALEX06` in `ALOT06ALL_MOD`, read once by [[readalex06.f#READALEX06|READALEX06]], and the grid values `XXG06`, `ZZG06` in `GALOT06_MOD` (initialized there); the requested composition `XE`, `ZE` in `ALOT06_MOD`.
@@ -19,7 +19,7 @@ $$\kappa_m(T,R) = \sum_{k=1}^{4} w_k(Z)\,\kappa(X_m, Z_{k}; T, R), \qquad w_k(Z)
 The 4th value of $X$ needs its own indexing near the corner of the grid ($X = 1 - Z$, $Z = 0.1$).
 4. Interpolate in $X$ the same way over the 4 results (`CAPTEMP`), giving `CAPALEX06`. When `IZ = NUMZ-3`, the 4th node in $X$ is placed at $1 - Z$.
 
-The tabulated quantity is probably $\log \kappa$ (READALEX06 reads it with format `F7.3`); the interpolation is linear in whatever is stored.
+The tabulated quantity is $\log \kappa$, as GETALEX06 uses it (READALEX06 reads it with format `F7.3`); the interpolation is linear in $\log\kappa$.
 
 **Design.** All state is in modules; the routine has no arguments. It stops the run on a bad composition, with a message that names "ALEX06".
 
@@ -33,4 +33,4 @@ The tabulated quantity is probably $\log \kappa$ (READALEX06 reads it with forma
 
 ### ALEX06TAB
 
-Interpolates the stored Alexander tables to the composition (`XE`, `ZE`) in `ALOT06_MOD`: first in $Z$, then in $X$, each with 4-point Lagrange weights from [[intrp2.f#INTRP2|INTRP2]]. Writes `CAPALEX06`.
+Interpolates the stored ALEX06 tables to the composition (`XE`, `ZE`) in `ALOT06_MOD`: first in $Z$, then in $X$, each with 4-point Lagrange weights from [[intrp2.f#INTRP2|INTRP2]]. Writes `CAPALEX06`.

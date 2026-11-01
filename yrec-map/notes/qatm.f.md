@@ -15,6 +15,7 @@
 
 Then $\rho$ and $\kappa$ at $(P, T)$, and hydrostatic equilibrium in the form $dP/d\tau = g/\kappa$:
 $$\frac{d\log P}{d\log\tau} = \frac{g\,\tau}{\kappa\,P},\qquad g = 10^{\log g}\,f_P .$$
+Here $P$ is the total pressure, gas plus radiation (EQSTAT is called with it, and returns $\rho$ from $P - aT^4/3$), so the radiative force enters through the radiation pressure $aT^4/3$ set by the $T$–$\tau$ relation, and $g$ is not reduced by a radiative acceleration.
 
 **KC's changes.** 2025-05-31: unused arguments removed from the call to `MEQOS` (that call is gone since `rp_1`); a never-executed `PRINT` keeps the unused arguments `B`, `FTL`, `LOCOND`, `RL` referenced, "for external procedure compatibility".
 

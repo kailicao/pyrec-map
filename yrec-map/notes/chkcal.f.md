@@ -9,7 +9,7 @@
 - **Kept between calls:** the previous model's `BLP`, `RLP` and the steps `DX`, `DA`, now local variables kept by `SAVE`.
 
 **The method.**
-1. **Converged** if $|\log L/L_\odot| <$ `TOLL` and $|\log R/R_\odot| <$ `TOLR` and, with the $Z/X$ option, $|\log_{10}(Z/X) - \log_{10}(Z/X)_\odot| <$ `TOLZ`: set `LSOL` and return. The target is thus exactly $L_\odot$ and $R_\odot$.
+1. **Converged** if $|\log L/L_\odot| <$ `TOLL` and $|\log R/R_\odot| <$ `TOLR` and, with the $Z/X$ option, $|\log_{10}(Z/X) - \log_{10}(Z/X)_\odot| <$ `TOLZ`: set `LSOL` and return. The target is thus exactly $L_\odot$ and $R_\odot$. These are the code's `CLSUN` and `CRSUN` (in `CONSTANTS_MOD`, settable in the `PHYSICS` namelist), $3.8515\times10^{33}$ erg s⁻¹ and $6.9598\times10^{10}$ cm by default; `BL` and `RL` are measured in them (how these compare with other adopted solar values is question 5).
 2. **Newton step** with fixed partial derivatives ("empirical", LLP 6/28/09): $\partial\log L/\partial X = -3.78$, $\partial\log R/\partial X = -0.89$, $\partial\log L/\partial\alpha = 0.0139$, $\partial\log R/\partial\alpha = -0.050$. It solves
 $$\log L + L_X\,\Delta X + L_\alpha\,\Delta\alpha = 0, \qquad \log R + R_X\,\Delta X + R_\alpha\,\Delta\alpha = 0,$$
 that is
@@ -17,6 +17,8 @@ $$\Delta\alpha = \frac{\log L\,R_X/L_X - \log R}{R_\alpha - L_\alpha R_X/L_X}, \
 3. The new values go to kind cards $N+1$ to $N+3$, starting from those of card $N-2$ (the start of the current cycle). With the $Z/X$ option, $Z$ is scaled: $Z_\mathrm{new} = Z_\mathrm{old}\,(Z/X)_\odot / (Z/X)_\mathrm{model}$.
 
 **Design.** An older method, which measured the derivatives with extra runs at kind cards 3, 6 and 9, is still in the file but skipped by `GOTO 1234`.
+
+**From YREC's documentation.** [Control Options](https://yrec.readthedocs.io/en/latest/namelist_control.html) (Calibration): `TOLL`, `TOLR` are the tolerances of the solar calibration in $L$ and $R$; `LCALSOLZX` enforces the mixture's $Z/X$, `CALSOLZX` (0.02292 for GS98), and without it $Z$ is held constant in the calibration loop.
 
 **Changed since `rp_1`.** `/CALSUN/` retired: the derivatives and `LSOL` are now arguments, and `BLP`, `RLP`, `DX`, `DA` saved locals; COMMON blocks to modules, `IMPLICIT NONE`.
 
@@ -26,6 +28,8 @@ $$\Delta\alpha = \frac{\log L\,R_X/L_X - \log R}{R_\alpha - L_\alpha R_X/L_X}, \
 2. **The header.** It says "only called for even NK", but main.f calls it when `NK` is a multiple of 3, which matches the use of `N-2` and `N+1..N+3`.
 3. **$Z/X$ not converged.** If $L$ and $R$ are within tolerance but $Z/X$ is not, the routine falls through to the Newton step and also changes $X$ and $\alpha$ slightly. Intended? Also, the convergence test uses $Z/X$ only when `CALSOLZX > 0`, but the update of $Z$ tests only `LCALSOLZX`, so a target of 0 would set $Z = 0$ (the default target is 0.02292).
 4. **Dead code.** The skipped derivative runs (with `DX`, `DA` never set on that path) and the unused `ZLP`: can they go?
+5. **The solar values targeted.** Convergence means $|\log L/L_\odot| <$ `TOLL` with the default $L_\odot$ = `CLSUN` = $3.8515\times10^{33}$ erg s⁻¹ and $R_\odot$ = `CRSUN` = $6.9598\times10^{10}$ cm, while the IAU 2015 nominal values are $3.828\times10^{33}$ erg s⁻¹ and $6.957\times10^{10}$ cm. With `TOLL` = $10^{-5}$, the 0.6% difference in $L_\odot$ ($0.0027$ in $\log L$) is far larger than the tolerance, so the calibrated $X$ and $\alpha$ depend on which value is used. Are the defaults kept for continuity with published YREC solar models, and should the documentation of `TOLL`, `CLSUN` and `CRSUN` say that a calibration matches whatever $L_\odot$, $R_\odot$ the namelist sets?
+6. **Fixed derivatives.** Beyond question 1 (`DLDA`), why fixed "empirical" derivatives rather than secants from the previous cycles (`BLP`, `RLP` are already saved)? A user changing the physics (another opacity, say) would want to know whether convergence slows, or fails within the 15 cycles main.f allows, when the true derivatives differ from these.
 
 ### CHKCAL
 

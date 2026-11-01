@@ -181,7 +181,7 @@ Revised: question 1 corrected (harmless now); question 2 made concrete on rotati
 ## coefft.f
 
 1. Unclear. "the energy fractions `SEG`": only `SEG(1:5)` are fractions of `SESUM` (the five nuclear terms); `SEG(6)` (neutrinos) and `SEG(7)` (gravothermal, `HHC`) are rates in erg g$^{-1}$ s$^{-1}$; with rotation `FRACNUC` $= (\mathtt{SESUM} - \mathtt{SEG(6)} - \mathtt{SEG(7)})/\mathtt{SESUM}$. Fix: say so.
-2. Missing. The point index: COEFFT passes `IU = IM` to ENGEB, so here the rates `HR1`… are stored at the right point (unlike main.f's call, see [[engeb.f#ENGEB|ENGEB]] question 7). Fix: a clause.
+2. Missing. The point index: COEFFT passes `IU = IM` to ENGEB, so here the rates `HR1`… are stored at the right point (unlike main.f's call, see [[engeb.f#ENGEB|ENGEB]] question 6, question 7 before Oct 31, 2026). Fix: a clause.
 3. Missing. `JENV` comes from CRRECT, which has it from MIX only at levels 3 and 4 (CRRECT's question 5). Also "points above `JENV`" is "at and above" (`IM` $\ge$ `JENV`). Fix: reword.
 
 Otherwise checked: the structure equations and their derivatives, $\epsilon_\mathrm{grav}$, the central conditions, $\Gamma_1$, `TLUMX`, KC's changes and the five questions hold.
@@ -211,7 +211,7 @@ Revised: the accretion weighting corrected in the method and made question 2 (an
 2. Settled (probably). Question 2 (units of `TAUCZ`): [[taucal.f#TAUCAL|TAUCAL]] forms it as a length over a convective velocity (`CZWIDE/CVEAVG` or `PSCA/CVEL`), so it is in seconds if the code's CGS units hold, and the cap is consistent. Fix: state it with "probably"; keep a short check.
 3. Unclear. The `###` summary says "per Gyr, probably", while the explanation derives it. Fix: drop "probably" there, keep the inference in the explanation.
 
-Checked: the rate, the factor $N_A/2$, `C21`, the cap and question 1 hold; this is the same $T_9^{+2/3}$ as in ENGEB (its question 4).
+Checked: the rate, the factor $N_A/2$, `C21`, the cap and question 1 hold; this is the same $T_9^{+2/3}$ as in ENGEB (its question 4, settled at a8a5950, where both rates go as $T_9^{-2/3}$).
 
 Revised: the call condition corrected; question 2 answered with "probably" (seconds, from TAUCAL); "probably" dropped from the summary; the link to ENGEB's same power added.
 
