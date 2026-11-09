@@ -7,16 +7,19 @@
 - **Who calls it:** the main program in [[main.f|main.f]], after each model when `LPOUT` is set.
 - **Outputs:** `POLEN` and the previous point updated; `LPULSE` in `NMLPAR_MOD`; the units `IOPMOD`, `IOPENV`, `IOPATM` (from [[iounits_mod.f#IOUNITS_MOD|IOUNITS_MOD]]) opened as `<FPMOD>NN_MMMM` and so on, with `NN` = `NK` (the main program's loop over runs, `DO 200 NK = 1, NUMRUN`) and `MMMM` the model number; a line to `IOWR` and `ISHORT`. While `LPULSE` is true, [[wrtmod.f#WRTMOD|WRTMOD]] writes the model to `IOPMOD` and passes `LPULPT` on to [[envint.f#ENVINT|ENVINT]], which writes the atmosphere and envelope to `IOPATM` and `IOPENV` from the points [[qatm.f#QATM|QATM]] and [[qenv.f#QENV|QENV]] store.
 
+    > **Question** ([[#L94]]; [[#L103]]; [[#L112]]). **`STATUS='NEW'`.** The files are opened as new, so rerunning a model sequence in the same directory stops at the first existing pulsation file. Is the stop meant to protect earlier pulsation files, or should they be opened with `STATUS='UNKNOWN'` (and rewound), as PARMIN opens the other outputs?
+
+
 **The method.** The squared step in the HR diagram and in age, with weights $a, b, c$, is accumulated:
 $$\ell^2 \mathrel{+}= (a\,\Delta\log L)^2 + (b\,\Delta\log T_\mathrm{eff})^2 + (c\,\Delta t)^2 .$$
 When $\ell^2 \ge$ `POMAX`, the files are opened and $\ell^2$ is reset to zero; otherwise the three units are closed and `LPULSE` is set false.
+
+> **Question** ([[#L76-L79]]; [[#L83]]). **`POMAX` is a squared distance.** The sum is of squares (printed as "LEN SQ"), so the default `POMAX` = 0.1 means a distance of about 0.32. YREC's documentation does not describe `POMAX`, `POA`, `POB` and `POC`; is the threshold meant as a squared distance, and should the documentation say so?
 
 **From YREC's documentation.** [Control Options](https://yrec.readthedocs.io/en/latest/namelist_control.html) (Output): `LPULSE` writes pulsation output, to `FPMOD` (the interior), `FPENV` (the envelope) and `FPATM` (the atmosphere), and needs `LSTATM` and `LSTENV` for the outer two; `IPVER` chooses its format.
 
 **Changed since `rp_1`.** `NK` and `DAGE` are now arguments (from `/ZRAMP/` and `/THEAGE/` before; main.f is the only caller); the other COMMON blocks to modules, `IMPLICIT NONE`; the unused `/PULSE/` members and dead `/LUNUM/` units dropped.
 
-## Questions for the experts
+## Bugs, by priority
 
-1. **`POMAX` is a squared distance.** The sum is of squares (printed as "LEN SQ"), so `POMAX` = 0.1 means a distance of about 0.32. Is the namelist documentation clear about this?
-2. **Two different lines.** The same format writes the step's differences (`TM1`–`TM3`) to `IOWR` but their weighted squares (`TMP1`–`TMP3`) to `ISHORT`, under the same labels "D L", "D Te", "D AGE".
-3. **`STATUS='NEW'`.** The files are opened as new, so rerunning a model sequence in the same directory stops at the first existing pulsation file.
+1. **(c)** **Two different lines under the same labels.** ([[#L119-L122]]) The same format writes the step's differences (`TM1`–`TM3`) to `IOWR` but their weighted squares (`TMP1`–`TMP3`) to `ISHORT`, under the same labels "D L", "D Te", "D AGE", so the two files disagree and the `ISHORT` line is mislabeled. Only with `LPOUT` (off by default). Read from the code, not run. **A possible fix:** a choice for the developers: write the same quantities to both units, or give the weighted squares their own labels.

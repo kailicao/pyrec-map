@@ -8,7 +8,7 @@
 - `SDEL(3,JSON)`: $\nabla_\mathrm{rad}$, $\nabla$, $\nabla_\mathrm{ad}$. [[rotmix.f#ROTMIX|`ROTMIX`]] replaces `SDEL(2,·)` for a while and restores it. Read by the burning and mixing routines ([[liburn.f#LIBURN|`LIBURN`]], [[liburn2.f#LIBURN2|`LIBURN2`]], [[microdiff_mte.f#MICRODIFF_MTE|`MICRODIFF_MTE`]], [[setup_grsett.f#SETUP_GRSETT|`SETUP_GRSETT`]], `ROTMIX`), [[gettau.f#GETTAU|`GETTAU`]], `HPOINT`, `MIDMOD`, `PHYSIC` and the output.
 - `SVEL(JSON)`: the convective velocity (cm/s); read by `GETTAU`, `HPOINT`, `MIDMOD` and the output.
 - `SBETA(JSON)`, `SETA(JSON)`, `SFXION(3,JSON)`, `SCP(JSON)`: $\beta$ (gas over total pressure), the degeneracy parameter $\eta$, the three ionization fractions and $c_P$, for the stored model (`PUTSTORE`, `STITCH`).
-- `LOCONS(JSON)`: whether conduction dominates the opacity (`LOCOND`); set by `COEFFT` and read by no routine.
+- `LOCONS(JSON)`: meant to say whether conduction dominates the opacity; set by `COEFFT` from its `LOCOND`, which it always sets to true ([[coefft.f#L161]]; [[coefft.f#L444]]), and read by no routine (unused?).
 
 **Design.** A blanket `USE SCRTCH_MOD` in each routine.
 

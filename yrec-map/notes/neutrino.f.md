@@ -11,8 +11,6 @@
 
 **The method.** Nuclei with $(A, Z)$ = (1, 1), (4, 2), (12, 6), (16, 8), mass fractions $(X, Y, X_\mathrm{C}, X_\mathrm{O})$; everything else is done in `NULOSSES`.
 
+> **Question** ([[#L52-L58]]; [[nulosses.f#L87-L95]]). **Metals other than C and O.** Neon, nitrogen, iron, and the rest of $Z$ are left out, so the four mass fractions sum to less than one, and [[nulosses.f#AZBAR|AZBAR]] does not renormalize them: $\bar A = 1/\sum_i X_i/A_i$ is then too large by the factor $1/\sum_i X_i$, and so is $\bar Z$ ($Y_e = \bar Z/\bar A$ is unaffected). Should the fractions be renormalized, or the missing metals added (for example as ¹⁶O)?
+
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **Metals other than C and O.** Neon, nitrogen, iron and the rest of $Z$ are left out, so the four mass fractions sum to less than one, and [[nulosses.f#AZBAR|AZBAR]] does not renormalize them: $\bar A = 1/\sum_i X_i/A_i$ is then too large by the factor $1/\sum_i X_i$, and so is $\bar Z$. Should the fractions be renormalized, or the missing metals added (for example as ¹⁶O)?

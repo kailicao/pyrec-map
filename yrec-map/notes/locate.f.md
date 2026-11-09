@@ -6,11 +6,9 @@
 
 **The method.** Standard bisection. Then two tolerances are added: if $j = 0$ but $x > 0.99\,\texttt{XX(1)}$, it returns $j = 1$; if $j = N$ but $x < 1.01\,\texttt{XX(N)}$, it returns $N-1$.
 
+> **Question** ([[#L30-L35]]). **Relative tolerances.** The 1 % tolerances are relative to the end values, so they act only for positive end values in an ascending array (such as $\log T$). For an end value $\le 0$ (an $X$ grid starting at 0, or a grid in $\log\rho$) the test can never pass and there is no tolerance at all; for a descending array with positive ends, the tests pass for any $x$ beyond either end, which is then pulled in. Both callers today pass ascending tables with positive values, $\log T$ (`ZOT`, [[gtpurz.f#L69]]) and $\log T_\mathrm{eff}$ (`TEFFLs`, [[alsurfp.f#L205]]), so neither case arises. Was an absolute tolerance meant?
+
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE` with explicit declarations. Two of its callers (`GTLAOL`, `GTLAOL2`) are removed since `rp_1`.
-
-## Questions for the experts
-
-1. **Relative tolerances.** The 1 % tolerances are relative to the end values, so they act only for positive end values in an ascending array (such as $\log T$). For an end value $\le 0$ (an $X$ grid starting at 0, or a grid in $\log\rho$) the test can never pass and there is no tolerance at all; for a descending array the tests do not match the bisection's convention. Was an absolute tolerance meant?
 
 ### LOCATE
 

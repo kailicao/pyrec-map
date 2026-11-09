@@ -12,19 +12,12 @@
 **The method.** With $q = 6.0\times10^{18}$ erg released per gram of hydrogen burned (the code's constant):
 - **Core burning** ($X_c \ge$ `ATIME(1)`): $\Delta X = \min(\texttt{ATIME(2)},\ \texttt{ATIME(3)}\,X_\mathrm{core})$ and
   $$\Delta t = \frac{q}{L_\odot}\,\frac{m_\mathrm{core}}{L(m_\mathrm{core})/L_\odot}\,\Delta X,$$
-  with $m$ and $L$ at `JCORE`, so that a convective core counts as a whole (the comment).
+  with $m$ and $L$ at `JCORE`, so that a convective core counts as a whole (the comment). The header speaks of "the fraction ATIME(3) of the central X", and the code takes $X$ at `JCORE`: The two agree, since `JCORE` is the outermost point of the convective core, which is mixed, or 1 (the center) when there is no convective core or the star is fully convective (settled from the code, Nov 9, 2026: [[#L53-L55]]; [[#L66]]; [[findsh.f#L65]]; [[findsh.f#L108-L110]]; [[findsh.f#L124]]).
 - **Shell burning:** $\Delta t = q\,\texttt{ATIME(6)}\,X_s M_\odot/L_\odot\,/\,L_H$, with $X_s$ the surface $X$ and $L_H$ = `HYDLUM`; and, if $dX/dt < 0$ at the shell's midpoint and `ATIME(7)` > 0,
   $$\Delta t = \min\!\left(\Delta t,\ \left|\frac{\texttt{ATIME(7)}}{dX/dt}\right|\,\mathrm{CSECYR}\times10^9\right).$$
-
-**KC's changes.** Removed the unused argument `JXBEG`, and shortened the calls to `RATES` and `EQBURN` to their new argument lists (2025-05-31).
+  `ATIME(6)` is a mass in solar masses, whatever the star's mass: REMAP's comment calls it the "max permitted solar masses of X burned in timestep" (`TIME_DX_TOTAL`, "max absolute H burned per timestep (post-MS)" in the documentation); the code burns the hydrogen of `ATIME(6)` $M_\odot$ of matter at the surface $X$, and the header's "the mass fraction ATIME(6) of X in the entire star" is older wording (settled from the code and the documentation, Nov 9, 2026: [[#L56-L60]]; [[#L73-L74]]; [[remap.f#L266-L267]]). The factor $\mathrm{CSECYR}\times10^9$ is there because `EQBURN` returns $dX/dt$ per Gyr: The rates of [[rates.f#RATES|RATES]] are per $10^9$ yr per amu (settled from the code, Nov 9, 2026: [[#L105-L106]]; [[rates.f#L656-L658]]).
 
 **Changed since `rp_1`.** Declarations only: `/CTLIM/` to `NMLPAR_MOD`, the constants to `CONSTANTS_MOD`; the unused `/CT3/` and `/FLAG/` dropped; `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **The star's mass or the Sun's?** In shell burning, the hydrogen mass is `ATIME(6)*HCOMP(1,M)*CMSUN`, one solar mass, whatever the star's mass. The comment says "the mass fraction ATIME(6) of X in the entire star". Should it use the star's mass?
-2. **Units of $dX/dt$.** The second limit multiplies by `CSECYR*1.0D9`, as if `EQBURN` returned $dX/dt$ per Gyr. Is that its unit?
-3. **The core's hydrogen.** The comment says the core criterion burns "the fraction ATIME(3) of the central X"; the code uses $X$ at `JCORE` (the core's edge), which equals the centre's only for a mixed core.
 
 ### XTIME
 

@@ -7,18 +7,27 @@
 - **Who calls it:** [[midmod.f#MIDMOD|MIDMOD]].
 - **Output:** `HCOMP` (H, $^3$He, D) over the shell or zone.
 
-**The method.** As in DBURN: mass-weighted means over the zone, substeps with $X_D \leftarrow X_D e^{-2r_k\Delta t/n}$ (the factor 2 as in DBURN, whose question 5 asks what it is for), then $\Delta X = \tfrac12\Delta X_D$ and $\Delta X_3 = -\tfrac32\Delta X_D$. The differences from DBURN:
+**The method.** As in DBURN: mass-weighted means over the zone, substeps with $X_D \leftarrow X_D e^{-2r_k\Delta t/n}$ (the factor 2 as in DBURN, whose question 2 asks what it is for, [[dburn.f#q2]]), then $\Delta X = \tfrac12\Delta X_D$ and $\Delta X_3 = -\tfrac32\Delta X_D$. The differences from DBURN:
 - the threshold for zeroing deuterium is $10^{-14}$ (DBURN: $10^{-11}$) and does not include the accreted D;
-- with accretion, the substep's share of the accreted matter is $f_a$ = `FAC2*FMASSACC`, and the new mean is
-$$X_D = \frac{X_{D,\mathrm{old}} + f_a X_{D,\mathrm{acc}}}{1 + f_a},$$
-written as a weighting by fractions. But `FMASSACC` is the accreted mass in grams ([[mdot.f#MDOT|MDOT]] sets it to `DELM`), so $f_a$ is in grams too (question 2).
+- with accretion, the substep's share of the accreted matter is $f_a$ = `FAC2*FMASSACC`, in grams, since `FMASSACC` is the accreted mass ([[mdot.f#MDOT|MDOT]] sets it to `DELM`); with $M$ = `SUMM` the region's mass (for a single shell, its own mass), the new mean is weighted by mass, as in DBURN:
+$$X_D = \frac{X_{D,\mathrm{old}}\,M + f_a X_{D,\mathrm{acc}}}{M + f_a}.$$
+
+> **Question** ([[#L83]]; [[dburn.f#L75-L80]]; [[#L50]]). **Two copies.** DBURN and DBURNM share almost all their code but differ in the time unit of `DT` and in the zeroing test: $10^{-11}$ in DBURN, with the accreted D included at the surface, against $10^{-14}$ here, without it. Which test is right, and can the two become one routine in the overhaul? See also the questions on [[dburn.f#DBURN|DBURN]].
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`, and the unused `/CONST1/` gone.
 
-## Questions for the experts
+**Changed since `a8a5950`.** The accretion blend is weighted by mass, $(X M + X_\mathrm{acc} f_a)/(M + f_a)$, as in DBURN; before, it divided by $1 + f_a$ with $f_a$ in grams, so any accretion replaced the region's D, H, and $^3$He by the accreted values. For a single shell, the region mass `SUMM` is now set to the shell's own mass (before, a value left from an earlier call). This settles former question 2.
 
-1. **Two copies.** DBURN and DBURNM share almost all their code but differ in the time unit of `DT`, the threshold ($10^{-11}$ against $10^{-14}$) and the accretion weighting; neither tests `DMDT0 > 0` in its accretion branch. Which behavior is right, and can the two become one routine in the overhaul? See also the questions on [[dburn.f#DBURN|DBURN]].
-2. **The accretion weighting.** `FMASSA = FAC2*FMASSACC` is a mass in grams, yet the means divide by `1 + FMASSA`, as if it were a fraction of the zone's mass. The accreted matter then gets nearly all the weight, so $X_D$, $X$ and $^3$He of the surface zone jump towards the accreted values. DBURN weights by the zone's mass `SUMM` (grams) instead. This looks like a bug: should it be `(XH2NO*SUMM + XH2NA*FMASSA)/(SUMM + FMASSA)`?
+## Bugs, by priority
+
+1. **(d)** **`FMASSACC` is read under mass loss.** ([[#L109]]; [[#L140-L145]]) As in DBURN ([[dburn.f#b1]]): The accretion branch does not test `DMDT0 > 0`, so in a run that only loses mass it blends with an `FMASSACC` that [[mdot.f#MDOT|MDOT]] never set ([[mdot.f#L320]], [[deuter_mod.f#L30]]); with the usual zero start value the result is the same as without accretion. Only with `LMDOT` (off by default). Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to take the accretion branch only when mass is gained,
+    C since MDOT sets FMASSACC only then.
+          IF(LMDOT .AND. IEND.EQ.M .AND. DMDT0.GT.0.0D0)THEN
+    ```
 
 ### DBURNM
 

@@ -13,12 +13,9 @@ $$\Delta X_{i+1/2} = \frac{\Delta t}{2}\,4\pi\,\frac{F_{i+1}-F_i}{m_{i+1}-m_i}\q
 
 stored in `EX_H(I)`, where at the centre ($i = 1$) the code takes $F_1 = 0$, $m_1 = 0$, and at the surface ($i = N-1$) $F_N = 0$, $m_N = M$: so the flux is taken as zero at the centre and at the surface. The same formulas, with `ECOD1Z` and `EZ_H`, are applied to the metals when `LDIFZ` is true and `LDOLI` is false.
 
+Only the increment is computed, not the textbook half step's average of the neighbouring values, $X_{j+1/2}^{n+1/2} = \tfrac12(X_j + X_{j+1}) + \Delta X_{j+1/2}$: The average enters through the midpoint coefficients, which `MODEL_TO_EQUAL` interpolates from the current abundances, and `GRSETT` adds the increment by linearizing them, $F_{i+1/2} + \Delta X_{i+1/2}\,\partial F/\partial X$, which is $F$ at the half step's abundance to first order (settled from the code, Nov 9, 2026: [[grsett.f#L173-L185]]; [[model_to_equal.f#L157-L170]]). The two boundary cells are not those of the midpoint grid: The central one spans the mass from 0 to `EM(2)`, and the surface one from `EM(NPT-1)` to `STOT`, so that each holds the reservoir beyond the grid's end (a convective core or envelope), to which `EQUAL_TO_MODEL` applies the change at the grid's end point (settled from the code, Nov 9, 2026: [[#L45-L47]], [[#L55-L57]]; [[equal_to_model.f#L42-L44]], [[equal_to_model.f#L113-L116]]).
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/CONST1/` to `CONSTANTS_MOD`, `LDIFZ` from `/GRAVS3/` to `NMLPAR_MOD`, `/GRAVEZ/` to `GRAVEZ_MOD`), `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **Only the flux difference.** The half step of the textbook Lax–Wendroff scheme (as the `GRSETT` comment writes it) also averages the neighbouring values, $X_{j+1/2}^{n+1/2} = \tfrac12(X_j + X_{j+1}) - \dots$; here only the increment is computed, and `GRSETT` uses it to update the coefficients. Is this the intended variant?
-2. **Index placement.** The central formula uses $m_2$ (the mass between points 1 and 2 when $m_1 = 0$), but the surface one uses $M - m_{N-1}$, which spans two intervals if $m_N < M$. Are the boundary masses consistent with the midpoint grid?
 
 ### LAX_WENDROF1
 

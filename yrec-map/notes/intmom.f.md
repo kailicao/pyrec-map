@@ -8,14 +8,9 @@
 
 $$h = \tfrac{2}{3}\,q\,R,\qquad I/m = h\left(1 + 0.15\sum_{j=1}^{5} c_j\,(j\eta_2 + 5)\,a^j\right),\qquad \frac{dI/m}{d\ln a} = h\;0.15\sum_{j=1}^{5} j\,c_j\,(j\eta_2+5)\,a^j,$$
 
-with $q$ = `QR0R`, $R$ = `R0R`; the two results are `HIM` and `QIWM`.
+with $q$ = `QR0R`, $R$ = `R0R`; the two results are `HIM` and `QIWM` ([[#L23-L31]]). The series, with its coefficients `C` ([[#L17-L18]]) and the factor 0.15, is the method of Wai-Yuen Law's thesis (Yale, 1980), p. 61, which MOMI's comment cites ([[momi.f#L52-L53]]) (settled from the code, Nov 9, 2026). The sum in `QIWM` is $a\,\partial(I/m)/\partial a$, a logarithmic derivative in $a \propto \Omega^2$, so $d(I/m)/d\Omega = (2/\Omega)\,$`QIWM`, while the comment ([[#L21-L22]]) calls it $dI/d\Omega$; SOLID's Newton step uses it as $dI/d\Omega$, a suspected bug ([[solid.f#b2]]).
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **Source of the series.** Where do the coefficients `C` and the factor 0.15 come from? A reference in the code would help.
-2. **What `QIWM` is.** The sum is $a\,\partial(I/m)/\partial a$, a logarithmic derivative in $a \propto \Omega^2$, so $d(I/m)/d\Omega = (2/\Omega)\,$`QIWM`. `MOMI` stores `QIWM` times the shell mass as `QIW` without that factor, while the comment calls it $dI/d\Omega$. Where it is used, in the Newton step of [[solid.f#SOLID|`SOLID`]] (`DELW = DELJ/(CZI + WGUESS*CZQIW)`), it is treated as $dI/d\Omega$, so the derivative of $J = I\Omega$ becomes $I + \Omega\,\texttt{QIW}$ instead of $I + 2\,\texttt{QIW}$. This would change only the convergence of the iteration, not its result; was the factor $2/\Omega$ meant?
 
 ### INTMOM
 

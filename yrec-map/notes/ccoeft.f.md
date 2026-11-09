@@ -2,6 +2,8 @@
 
 **Purpose.** This file sets up the tridiagonal system for one implicit time step of composition transport by rotationally induced mixing, on an evenly spaced grid in the coordinate $\chi$ built by [[getgrid.f#GETGRID|GETGRID]] and [[mixgrid.f#MIXGRID|MIXGRID]] (the comments' "radius" and "cm" are older than that grid).
 
+> **Question** ([[#L25-L36]]; [[#L61-L63]]). **Outdated comments.** The comments speak of an even grid in radius, a spacing in cm, coefficients "computed in SR COEFFT" and "angular momentum" at the boundary, while the routine works on the grid in $\chi$ with coefficients from CODIFF and MIXGRID, for composition. Should the comments be updated?
+
 **How it fits.**
 - **Inputs:** the arguments `COD` (diffusion coefficients, "computed in SR COEFFT" per the comment), `DR` (grid spacing: [[mixcom.f#MIXCOM|MIXCOM]] passes `DCHI`, the spacing in $\chi$), `DT` (time step, s), `ECOMP` (mass fractions at the start of the step on the even grid), `EM` (the masses of the grid's shells, g), `NTOT` (number of points).
 - **Who calls it:** [[mixcom.f#MIXCOM|MIXCOM]].
@@ -18,10 +20,6 @@ At both ends there is no flux across the boundary: $a_1 = 0$, $b_1 = 1 + f_1 D_2
 The scheme conserves mass: [[codiff.f#CODIFF|CODIFF]] includes $4\pi$ in `COD2`, and MIXGRID multiplies the coefficient by $\rho r^2\,d\chi/dr$, so `COD` is $4\pi\rho r^2 D\,d\chi/dr$, and the flux between shells is `COD` times the difference in $X$ over $\Delta\chi$.
 
 **Changed since `rp_1`.** Declarations only: `/TRIDI/` to its module, the unused `/CCOUT/` and `/LUOUT/` dropped, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **Outdated comments.** The comments speak of an even grid in radius, a spacing in cm, coefficients "computed in SR COEFFT" and "angular momentum" at the boundary, while the routine works on the grid in $\chi$ with coefficients from CODIFF and MIXGRID, for composition. Should the comments be updated?
 
 ### CCOEFT
 

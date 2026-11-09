@@ -3,7 +3,7 @@
 **Purpose.** `AEOS06_MOD` holds the OPAL 2006 equation-of-state tables and their grids, shared by 5 routines. It replaces `COMMON/AEOS06/` (MHP via Claude, 10/20/26), whose member `M` is now named `MIDX`; the table dimensions (`MX` = 5, `MV` = 10, `NR` = 169, `NT` = 197) are private to the module, since each user declares its own.
 
 **What its variables hold, who sets them, who reads them.**
-- `XZ(MX,MV,NT,NR)`: the tables, for each of the five $X$ values, ten quantities on the $(T_6, \rho)$ grid; read in by [[readcoeos06.f#READCOEOS06|`READCOEOS06`]], read by [[esac06.f#ESAC06|`ESAC06`]] and [[rhoofp06.f#RHOOFP06|`RHOOFP06`]].
+- `XZ(MX,MV,NT,NR)`: the tables, for each of the five $X$ values, room for ten quantities on the $(T_6, \rho)$ grid, of which the file fills nine ([[readcoeos06.f#L124-L126]]; the rest stays at $10^{35}$); read in by [[readcoeos06.f#READCOEOS06|`READCOEOS06`]], read by [[esac06.f#ESAC06|`ESAC06`]] and [[rhoofp06.f#RHOOFP06|`RHOOFP06`]].
 - `T6LIST(NR,NT)`, `RHO(NR)`, `T6A(NT)`: the grids, from `READCOEOS06`; read by `ESAC06`, `RHOOFP06`, [[eqbound06.f#EQBOUND06|`EQBOUND06`]] and [[t6rinteos06.f#T6RINTEOS06|`T6RINTEOS06`]].
 - `DFSX(MX)`, `DFS(NT)`, `DFSR(NR)`: inverse grid spacings in $X$, $T_6$ and $\rho$, set by `READCOEOS06`; read by `ESAC06` and `T6RINTEOS06`.
 - `ESK(NT,NR)`, `ESK2(NT,NR)`: values interpolated in $X$, set by `ESAC06` and read by it and `T6RINTEOS06`.

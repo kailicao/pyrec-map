@@ -10,20 +10,40 @@
 - **Modules:** [[galot06_mod.f#GALOT06_MOD|`GALOT06_MOD`]] (the grids `TGR06`, `R0GR06`, `XXG06`, `ZZG06`) and [[alot06_mod.f#ALOT06_MOD|`ALOT06_MOD`]] (the table `CAPALEX06` at the composition `XE`, `ZE`, and the last indices `IT`, `ID`), shared with `ALEX06TAB` and [[readalex06.f#READALEX06|READALEX06]]; $\ln 10$ from [[constants_mod.f#CONSTANTS_MOD|`CONSTANTS_MOD`]].
 
 **The method.**
-1. If $X$ or $Z$ differs from the stored `XE`, `ZE` by more than $10^{-8}$, rebuild the table with `ALEX06TAB`.
+1. If $X$ or $Z$ differs from the stored `XE`, `ZE` by more than $10^{-8}$, rebuild the table with `ALEX06TAB` ([[#L26-L33]]).
+
+    > **Question** ([[#L26-L33]]). **Table rebuilt per composition.** Every change of $X$ or $Z$ beyond $10^{-8}$ rebuilds the whole table (85 × 19 values, from 16 tables). Where the points below `TMOLMAX` differ in composition (with settling, or with a gradient in the cool envelope), this happens at almost every call. Is that cost acceptable, or should the routine interpolate in $X$ and $Z$ directly? A profile of a run with diffusion would show the share of time spent in `ALEX06TAB`.
+
 2. The table is in $\log T$ and $\log R$, with $\log R = \log\rho - 3(\log T - 6)$ (that is, $R = \rho/T_6^3$).
 3. Find the 4×4 stencil from the last indices, get Lagrange weights in $\log T$ and $\log R$, and interpolate $\log\kappa$ and $\partial\log\kappa/\partial\log R$.
-4. Above the largest $\log R$ of the table, extrapolate $\log\kappa$ linearly from the last two columns.
+
+    > **Question** ([[#L37-L59]]; [[#L66-L88]]). **No lower-edge handling.** Below the smallest $\log R$ ($-8$), or outside the $\log T$ range (2.70 to 4.50), the stencil stays at the edge and the Lagrange weights extrapolate the cubic silently; only above the largest $\log R$ is the extrapolation made linear (step 4). Should there be a check, or a linear extrapolation at the other edges too? (Above $\log T$ = 4.50 is reached only if `TMOLMAX` is set above it; its default is 4.1.)
+
+4. Above the largest $\log R$ of the table, extrapolate $\log\kappa$ linearly from the last two columns ([[#L90-L96]]; [[#L113-L120]]); the derivative is not extrapolated (bug 1).
 5. Convert the temperature derivative from fixed $R$ to fixed $\rho$:
 $$\left.\frac{\partial\log\kappa}{\partial\log T}\right|_\rho = \left.\frac{\partial\log\kappa}{\partial\log T}\right|_R - 3\left.\frac{\partial\log\kappa}{\partial\log R}\right|_T.$$
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 
-## Questions for the experts
+## Bugs, by priority
 
-1. **Table rebuilt per composition.** Every change of $X$ or $Z$ beyond $10^{-8}$ rebuilds the table. In a model with a composition gradient in the cool envelope, or with settling, this happens at almost every call. Is that cost acceptable, or should the routine interpolate in $X$ and $Z$ directly?
-2. **Extrapolation and derivatives.** Above the largest $\log R$, the value is extrapolated but `QOD` is not: it stays the derivative at the table edge. Consistent, or should it be the slope of the extrapolation?
-3. **No lower-edge handling.** Below the smallest $\log R$ or outside the $\log T$ range, the Lagrange weights extrapolate silently. Should there be a check?
+1. **(c)** **The derivative is not extrapolated with the value.** ([[#L90-L96]]; [[#L108-L111]]; [[#L113-L120]]; [[#L126-L129]]) Above the largest $\log R$ of the table ($\log R > 1$), $\log\kappa$ is extrapolated linearly from the last two columns, but `QOPR`, and so `QOD` $=\partial\log\kappa/\partial\log\rho|_T$, is the derivative of the cubic at the table edge, not the slope of the extrapolation. `QOT` is then converted to fixed $\rho$ with this `QOD` (line 129). What follows: There, the returned derivatives do not match the returned opacity; where they are used (the linearized equations) was not traced. Only with `LALEX06` (off by default in the code; recommended by YREC's User Guide) and at $\log T \le$ `TMOLMAX`. Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to give the extrapolated opacity its own derivative
+    C in log R, the slope of the linear extrapolation.
+          IF(LINEAR)THEN
+             DO I = 1,4
+                II = IT+I-1
+                OP(I) = OP(I)+(RR-R)*(CAPALEX06(II,NUMD)-
+         *      CAPALEX06(II,NUMD-1))/(R0GR06(NUMD)-R0GR06(NUMD-1))
+                QOPR(I) = (CAPALEX06(II,NUMD)-CAPALEX06(II,NUMD-1))/
+         *      (R0GR06(NUMD)-R0GR06(NUMD-1))
+             END DO
+             R = RR
+          ENDIF
+    ```
 
 ### GETALEX06
 

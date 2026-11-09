@@ -8,7 +8,7 @@
 - **Output:** the solution, returned in `B`; `A` is overwritten.
 - No COMMON blocks.
 
-**Storage.** Row $i$ of the matrix is stored in `A(i,1:10)`, with the diagonal in column 5: `A(i,5+k)` is the coefficient of unknown $x_{i+k}$, for $k = -4, \dots, 5$. The band thus has 4 subdiagonals and 5 superdiagonals.
+**Storage.** Row $i$ of the matrix is stored in `A(i,1:10)`, with the diagonal in column 5: `A(i,5+k)` is the coefficient of unknown $x_{i+k}$, for $k = -4, \dots, 5$. The band thus has 4 subdiagonals and 5 superdiagonals. `A` is declared `A(NMAX,10)` with `NMAX` = 8000 ([[#L9]]; [[#L12]]), and DADCOEFT declares the same ([[dadcoeft.f#L39]]; [[dadcoeft.f#L92]]); the two must agree, since the first dimension sets where each column starts. `KNOWN_ISSUES.md` (lines 1845–1848) keeps `NMAX` per routine on purpose.
 
 **The method.**
 1. **Forward elimination**, row by row: divide row $i$ and $b_i$ by the pivot $a_{ii}$, then remove $x_i$ from the next 4 rows,
@@ -17,17 +17,15 @@ The last 4 rows are handled separately, since their bands are cut off by the end
 2. **Back substitution:** with unit diagonal, for $i = N, \dots, 2$,
 $$b_{i-l} \leftarrow b_{i-l} - b_i\,a_{i-l,\,i}, \qquad l = 1, \dots, \min(5, i-1).$$
 
-**Design.** No pivoting: the method relies on the matrix being diagonally dominant enough. About 100 lines of an earlier version (blocks of 4 rows per shell, "DIAGONALIZE OMEGA(II) TERM") remain as comments.
+**Design.** No pivoting: the method relies on the matrix being diagonally dominant enough.
 
-**KC's changes.** 2025-05-31: the unused arguments `M1`, `M2` removed from the argument list (the old header kept as a comment).
+> **Question** ([[#L29-L32]]; [[#L52-L55]]; [[#L75]]). **No pivoting.** Is the system from DADCOEFT always diagonally dominant? A small pivot stops the whole run rather than trying a pivoted solve.
 
-**Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`, and the unused `JSON` parameter removed, which settles half of question 2.
+About 100 lines of an earlier version (blocks of 4 rows per shell, "DIAGONALIZE OMEGA(II) TERM") remain as comments.
 
-## Questions for the experts
+> **Question** ([[#L16-L27]]; [[#L81-L152]]). **Dead code.** The commented-out block solver: can it go in the overhaul?
 
-1. **No pivoting.** Is the system from DADCOEFT always diagonally dominant? A small pivot stops the whole run rather than trying a pivoted solve.
-2. **A dimension to keep in step.** `NMAX = 8000` must match the first dimension of `A` in DADCOEFT, which declares the same value.
-3. **Dead code.** The commented-out block solver: can it go in the overhaul?
+**Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`, and the unused `JSON` parameter removed, which settled half of a former question on the dimensions (the other half is now in Storage, above).
 
 ### BANDW
 

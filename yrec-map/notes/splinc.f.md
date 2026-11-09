@@ -15,11 +15,9 @@ which the code solves by forward elimination (`SIG`, `P`, `U`) and back substitu
 
 **Design.** The arrays have the fixed size `JSON` (5000, from `DIMENSIONS_MOD`). [[splinj.f|splinj.f]] is the same routine with arrays sized `N`.
 
+> **Question** ([[#L13]]; [[splinj.f#L10]]). **Two copies.** `SPLINC` and [[splinj.f#SPLINJ|SPLINJ]] are the same algorithm; only the array declarations differ. Could one replace the other?
+
 **Changed since `rp_1`.** Declarations only: the array size `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **Two copies.** `SPLINC` and [[splinj.f#SPLINJ|SPLINJ]] are the same algorithm; only the array declarations differ. Could one replace the other?
 
 ### SPLINC
 

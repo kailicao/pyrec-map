@@ -1,6 +1,6 @@
 # Pages quint.f to sneut.f
 
-Round 1, Oct 25, 2026, by Claude, against the code at YREC `rp_1`. Each finding gives its kind (wrong, missing, unclear, format), the text and the proposed fix; "Revised" says what was applied.
+Round 1, Oct 25, 2026, by Claude, against the code at YREC `rp_1`. Its line and question numbers refer to `rp_1`; the pages have since moved to the development branch (7be4133), where most questions were renumbered, answered, or made suspected bugs. Each finding gives its kind (wrong, missing, unclear, format), the text and the proposed fix; "Revised" says what was applied.
 
 ## quint.f
 

@@ -9,12 +9,8 @@
 
 **The method.** Over all shells, the largest changes $\Delta\log P$, $\Delta\log T$, $\Delta\log r$, and the relative luminosity change $\Delta L / \bar L$ (with $\bar L$ the mean of the shell and its inner neighbour). Then
 $$f = \max\left(\frac{\Delta\log P}{a_9},\ \frac{\Delta\log T}{a_8},\ \frac{\Delta\log r}{a_{10}},\ \frac{\Delta L/\bar L}{a_{11}\ln 10}\right),\qquad \frac{1}{a_{13}} \le f \le a_{13},\qquad \texttt{PDELT} = \frac{\Delta t}{f},$$
-with $a_k$ = `ATIME(k)`, and $f = 1$ if nothing changed.
+with $a_k$ = `ATIME(k)`, and $f = 1$ if nothing changed. The shells where the maxima occur are recorded in `NHMAX`, which nothing reads (unused?). The header still calls `ATIME(12)` the "maximum percentage change in the timestep"; since MHP 10/14 the code uses `ATIME(13)` as the factor, and REMAP now sets `ATIME(12)` from `TIME_DY_SHELL`, the helium-shell limit that [[ytime.f#YTIME|YTIME]] reads, and `ATIME(13)` from `TIME_MAX_DT_FRAC`: The header's line is older wording (settled from the code, Nov 9, 2026: [[#L68]]; [[#L128-L135]]; [[remap.f#L274-L275]]; [[remap.f#L291-L294]]).
+
+> **Question** ([[#L67]]; [[#L107-L108]]; [[#L122-L124]]). **The luminosity criterion.** $\Delta L/\bar L$ is compared with `ATIME(11)` $\times\ln 10$, which makes `ATIME(11)` a limit on $\Delta\log L$, whereas the header calls it "delta L/L" (and the documentation of `TIME_DL`, "max local ΔL"). Which is meant?
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/OLDMOD/` to `OLDMOD_MOD`, `ATIME` of `/CTLIM/` to `NMLPAR_MOD`; the unused `/CONST/`–`/CONST3/` dropped), `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **`ATIME(12)` or `ATIME(13)`.** The header says `ATIME(12)` is the "maximum percentage change in the timestep"; since MHP 10/14 the code uses `ATIME(13)` as a factor. Update the header?
-2. **The luminosity criterion.** $\Delta L/\bar L$ is compared with `ATIME(11)` $\times\ln 10$, which makes `ATIME(11)` a limit on $\Delta\log L$, whereas the header calls it "delta L/L". Which is meant?
-3. **Unused.** `NHMAX` (where each maximum occurs) is filled but not used, and is undefined when the maximum is at the first shell.

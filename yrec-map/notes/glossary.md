@@ -1,6 +1,6 @@
 # Glossary
 
-Every variable declared in one of YREC's 87 modules (905 in all), under its current name in lower case, as pyrec writes it. Some of YREC's names are not intuitive, and their history explains why: many are short, from the days of Fortran 77, and their types are implied by the first letter (`a`–`h` and `o`–`z` real, `i`–`n` integer, `l` logical). They are kept and explained here rather than renamed (Kaili Cao, Oct 31, 2026); every file page lists the variables its source uses, linked to their entries. The physics is written in the YREC paper's symbols (the overview's Notation); "log" is base 10 unless stated. Where neither the code nor YREC's documentation says what a variable holds, or its units, the entry says what is known and asks, in italics (42 entries). The constants and the input/output units come first, then the namelist modules, then the other modules in alphabetical order. An array's dimensions follow its meaning in parentheses, as in `(JSON)`, where `json` is the maximum number of shells.
+Every variable declared in one of YREC's 85 modules (898 in all), under its current name in lower case, as pyrec writes it. Some of YREC's names are not intuitive, and their history explains why: many are short, from the days of Fortran 77, and their types are implied by the first letter (`a`–`h` and `o`–`z` real, `i`–`n` integer, `l` logical). They are kept and explained here rather than renamed (Kaili Cao, Oct 31, 2026); every file page lists the variables its source uses, linked to their entries. The physics is written in the YREC paper's symbols (the overview's Notation); "log" is base 10 unless stated. Where neither the code nor YREC's documentation says what a variable holds, or its units, the entry says what is known and asks, in italics (42 entries). The constants and the input/output units come first, then the namelist modules, then the other modules in alphabetical order. An array's dimensions follow its meaning in parentheses, as in `(JSON)`, where `json` is the maximum number of shells.
 
 ## CONSTANTS_MOD
 
@@ -100,7 +100,7 @@ The namelist variables that serve only to set other quantities, or are kept for 
 - **`pmmm`**: the index $m$ of the wind law (the power of the field strength, $B^{4m}$, and of $\dot M^{1-2m}$ in $\dot J$); default 0.5 ('K97': `ALFA`/3, 'V13': 0.22); enters `EXW`, `EXR`, `EXM`, `EXL`, `EXPR`, `EXCEN`.
 - **`pmmmd`**: default 1.27D12; read nowhere. *What it holds is not stated: the solar mass-loss rate $\dot M_\odot$, in g s⁻¹?*
 - **`r14_15`**: in `CONTROL`, the ¹⁴N/¹⁵N ratio, default 411.9 (Lodders 2021); [[parmin.f#PARMIN|`PARMIN`]] only checks that a custom value is not negative; a placeholder, ¹⁵N is not followed (the documentation). *Name:* Ratio of 14 to 15.
-- **`r16_17`**: in `CONTROL`, the ¹⁶O/¹⁷O ratio, default 471.4; checked like `R14_15`; a placeholder, ¹⁷O is not followed. *The default is close to the solar ¹⁶O/¹⁸O ratio, while `R16_18`'s 2693.0 is close to ¹⁶O/¹⁷O: are the two defaults swapped ([[starin.f#STARIN|`STARIN`]]'s page, question 12)?*
+- **`r16_17`**: in `CONTROL`, the ¹⁶O/¹⁷O ratio, default 471.4; checked like `R14_15`; a placeholder, ¹⁷O is not followed. *The default is close to the solar ¹⁶O/¹⁸O ratio, while `R16_18`'s 2693.0 is close to ¹⁶O/¹⁷O: are the two defaults swapped ([[starin.f#b3|`STARIN`'s suspected bug 3]])?*
 - **`s0_1_1`**: $S_0$ of p+p, in keV b, default 4.01D-22 (Solar Fusion II); with `LNEWNUC`, [[remap.f#REMAP|`REMAP`]] sets `SSTANDARD(1)` to its ratio to the reference 4.07D-22. *Name:* S0, then the reacting nuclei by mass number (1 for p, 3 for ³He, 12 for ¹²C, …).
 - **`s0_1_12`**: $S_0$ of p+¹²C, keV b, default 1.34; gives `SSTANDARD(4)` (reference 1.45).
 - **`s0_1_13`**: $S_0$ of p+¹³C, keV b, default 7.6; gives `SSTANDARD(5)` (reference 5.5).
@@ -291,7 +291,7 @@ The run's settings that the physics routines read: the members of the `CONTROL` 
 - **`lnumderiv`**: numerical rather than analytic derivatives of the equation of state (very slow); default `.FALSE.`; read by [[eqstat.f#EQSTAT|`EQSTAT`]].
 - **`lopal95`**: in `CONTROL`, the atomic opacities in the OP/OPAL format (recommended); no initializer; read by [[getopac.f#GETOPAC|`GETOPAC`]], [[setupopac.f#SETUPOPAC|`SETUPOPAC`]] and `SURFOPAC`.
 - **`lopale06`**: the OPAL 2006 equation of state (PARMIN opens the table); default `.FALSE.`; read by [[eqstat2.f#EQSTAT2|`EQSTAT2`]], [[setups.f#SETUPS|`SETUPS`]] and [[calcad.f#CALCAD|`CALCAD`]].
-- **`lovmax`**: with `LOVSTC`, limit core overshoot by `BETAC`, against pathologies for small cores; default `.FALSE.`; read by [[oversh.f#OVERSH|`OVERSH`]].
+- **`lovmax`**: with `LOVSTC`, limit core overshoot by `BETAC`, against pathologies for small cores; default `.TRUE.` (since `7be4133`); read by [[oversh.f#OVERSH|`OVERSH`]].
 - **`lovstc`**: core overshoot (mixing only, unless `LADOV`); default `.FALSE.`; PARMIN stops the run if it is set with `LSEMIC`. *Name:* OVerShooT, Core.
 - **`lovste`**: envelope overshoot; default `.FALSE.`. *Name:* OVerShooT, Envelope.
 - **`lovstm`**: overshoot of intermediate convection zones (not recommended); default `.FALSE.`. *Name:* OVerShooT, Middle.
@@ -560,12 +560,6 @@ The structure of the atmosphere, point by point, set by [[envint.f#ENVINT|`ENVIN
 - **`atmor`**: the radial step from the previous atmosphere point, $\Delta r = \Delta\tau/\overline{\rho\kappa}$, in cm, not a logarithm, `(JSON)` (the page calls it $\log r$; [[envint.f#ENVINT|`ENVINT`]] stores `DELTR`, which [[stitch.f#STITCH|`STITCH`]] adds to the envelope's top radius).
 - **`atmot`**: $\log T$ at each point, `(JSON)`; set by `ENVINT`.
 - **`numatm`**: the number of atmosphere points stored; set by `ENVINT`.
-
-## BURN_MOD
-
-A copy of the composition (or of its changes) passed between the mixing routines.
-
-- **`hcompm`**: the fifteen composition arrays `HR1`…`HF2`, `(15,JSON)`; copied in by [[mix.f#MIX|`MIX`]], back by [[rotmix.f#ROTMIX|`ROTMIX`]], interpolated onto a new grid by [[hpoint.f#HPOINT|`HPOINT`]].
 
 ## CCOUT_MOD
 
@@ -842,7 +836,7 @@ Results and workspace of the OPAL 2006 equation-of-state interpolation: the inte
 
 The relative tolerance of the iteration for the moment of inertia and the surface rotation rate.
 
-- **`toleri`**: the relative tolerance to which [[solid.f#SOLID|`SOLID`]] matches the convection zone's angular momentum (at most 20 tries); [[checkj.f#CHECKJ|`CHECKJ`]] relaxes it to at least `DJOK`/100 around its call to `GETROT` and then restores it. No namelist, `DATA` statement or assignment gives it a first value, so it starts at zero in practice. *What value was meant as its default?* *Name:* TOLER for tolerance.
+- **`toleri`**: the relative tolerance to which [[solid.f#SOLID|`SOLID`]] matches the convection zone's angular momentum (at most 20 tries); [[checkj.f#CHECKJ|`CHECKJ`]] relaxes it to at least `DJOK`/100 around its call to `GETROT` and then restores it. Its first value is $10^{-12}$ (since `7be4133`; before, nothing gave it one, so it started at zero). *Name:* TOLER for tolerance.
 
 ## FAC_MOD
 
@@ -878,15 +872,6 @@ The grids of the low-temperature opacities of Ferguson et al. (2005) (ALEX06 in 
 - **`tgr06`**: the $\log T$ grid, 2.70 to 4.50, `(NUMT)`; read by [[getalex06.f#GETALEX06|`GETALEX06`]] and checked against the tables by [[readalex06.f#READALEX06|`READALEX06`]]. *Name:* T grid, 06.
 - **`xxg06`**: the nine $X$ values, 0 to 1, `(NUMX)`; read by [[alex06tab.f#ALEX06TAB|`ALEX06TAB`]].
 - **`zzg06`**: the sixteen $Z$ values, 0 to 0.10, `(NUMZ)`; read by [[alex06tab.f#ALEX06TAB|`ALEX06TAB`]].
-
-## GRAB_MOD
-
-The energy generation of the He3+He3 reaction and of the He3-burning reactions together, and their luminosities shell by shell.
-
-- **`enghe3`**: the energy generation rate per gram (erg g$^{-1}$ s$^{-1}$) of He3+He3 (`DG(2)`) at the current shell; set by [[engeb.f#ENGEB|`ENGEB`]], read by [[coefft.f#COEFFT|`COEFFT`]]. *Name:* ENerGy, He3.
-- **`he3all`**: the same for He3+He3 and He3+He4 together (`DG(2)+DG(3)`); set by `ENGEB`, read by `COEFFT`.
-- **`umhe33`**: `enghe3` times the shell's mass, in $L_\odot$, `(JSON)`; set by [[coefft.f#COEFFT|`COEFFT`]], read nowhere.
-- **`umheal`**: `he3all` times the shell's mass, in $L_\odot$, `(JSON)`; set by `COEFFT`, read nowhere.
 
 ## GRAVEZ_MOD
 
@@ -1018,7 +1003,7 @@ The proton-capture rates of ⁶Li, ⁷Li and ⁹Be at each shell for the current
 
 ## OLDMOD_MOD
 
-The model at the start of the step (the "old" model): structure, composition, effective temperature and number of shells.
+The model at the start of the step (the "old" model): structure, composition, effective temperature, and surface luminosity.
 
 - **`hcompp`**: the old composition, mass fractions as in `HCOMP` (1 $X$, 2 $Y$, 3 $Z$, 4–15 the tracked isotopes), `(15,JSON)`; saved by the [[main.f#(file level)|main program]], [[hpoint.f#HPOINT|`HPOINT`]], [[getw.f#GETW|`GETW`]] and [[bursmix.f#BURSMIX|`BURSMIX`]].
 - **`hdo`**: the old $\log\rho$, `(JSON)`; `HPOINT` also uses it as scratch. *Name:* `HD` old.
@@ -1028,8 +1013,8 @@ The model at the start of the step (the "old" model): structure, composition, ef
 - **`hss`**: the old mass coordinates, against which [[hpoint.f#HPOINT|`HPOINT`]] interpolates (and the new grid while it builds it), `(JSON)`. *Units not stated: $\log m$, as `HS`?*
 - **`hto`**: the old $\log T$, `(JSON)`. *Name:* `HT` old.
 - **`lco`**: the old convective flags (`LOGICAL*4`), `(JSON)`; saved by [[hpoint.f#HPOINT|`HPOINT`]], read by [[midmod.f#MIDMOD|`MIDMOD`]]. *Name:* `LC` old.
-- **`lczo`**: old convective flags (`LOGICAL*4`), `(JSON)`; saved by `HPOINT`, read nowhere. *What does it flag, as against `lco`?*
-- **`mo`**: the old number of shells (`INTEGER*4`); saved by the main program, `HPOINT` and `STARIN`, read by [[entime.f#ENTIME|`ENTIME`]]. *Name:* `M` old.
+- **`hlsuro`**: the old surface luminosity, $L/L_\odot$ (`HL(M)`); saved by the main program, `HPOINT` and `STARIN`, read by [[entime.f#ENTIME|`ENTIME`]] (since `7be4133`, in place of `MO`, the old number of shells). *Name:* `HL` at the SURface, old.
+- **`lczo`**: old convective flags (`LOGICAL*4`), `(JSON)`; saved by `HPOINT` (and `STARIN` for the starting model), read by [[crrect.f#CRRECT|`CRRECT`]], which passes them to `GETROT` (since `7be4133`). *What does it flag, as against `lco`?*
 - **`tefflo`**: the old $\log T_\mathrm{eff}$; saved by the main program, `HPOINT` and `STARIN`, read by [[entime.f#ENTIME|`ENTIME`]]. *Name:* `TEFFL` old.
 
 ## OLDPHY_MOD
@@ -1117,22 +1102,20 @@ The convective overturn time and the photospheric pressure at the start and end 
 
 The state of the surface convection zone and of light-element burning, carried from one step to the next for [[liburn.f#LIBURN|`LIBURN`]] and [[liburn2.f#LIBURN2|`LIBURN2`]].
 
-- **`bbe9old`**: the natural logarithm of the mass-averaged ⁹Be burning rate in the convection zone (s$^{-1}$) at the end of the previous step; stored by [[liburn.f#LIBURN|`LIBURN`]], [[liburn2.f#LIBURN2|`LIBURN2`]]; 0 when `LEXCOM` is set. *Name:* B (burning rate), BE9, OLD.
-- **`bli6old`**: as `BBE9OLD`, for ⁶Li; `LIBURN`, `LIBURN2` recompute the starting rates when it is ≤ 0. *Is "≤ 0" meant to mean "unset"? A natural log of a rate below 1 s$^{-1}$ is also negative.*
+- **`bbe9old`**: the natural logarithm of the mass-averaged ⁹Be burning rate in the convection zone (s$^{-1}$) at the end of the previous step; stored by [[liburn.f#LIBURN|`LIBURN`]], and reused as the next step's starting rate while `LBLIOLD` is set. *Name:* B (burning rate), BE9, OLD.
+- **`bli6old`**: as `BBE9OLD`, for ⁶Li.
 - **`bli7old`**: as `BBE9OLD`, for ⁷Li.
+- **`lbliold`**: true when `BLI6OLD`, `BLI7OLD` and `BBE9OLD` hold `LIBURN`'s end-of-step rates (`LOGICAL*4`, initially `.FALSE.`); set by [[liburn.f#LIBURN|`LIBURN`]], cleared by `LIBURN` when it skips the zone, by [[liburn2.f#LIBURN2|`LIBURN2`]] and by the [[main.f#(file level)|main program]] at each kind card (since `7be4133`, in place of the test `BLI6OLD` ≤ 0, which the logarithms of small rates always passed). *Name:* L (logical), BLI OLD.
 - **`jenvos`**: the shell of the envelope's base at the end of the step, used as the next step's starting `JENV0`; stored by [[liburn.f#LIBURN|`LIBURN`]], [[liburn2.f#LIBURN2|`LIBURN2`]]. *Name:* `JENV` + OS (old step).
 - **`rbase0`**: the radius of the base of the convection zone (with overshoot) at the start of the step, cm (not a logarithm); computed by [[liburn.f#LIBURN|`LIBURN`]], [[liburn2.f#LIBURN2|`LIBURN2`]] when 0, which store the step's ending base in it; reset to 0 by the [[main.f#(file level)|main program]] when `LEXCOM` is set.
 
 ## PUALPHA_MOD
 
-Three mixing-length quantities, at the current point and at every shell, for the pulsation output ("DBG 7/95").
+Three mixing-length quantities at the current point, for the pulsation output ("DBG 7/95").
 
 - **`alfmlt`**: a mixing-length quantity for the envelope's pulsation output; set to 0 on every entry to [[tpgrad.f#TPGRAD|`TPGRAD`]] and computed nowhere; written by [[envint.f#ENVINT|`ENVINT`]] (`IPVER` = 3). *What was it meant to hold: the $\alpha$ of the mixing-length theory at the point?*
 - **`cmxmlt`**: as `ALFMLT`, always 0. *What was it meant to hold?*
 - **`phmlt`**: as `ALFMLT`, always 0. *What was it meant to hold?*
-- **`valfmlt`**: `ALFMLT` at each shell, `(JSON)`; stored by [[coefft.f#COEFFT|`COEFFT`]] when `LPULSE` is set; written by [[wrtmod.f#WRTMOD|`WRTMOD`]] (`IPVER` = 3); always 0.
-- **`vcmxmlt`**: `CMXMLT` at each shell, `(JSON)`; stored and written like `VALFMLT`; always 0.
-- **`vphmlt`**: `PHMLT` at each shell, `(JSON)`; stored and written like `VALFMLT`; always 0.
 
 ## PULSE1_MOD
 

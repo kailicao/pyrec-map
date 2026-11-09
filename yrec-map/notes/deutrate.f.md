@@ -13,17 +13,13 @@ then, with $A_D$ = `AMDEUT` $= 2.013553$,
 $$\mathtt{DRATE} = X\,\rho\,N_A\langle\sigma v\rangle \cdot \frac{N_A}{A_D}\cdot C_{21}, \qquad C_{21} = 5.240358\times10^{-8} \approx \frac{3.156\times10^{16}\ \mathrm{s\,Gyr^{-1}}}{N_A},$$
 so `DRATE` $\approx X\rho N_A\langle\sigma v\rangle/A_D$ per Gyr (the value of $C_{21}$ is read as seconds per Gyr over $N_A$; this is an inference). The burning routines then use $X_D \propto e^{-2\,\mathtt{DRATE}\,t}$, so the destruction rate per deuteron is $\lambda = 2\,\mathtt{DRATE} = (2/A_D)\,X\rho N_A\langle\sigma v\rangle \approx 0.993\,X\rho N_A\langle\sigma v\rangle$ per Gyr. The comment calls `CAVOG/AMDEUT` "Avogadro's number divided by the mass of the deuteron in amu".
 
-**The convection-zone cap.** In the surface convection zone ($I \ge$ `JCZ`, with $\tau_\mathrm{cz} > 1$), $X\cdot$`RDEUT` is capped at $(N_A/A_D)/\tau_\mathrm{cz}$ (`CAVOG/AMDEUT/TAUCZ`), so that deuterium burns "on a time scale no shorter than the convective overturn timescale".
+**The convection-zone cap.** In the surface convection zone ($I \ge$ `JCZ`, with $\tau_\mathrm{cz} > 1$), $X\cdot$`RDEUT` is capped at $(N_A/A_D)/\tau_\mathrm{cz}$ (`CAVOG/AMDEUT/TAUCZ`), so that deuterium burns "on a time scale no shorter than the convective overturn timescale". [[taucal.f#TAUCAL|TAUCAL]] forms `TAUCZ` as a length in cm over a convective velocity (`CZWIDE/CVEAVG` or `PSCA/CVEL`, [[taucal.f#L159-L165]], [[taucal.f#L179]]), so in seconds, with YREC's cgs velocities; then `DRATE` $= C_{21}\,(N_A/A_D)/\tau_\mathrm{cz}$ is $1/(A_D\,\tau_\mathrm{cz})$ in Gyr$^{-1}$, and the destruction rate per deuteron, $2\,$`DRATE`, is $0.993/\tau_\mathrm{cz}$: the cap is consistent with the comment (settled from the code, Nov 9, 2026: [[#L65-L66]], [[#L81]]).
 
-**KC's changes.** 2025-05-31: the unused argument `XH2` removed.
+> **Question** ([[#L65]]). **The test `TAUCZ > 1`.** With `TAUCZ` in seconds, the test excludes only overturn times below one second, which a convection zone does not have. Is it meant as a guard against an unset or zero `TAUCZ` (no surface convection zone), and would `TAUCZ > 0` say so more plainly?
 
 **Changed since `rp_1`.** `C21` is now set in double precision (`5.240358D-8`), which settles the former question on its single-precision constant; COMMON blocks to modules, `IMPLICIT NONE`.
 
 **Changed since `09c3b9b`.** The rate's leading power of $T_9$ is now $T_9^{-2/3}$ (`T9M23`), as in the usual fit, not $T_9^{+2/3}$, which settles former question 1 (the rate rises by $T_9^{-4/3}$, about $10^{4}$ at $10^6$ K); the factor $3.0115\times10^{23}$ ($6.023\times10^{23}/2$) is now `CAVOG/AMDEUT`, Avogadro's number from `CONSTANTS_MOD` over the deuteron's mass in amu (a new `DATA` value), in the rate and in the cap (both 0.7% smaller); former question 2 is now 1.
-
-## Questions for the experts
-
-1. **The cap's units.** The cap makes $2\,\mathtt{DRATE} = 1/\tau_\mathrm{cz}$ in units of Gyr$^{-1}$ only if $\tau_\mathrm{cz}$ is in seconds. [[taucal.f#TAUCAL|TAUCAL]] forms `TAUCZ` as a length over a convective velocity (`CZWIDE/CVEAVG` or `PSCA/CVEL`), so it is in seconds, probably, and the cap is consistent; the test `TAUCZ > 1` (one second) then excludes almost nothing. Can the experts confirm?
 
 ### DEUTRATE
 

@@ -8,7 +8,11 @@
 
 $$\begin{pmatrix} s_1 - a_{31} & s_2 - a_{32}\\ s_4 - a_{41} & s_5 - a_{42}\end{pmatrix}\begin{pmatrix}\delta p\\ \delta t\end{pmatrix} = \begin{pmatrix} s_3 - b_3\\ s_6 - b_4\end{pmatrix},$$
 
-with $s_k$ = `HSRF(k)` and $a_{ij}$, $b_i$ taken at point `M`. Then, from the surface inward ($i = M, M-1, \dots, 2$), the rows stored at point $i$ give
+with $s_k$ = `HSRF(k)` and $a_{ij}$, $b_i$ taken at point `M`.
+
+> **Question** ([[#L21]]; [[#L26]]). **A singular surface system.** There is no check that $s_1 - a_{31}$ or the second pivot $s_5 - a_{42} - (\text{pivot})(s_2 - a_{32})$ is nonzero. Can either vanish for a physical model, or has a division by zero ever been seen here?
+
+Then, from the surface inward ($i = M, M-1, \dots, 2$), the rows stored at point $i$ give
 
 $$\delta p(i-1) = b_1(i) - a_{11}(i)\,\delta p(i) - a_{12}(i)\,\delta t(i),\qquad \delta t(i-1) = b_2(i) - a_{21}(i)\,\delta p(i) - a_{22}(i)\,\delta t(i),$$
 
@@ -16,12 +20,9 @@ $$y_k(i) = b_k(i) - a_{k1}(i)\,\delta p(i) - a_{k2}(i)\,\delta t(i)\quad (k = 3,
 
 and the centre point is finished the same way. On return `HHB(1..4, i)` holds the four corrections at each point, $\delta\log P$, $\delta\log T$, $\delta\log r$ and $\delta L$ ($L_\odot$), in the order of [[reduce.f#REDUCE|REDUCE]]'s rows. The six `HSRF` entries are the two surface conditions set by CRRECT: `HSRF(1..3)` the linearized $\log r$ relation of the envelope fit, `HSRF(4..6)` its $\log L$ relation, multiplied by $\ln 10\,L$ since $L$ is the unknown ([[crrect.f#CRRECT|CRRECT]], step 4).
 
+> **Question** ([[#L21-L42]]). **A comment on the variables.** `HHB(1..4)` holds the corrections to $\log P$, $\log T$, $\log r$ and $L$ on return (from CRRECT and REDUCE, above), but the code does not say so, nor which equations the six `HSRF` entries are. Is this reading right, and could a comment saying so be added for readers of `CRRECT`?
+
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`, and the array size `JSON` from `DIMENSIONS_MOD`.
-
-## Questions for the experts
-
-1. **A comment on the variables.** `HHB(1..4)` holds the corrections to $\log P$, $\log T$, $\log r$ and $L$ (from CRRECT and REDUCE, above), but the code does not say so, nor which equations the six `HSRF` entries are. A comment would help readers of `CRRECT`.
-2. **Singular surface system.** There is no check that $s_1 - a_{31}$ or the pivot is nonzero.
 
 ### HSOLVE
 

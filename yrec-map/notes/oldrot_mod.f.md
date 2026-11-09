@@ -6,12 +6,8 @@
 - `WOLD`: $\Omega$ at the start of the step (also set by [[starin.f#STARIN|`STARIN`]]). Read by [[wtime.f#WTIME|`WTIME`]] (the largest fractional change of $\Omega$, for the time step), [[checkj.f#CHECKJ|`CHECKJ`]] (whether a gradient was positive before), [[getw.f#GETW|`GETW`]] (the start of the first substep) and HPOINT.
 - `HJX` ($J/M$, "MHP 10/91 J/M stored in HJX"), `R0X`, `ETA2X` (the rotational distortion terms): interpolated onto the new grid and copied back into `HJM`, `R0`, `ETA2` by HPOINT itself.
 - `HGO`: gravity, read by [[midmod.f#MIDMOD|`MIDMOD`]] (interpolated to mid-step).
-- `HIO`: the moment of inertia; read nowhere.
+- `HIO`: the moment of inertia, saved by HPOINT ([[hpoint.f#L816]]); read nowhere: unused?
 
 **Design.** A blanket `USE OLDROT_MOD`.
 
 **Changed since `rp_1`.** New file: `COMMON/OLDROT/` as a module.
-
-## Questions for the experts
-
-1. **An unused copy.** `HIO` is saved by HPOINT and read nowhere. Can it go?

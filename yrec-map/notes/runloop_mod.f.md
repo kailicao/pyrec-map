@@ -8,6 +8,8 @@
 - `LENDAG(50)`: evolve until a stop condition (an age `ENDAGE`, or a central D, X or Y), set by `PARMIN` and by the calibrations; read by the main program, `PARMIN` and [[htimer.f#HTIMER|`HTIMER`]] (which keeps the step from passing the age).
 - `LSETDT(50)`: a fixed time step (`SETDT` > 0), set by `PARMIN`, `SETCAL`, `SETSCAL`; read by `HTIMER` and `PARMIN`.
 
-**Design.** A blanket `USE RUNLOOP_MOD` in each routine. The module's header explains the convention of the whole conversion (a blanket `USE` is safe because every block was declared identically everywhere, and no member's name is in two blocks or names a procedure) and points to `shadow_census.py` and KNOWN_ISSUES.md issue 22 for the risk of later edits. `IRESCA` is now `INTEGER*4` everywhere; at `rp_1` only PARMIN declared it so, and the other files left it to the default integer kind.
+**Design.** A blanket `USE RUNLOOP_MOD` in each routine. The module's header explains the convention of the whole conversion (a blanket `USE` is safe because every block was declared identically everywhere, and no member's name is in two blocks or names a procedure) and points to KNOWN_ISSUES.md issue 22 for the risk of later edits; since every file now has `IMPLICIT NONE`, a `USE` that would capture a local is a compile error, so the script `shadow_census.py` that checked for it was removed. `IRESCA` is now `INTEGER*4` everywhere; at `rp_1` only PARMIN declared it so, and the other files left it to the default integer kind.
 
 **Changed since `rp_1`.** New file: `COMMON/CKIND/` and `COMMON/SETT/` merged as a module, with their namelist members moved to `NMLPAR_MOD`.
+
+**Changed since `a8a5950`.** The header's advice to run `shadow_census.py` before adding a `USE` is replaced by a note that `IMPLICIT NONE` everywhere makes such a capture a compile error; comments only.

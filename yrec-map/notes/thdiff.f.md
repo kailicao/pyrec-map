@@ -5,8 +5,11 @@
 **How it fits.**
 - **Inputs:** arguments: the number of species `M` (fluid 1 hydrogen, 2 helium, 3 to `M-1` heavy elements, `M` the electrons), their atomic masses `A` (with `A(M)` = $m_e/m_u$), charges `Z` (`Z(M)` = $-1$), mass fractions `X`, and the Coulomb logarithms `CL(M,M)`.
 - **Who calls it:** [[microdiff_cod.f#MICRODIFF_COD|MICRODIFF_COD]] and [[setup_grsett.f#SETUP_GRSETT|SETUP_GRSETT]] (which, for the gravitational settling of hydrogen, uses `-AP(1)` and `-SDEL(2,I)*AT(1)`, or else a fitted polynomial in $X$).
+
+    > **Question** ([[setup_grsett.f#L275-L285]]; [[setup_grsett.f#L306]]). **A mixed treatment.** In `SETUP_GRSETT` the concentration coefficient `AC = 1.15 - 1.42X + 0.647X^2`, the metals' `AH` and the derivatives `QAPX`, `QATX` always come from the fits, even when $A_P$ and $A_T$ come from `THDIFF`. Is this intended?
+
 - **What it calls:** [[ludcmp.f#LUDCMP|LUDCMP]] (LU decomposition) and [[lubksb.f#LUBKSB|LUBKSB]] (back substitution).
-- **Outputs:** `AP(M)`, `AT(M)`, `AX(M,M)`, the coefficients of the pressure, temperature and concentration gradients in each species' diffusion velocity; also `X(M)`, the electrons' mass fraction, is overwritten.
+- **Outputs:** `AP(M)`, `AT(M)`, `AX(M,M)`, the coefficients of the pressure, temperature and concentration gradients in each species' diffusion velocity; also `X(M)`, the electrons' mass fraction, is overwritten ([[#L99]]). Harmless with both callers: they pass a local array, `XFRAC`, refill its first three entries at every point and never read `XFRAC(4)` (settled from the code, Nov 9, 2026: [[microdiff_cod.f#L79-L81]]; [[setup_grsett.f#L224-L226]]).
 - **COMMON blocks:** none.
 
 **The method.**
@@ -25,15 +28,24 @@
    $$w_s = A^{(p)}_s\,\frac{d\ln p}{dr} + A^{(T)}_s\,\frac{d\ln T}{dr} + \sum_t A^{(C)}_{st}\,\frac{d\ln C_t}{dr},$$
    multiplied by `KO*AC*CC` $= K_0 \left(\sum_s A_s C_s\right)\left(\sum_s C_s\right)$ with $K_0 = 2$; $\sum_s A_s C_s$ is only proportional to $\rho$ (the comment: "multiplied by $p/K_0$"). The callers then multiply the coefficients by $r^2T^{5/2}/\ln\Lambda$ ($r$ in $R_\odot$, $T$ in $10^7$ K; `FAC` in [[setup_grsett.f#SETUP_GRSETT|SETUP_GRSETT]] and [[microdiff_cod.f#MICRODIFF_COD|MICRODIFF_COD]]), which gives the flux in the units of the settling equation on [[grsett.f#GRSETT|GRSETT]]'s page.
 
+    > **Question** ([[#L278-L286]]). **The normalisation comment.** The comment says the results "must be multiplied by p/K_0", while the code multiplies by `KO*AC*CC` ($K_0 \sum A_s C_s \sum C_s$). Which units do the callers assume?
+
+    > **Question** ([[#L112-L114]]; [[microdiff_cod.f#L130-L154]]; [[setup_grsett.f#L261-L275]]). **Is the Coulomb logarithm counted twice?** `THDIFF` puts the Coulomb logarithms `CL` into $K_{st}$, so its coefficients already scale as $1/\ln\Lambda$. [[microdiff_cod.f#MICRODIFF_COD|MICRODIFF_COD]] computes `TCL` per pair (a fit in the Debye length or interionic distance), passes it to `THDIFF`, and then multiplies by `FAC`, divided by a fixed `LN_LAMBDA = 2.2D0`; [[setup_grsett.f#SETUP_GRSETT|SETUP_GRSETT]] with `LTHOUL` (not `LTHOULFIT`) passes `TCL` = `LN_LAMBDA` (or the fitted `TCL` with `ILAMBDA = 4`) and again divides `FAC` by `LN_LAMBDA`; and the time unit of both callers "includes factor of 2.2 from ln lambda". Only the fitted branch (`LTHOULFIT`) is clearly free of $\ln\Lambda$. Do `THDIFF`'s outputs need the division by $\ln\Lambda$ again, or does `KO*AC*CC` normalise them to $\ln\Lambda = 1$? If not, settling with the full Thoul solution would be too slow by a factor of about $\ln\Lambda$ (to be checked against Thoul et al. 1994 before calling it an error).
+
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`.
 
-## Questions for the experts
+## Bugs, by priority
 
-1. **No check of the array sizes.** The work arrays hold at most `MMAX = 20` species (`NMAX = 42` equations), with no test that `M` ≤ 20.
-2. **`X(M)` is overwritten.** The electrons' mass fraction is written into the caller's array. Do the callers expect it?
-3. **The normalisation comment.** The comment says the results "must be multiplied by p/K_0", while the code multiplies by `KO*AC*CC` ($K_0 \sum A_s C_s \sum C_s$). Which units do the callers assume?
-4. **Is the Coulomb logarithm counted twice?** `THDIFF` puts the Coulomb logarithms `CL` into $K_{st}$, so its coefficients already scale as $1/\ln\Lambda$. [[microdiff_cod.f#MICRODIFF_COD|MICRODIFF_COD]] computes `TCL` per pair (a fit in the Debye length or interionic distance), passes it to `THDIFF`, and then multiplies by `FAC`, divided by a fixed `LN_LAMBDA = 2.2D0`; [[setup_grsett.f#SETUP_GRSETT|SETUP_GRSETT]] with `LTHOUL` (not `LTHOULFIT`) passes `TCL` = `LN_LAMBDA` (or the fitted `TCL` with `ILAMBDA = 4`) and again divides `FAC` by `LN_LAMBDA`; and the time unit of both callers "includes factor of 2.2 from ln lambda". Only the fitted branch (`LTHOULFIT`) is clearly free of $\ln\Lambda$. Do `THDIFF`'s outputs need the division by $\ln\Lambda$ again, or does `KO*AC*CC` normalise them to $\ln\Lambda = 1$? If not, settling with the full Thoul solution would be too slow by a factor of about $\ln\Lambda$ (to be checked against Thoul et al. 1994 before calling it an error).
-5. **A mixed treatment.** In `SETUP_GRSETT` the concentration coefficient `AC = 1.15 - 1.42X + 0.647X^2`, the metals' `AH` and the derivatives `QAPX`, `QATX` always come from the fits, even when $A_P$ and $A_T$ come from `THDIFF`. Intended?
+1. **(d)** **No check of the array sizes.** ([[#L48-L53]]; [[#L72]]) The work arrays hold at most `MMAX = 20` species (`NMAX = 42` equations), with no test that `M` ≤ 20; a larger `M` would write past them. Correct today: both callers pass `M` = 4 (`NSPEC`). Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to stop when M exceeds the size of the work arrays.
+          IF(M.GT.MMAX)THEN
+             WRITE(*,*) 'THDIFF: M EXCEEDS MMAX = ',MMAX
+             STOP
+          ENDIF
+    ```
 
 ### THDIFF
 

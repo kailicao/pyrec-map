@@ -9,37 +9,74 @@
 - **Outputs:** `ISHORT` (summary block), `ITRACK` (track; the header comes from [[wrthead.f#WRTHEAD|WRTHEAD]]), and the files written by the routines it calls. In `CENT_MOD`, it stores $\log T_c$, $\log P_c$, $\log\rho_c$ and the convection zone's base (`CZsurf_M`, `CZsurf_R`, formerly `ENVLM`, `ENVR`), read by the main program for its `ISNU` output (WRTMONTE, which also read them, removed since `rp_1`); in `FLUXES_MOD`, the Cl and Ga rates `CLSNU`, `GASNU`; in `OVRTRN_MOD`, `TAUCZ0` and `PPHOT0`.
 
 **The method.**
-1. **Luminosity terms** `TLUMX` (pp I–III, CNO, triple-α, He–C, gravity, neutrinos) are rescaled so that they sum to the surface luminosity (not during the helium flash). The factor, $L$ divided by the unscaled sum, is not written out (whether it measures how well the energy equation balances is question 9).
+1. **Luminosity terms** `TLUMX` (pp I–III, CNO, triple-α, He–C, gravity, neutrinos) are rescaled so that they sum to the surface luminosity (not during the helium flash). The factor, $L$ divided by the unscaled sum, is not written out. (`LTSCAL`, set to false at [[#L176]], is never read: unused?)
+
+    > **Question** ([[#L177-L185]]). **The unscaled luminosity sum.** The rescaling of `TLUMX` hides the mismatch between the sum of the sources and the surface luminosity. Is that mismatch the numerical error of the energy equation, or does it include terms the sum leaves out? How large is it typically, and could the factor be written to the track or the short output as a check of energy conservation?
+
 2. **Radius and gravity:** $\log R = \tfrac12(\log L + \log L_\odot - \log 4\pi - \log\sigma - 4\log T_\mathrm{eff})$, $\log g = \log G + \log M - 2\log R$; $M_\mathrm{bol} = $ `CMBOL` $- 2.5\log(L/L_\odot)$. So $R$ is the radius that $L$ and $T_\mathrm{eff}$ define through $L = 4\pi R^2\sigma T_\mathrm{eff}^4$, not the outermost model point, which lies at the envelope's fitting point (`HR(M)`). $\log M$ here is `STOTAL`, the copy of `HSTOT` in `COMP_MOD`.
+
+    > **Question** ([[#L223]]). **`CMBOL` = 4.79.** [[setups.f#SETUPS|SETUPS]] sets $M_{\mathrm{bol},\odot} = 4.79$; the IAU 2015 Resolution B2 nominal value is 4.74 (for $L_\odot = 3.828\times10^{33}$ erg/s), and with the code's own $L_\odot$ (`CLSUN` = $3.8515\times10^{33}$ erg/s) that zero point gives about 4.73. Is 4.79 an intended older convention, and should it follow the solar luminosity in use?
+
 3. **Central conditions**, extrapolated from shell 1 (mass $m_1$, radius $r_1$ from $m_1 = \tfrac{4\pi}{3}\rho_1 r_1^3$):
    $$P_c = P_1 + \tfrac12\,\frac{G m_1 \rho_1}{r_1},\qquad \log T_c = \log T_1 + \log\!\left(1 + \nabla_1\,\frac{P_c - P_1}{P_1}\right),$$
-   then the equation of state ([[eqstat.f#EQSTAT|EQSTAT]], with the Debye–Hückel composition set first when `LDH`) gives $\beta$, $\eta$ there.
-4. **Base of the surface convection zone:** where $\nabla_\mathrm{rad} - \nabla_\mathrm{ad}$ (`SDEL(1)` − `SDEL(3)`) changes sign between shells `JENV-1` and `JENV`, by linear interpolation; its mass above (`CZsurf_M`, $M_\odot$), radius (`CZsurf_R`, $R_\odot$), $T$, $\rho$, $P$, $\kappa$ (the locals `CZsurf_T`, `CZsurf_D`, `CZsurf_P`, `CZsurf_O`).
+   then the equation of state ([[eqstat.f#EQSTAT|EQSTAT]], with the Debye–Hückel composition set first when `LDH`) gives $\beta$, $\eta$ there. Its argument `KSAHA`, a counter that EQSAHA increments ([[eqsaha.f#L95]]), is passed unset; WRTOUT never reads it back, so its value does not matter (settled from the code, Nov 9, 2026: [[#L251-L253]]).
+4. **Base of the surface convection zone:** where $\nabla_\mathrm{rad} - \nabla_\mathrm{ad}$ (`SDEL(1)` − `SDEL(3)`) changes sign between shells `JENV-1` and `JENV`, by linear interpolation; its mass above (`CZsurf_M`, $M_\odot$), radius (`CZsurf_R`, $R_\odot$), $T$, $\rho$, $P$, $\kappa$ (the locals `CZsurf_T`, `CZsurf_D`, `CZsurf_P`, `CZsurf_O`). The convective core's radius `CORER` (JVS 10/11, [[#L212-L221]]) is computed and never used (unused?, with `FX2` and `CORERL`): `FX2` is always 1 (or 0/0), and the radius is interpolated with `FX`, left at that point from the previous model's step 4.
 5. **Hydrogen shell** (`LSHELL`): masses at its middle, its total and the helium core's, and the temperature maximum (for the helium flash, the first maximum above $\log T = 7.98$).
-6. **Neutrino detectors:** capture rates as linear combinations of the eight fluxes (pp, pep, hep, $^7$Be, $^8$B, $^{13}$N, $^{15}$O, $^{17}$F) with cross sections (from Bahcall's book, p. 207, table 8.2, by the comment) for $^7$Li, $^{37}$Cl, $^{71}$Ga, $^{81}$Br, $^{98}$Mo, $^{115}$In; and for the track, Cl and Ga in SNU with a second table (`CLSNUF`, `GASNUF`, "Neutrino Astrophysics p. 207", with $^{37}$Cl changes after Bahcall & Pinsonneault).
-7. **Track** (`LTRACK`): the total moment of inertia (with rotation $\sum I_j$, otherwise $\sum \tfrac23 \Delta m_j r_j^2$), the surface zone's, the rotation period $P = 2\pi/\Omega_s$ in days and $v = \Omega_s R$ in km/s; then, by `ITRVER`, one line per model (0, after calling `GETTAU` for $\tau_\mathrm{cz}$ and $P_\mathrm{phot}$), or several lines (1, 2), or a short line (3).
-8. **Model files:** the last model to `ILAST` every time; the detailed output through `PUTSTORE` every `NPRTMOD` models if `LSTORE` (with `LSTCH`, PUTSTORE also writes the stitched profile); otherwise, with `LPULSE`, `WRTMIL` and `WRTMOD`; with `LACOUT`, acoustic depths through `CALCAD` and a second track line (format 1800).
+
+    > **Question** ([[#L382-L384]]). **The helium flash's threshold.** The temperature maximum during the helium flash is the first one above $\log T = 7.98$, a hard-coded value. Where does it come from, and should it be a setting?
+
+6. **Neutrino detectors:** capture rates as linear combinations of the eight fluxes (pp, pep, hep, $^7$Be, $^8$B, $^{13}$N, $^{15}$O, $^{17}$F) with cross sections (from Bahcall's book, p. 207, table 8.2, by the comment) for $^7$Li, $^{37}$Cl, $^{71}$Ga, $^{81}$Br, $^{98}$Mo, $^{115}$In; and for the track, Cl and Ga in SNU with a second table (`CLSNUF`, `GASNUF`, "Neutrino Astrophysics p. 207", with $^{37}$Cl changes after Bahcall & Pinsonneault). The summary's labels give these rates and the fluxes in erg (bug 2).
+
+    > **Question** ([[#L404-L413]]; [[#L165-L171]]). **Two tables of cross sections.** The $^{37}$Cl rate printed in the summary uses 1.09×10⁴ for $^8$B (`FL37CL`), the track's `CLSNU` 1.14×10⁴; the Ga values differ too (for example $^7$Be: 73.2 against 71.7). Which are current?
+
+7. **Track** (`LTRACK`): the total moment of inertia (with rotation $\sum I_j$, otherwise $\sum \tfrac23 \Delta m_j r_j^2$), the surface zone's, the rotation period $P = 2\pi/\Omega_s$ in days and $v = \Omega_s R$ in km/s; then, by `ITRVER`, one line per model (0, after calling `GETTAU` for $\tau_\mathrm{cz}$ and $P_\mathrm{phot}$), or several lines (1, 2), or a short line (3). For version 0 without `LSNU`, the fluxes `FLUXTOT` are set to zero ([[#L459-L463]]); without `LSNU` they are never accumulated ([[coefft.f#L150-L155]]; [[coefft.f#L304-L309]]), and their other reader, the main program's `ISNU` output, runs only with `LSNU` ([[main.f#L1195]]), so this changes nothing read later (settled from the code, Nov 9, 2026). The headers that [[wrthead.f#WRTHEAD|WRTHEAD]] writes for versions 1–3 do not match these lines ([[wrthead.f#b1]]).
+
+    > **Question** ([[#L470]]; [[#L596-L598]]). **The period's cap.** Version 0 still caps the rotation period at 9999 days, while versions 1 and 2 no longer do (MHP 8/25). Should version 0 follow?
+
+8. **Model files:** the last model to `ILAST` every time; the detailed output through `PUTSTORE` every `NPRTMOD` models if `LSTORE` (with `LSTCH`, PUTSTORE also writes the stitched profile); otherwise, with `LPULSE`, `WRTMIL` and `WRTMOD`; with `LACOUT`, acoustic depths through `CALCAD` and a second track line (format 1800). `LACOUT` is in no namelist and nothing sets it, so this last branch never runs (see [[acdpth_mod.f#ACDPTH_MOD|`ACDPTH_MOD`]]).
+
+    > **Question** ([[#L696-L725]]). **The acoustic-depth line.** If `LACOUT` is turned on, each model with `ITRVER = 0` writes a format-1499 line and a format-1800 line to `ITRACK`, with different columns (1800 has acoustic quantities in place of rotation ones, and `ICHECK`); the 1800 line writes `CLSNU`, `GASNU`, `SSS1`–`RRR3` and `TAUCZ`, which are set only with `LTRACK` ([[#L431-L644]]); and `CZsurf_RL`, passed to `CALCAD`, is set only when the base of the convection zone is inside the model ([[#L262-L278]]). Without these, the values come from earlier models. Is the acoustic line meant for a separate file, and should these values be computed for it?
+
 
 **For users** (from YREC's [Quick Start](https://yrec.readthedocs.io/en/latest/quickstart.html), Understanding the output). The `.track` file is the run's history: one line per model of its global properties (age, luminosity, effective temperature, central temperature and pressure, and so on), not its interior structure, which goes to `.store`; `ITRVER` = 0, one line per model, is the format the test suite uses. The `.short` file holds the numerical details of each model (with `LRWSH`, the main program rewinds it so that only the last model's remain). The `.last` file, rewritten after every model, is the last converged model, readable by YREC as a starting model. The documentation's two deprecated outputs, `.full` and `.excomp`, are not written here: the light-element history that `.excomp` held is now in the track.
-
-**KC's changes.** Removed the unused argument `NKK` (2025-05-31), and adjusted the calls to `MEQOS`, `GETTAU`, `CALCAD` and `WRTMOD` to their shorter argument lists (2025-05-31); reordered the elements of COMMON `ACDPTH` (2025-05-30).
 
 **From YREC's documentation.** [Control Options](https://yrec.readthedocs.io/en/latest/namelist_control.html) (Output): `NPRTMOD` writes the detailed structure every `NPRTMOD` models (negative: none of the intermediate ones, though the final model can still be written with `LSTPCH`); `LTRACK` writes the global properties to the `.track` file ("should almost always be on"); `ITRVER` chooses the track format, and the documentation strongly recommends 0 (one line per model), while the default is 1; `LRWSH` keeps only the last model's details in the `.short` file.
 
 **Changed since `rp_1`.** The MHD equation of state removed (EQSTAT always); the isochrone output (`LISO`, unit `IISO`) removed; the call to STITCH removed, since PUTSTORE makes it (it ran twice per stored model); the new arguments `CMIXL`, `XMSOL` (formerly in `/CONST3/` and `/PULSE/`) and `COMPMIX` (formerly `/I2O/`), passed on to GETTAU, WRTLST, PUTSTORE, WRTMOD and CALCAD; `ENVLM`, `ENVR` renamed `CZsurf_M`, `CZsurf_R` (and the other `ENV…` locals `CZsurf_…`); the track's format 1499 writes `E17.8E3` in place of `E16.8`, for three-digit exponents (MCR 12/25); the commented-out JVS block on the zone outside the fitting point deleted; COMMON blocks to modules (many unused ones dropped), `IMPLICIT NONE`.
 
-## Questions for the experts
+## Bugs, by priority
 
-1. **The convective core's radius.** `FX2 = (SDEL(3,JCORE+1)-SDEL(1,JCORE))/(SDEL(3,JCORE+1)-SDEL(1,JCORE))` is always 1 (or 0/0), and the next line uses `FX`, not `FX2`, which at that point is undefined or left from the previous model. `CORER` is then never used. Is this block (JVS 10/11) unfinished?
-2. **Two tables of cross sections.** The $^{37}$Cl rate printed in the summary uses 1.09×10⁴ for $^8$B (`FL37CL`), the track's `CLSNU` 1.14×10⁴; the Ga values differ too (for example $^7$Be: 73.2 against 71.7). Which are current? And the summary line calls these rates "neutrino energies (1.E-36 erg)".
-3. **Stale values in the track.** For `ITRVER` 1 and 2, `ROTP`, `ROTV` and `HICZ` are set only with rotation, but version 2 writes them always; `CLSNU` and `GASNU` in the `LACOUT` line (format 1800) are computed only when `LTRACK` is on; `CZsurf_RL` (formerly `ENVRL`), passed to `CALCAD`, is set only when the base of the convection zone is inside the model. Without these, the values come from earlier models.
-4. **Two line formats in one track file.** With `LACOUT` and `ITRVER = 0`, each model writes a format-1499 line and a format-1800 line to `ITRACK`, with different columns (1800 has acoustic quantities in place of rotation ones, and `ICHECK`). Is the acoustic line meant for a separate file?
-5. **`KSAHA` undefined.** The call to `EQSTAT` for the central conditions passes `KSAHA`, never set here (now declared `INTEGER`, still unset).
-6. **`FLUXTOT` zeroed.** For `ITRVER = 0` without `LSNU`, the fluxes in COMMON `FLUXES` are set to zero, which changes what later routines (such as the main program's `ISNU` output) read.
-7. **Hard-coded values.** The helium flash's temperature threshold ($\log T = 7.98$), and the period's old cap of 9999 days still applied in version 0 (removed in version 1, MHP 8/25).
-8. **Unused variable.** `LTSCAL` is set and never used.
-9. **The unscaled luminosity sum.** The rescaling of `TLUMX` (method, step 1) hides the mismatch between the sum of the sources and the surface luminosity. Is that mismatch the numerical error of the energy equation, or does it include terms the sum leaves out? How large is it typically, and could the factor be written to the track or the short output as a check of energy conservation?
-10. **`CMBOL` = 4.79.** [[setups.f#SETUPS|SETUPS]] sets $M_{\mathrm{bol},\odot} = 4.79$; the IAU 2015 Resolution B2 nominal value is 4.74 (for $L_\odot = 3.828\times10^{33}$ erg/s), and with the code's own $L_\odot$ (`CLSUN` = $3.8515\times10^{33}$ erg/s) that zero point gives about 4.73. Is 4.79 an intended older convention, and should it follow the solar luminosity in use?
+1. **(c)** **Track version 2 without rotation writes rotation values never set.** ([[#L594-L608]]; [[#L630-L634]]) In the branch for `ITRVER` 1 and 2, `ROTP`, `ROTV`, and `HICZ` are set only with `LROT`, but version 2 writes them always (format 1540). Without rotation they hold what an earlier call left, or, in a run that never set them, undefined values (zero with a compiler that zero-initializes `SAVE`d locals). `HICZ`, the surface zone's moment of inertia, is then not computed at all, while version 0 computes it without rotation ([[#L477-L485]]). Only with `ITRVER` = 2 (the default is 1) and `LROT` off. Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to set ROTP, ROTV and HICZ without rotation too, as
+    C for ITRVER = 0.
+                IF(LROT) THEN
+    ...
+                ELSE
+                   ROTP = 0.0D0
+                   ROTV = 0.0D0
+                   HICZ = 0.0D0
+                   IF(JENV.LT.M)THEN
+                      DO K = JENV,M
+                         HICZ = HICZ + CC23*HS2(K)*EXP(2.0D0*CLN*HR(K))
+                      END DO
+                   ENDIF
+                ENDIF
+    ```
+
+2. **(c)** **The summary gives the neutrino fluxes and capture rates in erg.** ([[#L401-L403]]; [[#L423-L426]]) Format 160 labels the fluxes "1E10ERG/CM^2", and format 2160 the capture rates "NEUTRINO ENERGIES (1.E-36ERG)". The fluxes `FLUXTOT` are numbers of neutrinos, in units of $10^{10}$ cm⁻² s⁻¹ ([[engeb.f#ENGEB|ENGEB]], step 8), and a flux in these units times a cross section in $10^{-46}$ cm² (the $^8$B coefficient 1.09×10⁴ for $^{37}$Cl is $1.09\times10^{-42}$ cm²) is a capture rate in units of $10^{-36}$ per target atom per second, that is, in SNU, the unit the track gives the same sums ([[#L451-L458]]; `Cl_snu`, `Ga_snu` in [[wrthead.f#L138]]). What follows: wrong units in the `.short` file only; nothing reads them back. The lines are written for every model, with nonzero values only with `LSNU` (off by default). Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to label the neutrino fluxes and capture rates in
+    C their units.
+      160 FORMAT(1X,'NEUTRINOS 1E10/CM^2/S PP,PEP,HEP,BE7,',
+         *  'B8,N13,O15,F17:', 1P8E9.2)
+    ...
+     2160 FORMAT(1X,'NEUTRINO CAPTURE RATES (SNU): 7Li=', 1PE9.2,
+    ```
 
 ### WRTOUT
 

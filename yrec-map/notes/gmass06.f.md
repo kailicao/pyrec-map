@@ -12,13 +12,11 @@ and the number fractions are $\mathrm{FRAC}_i = n_i/\sum_j n_j$, stored in the o
 
 $$\mathrm{AMOLES} = \sum_i (1+Z_i)\,\mathrm{FRAC}_i,\qquad \mathrm{EGROUND} = \sum_i E_i\,\mathrm{FRAC}_i,\qquad \mathrm{GMASS06} = \sum_i A_i\,\mathrm{FRAC}_i,$$
 
-without the electrons' mass (which `GMASS` added). `FRACZ` returns $f_Z$.
+without the electrons' mass (which `GMASS` added). `FRACZ` returns $f_Z$. The mean number of electrons per nucleus, `ANUME` = `AMOLES` $- 1$ ([[#L54]]), is computed but not returned (unused?).
+
+> **Question** ([[#L17-L25]]). **Values inherited from `GMASS01`.** The code was identical to `GMASS01` (for the 2001 tables, removed since `rp_1`) apart from the name, including the ion energies `EION` and the metal fractions. Were the 2006 tables meant to use other values (those of the mixture the 2006 tables were computed for)?
 
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`. `GMASS` and `GMASS01`, which the method referred to, are removed, so their equations are given here.
-
-## Questions for the experts
-
-1. **Values inherited from `GMASS01`.** The code was identical to `GMASS01` (for the 2001 tables, removed since `rp_1`) apart from the name, including the ion energies. Were the 2006 tables meant to use other values?
 
 ### GMASS06
 

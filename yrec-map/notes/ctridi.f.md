@@ -9,13 +9,11 @@
 
 **The method.** For $a_j u_{j-1} + b_j u_j + c_j u_{j+1} = d_j$: forward elimination with $\beta_1 = b_1$, $\gamma_j = c_{j-1}/\beta_{j-1}$, $\beta_j = b_j - a_j\gamma_j$, $u_j = (d_j - a_j u_{j-1})/\beta_j$; then back substitution $u_j \leftarrow u_j - \gamma_{j+1}u_{j+1}$. No pivoting; a zero $\beta$ stops the run (with the message "TRIDIA: singular matrix").
 
+> **Question** ([[#L19-L24]]). **Exact zero test.** Only $\beta = 0$ exactly is caught, and only from $j = 2$ ($\beta_1 = b_1$ is not tested); a tiny $\beta$ passes. The diffusion matrices from CCOEFT are diagonally dominant, so this should not arise. Should the test compare $|\beta|$ with a small threshold, as BANDW does, and include $j = 1$?
+
 **Design.** [[tridia.f#TRIDIA|TRIDIA]] is the same solver with extra bookkeeping of the change in angular momentum; this copy is for composition.
 
 **Changed since `rp_1`.** Declarations only: `/TRIDI/` to `TRIDI_MOD`, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **Exact zero test.** Only $\beta = 0$ exactly is caught, and only from $j = 2$ ($\beta_1 = b_1$ is not tested); a tiny $\beta$ passes. The diffusion matrices from CCOEFT are diagonally dominant, so this should not arise.
 
 ### CTRIDI
 

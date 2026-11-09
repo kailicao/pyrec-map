@@ -13,12 +13,11 @@
 $$\chi_i = \frac{\log m_i}{\Delta_m} + \frac{L_i}{\Delta_L} - \frac{\log P_i}{\Delta_P}.$$
 The equally spaced grid runs from $\chi_1$ to $\chi_N$ with $N$ = `NTOT` points, $\Delta\chi = (\chi_N - \chi_1)/(N-1)$, and $\log m$ is interpolated onto it with `OSPLIN`, then unlogged.
 
+> **Question** ([[#L61-L67]]). **Number of points.** `NTOT` is set to the number of model points in the region (at least 3); the formula that set it from the range of $\chi$ ("modulus of final chi plus one", [[#L63-L64]]) is commented out. So the grid is equally spaced in $\chi$ but has as many points as the model. Is that the intended resolution?
+
+> **Question** ([[#L57-L60]], [[#L88]]). **Monotonic $\chi$.** `OSPLIN` interpolates in $\chi$, so it needs increasing abscissae. $\chi$ increases outward when $\log P$ decreases and $L$ does not drop sharply; can $L$ decrease enough (for example in a region with neutrino losses) to break this?
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **Number of points.** `NTOT` is set to the number of model points in the region (at least 3); the formula that set it from the range of $\chi$ ("modulus of final chi plus one") is commented out. So the grid is equally spaced in $\chi$ but has as many points as the model. Is that the intended resolution?
-2. **Monotonic $\chi$.** `OSPLIN` needs increasing abscissae. $\chi$ increases outward when $\log P$ decreases and $L$ does not drop sharply; can $L$ decrease enough (for example in a region with neutrino losses) to break this?
 
 ### GETGRID
 

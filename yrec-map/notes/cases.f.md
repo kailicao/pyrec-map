@@ -12,11 +12,9 @@
 $$z_1 = \frac{p_2 - q_2 + m_2 q_1 - m_1 p_1}{m_2 - m_1},$$
 and the knots are the midpoints $v = \tfrac12(p + z)$, $w = \tfrac12(z + q)$. Cases 2–4 place the middle knot at the interval's midpoint or at auxiliary points ($c_1 = p_1 + (q_2 - p_2)/m_1$ and $d_1 = q_1 + (p_2 - q_2)/m_2$), as the slopes require.
 
+The divisions are safe for the cases [[choose.f#CHOOSE|CHOOSE]] picks, as long as $q_1 \ne p_1$: case 1 divides by $m_2 - m_1$ ([[#L55]]), and CHOOSE picks it only when the two slopes differ (opposite signs, or the same sign with $|s|$ strictly between $|m_1|$ and $|m_2|$, [[choose.f#L59-L61]], [[choose.f#L82-L89]], [[choose.f#L131-L143]]); cases 3 and 4 divide by $m_1$ and $m_2$ ([[#L74-L75]]), which CHOOSE rules out as zero ([[choose.f#L57]]), by $h_1 - p_1 = 2(q_2 - p_2)/m_1$, nonzero since $s \ne 0$ there, and in case 3 by $\bar m_2 - \bar m_1 = (m_2 - m_1)/2$ ([[#L84]]), nonzero since one slope exceeds $2|s|$ and the other does not exceed $(2-\epsilon)|s|$ (settled from the code, Nov 9, 2026).
+
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **Division by zero.** Case 1 divides by $m_2 - m_1$ and cases 3–4 by $m_1$ and $m_2$. The caller presumably chooses `NCASE` to avoid these; this file does not check.
 
 ### CASES
 

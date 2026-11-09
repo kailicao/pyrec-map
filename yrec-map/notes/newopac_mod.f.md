@@ -4,12 +4,8 @@
 
 **What its variables hold, who sets them, who reads them.** Both are `LOGICAL*4`.
 - `L2Z`: whether two opacity tables in $Z$ are needed, `LZRAMP .OR. LDIFZ`, set by [[setupopac.f#SETUPOPAC|`SETUPOPAC`]]; read by [[getopac.f#GETOPAC|`GETOPAC`]] in its test of whether the local $Z$ is covered by the tables (a $Z$ far from `ZENV` is accepted only with `L2Z` or `LOPAL95`).
-- `LLAOL`: the switch of the obsolete LAOL opacities, initially `.FALSE.` (moved from PARMIN's `DATA` statement) and set nowhere, so [[starin.f#STARIN|`STARIN`]] always takes the element fractions from `VNEW` rather than from the LAOL tables (its comment: "to maintain backward compatibility").
+- `LLAOL`: the switch of the obsolete LAOL opacities, initially `.FALSE.` (moved from PARMIN's `DATA` statement) and set nowhere, so [[starin.f#STARIN|`STARIN`]] always takes the element fractions from `VNEW` rather than from the LAOL tables (its comment: "to maintain backward compatibility", [[starin.f#L910-L916]]); unused? (a switch that cannot be turned on, for tables that were removed).
 
 **Design.** A blanket `USE NEWOPAC_MOD`; [[parmin.f#PARMIN|`PARMIN`]] still uses the module but reads neither member. The module header calls `LLAOL` a namelist variable, but it is in no namelist (so also at `rp_1`).
 
 **Changed since `rp_1`.** New file: `L2Z` of `COMMON/NEWOPAC/` and `LLAOL` of `/NWLAOL/` as a module; the namelist members moved to `NMLPAR_MOD`, those of removed opacity tables deleted.
-
-## Questions for the experts
-
-1. **A switch that cannot be turned on.** `LLAOL` is set nowhere, and the LAOL tables it served were removed. Can it go, with STARIN's test?

@@ -10,6 +10,22 @@
 
 **Changed since `rp_1`.** Declarations only: `JSON` from `DIMENSIONS_MOD` instead of a local `PARAMETER`, `IMPLICIT NONE`.
 
-## Questions for the experts
+## Bugs, by priority
 
-1. **The error flag.** `MEVAL` returns an error code `ERR` (1 if some `XVAL` lies outside the table, 2 if `XVAL` is not increasing), which `OSPLIN` ignores. Should a failure be reported?
+1. **(d)** **MEVAL's error code is ignored.** ([[#L47]]; [[meval.f#L93-L98]]) `MEVAL` returns `ERR` = 2 when `XVAL` is not nondecreasing, and then returns without setting `YVAL`; `ERR` = 1 marks extrapolation, which is expected. `OSPLIN` does not check `ERR`, so with points of evaluation out of order the caller gets whatever `YVAL` held, without a message. Correct while every caller passes ordered points (the new mass grid, the equally spaced grids), which was not traced for each of the six callers. Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to stop the run when MEVAL finds the points of
+    C evaluation out of order, since YVAL is then left unset.
+          USE IOUNITS_MOD
+    ...
+          CALL MEVAL(XVAL,YVAL,XTAB,YTAB,M,N,K,EPS,ERR)
+          IF (ERR .EQ. 2) THEN
+             WRITE(*,900) K
+             WRITE(ISHORT,900) K
+     900     FORMAT(' OSPLIN: POINTS OF EVALUATION NOT IN ORDER, K',I6/
+         *          ' RUN STOPPED')
+             STOP 1
+          ENDIF
+    ```

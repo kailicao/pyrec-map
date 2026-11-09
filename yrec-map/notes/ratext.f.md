@@ -10,10 +10,6 @@ $$b = \frac{c - v}{f_k v - c},\qquad \Delta = c\,b,\qquad c \leftarrow f_k v\,b,
 
 where $v$ is the previous diagonal's entry (`D(J,K)`) and $c$ the running term; the extrapolated value is $y_i + \sum\Delta$, and the last $\Delta$ is the error estimate. When $f_k v - c = 0$, it takes $\Delta = v$.
 
-**Design.** The tableau `D` and the saved abscissae `X` persist between calls (`SAVE`), so the routine is stateful: it assumes the calls for one step come in order, `IEST` = 1, 2, …. Each caller runs its whole sequence inside one call of its own (the loop over `I` in `BSSTEP`, over `J` in `LIBURN`), and a call with `IEST` = 1 starts the tableau afresh, so the two callers do not disturb each other. The fixed sizes are `IMAX` = 11 estimates, `NMAX` = 15 variables and `NCOL` = 7 columns, with no check of `NV` or `NUSE` against them.
+**Design.** The tableau `D` and the saved abscissae `X` persist between calls (`SAVE`), so the routine is stateful: it assumes the calls for one step come in order, `IEST` = 1, 2, …. Each caller runs its whole sequence inside one call of its own (the loop over `I` in `BSSTEP`, over `J` in `LIBURN`), and a call with `IEST` = 1 starts the tableau afresh, so the two callers do not disturb each other. The fixed sizes are `IMAX` = 11 estimates, `NMAX` = 15 variables and `NCOL` = 7 columns, with no check of `NV` or `NUSE` against them ([[#L11-L12]]): with the `PHYSICS` namelist's `IMAX` above 11 or `NUSE` above 7, BSSTEP's calls write past `X`, `D` and `FX` ([[bsstep.f#b2]]).
 
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **No bounds checks.** `NV` must not exceed 15 (`NMAX`), `IEST` 11 (`IMAX`) and `NUSE` 7 (`NCOL`), but nothing checks this. `LIBURN` passes `NV` = 3 and `NUSE` = 7. `BSSTEP` passes `NV` = 1 or 3 (from [[envint.f#ENVINT|`ENVINT`]]) and `NUSE` from `INTPAR_MOD`, and runs `IEST` up to `IMAX` of `INTPAR_MOD`; both are namelist parameters (defaults 7 and 11, initialized in `INTPAR_MOD` and read in [[parmin.f#PARMIN|`PARMIN`]]'s namelist). A user value above 7 or 11 would write past `FX`, `D` and `X` here (and past `NSEQ(11)` in `BSSTEP`). Should `PARMIN` or `BSSTEP` check them?

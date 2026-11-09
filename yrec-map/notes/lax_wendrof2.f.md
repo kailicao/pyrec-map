@@ -10,11 +10,9 @@ $$X_1 \mathrel{+}= \Delta t\,4\pi\,\frac{F_{1/2}}{m_{1/2}},\qquad X_i \mathrel{+
 
 The same for the metals (`EZ`) when `LDIFZ` is true and `LDOLI` is false.
 
+The end points hold the reservoirs beyond the grid: The surface update divides by $M - m_{N-1/2}$, half a cell plus all the mass above point $N$, and the central one by $m_{1/2}$, all the mass below the first midpoint; [[equal_to_model.f#EQUAL_TO_MODEL|`EQUAL_TO_MODEL`]] then applies the end points' changes to every shell beyond them (settled from the code, Nov 9, 2026: [[#L43-L45]], [[#L54-L56]]; [[equal_to_model.f#L42-L44]], [[equal_to_model.f#L113-L116]]).
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/CONST1/` to `CONSTANTS_MOD`, `LDIFZ` from `/GRAVS3/` to `NMLPAR_MOD`, `/GRAVEZ/` to `GRAVEZ_MOD`), `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **Surface mass.** The surface update divides by $M - m_{N-1/2}$, the mass of half a cell plus whatever lies above point $N$; is the outermost point meant to hold that mass?
 
 ### LAX_WENDROF2
 

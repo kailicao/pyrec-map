@@ -18,6 +18,8 @@ $$\sum_{k}\Bigl[\Bigl(-\epsilon_{yk} - \tfrac{\Delta s}{2}\ln 10\,\frac{\partial
 
 with $k$ over $P, T, R, L$ ($\epsilon_{yk}$ is 1 when $k = y$, else 0; the factor `CLN` $= \ln 10$ because the corrections are in $\log_{10}$, as `HP`, `HT`, `HR` are base-10 logarithms ([[crrect.f#CRRECT|CRRECT]] adds them to these), while COEFFT's derivatives are with respect to natural logarithms, so $\partial f/\partial\log_{10}y = \ln 10\,\partial f/\partial\ln y$; for the linear $L$ column COEFFT divides by $\ln 10$ beforehand, as in its $\mathtt{QT}/(L\ln 10)$). Read from the algebra, the comments' columns are: 1–2 $\delta R_{i-1}$, $\delta L_{i-1}$; 3–4 $\delta P_{i-1}$, $\delta T_{i-1}$; 5–6 $\delta R_i$, $\delta L_i$; and $\delta P_i$, $\delta T_i$ remain. The work matrix `Q(k,1:2)` holds the coefficients of $\delta P_{i-1}$, $\delta T_{i-1}$, and `HHA(k,1:2,I)` those of $\delta P_i$, $\delta T_i$.
 
+> **Question** ([[#L42-L111]]). **The meaning of the columns.** The comments name the pivots by row and column of a matrix that is written nowhere; the column map above is read from the algebra. Can it be confirmed, and documented in the code?
+
 1. **Columns 1 and 2.** The previous call left $\delta R_{i-1} = $ `HHB(3,I-1)` $- \sum_m$ `HHA(3,m,I-1)` $u_m$, and the same for $\delta L_{i-1}$ with row 4, where $u = (\delta P_{i-1}, \delta T_{i-1})$. Substituting them removes $\delta R_{i-1}$, $\delta L_{i-1}$. In the $L$ row the coefficient of $\delta L_{i-1}$ is $-1$ (no $\partial f_L/\partial L$ term), so its terms enter with a plus sign.
 2. **Columns 6, 5, 4, 3,** in turn ("PIVOT ON ROW-4 AND COLUMN-6", then row 3 and column 5, row 2 and column 4, row 1 and column 3): Gauss–Jordan steps that eliminate $\delta L_i$, $\delta R_i$, $\delta T_{i-1}$ and $\delta P_{i-1}$.
 
@@ -29,9 +31,6 @@ Rows 3 and 4 are what the next call (shell $i+1$) uses in step 1; [[hsolve.f#HSO
 
 **Design.** No pivoting by size: the divisions by `Q(2,2)`, `Q(1,1)` and $1 - \tfrac{\Delta s}{2}\ln 10\,\partial f_R/\partial R$ assume these are not zero. The routine has 39 arguments, the equations' derivatives one by one.
 
+> **Question** ([[#L70]]; [[#L90]]; [[#L103]]). **No safeguard against a zero pivot.** `DIV = 1.0D0/Q(2,2)` and `1.0D0/Q(1,1)` are taken without a check. Has a breakdown ever been seen, for instance in very thin shells?
+
 **Changed since `rp_1`.** Declarations only: `/CONST1/` to `CONSTANTS_MOD`, `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **The meaning of the columns.** The comments name the pivots by row and column of a matrix that is written nowhere; the column map above is read from the algebra. Can it be confirmed, and documented in the code?
-2. **No safeguard against a zero pivot.** `DIV = 1.0D0/Q(2,2)` and `1.0D0/Q(1,1)` are taken without a check. Has a breakdown ever been seen, for instance in very thin shells?

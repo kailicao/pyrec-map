@@ -8,7 +8,7 @@
 - `ECOD1Z(JSON)`: the settling coefficient at the grid points, set by `MODEL_TO_EQUAL`, read by `LAX_WENDROF1`.
 - `ECOD1Z_H(JSON)`: the settling coefficient at the midpoints, set by `MODEL_TO_EQUAL` and updated by `GRSETT` with the half-step abundances (`ECOD1Z_H + EZ_H*EQCOD1Z_H`); read by `LAX_WENDROF2`.
 - `EQCOD1Z_H(JSON)`: the abundance-dependent part of that coefficient, set by `MODEL_TO_EQUAL`, read by `GRSETT`.
-- `ECOD2Z_H`, `EQCOD2Z_H` (`JSON` each): the diffusion coefficient and its abundance-dependent part at the midpoints, set by `MODEL_TO_EQUAL`; read nowhere, since the metals get only the explicit settling term (see GRSETT's notes).
+- `ECOD2Z_H`, `EQCOD2Z_H` (`JSON` each): the diffusion coefficient and its abundance-dependent part at the midpoints, set by `MODEL_TO_EQUAL` ([[model_to_equal.f#L105-L107]]; [[model_to_equal.f#L180-L187]]); read nowhere (unused?), since the metals get only the explicit settling term (see GRSETT's notes).
 
 **Design.** A blanket `USE GRAVEZ_MOD`. The hydrogen counterparts (`EX`, `ECOD1`, …) are arguments of the same routines; only the metals go through the module.
 

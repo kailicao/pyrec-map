@@ -4,14 +4,11 @@
 
 **What its variables hold, who sets them, who reads them.**
 - `SCEN`: the convective envelope's mass-averaged $(\mathcal R/\mu)(\tfrac32\ln T - \ln\rho)$ (an entropy per gram), computed by `MASSLOSS` and then set to 0 in both branches that follow; read by `MDOT`.
-- `SACC`: the same quantity at the base of the envelope, set by `MASSLOSS`; read nowhere.
+- `SACC`: the same quantity at the base of the envelope, set by `MASSLOSS` ([[massloss.f#L201]]); read nowhere (only commented-out lines of MDOT and MASSLOSS read it).
 - `DLOGT`, `DLOGP`: the changes of $\log T$ and $\log P$ that `MDOT` derives from `SCEN` and applies to the envelope; read also by `COEFFT`, which adds them in its entropy terms with accretion. Since `SCEN` = 0, they are zero in practice (MDOT's and MASSLOSS's notes ask whether this code is kept for later work).
-- `SMASS0`: the total mass (solar units) after the step's mass change, set by `MDOT`; read nowhere.
+- `SMASS0`: the total mass (solar units) after the step's mass change, set by `MDOT` ([[mdot.f#L263]]); read nowhere (only a commented-out line of COEFFT reads it). Both are kept on purpose: they belong to the experimental mass-loss code, "not finished", not "dead" (settled from `KNOWN_ISSUES.md`, issue 12, Nov 9, 2026).
 
 **Design.** A blanket `USE MASSCHG2_MOD`. At `rp_1`, MASSLOSS declared `DLOGT` and `DLOGP` in the opposite order from MDOT and COEFFT, so under COMMON's storage association each name there held the other's value; MASSLOSS uses neither, so this had no effect, and the module removes the hazard.
 
 **Changed since `rp_1`.** New file: `COMMON/MASSCHG2/` as a module.
 
-## Questions for the experts
-
-1. **Unused members.** `SACC` and `SMASS0` are set and read nowhere. Can they go?

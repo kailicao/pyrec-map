@@ -8,10 +8,6 @@
 - **What it calls:** [[convec.f#CONVEC|CONVEC]] (which in turn calls [[oversh.f#OVERSH|OVERSH]]).
 - **Outputs:** `LCZ`, and the zone lists `MRZONE`, `MXZONE`, `NRZONE`, `NZONE`. The edges `JCORE`, `JENV` and the zones without overshoot `MXZON0` are local and dropped.
 
-**KC's changes.** 2025-05-30: a check `I .GT. 0` added before `LCZ(I) = .FALSE.`, "to avoid runtime error".
+**The method.** The radiative zones are marked first, then the mixed zones ([[#L24-L34]]); a check `I .GT. 0` guards `LCZ(I) = .FALSE.` (comment: "to avoid runtime error"). The check cannot fail: CONVEC gives every radiative region it counts a lower edge of at least 1 ([[convec.f#L183-L205]]), and the loop counts up from it (settled from the code, Nov 9, 2026: [[#L25-L27]]). The out-of-range index is more likely CONVEC's bug 1 ([[convec.f#b1]]), which leaves the top radiative region's upper edge stale, possibly beyond `M` (from an earlier call with more shells), which the check does not catch; the loop over `MXZONE` has no check either. That bug also makes the first loop mark shells 1 to `M` radiative, which is harmless here, since the second loop then marks the mixed zones.
 
 **Changed since `rp_1`.** Declarations only: `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **Where the bad index comes from.** KC's check guards against an index $I \le 0$, but `CONVEC` sets every zone it counts in `NRZONE` with a lower edge $\ge 1$, so the source is unclear (a stale `NRZONE` or zone list from an earlier call?). A related problem: CONVEC's index error ([[convec.f#CONVEC|CONVEC]], question 1) sets `MRZONE(1,2) = M` instead of `MRZONE(NRZONE,2) = M` for a radiative region above the last convection zone. Here that makes the first loop mark shells 1 to `M` radiative (harmless, since the second loop then marks the mixed zones) and lets the top region run to a stale upper bound, possibly beyond `M`, which the check does not catch. The loop over `MXZONE` has no check either.

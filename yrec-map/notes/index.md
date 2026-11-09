@@ -1,4 +1,4 @@
-**What it is.** YREC, the Yale Rotating Evolution Code, at its development branch's commit a8a5950 (Oct 30, 2026; the map was written for 09c3b9b and moved on Oct 31): 284 fixed-form Fortran files in `src/`, about one routine per file. 87 of them are modules (`*_mod.f`), which replaced the COMMON blocks of the release `rp_1` (where this site began): routines share data through the modules they `USE` (see the Modules page; every module variable is in the [Glossary](glossary.html), under its name in lower case) as much as through arguments, so a routine's modules matter as much as its calls. Since `rp_1`, the development branch has also removed legacy options (the MHD equation of state, the OPAL 1995 and 2001 equations of state, the Kurucz 1990, LAOL89 (all but its pure-metal table), Alexander 1995 and OPAL92 opacities, and the Monte Carlo loop), with 58 files, and fixed a number of bugs; each page's explanation ends with a "Changed since `rp_1`" line.
+**What it is.** YREC, the Yale Rotating Evolution Code, at its development branch's commit 7be4133 (Nov 2, 2026; the map was written for 09c3b9b and moved on Oct 31 and Nov 9): 282 fixed-form Fortran files in `src/`, about one routine per file. 85 of them are modules (`*_mod.f`), which replaced the COMMON blocks of the release `rp_1` (where this site began): routines share data through the modules they `USE` (see the Modules page; every module variable is in the [Glossary](glossary.html), under its name in lower case) as much as through arguments, so a routine's modules matter as much as its calls. Since `rp_1`, the development branch has also removed legacy options (the MHD equation of state, the OPAL 1995 and 2001 equations of state, the Kurucz 1990, LAOL89 (all but its pure-metal table), Alexander 1995 and OPAL92 opacities, and the Monte Carlo loop), with 58 files, and fixed a number of bugs; each page's explanation ends with a "Changed since `rp_1`" line.
 
 **Where to start.** [main.f](yrec-map/main.f.html) is the main program (it has no PROGRAM statement), and its page walks through the whole run. In order, it:
 
@@ -14,17 +14,50 @@ Each kind card then rescales the model to the wanted mass, composition and mixin
 
 After each model, [WRTOUT](yrec-map/wrtout.f.html) appends a line to the `.track` file (the global properties over time) and numerical details to `.short`, rewrites `.last` (the latest model, to restart from), and, as asked, writes snapshots of the structure to `.store` ([PUTSTORE](yrec-map/putstore.f.html)) and pulsation files ([WRTMOD](yrec-map/wrtmod.f.html)). A grid of stars is many such jobs, run by scripts or by the Python wrapper (`pip install yrec`), which runs the same executable. The test suite (`testsuite/`, run with pytest) runs a set of such jobs, solar models, brown dwarfs and stars of 0.1 to 9 $M_\odot$ evolved to various stages, and compares their outputs with stored reference outputs; it is how a change to the code is checked.
 
-**The code's conventions.** Changes in the source carry a comment with their date and the author's initials ("MHP 10/24", "G. Somers 11/14", "KC 2025-05-31", and, for changes made with an AI assistant, "MHP via Claude"), which is why the pages list them. Variable names still follow the old implicit types (`A`–`H` and `O`–`Z` real, `I`–`N` integer, `L` logical), although every file now declares its types under `IMPLICIT NONE`. Character strings stay out of the modules, as they once stayed out of the COMMON blocks: file names are read and tied to unit numbers in PARMIN, and the few strings used elsewhere (the version, the mixture's name) are passed as arguments through the main program. The namelist variables live in two modules, [NMLPAR_MOD](yrec-map/nmlpar_mod.f.html) and [NMLBYPASS_MOD](yrec-map/nmlbypass_mod.f.html), with their defaults. A physics routine returns its derivatives with its value (an opacity with its derivatives in density and temperature, for example), so an alternative must return the same set.
+**The code's conventions.** Changes in the source carry a comment with their date and the author's initials ("MHP 10/24", "G. Somers 11/14", "KC 2025-05-31", and, for changes made with an AI assistant, "MHP via Claude"), which is why the pages list them. Variable names still follow the old implicit types (`A–H` and `O–Z` real, `I–N` integer, `L` logical), although every file now declares its types under `IMPLICIT NONE`. Character strings stay out of the modules, as they once stayed out of the COMMON blocks: file names are read and tied to unit numbers in PARMIN, and the few strings used elsewhere (the version, the mixture's name) are passed as arguments through the main program. The namelist variables live in two modules, [NMLPAR_MOD](yrec-map/nmlpar_mod.f.html) and [NMLBYPASS_MOD](yrec-map/nmlbypass_mod.f.html), with their defaults. A physics routine returns its derivatives with its value (an opacity with its derivatives in density and temperature, for example), so an alternative must return the same set.
 
-**What the explanations found.** Each page ends with questions for the experts; some are apparent bugs worth reading first. The development branch has already fixed several found at `rp_1` (for example, `MASSLOSS` called `MDOT` with one argument too many, and `SECULR`'s whole-domain option was never switched on). Some that remain: GRSETT's convergence test ignores negative changes, and its coefficient correction sits one midpoint off; in SNEUT, `cap-cap` stands where `cap*cap` is expected; VCIRC's restored μ-current option divides by the speed of light `CC`, which is never set; and the acoustic-depth output (CALCAD) never runs, since nothing sets its switch `LACOUT` (see `ACDPTH_MOD`).
+## Reading this site
+
+
+Each file's page has an outline in the margin, its text on the left, and the whole file's code on the right, which stays in view: the Fortran, re-indented by its loops and IF blocks (switch to "as in YREC" for the code as written), or its Python translation, whose blocks name the Fortran lines they translate. Every link to lines (in a question, a bug, a call) shows those lines in the code, and a ↗ beside it opens them on GitHub. Each routine's section gives the modules it uses (each linked to the module's page, which lists every unit using it), what calls it, and a flowchart of its calls in the order of the source, nested in boxes for its loops and branches; lines with a compiler's warning (gfortran) or a linter's finding (ruff, in the Python) are marked. Calls are found by reading the code, not by running it. Only `src/` is mapped; the `.f` files under `input/`, tools for the data tables, are left out. Many files carry changes marked "KC 20…" (Kaili Cao's), with the old lines kept as comments beside them, which is where they are read.
+
+### A reading path
+
+A route through the 15 topics of [Files by topic](#files-by-topic), for a newcomer who wants to read every page. Within each topic, read the files named here first, then the rest in the order their topic's table lists them (the routines, then the modules, which are short and best read beside the routines that use them).
+
+1. **The main program and the run's control:** [[main.f]] first, its page walks through a whole run; then [[rscale.f]], and the calibrations [[setcal.f]] and [[chkcal.f]].
+2. **Input:** [[parmin.f]] with [[nmlpar_mod.f]] (what every setting means), then [[setups.f]] and [[starin.f]].
+3. **The structure equations and the Henyey solver:** [[crrect.f]], [[coefft.f]] (the four equations), then [[reduce.f]] and [[hsolve.f]].
+4. **Atmospheres, the envelope and the boundary conditions:** [[surfbc.f]] (the envelope triangle), [[envint.f]], then [[qenv.f]] and [[qatm.f]].
+5. **The equation of state:** [[eqstat.f]], [[eqstat2.f]] (the choice and blending of the tables), then [[eqsaha.f]].
+6. **Opacities:** [[getopac.f]], then [[setupopac.f]] and [[getopal95.f]].
+7. **Nuclear reactions, energy generation and neutrinos:** [[engeb.f]], [[rates.f]], [[kemcom.f]].
+8. **Convection, overshoot and the mixing of composition:** [[mix.f]] (the composition over a step), [[convec.f]], [[tpgrad.f]] (mixing-length theory), [[oversh.f]], [[mixcz.f]].
+9. **The time step and rezoning:** [[htimer.f]], [[hpoint.f]].
+10. **Output:** [[wrtout.f]], [[wrthead.f]], [[putstore.f]].
+
+This completes a run without rotation or diffusion. The remaining topics are options, each switched on by the namelists:
+
+11. **Microscopic diffusion and settling:** [[grsett.f]] (the older treatment), then [[microdiff.f]] (the newer one) and [[thdiff.f]] (Burgers' equations).
+12. **Rotation, the structure of a rotating star:** [[fpft.f]], [[shape.f]], [[momi.f]], [[getrot.f]].
+13. **Rotation, angular-momentum transport and rotational mixing:** [[getw.f]] (the driver), [[midmod.f]], [[seculr.f]], [[vcirc.f]], [[codiff.f]].
+14. **Angular-momentum loss and mass loss:** [[mwind.f]], [[gettau.f]] (the overturn time), [[massloss.f]], [[mdot.f]].
+15. **Numerical utilities:** as the other pages call them; [[intrp2.f]], [[interp.f]] and [[osplin.f]] are the most used.
+
+### What the explanations found
+
+
+Each page has questions for the experts, placed where their context is, and, where the code seems wrong, suspected bugs graded by what they would do (wrong results first), each with a possible fix in the code's own style; each topic of [Files by topic](#files-by-topic) lists its suspected bugs and questions in tables of their own (being reorganized this way page by page, from Nov 9, 2026; the opacity pages are done). The development branch has already fixed several found at `rp_1` (for example, `MASSLOSS` called `MDOT` with one argument too many, and `SECULR`'s whole-domain option was never switched on). Some that remain: GRSETT's convergence test ignores negative changes, and its coefficient correction sits one midpoint off; in SNEUT, `cap-cap` stands where `cap*cap` is expected; VCIRC's restored μ-current option divides by the speed of light `CC`, which is never set; and the acoustic-depth output (CALCAD) never runs, since nothing sets its switch `LACOUT` (see `ACDPTH_MOD`).
 
 **Found in passing.** Four CALLs name routines not in `src/`: `DERIV` (in MMID, a routine passed as an argument, QENV or QATM) and, in PARMIN, `GETARG`, `GETENV` and `SYSTEM` (compiler extensions for the command line, the environment and the shell).
 
-**Reading this site.** Each routine's section shows the comments above it (YREC's own documentation), its header, the modules it uses (each linked to the module's page, which lists every unit using it), what it calls and what calls it, its source with each call linked, and its Python translation, folded, beside the Fortran. Calls are found by reading the code, not by running it. Only `src/` is mapped; the `.f` files under `input/`, tools for the data tables, are left out. Many files carry changes marked "KC 20…" (Kaili Cao's), with the old lines kept as comments beside them; each explanation lists them in a "KC's changes" line.
+### Where the overhaul stands
 
-**Where the overhaul stands.** An overhaul goes in four stages: a documentation site for the old code (this part of the site); the documentation of a new code on the same site, with references to the old one; the new code, with benchmarks (same inputs, same outputs); and a paper. The first stage is complete for `rp_1`, where every file had an explanation with questions for the code's experts and every page went through one round of review and revision; a page's review findings, folded at its end, refer to `rp_1`. On Oct 27 every page was moved to 09c3b9b, each with its Python translation in the current structure (the [pyrec](https://github.com/kailicao/pyrec) repository): the translation is checked only by compiling it, and is to be tested routine by routine against the Fortran. On Oct 31 the pages moved to a8a5950, with YREC's public documentation, the YREC paper's notation, the files grouped by topic with a reading path, and the glossary. The second stage is drafted, and its pages are drafts: the [new structure](pyrec-map/overview.html), one page per component with its modern-Fortran design and its Python stubs.
+
+An overhaul goes in four stages: a documentation site for the old code (this part of the site); the documentation of a new code on the same site, with references to the old one; the new code, with benchmarks (same inputs, same outputs); and a paper. The first stage is complete for `rp_1`, where every file had an explanation with questions for the code's experts and every page went through one round of review and revision; a page's review findings, folded at its end, refer to `rp_1`. On Oct 27 every page was moved to 09c3b9b, each with its Python translation in the current structure (the [pyrec](https://github.com/kailicao/pyrec) repository): the translation is checked only by compiling it, and is to be tested routine by routine against the Fortran. On Oct 31 the pages moved to a8a5950, with YREC's public documentation, the YREC paper's notation, the files grouped by topic with a reading path, and the glossary. On Nov 9 they moved to 7be4133, after a round of bug fixes by YREC's developers; each page changed since ends with a "Changed since `a8a5950`" line. The second stage is drafted: [a new design](pyrec-map/overview.html), a high-level design on one page (Nov 9, 2026): a `Model` holding the star's state and its history, with its physics and numerical methods as families of callables, each a Python base class, in Python with Numba.
 
 ## Notation
+
 
 The pages write the physics in the symbols of the YREC paper (Pinsonneault et al., "The YREC Stellar Evolution Code: Public Data Release", `YREC_Public_Data_Release_Paper_revised.pdf` in the repository's root), and the code's variables in code font. The paper names some quantities only in words; for those, marked *, the pages use the usual symbol. Many arrays hold logarithms (base 10) of the quantity, per shell. The code works in cgs, except that `HL` is in $L_\odot$ and is not a logarithm, `SMASS` is in $M_\odot$, the age `DAGE` is in Gyr and the step `DDAGE` in yr (`DELTS`, the same step, in s).
 
@@ -57,7 +90,8 @@ The pages write the physics in the symbols of the YREC paper (Pinsonneault et al
 
 ## Files by topic
 
-The 284 files, in 15 topics, in the order of the reading path below; within each topic the routines come first, in reading order, then the modules that hold its data.
+
+The 282 files, in 15 topics, in the order of the reading path (in [Reading this site](#reading-this-site)); within each topic the routines come first, in reading order, then the modules that hold its data.
 
 **The main program and the run's control.** The main program, which runs the job kind card by kind card and model by model, with the rescaling of a starting model and the automatic calibrations of the Sun and of other stars. [[main.f]], [[runloop_mod.f]], [[rscale.f]], [[setcal.f]], [[chkcal.f]], [[setscal.f]], [[chkscal.f]], [[version.f]].
 
@@ -71,15 +105,15 @@ The 284 files, in 15 topics, in the order of the reading path below; within each
 
 **Opacities.** The radiative opacity from the OPAL 1995 and the low-temperature (Ferguson et al.) tables, LAOL89's pure-metal table (`FPUREZ`, used where $Z > 0.1$ and $\log T > 7$, in helium-burning cores; LAOL89's tables for mixtures are removed), and the conductive opacity. [[getopac.f]], [[setupopac.f]], [[surfopac.f]], [[getopal95.f]], [[ll95tbl.f]], [[op95xtab.f]], [[op95ztab.f]], [[op952d.f]], [[op953d.f]], [[op954d.f]], [[getalex06.f]], [[readalex06.f]], [[alex06tab.f]], [[gtpurz.f]], [[rdzlaol.f]], [[zsulaol.f]], [[condopacp.f]], [[condopacpint.f]], [[newopac_mod.f]], [[op95interp_mod.f]], [[llot95_mod.f]], [[llot95a_mod.f]], [[llot95e_mod.f]], [[alot06_mod.f]], [[alot06all_mod.f]], [[galot06_mod.f]], [[zlaol_mod.f]], [[zslaol_mod.f]].
 
-**Nuclear reactions, energy generation and neutrinos.** Reaction rates, energy generation, the burning network, deuterium and the light elements, and neutrino losses. [[engeb.f]], [[rates.f]], [[kemcom.f]], [[eqburn.f]], [[dburn.f]], [[dburnm.f]], [[deutrate.f]], [[lirate88.f]], [[liburn.f]], [[liburn2.f]], [[neutrino.f]], [[nulosses.f]], [[sneut.f]], [[cross_mod.f]], [[grab_mod.f]], [[fluxes_mod.f]], [[deuter_mod.f]], [[newrat_mod.f]], [[oldrat_mod.f]], [[prevcz_mod.f]].
+**Nuclear reactions, energy generation and neutrinos.** Reaction rates, energy generation, the burning network, deuterium and the light elements, and neutrino losses. [[engeb.f]], [[rates.f]], [[kemcom.f]], [[eqburn.f]], [[dburn.f]], [[dburnm.f]], [[deutrate.f]], [[lirate88.f]], [[liburn.f]], [[liburn2.f]], [[neutrino.f]], [[nulosses.f]], [[sneut.f]], [[cross_mod.f]], [[fluxes_mod.f]], [[deuter_mod.f]], [[newrat_mod.f]], [[oldrat_mod.f]], [[prevcz_mod.f]].
 
-**Convection, overshoot and the mixing of composition.** Where the model is convective, its temperature gradient, overshoot and semiconvection, and the change of composition over a step (burning and mixing of convection zones). [[mix.f]], [[convec.f]], [[tpgrad.f]], [[hsubp.f]], [[findsh.f]], [[oversh.f]], [[sconvec.f]], [[mixcz.f]], [[ovrot.f]], [[burn_mod.f]], [[comp_mod.f]], [[comp2_mod.f]], [[dpmix_mod.f]], [[liov_mod.f]], [[pualpha_mod.f]].
+**Convection, overshoot and the mixing of composition.** Where the model is convective, its temperature gradient, overshoot and semiconvection, and the change of composition over a step (burning and mixing of convection zones). [[mix.f]], [[convec.f]], [[tpgrad.f]], [[hsubp.f]], [[findsh.f]], [[oversh.f]], [[sconvec.f]], [[mixcz.f]], [[ovrot.f]], [[comp_mod.f]], [[comp2_mod.f]], [[dpmix_mod.f]], [[liov_mod.f]], [[pualpha_mod.f]].
 
 **The time step and rezoning.** The choice of the next time step, and the redistribution of the mass points at the start of each step. [[htimer.f]], [[xtime.f]], [[ytime.f]], [[ptime.f]], [[entime.f]], [[wtime.f]], [[hpoint.f]], [[entrop_mod.f]].
 
 **Output.** The output files: headers, the track and short output, stored models, model files and profiles for pulsation. [[wrthead.f]], [[wrtout.f]], [[wrtlst.f]], [[putstore.f]], [[stitch.f]], [[putmodel2.f]], [[putyrec7.f]], [[wrtmod.f]], [[wrtmil.f]], [[pindex.f]], [[pdist.f]], [[calcad.f]], [[acdpth_mod.f]], [[ccout_mod.f]], [[cent_mod.f]], [[label_mod.f]], [[pulse1_mod.f]], [[pulse2_mod.f]], [[sound_mod.f]].
 
-**Microscopic diffusion and settling.** Gravitational settling and thermal diffusion of helium, metals and light elements: the older GRSETT treatment and the newer MICRODIFF. [[grsett.f]], [[setup_grsett.f]], [[model_to_equal.f]], [[lax_wendrof1.f]], [[lax_wendrof2.f]], [[get_imp_diffco.f]], [[tridiag_gs.f]], [[equal_to_model.f]], [[microdiff.f]], [[microdiff_setup.f]], [[microdiff_mte.f]], [[microdiff_cod.f]], [[microdiff_run.f]], [[microdiff_etm.f]], [[thdiff.f]], [[gravez_mod.f]].
+**Microscopic diffusion and settling.** Gravitational settling and thermal diffusion of helium, metals and light elements: the older GRSETT treatment and the newer MICRODIFF. Settling is off by default (`LDIFY`); with it on, MICRODIFF needs `LNEWDIF` (also off by default, set by the test suite's settling cases), and GRSETT runs otherwise. [[grsett.f]], [[setup_grsett.f]], [[model_to_equal.f]], [[lax_wendrof1.f]], [[lax_wendrof2.f]], [[get_imp_diffco.f]], [[tridiag_gs.f]], [[equal_to_model.f]], [[microdiff.f]], [[microdiff_setup.f]], [[microdiff_mte.f]], [[microdiff_cod.f]], [[microdiff_run.f]], [[microdiff_etm.f]], [[thdiff.f]], [[gravez_mod.f]].
 
 **Rotation: the structure of a rotating star.** The distortion of a rotating star, its moments of inertia and the form factors that correct the structure equations, and the rotation curve. [[fpft.f]], [[shape.f]], [[func.f]], [[qgauss.f]], [[trapzd.f]], [[getqua.f]], [[intmom.f]], [[momi.f]], [[getrot.f]], [[solid.f]], [[wczimp.f]], [[errmom_mod.f]], [[quadd_mod.f]], [[quadru_mod.f]].
 
@@ -88,25 +122,3 @@ The 284 files, in 15 topics, in the order of the reading path below; within each
 **Angular-momentum loss and mass loss.** Magnetic braking by winds (with the convective overturn time it needs), disk locking, and mass loss or accretion. [[mwind.f]], [[cowind.f]], [[mcowind.f]], [[wind.f]], [[amcalc.f]], [[gettau.f]], [[taucal.f]], [[tauint.f]], [[tauintnew.f]], [[massloss.f]], [[mdot.f]], [[disk_mod.f]], [[ovrtrn_mod.f]], [[masschg2_mod.f]].
 
 **Numerical utilities.** Interpolation, splines, quadrature and linear solvers, most of them from Numerical Recipes or published algorithms. [[interp.f]], [[inter3.f]], [[intrp2.f]], [[xrng4.f]], [[locate.f]], [[polint.f]], [[cspline.f]], [[splinc.f]], [[splinj.f]], [[splint.f]], [[splintd2.f]], [[kspline.f]], [[ksplint.f]], [[osplin.f]], [[meval.f]], [[spline.f]], [[cases.f]], [[choose.f]], [[search.f]], [[slopes.f]], [[splin_mod.f]], [[boole.f]], [[bandw.f]], [[ctridi.f]], [[simeqc.f]], [[ludcmp.f]], [[lubksb.f]].
-## A reading path
-
-A route through the 15 topics above, for a newcomer who wants to read every page. Within each topic, read the files named here first, then the rest in the order listed above (the routines, then the modules, which are short and best read beside the routines that use them).
-
-1. **The main program and the run's control:** [[main.f]] first, its page walks through a whole run; then [[rscale.f]], and the calibrations [[setcal.f]] and [[chkcal.f]].
-2. **Input:** [[parmin.f]] with [[nmlpar_mod.f]] (what every setting means), then [[setups.f]] and [[starin.f]].
-3. **The structure equations and the Henyey solver:** [[crrect.f]], [[coefft.f]] (the four equations), then [[reduce.f]] and [[hsolve.f]].
-4. **Atmospheres, the envelope and the boundary conditions:** [[surfbc.f]] (the envelope triangle), [[envint.f]], then [[qenv.f]] and [[qatm.f]].
-5. **The equation of state:** [[eqstat.f]], [[eqstat2.f]] (the choice and blending of the tables), then [[eqsaha.f]].
-6. **Opacities:** [[getopac.f]], then [[setupopac.f]] and [[getopal95.f]].
-7. **Nuclear reactions, energy generation and neutrinos:** [[engeb.f]], [[rates.f]], [[kemcom.f]].
-8. **Convection, overshoot and the mixing of composition:** [[mix.f]] (the composition over a step), [[convec.f]], [[tpgrad.f]] (mixing-length theory), [[oversh.f]], [[mixcz.f]].
-9. **The time step and rezoning:** [[htimer.f]], [[hpoint.f]].
-10. **Output:** [[wrtout.f]], [[wrthead.f]], [[putstore.f]].
-
-This completes a run without rotation or diffusion. The remaining topics are options, each switched on by the namelists:
-
-11. **Microscopic diffusion and settling:** [[grsett.f]] (the older treatment), then [[microdiff.f]] (the newer one) and [[thdiff.f]] (Burgers' equations).
-12. **Rotation, the structure of a rotating star:** [[fpft.f]], [[shape.f]], [[momi.f]], [[getrot.f]].
-13. **Rotation, angular-momentum transport and rotational mixing:** [[getw.f]] (the driver), [[midmod.f]], [[seculr.f]], [[vcirc.f]], [[codiff.f]].
-14. **Angular-momentum loss and mass loss:** [[mwind.f]], [[gettau.f]] (the overturn time), [[massloss.f]], [[mdot.f]].
-15. **Numerical utilities:** as the other pages call them; [[intrp2.f]], [[interp.f]] and [[osplin.f]] are the most used.

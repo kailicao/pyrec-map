@@ -1,6 +1,6 @@
 # Pages mhdtbl.f to quadeos06.f
 
-Round 1, Oct 25, 2026, by Claude, against the code at YREC `rp_1`. Each finding gives its kind (wrong, missing, unclear, format), the text and the proposed fix; "Revised" says what was applied.
+Round 1, Oct 25, 2026, by Claude, against the code at YREC `rp_1`. Its line and question numbers refer to `rp_1`; the pages have since moved to the development branch (7be4133), where most questions were renumbered, answered, or made suspected bugs. Each finding gives its kind (wrong, missing, unclear, format), the text and the proposed fix; "Revised" says what was applied.
 
 Following the review brief; checked also against `callgraph.json` and with `grep`. No earlier round to check (this is the only one). Part of the list was reviewed on Oct 25 in a second pass.
 

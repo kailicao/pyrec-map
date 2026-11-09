@@ -4,30 +4,41 @@
 
 **How it fits.**
 - **Inputs:** the arguments, the model (`HD`, `HL`, `HP`, `HR`, `HS`, `HS1`, `HS2`, `HT`, `HV`), the mixing coefficients `COD2`, the time step `DELTS`, the zones (`MRZONE`, `MXZONE`, `NRZONE`, `NZONE`, `LCZ`); `LEXCOM` from [[nmlpar_mod.f#NMLPAR_MOD|`NMLPAR_MOD`]] (whether the extended set of 15 species, with the light elements, is followed); `HCOMPP` in [[oldmod_mod.f#OLDMOD_MOD|`OLDMOD_MOD`]], the composition at the start of the step.
-- **Who calls it:** [[getw.f#GETW|GETW]], the rotation step, only when `LINSTB` is true, `LALLCZ` false and `LBURS` true.
+- **Who calls it:** [[getw.f#GETW|GETW]], the rotation step, only when `LINSTB` is true, `LALLCZ` false and `LBURS` true ([[getw.f#L455-L460]]). GETW sets its local `LBURS` to false on every call and never changes it ([[getw.f#L140]]), so at 7be4133 BURSMIX is never called, nor [[bsrotmix.f#BSROTMIX|BSROTMIX]] through it: unused?
 - **What it calls:** [[rotmix.f#ROTMIX|ROTMIX]] (burning, by its header with [[kemcom.f#KEMCOM|KEMCOM]] in radiative regions), [[ndifcom.f#NDIFCOM|NDIFCOM]] (mixing by angular-momentum transport), [[liburn2.f#LIBURN2|LIBURN2]] (light-element burning, if `LEXCOM`), and [[bsrotmix.f#BSROTMIX|BSROTMIX]] (the extrapolation).
 - **Outputs:** `HCOMP`, the abundances at the end of the step. If `LEXCOM`, it copies the new lithium and beryllium rates ([[newrat_mod.f#NEWRAT_MOD|`NEWRAT_MOD`]]) into the old ones ([[oldrat_mod.f#OLDRAT_MOD|`OLDRAT_MOD`]]), and sets `JENV0 = JENV1`, `PSCAL0 = PSCAL1` ([[liov_mod.f#LIOV_MOD|`LIOV_MOD`]]).
 - **Modules:** `OLDMOD_MOD` (18 units, among them [[crrect.f#CRRECT|CRRECT]], [[kemcom.f#KEMCOM|KEMCOM]], [[liburn.f#LIBURN|LIBURN]]); `NEWRAT_MOD`, `OLDRAT_MOD`, `LIOV_MOD` (GETW, LIBURN, LIBURN2, LIRATE88); `NMLPAR_MOD`.
 
 **The method.**
-1. Save the composition at the start of the step (`HCOMPP`), and $X$, $Y$, $Z$ of the input `HCOMP`, which the caller's full step has already produced.
+1. Save the composition at the start of the step (`HCOMPP`), and $X$, $Y$, $Z$ of the input `HCOMP`, which the caller's full step has already produced ([[#L75-L82]]).
 2. Pass the composition of the full step, already computed by the caller, to BSROTMIX as sequence 1.
-3. For sequences $k = 2, \dots, 11$, with $n_k$ = 2, 4, 6, …, 20 substeps of $\Delta t/n_k$: reset the composition, then for each substep burn and, if `LDIFY`, settle (ROTMIX, which calls MICRODIFF or GRSETT), mix (NDIFCOM) and, if `LEXCOM`, burn the light elements (LIBURN2); the end of each substep becomes the start of the next (`HCOMPP`, which KEMCOM reads as the start-of-step state). Then call BSROTMIX; stop when it reports convergence.
+3. For sequences $k = 2, \dots, 11$, with $n_k$ = 2, 4, 6, …, 20 substeps of $\Delta t/n_k$: reset the composition, then for each substep burn and, if `LDIFY`, settle (ROTMIX, which calls MICRODIFF or GRSETT), mix (NDIFCOM) and, if `LEXCOM`, burn the light elements (LIBURN2); the end of each substep becomes the start of the next (`HCOMPP`, which KEMCOM reads as the start-of-step state). Then call BSROTMIX; stop when it reports convergence ([[#L87-L126]]). On convergence `HCOMPP` is set to the end-of-step composition ([[#L118-L123]]), and otherwise it is left there by the last substep, though the comment says it is overwritten "temporarily" ([[#L72-L74]]); GETW does the same on its other path, copying the end-of-step composition into `HCOMPP` when `LBURS` is false ([[getw.f#L372-L377]]), so it is the start of the next step (settled from the code, Nov 9, 2026).
+
+    > **Question** ([[#L52]]; [[#L95-L96]]). **Two `NSEQ` sequences.** `NSEQ` here starts 1, 2, 4, 6, … (step by 2), while [[bsstep.f#BSSTEP|BSSTEP]] uses 2, 4, 6, 8, 12, … Is the choice deliberate?
+
 4. If no sequence converges, print a warning and keep the composition of the last (finest) sequence.
-5. Restore $X$ and $Z$ to their input values (those of the caller's full step, not those at the start of the time step), and set $Y = 1 - X - Z - X_3$.
+5. Restore $X$ and $Z$ to their input values (those of the caller's full step, not those at the start of the time step), and set $Y = 1 - X - Z - X_3$ ([[#L131-L136]]).
+
+    > **Question** ([[#L132-L136]]). **$X$ and $Z$ restored.** After the extrapolation, $X$ and $Z$ are reset to their values on entry (`HKEEP`), that is, to the caller's full step, so the burning and mixing of hydrogen computed in the substeps are discarded, and $Y$ absorbs the difference. Is this reset meant?
 
 Only species 4 onward (from $^3$He) are extrapolated (`JBEG = 4`).
 
-**KC's changes.** 2025-05-31: unused arguments dropped from the calls to ROTMIX (`ITLVL`, passed as 5), NDIFCOM (`NTOT`) and LIBURN2 (`HD`); the old calls kept as comments.
-
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 
-## Questions for the experts
+## Bugs, by priority
 
-1. **$X$ and $Z$ restored.** After the extrapolation, $X$ and $Z$ are reset to their values on entry (`HKEEP`), that is, to the caller's full step, so the burning and mixing of hydrogen computed in the substeps are discarded, and $Y$ absorbs the difference. Is this reset meant?
-2. **Uninitialized arrays.** `ECOD2`, `EM`, `IBEG` and `IEND` are local (listed under "INPUT VARIABLES" but not arguments) and never set here. NDIFCOM sets them (through MIXGRID) when `LOK` is true, and reads them as they are when `LOK` is false; `LOK` is passed from GETW, which gets it from SECULR. When `LOK` is false, are these arrays undefined?
-3. **`HCOMPP` left at the end of the step.** The substeps overwrite `HCOMPP`, the start-of-step composition in `OLDMOD_MOD` that CRRECT, KEMCOM and others read, and leave it at the end-of-step composition for all species, although the comment says it is overwritten "temporarily". GETW also overwrites `HCOMPP` for species 12–15 elsewhere. Is the end state intended?
-4. **Two `NSEQ` sequences.** `NSEQ` here starts 1, 2, 4, 6, … (step by 2), while [[bsstep.f#BSSTEP|BSSTEP]] uses 2, 4, 6, 8, 12, … Is the choice deliberate?
+1. **(d)** **NDIFCOM gets a region never set when `LOK` is false.** ([[#L28-L31]]; [[#L46-L49]]; [[#L103-L106]]) `IBEG`, `IEND`, `ECOD2` and `EM` are locals of BURSMIX, listed as input variables but set nowhere in it; only NDIFCOM sets them, through MIXGRID, and only when `LOK` is true. With `LOK` false, NDIFCOM passes them straight to MIXCOM ([[ndifcom.f#L64-L66]]). GETW passes the `LOK` that SECULR returns, which is false when SECULR finds no instability and leaves early ([[seculr.f#L202]], [[seculr.f#L289]]). What follows: On the first such call `IBEG` = `IEND` = 0 if the compiler zeroes saved locals, and MIXCOM reads `HCOMP(J,0)`, out of bounds ([[mixcom.f#L61]]), before finding nothing to do; after an earlier call with `LOK` true, MIXCOM mixes again the last region of that call, with its old coefficients, in a model SECULR found stable. Not reached at 7be4133, since `LBURS` is false ([[getw.f#L140]]). Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to mix only when SECULR found unstable regions (LOK);
+    C IBEG, IEND, ECOD2 and EM are set only by such a call.
+                IF(LOK)THEN
+                   CALL NDIFCOM(DT,COD2,ECOD2,EM,HD,HL,HP,HR,HS,HS1,HS2,
+         *                      HSTOT,HV,IBEG,IEND,IMAX,IMIN,LCZ,LOK,M,
+         *                      HCOMP,JBEG,JEND)
+                ENDIF
+    ```
 
 ### BURSMIX
 

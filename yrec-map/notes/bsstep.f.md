@@ -6,20 +6,50 @@
 - **Inputs:** `Y(3)`, `DYDX(3)` at `X0` (the independent variable), the trial step `HTRY`, the tolerance `EPS`, the scales `YSCAL`, the derivative routine `DERIV` (passed as an argument by ENVINT: [[qatm.f#QATM|QATM]] for the atmosphere, [[qenv.f#QENV|QENV]] for the envelope) and the stellar quantities it needs (`B`, `FPL`, `FTL`, `GL`, `RL`, `TEFFL`, `X`, `Z`, …); `IMAX` and `NUSE` from the module [[intpar_mod.f|INTPAR_MOD]] (initialized there to 11 and 7; both are also in the `PHYSICS` namelist, read by [[parmin.f#PARMIN|PARMIN]], so a run can change them).
 - **Who calls it:** [[envint.f#ENVINT|ENVINT]].
 - **What it calls:** [[mmid.f#MMID|MMID]] (modified midpoint) and [[ratext.f#RATEXT|RATEXT]] (rational extrapolation).
-- **Outputs:** `Y` and `X0` advanced, `HDID` (the step taken), `HNEXT` (the suggested next step), `ERR` (the scaled error of each variable).
+- **Outputs:** `Y` and `X0` advanced, `HDID` (the step taken), `HNEXT` (the suggested next step), `ERR` (the scaled error of each variable); on a step-size underflow, a message on the screen and on `ISHORT` (from [[iounits_mod.f|IOUNITS_MOD]]).
 
 **The method.** For $i = 1, \dots, I_\mathrm{max}$, integrate across $H$ with $n_i$ = 2, 4, 6, 8, 12, 16, … midpoint substeps, and extrapolate the results in $(H/n_i)^2$ to zero. Accept the step when
 $$\max_j \frac{|\epsilon_j|}{y_{\mathrm{scal},j}} < \mathrm{EPS}.$$
 The next step is $0.95H$ if it took `NUSE` sequences, $1.2H$ if one fewer, otherwise $H\,n_{\mathrm{NUSE}-1}/n_i$. If all $I_\mathrm{max}$ sequences fail, retry with
 $$H \leftarrow \frac{H/4}{2^{\lfloor (I_\mathrm{max} - N_\mathrm{use})/2 \rfloor}}.$$
+If the new step no longer changes `X` (the hydrogen abundance, not the position: suspected bug 1), the run stops with exit status 1, printing `X` and $H$ ([[#L62-L71]]).
 
 **From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) describes `IMAX` and `NUSE` (defaults 11 and 7) together: the integrators of the envelope and the atmosphere start with a large step, divide it into smaller ones and extrapolate to zero step size; `IMAX` is the largest number of such divisions, `NUSE` the number of earlier steps used in the extrapolation.
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/INTPAR/` to `INTPAR_MOD`), `IMPLICIT NONE`.
 
-## Questions for the experts
+**Changed since `a8a5950`.** The step-size underflow stop gives `X` and $H$, writes them to `ISHORT` as well as the screen, and ends the run with exit status 1 instead of 0 (`KNOWN_ISSUES.md`, issue 38).
 
-1. **The step-size underflow check.** `IF(X+H.EQ.X)` tests `X`, which here is the hydrogen abundance passed through to `DERIV`, not the independent variable `X0` (Numerical Recipes tests the independent variable). The check thus fires only if $H$ is negligible next to $X$, not next to the position. Should it be `X0+H.EQ.X0`? Since `X` is about 0.7, the check fires only once $H$ falls below about $10^{-16}X$; until then a failing step keeps shrinking $H$, and the run may stop with "ERROR IN BSSTEP" only late.
+## Bugs, by priority
+
+1. **(c)** **The step-size underflow test uses the hydrogen abundance.** ([[#L64]]) `IF(X+H.EQ.X)` tests `X`, which here is the hydrogen abundance passed through to `DERIV`, not the independent variable `X0` ($\log\tau$ in the atmosphere, $\log P$ in the envelope: [[envint.f#L395-L397]], [[envint.f#L693-L695]]); Numerical Recipes tests the independent variable. What follows: The test fires when $H$ is negligible next to $X \approx 0.7$, not next to the position, so a failing step goes on shrinking $H$ (by a factor 16 per round of `IMAX` sequences, with the defaults) somewhat longer before the run stops with "ERROR IN BSSTEP"; with $X = 0$ it fires only once $H$ underflows to zero. The stop and its message come late, the result is not changed. On every run's path, but only when the integration fails. Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to test the independent variable X0, not the
+    C hydrogen abundance X, for a step-size underflow.
+          IF(X0+H.EQ.X0) THEN
+             WRITE(*,900)X0,H
+             WRITE(ISHORT,900)X0,H
+    ...
+    ```
+
+2. **(d)** **No check of `IMAX` and `NUSE` against the sizes of the arrays.** ([[#L27-L28]]; [[#L38-L42]]; [[#L57]]; [[ratext.f#L11-L12]]) `IMAX` and `NUSE` are `PHYSICS` namelist variables (defaults 11 and 7, from [[intpar_mod.f|`INTPAR_MOD`]]). The loop runs `I` up to `IMAX` and reads `NSEQ(I)`, declared `NSEQ(11)`; [[ratext.f#RATEXT|RATEXT]] stores `X(IEST)` in `X(11)` and fills up to `NUSE` columns of `D(15,7)` and `FX(7)`. A value of `IMAX` above 11 or `NUSE` above 7 reads and writes out of bounds, and `NUSE` = 1 reads `NSEQ(0)` at line 57. Correct with the defaults (and in [[liburn.f#LIBURN|LIBURN]], which passes `NUSE` = 7 to RATEXT itself). Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to stop when IMAX or NUSE exceed the sizes of NSEQ
+    C here and of X, D and FX in RATEXT.
+          IF(IMAX.GT.11 .OR. NUSE.GT.7 .OR. NUSE.LT.2) THEN
+             WRITE(*,910) IMAX,NUSE
+             WRITE(ISHORT,910) IMAX,NUSE
+     910     FORMAT(' ERROR IN BSSTEP: IMAX',I4,' OR NUSE',I4,
+         *          ' OUT OF RANGE'/' RUN STOPPED')
+             STOP 1
+          ENDIF
+          H = HTRY
+    ...
+    ```
 
 ### BSSTEP
 

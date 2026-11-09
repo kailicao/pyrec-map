@@ -11,15 +11,15 @@
 
 At each end node, the derivative is the slope from the midpoint of the end interval, where it takes the value of the line through the neighbor node with that node's derivative, to the end node. It is set to 0 if that would reverse the sign of the end chord, or to $2m$, twice the end chord's slope $m$, if the two chords nearest that end have opposite signs.
 
-**KC's changes.** Two divisions were replaced by calls to `SAFEDIVIDE`, which returns 0 instead of dividing by zero: the slope $m_2$ in the loop, and the derivative at the last node (KC 2025-05-31).
+Two divisions go through `SAFEDIVIDE`, which returns 0 instead of dividing by zero: the slope $m_2$ in the loop ([[#L96]]) and the derivative at the last node ([[#L105]]).
+
+> **Question** ([[#L96]]; [[#L105]]). **Where can the denominator be zero?** A zero denominator means two equal abscissae, which would make the spline ill-defined anyway; replacing the slope by 0 hides the problem, and a check in `OSPLIN` might be clearer. Which caller passes repeated $x$ values?
+
+> **Question** ([[#L59-L61]]; [[#L93]]; [[#L116]]). **Unprotected divisions remain.** The first two chord slopes, $m_1$ in the loop, and the derivative at the first node are still plain divisions. Each difference of abscissas that the loop's $m_2$ protects is divided again, unprotected, as the next pass's $m_1$ ([[#L93]]), so a repeated abscissa still raises the exception unless it is the last pair, where [[choose.f#CHOOSE|CHOOSE]] may then divide by it ([[choose.f#L52]]). Should they be treated the same way, or should the check move to `OSPLIN`?
+
+> **Question** ([[#L57-L61]]). **At least three points.** The routine reads `YTAB(3)` without checking `NUM` ≥ 3. Do all callers guarantee this?
 
 **Changed since `rp_1`.** Declarations only: the array size `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE` in both routines.
-
-## Questions for the experts
-
-1. **Where can the denominator be zero?** A zero denominator means two equal abscissae, which would make the spline ill-defined anyway. Which caller passes repeated $x$ values? Replacing the slope by 0 hides the problem; a check in `OSPLIN` might be clearer.
-2. **Unprotected divisions remain.** The first two chord slopes, $m_1$ in the loop, and the derivative at the first node are still plain divisions. Should they be treated the same way?
-3. **At least three points.** The routine reads `YTAB(3)` without checking `NUM` ≥ 3. Do all callers guarantee this?
 
 ### SLOPES
 

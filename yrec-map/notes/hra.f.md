@@ -10,11 +10,9 @@ $$\log_{10} T = \sum_{k=0}^{9} a_k\, t^k,$$
 
 with $a_0 = 3.8115$, $a_1 = 0.14613$, … , $a_9 = 1.587\times10^{-6}$ (the constants in the code).
 
+> **Question** ([[#L13-L31]]). **Range of validity.** The fit is a 9th-degree polynomial in $\log\tau$; over which range of $\tau$ was it fitted? Nothing stops callers from using it outside that range, where such a polynomial can diverge quickly.
+
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **Range of validity.** The fit is a 9th-degree polynomial in $\log\tau$; over which range of $\tau$ was it fitted? Nothing stops callers from using it outside that range, where such a polynomial can diverge quickly.
 
 ### HRA
 

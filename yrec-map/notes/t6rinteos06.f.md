@@ -12,11 +12,9 @@
 $$f = w\,f_{123} + (1 - w)\,f_{234},\qquad w = (T_{k_3} - T)\,/\,(T_{k_3} - T_{k_2}),$$
 the weight from `DFS(K3)`, the inverse grid spacing. The same is done for the $q$'s, and, when `IP = 3`, the two results are blended in density with $w_\rho = (\rho_{l_3} - \rho)\,/\,(\rho_{l_3} - \rho_{l_2})$ (`DFSR(L3)`). A result above $10^{15}$ stops the run ("interpolation indices out of range").
 
+> **Question** ([[#L7]]; [[#L46]]). **`RECURSIVE`.** The routine is declared `recursive`, but does not call itself and has `SAVE`; `T6RINTEOS01` (removed since `rp_1`) was not recursive. Why? (With `SAVE`, a recursive call would share the locals anyway.)
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/AEOS06/` to `AEOS06_MOD`, `/EEEOS06/` to `EEEOS06_MOD`, `/AAEOS06/`, `/BBEOS06/` and `/EEOS06/` to `EOS06MISC_MOD`, `/LUOUT/` to `IOUNITS_MOD`), `IMPLICIT NONE`. The question on the two releases is settled: the 2001 version, `t6rinteos01.f`, was removed.
-
-## Questions for the experts
-
-1. **`RECURSIVE`.** The routine is declared `recursive`, but does not call itself and has `SAVE`; `T6RINTEOS01` (removed since `rp_1`) was not recursive. Why?
 
 ### T6RINTEOS06
 

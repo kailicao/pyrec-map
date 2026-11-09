@@ -16,15 +16,24 @@
 
 **Design.** The table is kept in local `SAVE`d arrays, read once (`KRUN = 12345` marks it read). The array sizes must match the file. The error branch for $T$ prints the $Z$ grid before stopping, a debugging leftover.
 
-**KC's changes.** 2025-05-30: the integer divisions `MAXZ/2+1` etc. rewritten as `INT(MAXZ/2.)+1` to silence the compiler warning `-Winteger-division`; the result is the same.
-
 **From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html): `LCONDOPACP` uses the updated conductive opacity tables, whose path is `FcondOpacP` ([Control Options](https://yrec.readthedocs.io/en/latest/namelist_control.html)).
 
 **Changed since `rp_1`.** Declarations only: `/MISCOPAC/` to `IOUNITS_MOD`, `IMPLICIT NONE` in all three units.
 
-## Questions for the experts
+## Bugs, by priority
 
-1. **Stopping at the table's upper edges.** Any point outside the table stops the run. [[condopacpint.f#CONDOPACPINT|CONDOPACPINT]] guards the call with limits equal to the table's edges ($3 \le \log T \le 9$, $\log\rho \le 9.75$, inclusive). But HUNT returns $N$ for a value equal to the last grid value, so a point at exactly $\log T = 9$ or $\log\rho = 9.75$ passes the guard and stops the run. Rare, but should the guards be strict, or the last interval accepted?
+1. **(b)** **A point on the table's last temperature or density stops the run.** ([[#L99-L109]]) `HUNT` returns `N` for a value equal to the last grid value ([[#L269-L276]]), and the tests after it treat `N` as out of range, so the run stops ("CONINTER: T out of range", "CONINTER: rho out of range"). [[condopacpint.f#CONDOPACPINT|`CONDOPACPINT`]] guards its calls with limits that include the table's upper edges, $\log T \le 9$ and $\log\rho \le 9.75$ ([[condopacpint.f#L54]]), so a point at exactly $\log T = 9$ or $\log\rho = 9.75$ passes the guard and stops the run. Only with `LcondOpacP` (off by default, set in all 51 decks of the test suite and recommended by the user guide), and only at exactly these values, so rare. Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to accept a point on the table's last temperature or
+    C density, which HUNT returns as JLO = N, in the last interval.
+          call HUNT(AT,MAXT,TLG,IT)
+          IF(IT.EQ.MAXT.AND.TLG.LE.AT(MAXT)) IT=MAXT-1
+    ...
+          call HUNT(AR,MAXR,RLG,IR)
+          IF(IR.EQ.MAXR.AND.RLG.LE.AR(MAXR)) IR=MAXR-1
+    ```
 
 ### CONDOPACP
 

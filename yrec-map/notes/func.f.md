@@ -14,13 +14,13 @@ $$\frac{\partial\Phi}{\partial\theta} = \frac{4\pi}{3r^4}\left(P_2\,Q\,\frac{\pa
 with $I$ = `AINT`, $\partial r_0/\partial r = 1/(1-4aP_2)$ and $\partial r_0/\partial\theta = 3a\cos\theta\sin\theta\,(\partial r_0/\partial r)/(1-aP_2)$, and
 $$g = \sqrt{(\partial_r\Phi)^2 + (\partial_\theta\Phi)^2},\qquad S = 4\pi r\sin\theta\, r_0\sqrt{(1-aP_2)^2 + (3a\cos\theta\sin\theta)^2}.$$
 
+`S` carries $4\pi$ rather than the $2\pi$ of a ring, which counts both hemispheres: [[fpft.f#FPFT|FPFT]] calls QGAUSS with the upper limit $\pi/2$ (`B = 0.125D0*C4PI`, [[fpft.f#L39]]), so that the integral of `S` is the whole area of the equipotential (for a sphere, $\int_0^{\pi/2} 4\pi r^2\sin\theta\,d\theta = 4\pi r^2$) (settled from the code, Nov 9, 2026: [[#L46-L47]]).
+
+> **Question** ([[#L38-L41]]). **Comment vs code.** The comment says "ASSUME DR0/DR = 1", but the code multiplies by `QR0R` $= 1/(1-4aP_2)$ ([[#L31]]), which is $dr_0/dr$ at fixed $\theta$ for $r = r_0(1-aP_2)$ with $a \propto r_0^3$. Which is intended?
+
+> **Question** ([[#L36]]; [[#L38-L44]]). **Constants.** The comment writes the distortion terms as $12\pi G P_2 I/(5r^4)$ and $4\pi G P_2 Q/(5r^3)$; the code uses $4\pi/(3r^4)$ (`CONST`) with no $G$ or 1/5. The two agree exactly if the comment's $I$ and $Q$ are $5/(3G)$ times `AINT` and `Q` as [[trapzd.f#TRAPZD|TRAPZD]] computes them. Is that the convention, and could the comment be brought in line?
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **Comment vs code.** The comment says "ASSUME DR0/DR = 1", but the code multiplies by `QR0R` $= 1/(1-4aP_2)$. Which is intended?
-2. **Constants.** The comment writes the distortion terms as $12\pi G P_2 I/(5r^4)$ and $4\pi G P_2 Q/(5r^3)$; the code uses $4\pi/(3r^4)$ with no $G$ or 1/5. Probably those factors are absorbed into $I$ and $Q$ as `TRAPZD` defines them; could the comment be brought in line?
-3. **The factor $4\pi$.** `S` carries $4\pi$ rather than the $2\pi$ of a ring, probably to count both hemispheres, since `QGAUSS` integrates over $0 \le \theta \le \pi/2$ only. Could a comment say so?
 
 ### FUNC
 

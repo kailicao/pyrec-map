@@ -14,16 +14,39 @@
 
 $$R = \frac{\rho}{T_6^{\,3}} .$$
 
-The tables at $X = 1-Z$ exist for 15 values of $Z$ only (none for $Z = 0.1$), so there are $8 \times 16 + 15 = 143$ compositions (`NUMXZ`), stored at index $(i_X - 1)\cdot 16 + i_Z$.
+The tables at $X = 1-Z$ exist for 15 values of $Z$ only (none for $Z = 0.1$), so there are $8 \times 16 + 15 = 143$ compositions (`NUMXZ`), stored at index $(i_X - 1)\cdot 16 + i_Z$ ([[#L82]]; [[#L121]]).
 
-**The method.** For each composition, the routine reads the header ($X$, $Z$) and checks it against the grid; reads the $\log R$ row and checks it; then reads the 85 temperature rows in descending order of $T$, checking each $\log T$ against `TGR06`. A mismatch prints an error and stops the run.
+> **Question** ([[#L58-L61]]; [[#L101-L104]]). **Stale comment.** The comment on the storage index, repeated in both loops, speaks of "15 sets of metal abundance with 7 sets of hydrogen", while the code reads 16 values of $Z$ and 9 of $X$ (the ninth at $X = 1-Z$, with 15 tables). Should it be brought up to date?
+
+**The method.** For each composition, the routine reads the header ($X$, $Z$) and checks it against the grid; reads the $\log R$ row and checks it; then reads the 85 temperature rows in descending order of $T$, checking each $\log T$ against `TGR06`. A mismatch prints an error (to the terminal only) and stops the run with exit status 3, the code for input errors, except for the check of $X$ and $Z$ in the first loop, whose `STOP` is commented out (bug 1).
+
+> **Question** ([[#L73-L74]]; [[#L114-L115]]). **Only 16 of 19 densities checked.** Both loops check `R0GRTAB(KK)` for `KK = 1, 16`, not up to `NUMD` = 19, so the last three values of $\log R$ (0, 0.5, 1) are read but not checked. Is that on purpose (for example, for tables whose last columns differ), or should the loop run to `NUMD`? The $\log R$ rows of `alexmol06gs98.tab` would show whether the full check passes.
+
+> **Question** ([[#L65]]; [[#L74]]; [[#L88]]; [[#L108]]; [[#L115]]; [[#L126]]). **Exact comparisons of reals.** The checks compare values read with `F9.6`, `F7.3` or `F5.3` against the grids' literals with `.NE.`. This works when the decimal strings in the file read to the same binary numbers as the literals (they do for values written with these formats, such as 0.350000 or -7.500), but a table written with a slightly different rounding would stop the run. Should the checks use a tolerance, such as $10^{-6}$?
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`; the grids' and the starting indices' `DATA` statements moved into the modules (`GALOT06_MOD`, `ALOT06_MOD`), with the same values.
 
-## Questions for the experts
+**Changed since `a8a5950`.** The stops on a mismatch exit with status 3, the code for input errors, instead of a bare `STOP` (exit status 0) (`KNOWN_ISSUES.md`, issue 38). The commented-out stop of bug 1 is unchanged.
 
-1. **A check that does not stop.** In the first loop (the eight $X$ values below $1-Z$), the `STOP` after a mismatch of $X$ or $Z$ is commented out, so the run goes on after printing "RUN STOPPED". In the second loop it does stop. Which is intended?
-2. **Only 16 of 19 densities checked.** Both loops check `R0GRTAB(KK)` for `KK = 1, 16`, not up to `NUMD` = 19. Why are the last three values of $\log R$ not checked?
-3. **Exact comparisons of reals.** The checks compare values read with `F9.6` or `F7.3` against `DATA` values with `.NE.`. This works when the decimal strings round to the same binary number, but a table written with a slightly different rounding would stop the run. Use a tolerance?
-4. **Stale comment.** The comment on the storage index speaks of "15 sets of metal abundance with 7 sets of hydrogen" and of $Z = 0.1$ "already read in at X=0.9", while the code has 16 values of $Z$ and 9 of $X$.
-5. **No `STATUS='OLD'`.** The file is opened without `STATUS`, so a wrong name creates an empty file and fails at the first read rather than at the open.
+## Bugs, by priority
+
+1. **(c)** **A check that does not stop.** ([[#L63-L70]]) In the first loop (the eight values of $X$ below $1-Z$), the `STOP` after a mismatch of the header's $X$ or $Z$ is commented out (line 69), so the run goes on after printing "RUN STOPPED", and the table is stored under the composition the grid expects. In the second loop the same check stops the run (lines 106–112). What follows: A table file in another order or with other compositions is read without stopping, if its $\log R$ and $\log T$ rows match. Only with `LALEX06` (off by default in the code; recommended by YREC's User Guide). Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to stop on a mismatch of X or Z in the first loop too,
+    C as the second loop does.
+                IF(XX.NE.XXG06(I) .OR. ZZ.NE.ZZG06(II))THEN
+                   WRITE(*,15)XXG06(I),XX,ZZG06(II),ZZ
+                   STOP 3
+                ENDIF
+    ```
+
+2. **(c)** **No `STATUS='OLD'`.** ([[#L54]]) The file is opened without `STATUS`, so with a wrong name the `OPEN` creates an empty file of that name, and the run fails at the first `READ` (line 63), at the end of the file, with the compiler's message rather than one that names the missing table. Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to open the table with STATUS='OLD', so that a wrong
+    C file name stops the run at the OPEN.
+          OPEN(UNIT=IALEX06,FILE=FALEX06,STATUS='OLD')
+    ```

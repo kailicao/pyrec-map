@@ -8,21 +8,20 @@
 - **Output:** `TAUCZ` in `OVRTRN_MOD`.
 - **Modules:** `OVRTRN_MOD`, `ENVSTRUCT_MOD`, `NMLPAR_MOD` (`LROT`) and `CONSTANTS_MOD`.
 
-**The method.** If the top shell or the one below it is convective, the zone's base `IMAX` is the lowest shell of the convective run from the surface.
+**The method.** If the top shell or the one below it is convective, the zone's base `IMAX` is the lowest shell of the convective run from the surface. The overturn time is computed only if `LCZSUR` is set, which the test `(HSTOP-HSBOT)/CMSUN .GT. 0` makes true for any such zone.
+
+> **Question** ([[#L87-L99]]). **The `LCZSUR` test.** `(HSTOP-HSBOT)/CMSUN .GT. 0` is true for any zone; is a minimum depth intended (the comment: "DEEP ENOUGH FOR ANGULAR MOMENTUM LOSS")?
+
 - **Partly convective star:** as in [[taucal.f|taucal.f]], step 2 and 4: the base $r_b$ where $\nabla_1 - \nabla_2$ changes sign, $H_p = P/(\rho g)$ there, and
   $$\tau_\mathrm{cz} = \frac{H_p}{v(r_b + H_p)} ,$$
   with $v$ interpolated linearly in $\log r$. If $r_b + H_p$ lies beyond the profile, the envelope in `ENVSTRUCT_MOD` is searched for the first convective point above it ("stitch on the envelope for more room"; the profile holds the interior only, so TAUINT searches the envelope itself), and $v$ is interpolated between the last shell and that point.
+
+    > **Question** ([[#L126-L132]]). **The envelope interpolation.** Beyond the profile, $v$ is interpolated between the last shell `M` and envelope point `K`, with `FX = (RTESTL-HR(M))/(ENVR(K)-HR(M))`, skipping envelope points `2..K-1`, so a velocity profile with structure between the fitting point and point `K` is replaced by a straight line. Should the interpolation use the two envelope points that bracket $r_b + H_p$?
+
 - **Fully convective star:** the point where $H_p = r$, by linear interpolation of $H_p - r$; then $\tau_\mathrm{cz} = H_p/v$ there. If already $H_p \le r$ at the first shell, it takes $H_p \approx \sqrt{H_{p,1}\,r_1}$ and $v_1$ (the comment: "assume v constant inside and $H_p = k/r$" near the centre).
 - **No surface zone:** $\tau_\mathrm{cz} = 0$.
 
-**KC's changes.** The unused arguments `HCOMP`, `HS2` and `HSTOT` were removed (2025-05-31); the elements of COMMON `ENVSTRUCT` were reordered (2025-05-30).
-
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/OVRTRN/` to `OVRTRN_MOD`, `/ENVSTRUCT/` to `ENVSTRUCT_MOD`, `/ROT/` to `NMLPAR_MOD`, the constants to `CONSTANTS_MOD`; the unused `/COMP/`, `/DEUTER/` and `/JTEST/` dropped, which settles the former question 3), the array size `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **The envelope interpolation.** Beyond the profile, $v$ is interpolated between the last shell `M` and envelope point `K`, with `FX = (RTESTL-HR(M))/(ENVR(K)-HR(M))`, skipping envelope points `2..K-1`, so a velocity profile with structure between the fitting point and point `K` is replaced by a straight line. Should the interpolation use the two envelope points that bracket $r_b + H_p$?
-2. **The `LCZSUR` test.** `(HSTOP-HSBOT)/CMSUN .GT. 0` is true for any zone; is a minimum depth intended (the comment: "deep enough for angular momentum loss")?
 
 ### TAUINT
 

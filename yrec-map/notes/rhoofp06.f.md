@@ -18,12 +18,8 @@ Failures (out of the table, no convergence, an error return from `ESAC06`) all r
   $$P_\mathrm{gas} = P - \tfrac43\,\frac{\sigma}{c}\,T_6^4\quad(\text{in Mb}),$$
   and the search matches $P_\mathrm{gas}$ against `ESAC06` called with `irad` = 0 (gas only), with $P_\mathrm{min}$ and $P_\mathrm{max}$ also without radiation. The other two versions matched the total pressure instead.
 - **The edge `NRA`** comes from `EOS06MISC_MOD`, not from a local `DATA` list.
-- **Tolerance.** Convergence is $|P_3 - P|/P < 10^{-5}$, changed from $5\times10^{-8}$ "to prevent array value eos(5) from growing without bound and crashing the program during certain model runs" (MR 2025-10-10).
+- **Tolerance.** Convergence is $|P_3 - P|/P < 10^{-5}$ ([[#L117-L121]]), changed from $5\times10^{-8}$ "to prevent array value eos(5) from growing without bound and crashing the program during certain model runs" (MR 2025-10-10). The growth comes from `ESAC06`: called here with `IORDER` = 1 and `IRAD` = 0, it rescales `EOS(5)`, which it has not interpolated, on every call, so fewer calls mean less growth (see [[esac06.f#b1]]).
 
-**KC's changes.** The unused argument `ZTAB` was removed from the function and its calls to `ESAC06` (KC 2025-05-31; one marker sits, probably by mistake, on the line computing `rhog3`); the members of `/BEOS06/` were reordered (KC 2025-05-30).
+    > **Question** ([[#L120]]). **The looser tolerance.** The 2025 change accepts a density whose pressure is off by up to $10^{-5}$ relative. Is that accurate enough for the hydrostatic solution, and should the stricter tolerance come back once `ESAC06` scales only what it interpolates?
 
 **Changed since `rp_1`.** The first-call switch (`ITIME` in `/LREADCO/`) and the call to `ESAC06` at a fixed point that forced the tables to be read are removed (the tables are now read once by `SETEOS06`, from `SETUPS`); `SIGMACC` is a double-precision constant (`1.8914785D-3`), which settles former question 3; `RHOOFP` and `RHOOFP01` are removed, which settles former question 2 (making the three versions agree); COMMON blocks to modules, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **The looser tolerance.** The 2025 change accepts a density whose pressure is off by up to $10^{-5}$ relative. Is that accurate enough for the hydrostatic solution, and is the underlying growth of `eos(5)` ($c_V$) understood?

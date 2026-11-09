@@ -7,11 +7,9 @@
 - **Output:** the solution `EX`.
 - **Modules:** `DIMENSIONS_MOD` (the array size `JSON`) only.
 
+> **Question** ([[#L17-L27]]). **The same algorithm four times.** [[tridia.f#TRIDIA|TRIDIA]], [[ctridi.f#CTRIDI|CTRIDI]], [[getqua.f#GETQUA|GETQUA]], and `TRIDIAG_GS` each code the Thomas algorithm; this one is the only general version. Could the others call it?
+
 **Changed since `rp_1`.** Declarations only: `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **The same algorithm four times.** [[tridia.f#TRIDIA|TRIDIA]], `CTRIDI`, `GETQUA` and `TRIDIAG_GS` each code the Thomas algorithm; this one is the only general version. Could the others call it?
 
 ### TRIDIAG_GS
 

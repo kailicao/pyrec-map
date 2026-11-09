@@ -11,14 +11,11 @@
 
 **The method.**
 1. **The coordinate.** GETGRID defines, at each model point, $\chi = \log m/\Delta_m + L/\Delta_L - \log P/\Delta_P$, with $\Delta_m$, $\Delta_L$, $\Delta_P$ from `HPTTOL`, and an equal grid in $\chi$ (`ECHI`, step `DCHI`).
-2. **Zone masses.** Interior zones: $\Delta M_i = \tfrac12 (m_{i+1} - m_{i-1})$ (`ES1` are the grid points' masses). The first and last zones reach to the midpoint with the neighbouring model point (or to the centre, or the surface), and add any adjoining convection zone's mass.
+2. **Zone masses.** Interior zones: $\Delta M_i = \tfrac12 (m_{i+1} - m_{i-1})$ (`ES1` are the grid points' masses). The first and last zones reach to the midpoint with the neighbouring model point (or to the centre, or the surface), and add any adjoining convection zone's mass. The loops that do so also set `I0 = I + 1` and `I1 = I - 1` ([[#L89]], [[#L110]]), with `I` left over from the loop of the interior zones rather than the loop variable `II`; `I0` and `I1` are read nowhere (unused?).
 3. **The coefficient.** `COD2` is interpolated to the zone edges (taken as constant beyond the end interfaces). It is multiplied by $\rho r^2\, d\chi/dr$, where, as the comment derives with $\mathrm{FAC} = 4\pi\rho r^2$,
 $$\frac{d\chi}{dr} = \frac{4\pi\rho r^2}{\ln 10\,\Delta_m\, m} + \frac{4\pi\rho r^2\,\epsilon}{\Delta_L} + \frac{G m \rho}{\ln 10\,\Delta_P\, P\, r^2},$$
 interpolated in $\log$ to the grid with `OSPLIN`. Here $\Delta_m$ = `HPTTOL(2)`, $\Delta_L$ = `HPTTOL(9)`$\times L_\ast$ (`HL(M)*CLSUN`, in erg s⁻¹; GETGRID uses the same scale, `HPTTOL(9)*HL(M)`, in the solar units of `HL`), $\Delta_P$ = `HPTTOL(11)`, and $\epsilon$ = `EPSM`. The coefficient `ECOD2(I)` lies at the edge between grid points `I-1` and `I` (`XVAL(I) = ECHI(I) - DCHI/2`), where [[ccoeft.f#CCOEFT|CCOEFT]] uses it.
 
+    > **Question** ([[#L153]], [[#L156-L157]]). **A comment that omits $P$.** The comment writes the last term as `RHO*GM/(LN10*DP*R**2)`; the code divides by $P$ as well (`-HP(II)` in the exponent), which is the correct $-d\log P/dr$. Should the comment read `RHO*GM/(LN10*DP*P*R**2)`?
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
-
-## Questions for the experts
-
-1. **A wrong loop variable.** When looking for the edges of the adjoining convection zones, `I0 = I + 1` and `I1 = I - 1` use `I` (left over from an earlier loop) instead of the loop variable `II`. `I0` and `I1` are not used afterwards in this routine, so the result is unaffected; should the lines be fixed or removed?
-2. **A comment that omits $P$.** The comment writes the last term as `RHO*GM/(LN10*DP*R**2)`; the code divides by $P$ as well (`-HP(II)` in the exponent), which is the correct $-d\log P/dr$.

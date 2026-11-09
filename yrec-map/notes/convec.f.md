@@ -10,18 +10,31 @@
 
 **The method.**
 1. Scan the shells for runs of convective shells; a run of a single shell is ignored (the test `I1.NE.I-1`). At most 11 zones: as soon as the 11th is stored, the routine prints "TOO MANY MIX ZONES" (whether or not more follow) and stops the scan.
+
+    > **Question** ([[#L96-L103]]). **One-shell zones.** A single convective shell is treated as radiative (the test `I1.NE.I-1`). Is this a deliberate filter against noise in `LC`?
 2. No zone: `JCORE = 1`, `JENV = M`, one radiative region. One zone covering the whole star: fully convective, `JCORE = JENV = 1`, `NRZONE = 0` (`MRZONE` is left as it was; every reader loops from 1 to `NRZONE`, so none reads it), and overshoot and merging are skipped.
 3. `JCORE` is the top of a zone starting at shell 1; `JENV` the bottom of a zone ending at shell `M`.
+
+    > **Question** ([[#L67-L69]]; [[#L129-L150]]). **The header's wording.** It says `JCORE` and `JENV` are "the edges of the surface and central convection zones respectively"; the code makes `JCORE` the core's edge and `JENV` the envelope's base (the reverse order). Should the header say "central and surface"?
 4. If any overshoot switch is on, call OVERSH, then merge zones whose (overshot) edges now meet, with a message to `ISHORT`.
-5. The radiative regions: below the first zone, between zones, above the last.
+5. The radiative regions: below the first zone, between zones, above the last (but see bug 1).
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 
-## Questions for the experts
+## Bugs, by priority
 
-1. **An index error.** For a radiative region above the last convection zone, the code sets `MRZONE(1,2) = M` instead of `MRZONE(NRZONE,2) = M`. When that region is the only one (a convective core under a radiative envelope), the two are the same element and nothing goes wrong. When it is the second or a later one (a radiative surface and at least two radiative regions, e.g. a radiative core, a thin convection zone and a radiative surface), the top region's upper edge keeps an old value and the first region's upper edge becomes `M`. [[mix.f#MIX|MIX]] then burns the shells of the convection zones above the first region one by one, as radiative, before it treats each zone as a unit, and ROTMIX and MIDMOD treat those shells as radiative too (OVROT sets the convective flags after the radiative ones, so its `LCZ` comes out right). This looks like a bug. KC's check `I .GT. 0` in [[ovrot.f#OVROT|OVROT]] (2025-05-30, "to avoid runtime error") guards a loop over the same `MRZONE`, and may be related.
-2. **The header's wording.** It says `JCORE` and `JENV` are "the edges of the surface and central convection zones respectively"; the code makes `JCORE` the core's edge and `JENV` the envelope's base (the reverse order).
-3. **One-shell zones.** A single convective shell is treated as radiative. Is this a deliberate filter against noise in `LC`?
+1. **(a)** **The upper edge of the last radiative region is written to the first.** ([[#L200-L205]]) For a radiative region above the last convection zone, the code sets `MRZONE(1,2) = M` instead of `MRZONE(NRZONE,2) = M`. When that region is the only one (a convective core under a radiative envelope), the two are the same element and nothing goes wrong. When it is the second or a later one (a radiative surface and at least two radiative regions, for example a radiative core, a thin convection zone, and a radiative surface, or a convective core, an intermediate convection zone, and a radiative surface), the top region's upper edge keeps an old value and the first region's upper edge becomes `M`. What follows: [[mix.f#MIX|MIX]] then burns the shells of the convection zones above the first region one by one, as radiative (up to the `TCUT(1)` cutoff, [[mix.f#L249-L261]]), before it treats each zone as a unit, so those shells are burned twice over the step; [[rotmix.f#ROTMIX|ROTMIX]] and [[midmod.f#MIDMOD|MIDMOD]] treat those shells as radiative too ([[ovrot.f#OVROT|OVROT]] sets the convective flags after the radiative ones, so its `LCZ` comes out right). On the default path whenever a model has a radiative surface and two or more radiative regions. Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to set the upper edge of the last radiative region,
+    C MRZONE(NRZONE,2), instead of that of the first.
+          IF(MXZONE(NZONE,2).LT.M)THEN
+             NRZONE = NRZONE + 1
+             MRZONE(NRZONE,1) = MXZONE(NZONE,2) + 1
+             MRZONE(NRZONE,2) = M
+          ENDIF
+    ```
 
 ### CONVEC
 

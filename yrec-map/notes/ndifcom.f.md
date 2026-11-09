@@ -10,18 +10,12 @@
 - **Modules:** only `DIMENSIONS_MOD` (`JSON`); the grid is shared between `MIXGRID` and `MIXCOM` through `EGRID_MOD`.
 
 **The method.**
-- **Before the last iteration** (`LOK = F`): `MIXCOM` is called once for the region found earlier (`IBEG..IEND`, with its grid), so that the comments' aim, the change of the $\mu$ gradient caused by mixing, can be found. The comment says only H, ⁴He and ³He are mixed then; which species are mixed is set by the caller through `JBEG..JEND`.
-- **On the last iteration** (`LOK = T`): it scans `IMIN..IMAX` for runs of interfaces with `HV > 0`. Each run, from the zone below its first such interface (`IBEG`) to the zone above its last (`IEND`), gets its own grid from `MIXGRID` and its own solve in `MIXCOM`. A region of only two zones (`LDUM2`) is skipped.
+- **Before the last iteration** (`LOK = F`): `MIXCOM` is called once for the region found earlier (`IBEG..IEND`, with its grid), so that the comments' aim, the change of the $\mu$ gradient caused by mixing, can be found ([[#L64-L66]]). The header's "the program checks for additional unstable regions" is done by the caller: [[seculr.f#SECULR|SECULR]] scans the regions itself, builds each one's grid with ROTGRID and calls NDIFCOM once per region ([[seculr.f#L304-L430]]) (settled from the code, Nov 9, 2026). The comment says only H, ⁴He and ³He are mixed then; which species are mixed is set by the caller through `JBEG..JEND`: SECULR passes rows 1–4 before its last iteration and rows 5–11 (5–15 with `LEXCOM`) after it ([[seculr.f#L419-L420]], [[seculr.f#L466-L475]]), as the comments say; [[bursmix.f#BURSMIX|BURSMIX]] passes rows 4 to 11 (or 15) on every call ([[bursmix.f#L69-L70]]), since its substeps burn ³He too and it restores $X$, $Z$ and the closure for $Y$ afterwards (settled from the code, Nov 9, 2026).
+- **On the last iteration** (`LOK = T`): it scans `IMIN..IMAX` for runs of interfaces with `HV > 0`. Each run, from the zone below its first such interface (`IBEG`) to the zone above its last (`IEND`), gets its own grid from `MIXGRID` and its own solve in `MIXCOM`. A region of only two zones (`LDUM2`) is skipped ([[#L102-L112]]).
 
-**KC's changes.** 2025-05-31: the unused argument `NTOT` removed.
+    > **Question** ([[#L104-L112]]; [[mixgrid.f#L56-L62]]). **Regions skipped.** A region of only two zones (one unstable interface) is skipped entirely, so no composition is mixed across a single unstable interface; SECULR skips such a region for angular momentum too ([[rotgrid.f#L66-L73]]). Is that intended, and would a two-zone grid be enough to mix it?
 
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`, `JSON` from `DIMENSIONS_MOD`.
-
-## Questions for the experts
-
-1. **The species mixed.** The comments say that before the last iteration only H, ⁴He and ³He are mixed, and on the last only species heavier than ⁴He. The routine itself does not choose: `JBEG..JEND` come from the caller. [[seculr.f#SECULR|SECULR]] matches the comments (rows 1–4, then rows 5–11 or 5–15); [[bursmix.f#BURSMIX|BURSMIX]] passes rows 4 to 11 (or 15) on every call. Is that intended for BURSMIX?
-2. **Regions skipped.** A region of only two zones (one unstable interface) is skipped entirely, so no composition is mixed across a single unstable interface. Intended?
-3. **Only the last region before the final call.** The header says the grid of the last region solved "[is] used initially, and then the program checks for additional unstable regions interior to that", but with `LOK = F` only that one region is mixed and nothing else is checked; other unstable regions are mixed only on the final call. Intended?
 
 ### NDIFCOM
 

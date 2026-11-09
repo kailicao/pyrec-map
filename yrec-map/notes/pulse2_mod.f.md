@@ -4,7 +4,7 @@
 
 **What its variables hold, who sets them, who reads them.** `QENV` and `QATM` set them when `LSAVE` or `LPUMOD` (`PULSE1_MOD`) is on (`QENV` sets `QQDP`, `QQDT`, `QQCP` always); `ENVINT` reads them.
 - `QTL`, `QT`, `QPL`, `QP`, `QDL`, `QD`: $\log T$, $T$, $\log P$, $P$, $\log\rho$, $\rho$.
-- `QO`, `QOL`: the opacity and its log (`QOL` is read nowhere); `QQOD`, `QQOT`: its logarithmic derivatives in $\rho$ and $T$.
+- `QO`, `QOL`: the opacity and its log (`QOL` is read nowhere: unused?); `QQOD`, `QQOT`: its logarithmic derivatives in $\rho$ and $T$.
 - `QQDP`, `QQDT`, `QQCP`, `QRMU`, `QEMU`: the equation of state's $\partial\ln\rho/\partial\ln P$, $\partial\ln\rho/\partial\ln T$, $c_P$, `RMU`, `EMU`.
 - `QDEL`, `QDELA`: $\nabla$ and $\nabla_\mathrm{ad}$.
 - `QQED`, `QQET`: energy generation's derivatives, set to 0 by `QENV`, `QATM` and by `ENVINT` (which also sets `QQET`); `QFS`: set to 1 by `ENVINT` at the first point and by `QENV`.

@@ -17,10 +17,14 @@
    $$\texttt{SSTANDARD}(j) = \frac{S_{0,j}}{S_{0,j}^{\mathrm{ref}}},\qquad f_{C12} = \frac{S_{0}^{\,15(p,\alpha)}}{6.75\times10^4},\qquad f_{O16} = \frac{S_0^{\,15(p,\gamma)}}{64}.$$
    The resonant helium-burning reactions (8, 10, 11, 12) and the unused ones (9, 13) are left at 1. The derivative factors are ratios of $S'/S$ (and $S''/S$) to those of Solar Fusion I (Adelberger et al. 1998), whose values are hard-coded (`QS0E_…_A98`, `QQS0EE_…_A98`, in b):
    $$\texttt{QS0E}(j) = \frac{S'_j/S_{0,j}}{\bigl(S'/S_0\bigr)_j^{\mathrm{A98}}},\qquad \texttt{QQS0EE}(j) = \frac{S''_j/S_{0,j}}{\bigl(S''/S_0\bigr)_j^{\mathrm{A98}}},$$
-   set to 0 when $S_{0,j} \le 0$. `RATES` multiplies its $Q_2, Q_3$ terms by `QS0E` and its $Q_4, Q_5$ terms by `QQS0EE`.
+   set to 0 when $S_{0,j} \le 0$. `RATES` multiplies its $Q_2, Q_3$ terms by `QS0E` and its $Q_4, Q_5$ terms by `QQS0EE` (a comment, [[#L160]], says the derivatives are used "in ENGEB AND NRATES"; the routine is `RATES`).
+
+    > **Question** ([[#L81]], [[#L97-L98]], [[#L103]]). **Units of the derivatives.** The comments give the reference S-factors in keV b and the first derivatives in b, and give no unit for the second derivatives; is the user expected to give `S0P_…` in b as well, and `S0PP_…` in b keV$^{-1}$? The namelist documentation does not say.
+
 3. **Tolerances, when `LNEWVARS` is true.** A one-to-one copy, with a comment on each: for example `HPTTOL(1)` = `TOL_DM_MIN` (minimum log mass spacing), `HPTTOL(11)` = `TOL_DP_CORE_MAX`, `ATIME(7)` = `TIME_DX_SHELL` (maximum fraction of X burned in a shell in a step), `ATIME(13)` = `TIME_MAX_DT_FRAC`.
 
-**KC's changes.** The unused `DATA` values of the Adelberger reference S-factors were commented out, keeping only `S0_1_1_A98` and `S0_1_BE7P_A98` (KC 2025-05-31; those of reactions 2–7 are restored since `09c3b9b`, below); the members of `/NEWPARAM/` were reordered, `LSTRUCT_TIME` moved to just before `LNEWVARS` (KC 2025-05-30).
+    > **Question** ([[#L128-L131]], [[#L233-L235]]). **Both switches change other inputs silently.** With `LNEWNUC`, any `SSTANDARD` given in the namelist is overwritten; with `LNEWVARS`, `HPTTOL` and `ATIME` are (the code's comments say so, but nothing is printed). Should a message warn a user who sets both?
+
 
 **From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) lists the parameters that `REMAP` copies, with these meanings (defaults from [[nmlbypass_mod.f#NMLBYPASS_MOD|`NMLBYPASS_MOD`]]); `REMAP` copies them only when `LNEWVARS` is true, and `LNEWNUC` likewise gates the S-factors.
 
@@ -46,14 +50,8 @@
 | `LSTRUCT_TIME` | false | `LPTIME` | limit the step by structural changes; switched off once $L_\mathrm{grav} < 0$ (near the ZAMS) |
 | `TIME_DW_GLOBAL`, `TIME_DW_MIX` | 0.08, 0.08 | `DTWIND`, `DTDIF` | largest $\Delta\Omega$ per model, and per mixing substep |
 
+> **Question** ([[#L235]]; [[nmlbypass_mod.f#L63]]). **`LNEWVARS` listed as legacy.** The documentation presents the `TOL_…`, `FLAG_…` and `TIME_…` names as the mesh and time-step controls, but lists `LNEWVARS` ("use updated variable names for tolerances") and `LNEWNUC` under "Legacy options". Their default is false, so without `LNEWVARS = .TRUE.` in the namelist every one of these parameters is ignored and the old `HPTTOL`, `ATIME` values are used. Every namelist file in the repository that sets one of them (965) also sets `LNEWVARS = .TRUE.`. Should the default become true (or the old vectors go), or should the documentation say that `LNEWVARS` must be set?
+
 **Changed since `rp_1`.** The reference value `S0_1_16_REF` is now the double-precision `9.4D0` (it was `9.4E0`, a single-precision constant, about $4\times10^{-8}$ smaller), which changes `SSTANDARD(7)` in the same proportion; otherwise COMMON blocks to modules (`/NEWPARAM/` and `/NEWCROSS/` merged into `NMLBYPASS_MOD`; the tolerances, time-step limits and `SSTANDARD` into `NMLPAR_MOD`), `IMPLICIT NONE`.
 
 **Changed since `09c3b9b`.** The derivative factors `QS0E(2)`–`QS0E(7)` and `QQS0EE(4)`, `QQS0EE(5)`, `QQS0EE(7)` are now normalized by each reaction's own A98 S-factor (`S0_3_3_A98`, `S0_3_4_A98`, `S0_1_12_A98`, `S0_1_13_A98`, `S0_1_14_A98`, `S0_1_16_A98`, whose `DATA` values, 5.4D3, 5.3D-1, 1.34D0, 7.6D0, 3.5D0 and 9.4D0 keV b, are restored) instead of p+p's `S0_1_1_A98`. Before, these factors came out of order $10^{-22}$, so with `LNEWNUC` the S′ and S″ terms of reactions 2–7 were dropped and the `S0P_…`, `S0PP_…` inputs had no effect; now they are of order 1, as intended. This settles former question 1; former questions 2–4 are now 1–3.
-
-## Questions for the experts
-
-1. **Units of the derivatives.** The comments give the reference S-factors in keV b and the first derivatives in b; is the user expected to give `S0P_…` in b as well, and `S0PP_…` in b keV$^{-1}$? The namelist documentation should say.
-2. **"NRATES".** A comment says the derivatives are used "in ENGEB AND NRATES"; the routine is `RATES`.
-3. **Both switches change other inputs silently.** With `LNEWNUC`, any `SSTANDARD` given in the namelist is overwritten; with `LNEWVARS`, `HPTTOL` and `ATIME` are. Is a message printed anywhere to warn a user who sets both?
-4. **`LNEWVARS` listed as legacy.** The documentation presents the `TOL_…`, `FLAG_…` and `TIME_…` names as the mesh and time-step controls, but lists `LNEWVARS` ("use updated variable names for tolerances") and `LNEWNUC` under "Legacy options". Their default is false, so without `LNEWVARS = .TRUE.` in the namelist every one of these parameters is ignored and the old `HPTTOL`, `ATIME` values are used. Should the default become true (or the old vectors go), or should the documentation say that `LNEWVARS` must be set?
-

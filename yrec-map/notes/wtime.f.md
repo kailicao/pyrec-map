@@ -9,15 +9,29 @@
 
 **The method.** The largest relative change over all shells,
 $$\delta_\mathrm{max} = \max_i \frac{2\,|\Omega_i - \Omega_i^\mathrm{old}|}{\Omega_i + \Omega_i^\mathrm{old}},$$
-gives $f = \delta_\mathrm{max}/$`DTWIND`, limited to $1/a \le f \le a$ with $a$ = `ATIME(13)` (MHP 10/14), and $\Delta t_\Omega = \Delta t/f$. If nothing changed ($f = 0$), $\Delta t_\Omega = 10^{20}$, so that rotation does not limit the step.
+gives $f = \delta_\mathrm{max}/$`DTWIND`, limited to $1/a \le f \le a$ with $a$ = `ATIME(13)` (MHP 10/14), and $\Delta t_\Omega = \Delta t/f$. If nothing changed ($f = 0$), $\Delta t_\Omega = 10^{20}$, so that rotation does not limit the step. The shell of the largest change is found (`IWMAX`) but not returned or read (unused?). The comment before the limiter, "restrict change in timestep to no more than a factor of ATIME(14)%", describes the commented-out line below it; REMAP now sets `ATIME(14)` from `TIME_DY_TOTAL`, a helium-burning limit of [[ytime.f#YTIME|YTIME]], and the code uses `ATIME(13)` (settled from the code, Nov 9, 2026: [[#L71-L77]]; [[remap.f#L276-L277]]).
 
 **Changed since `rp_1`.** Declarations only: `COMMON/OLDROT/` to `OLDROT_MOD`, `/CT2/` and `/CTLIM/` to `NMLPAR_MOD` (where `DTWIND` now has the initial value 10), `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.
 
-## Questions for the experts
+## Bugs, by priority
 
-1. **A non-rotating shell.** If $\Omega_i = \Omega_i^\mathrm{old} = 0$ in any shell, the ratio is 0/0.
-2. **The comment and the limiter.** The comment says the change is restricted to "a factor of ATIME(14)%", while the code uses `ATIME(13)` as a factor (MHP 10/14).
-3. **`IWMAX`** (the shell of the largest change) is found but not returned or used.
+1. **(d)** **0/0 where $\Omega$ is zero.** ([[#L53-L62]]) The relative change $2|\Omega_i - \Omega_i^\mathrm{old}|/(\Omega_i + \Omega_i^\mathrm{old})$ is 0/0 in a shell where both are zero. In the first shell it makes `DWMAX` a NaN, and since every comparison with a NaN is false, `DWMAX` stays NaN, and so do `FAC` and `DELTSW` ([[#L63-L78]]); HTIMER's test `DELTSW.LT.1.0D0` does not catch it ([[htimer.f#L131]]), and `DWMAX` goes on to the rotational-mixing routines, which set their number of substeps from it. In any other shell the NaN is skipped. This needs `LROT` (off by default) and a model with $\Omega = 0$ at the center in two successive models, such as a rotating run started without rotation; with a floating-point trap on invalid operations, the run stops there. Read from the code, not run. **A possible fix:**
+
+    ```fortran
+    C 11/09/26 KC via Claude
+    C code changed to skip shells where OMEGA and WOLD are both zero, so
+    C that DWMAX is never 0/0.
+          DWMAX = 0.0D0
+          IWMAX = 1
+          DO 50 I = 1,M
+             IF(OMEGA(I)+WOLD(I).LE.0.0D0) GOTO 50
+             TESTW=2.0D0*ABS(OMEGA(I)-WOLD(I))/(OMEGA(I)+WOLD(I))
+             IF(TESTW.GT.DWMAX) THEN
+                DWMAX = TESTW
+                IWMAX = I
+             ENDIF
+     50   CONTINUE
+    ```
 
 ### WTIME
 

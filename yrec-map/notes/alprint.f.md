@@ -9,11 +9,9 @@
 
 **Design.** Besides printing, it recomputes `TEFFLmin` and `TEFFLmax` in `ALATM02_MOD`, with the same formulas as ALTABINIT, so it has a (harmless) side effect.
 
-**Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/ALATM01/`, `/ALATM02/`, `/LUOUT/` to `IOUNITS_MOD`; the unused `/ALATM03/` and `/ALATM04/` dropped, though a stray declaration of `LALTPTau100` remains), `IMPLICIT NONE`.
+> **Question** ([[#L44-L45]]). **Side effect.** ALPRINT writes `TEFFLmin` and `TEFFLmax` into `ALATM02_MOD`, with the formulas ALTABINIT has already applied ([[altabinit.f#L63-L64]]). Is this left over from a time when ALTABINIT did not set them?
 
-## Questions for the experts
-
-1. **Side effect.** ALPRINT writes `TEFFLmin` and `TEFFLmax` into `ALATM02_MOD`. Is this left over from a time when ALTABINIT did not set them?
+**Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/ALATM01/`, `/ALATM02/`, `/LUOUT/` to `IOUNITS_MOD`; the unused `/ALATM03/` and `/ALATM04/` dropped, though a stray declaration of `LALTPTau100` remains, unused? ([[#L25]])), `IMPLICIT NONE`.
 
 ### ALPRINT
 

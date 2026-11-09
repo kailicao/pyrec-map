@@ -10,27 +10,24 @@
 
 **The method.**
 1. **Table lookup.** The electron pressure is tabulated as a function of $x = \log\rho + \log\mu_e^{-1} - \tfrac32\log T$ and $y = \log T$ (columns of `DTABLE`: $\log P_e$, $\log U_e$, and derivatives). The code interpolates with three points in each direction: Newton (equal spacing) in $y$, column $j$ at $\log T = 5 + 0.2j$, so the 20 columns span $\log T = 5.2$ to 9.0; Lagrange in $x$ (unequal spacing).
+
+    > **Question** ([[#L101-L102]]; [[#L126-L128]]). **Table edges.** The temperature index is forced into the table (`JT1` between 1 and 18) and the density index into 1..261; outside the table the values are extrapolated silently. Should a warning be written?
 2. **Pressure balance.** With $P_\mathrm{rad} = (1-\beta)P$ and $P_\mathrm{ion} = R\mu_\mathrm{ion}^{-1}\rho T$ (`PA` = `CGAS*AMU*T*D`),
 $$P_\mathrm{tot}(\rho) = P_\mathrm{ion} + P_e + P_\mathrm{rad}\;(+\,P_\mathrm{DH}),\qquad P_\mathrm{DH} = C_\mathrm{DH}\,c_\mathrm{mix}\,\rho^{3/2}T^{-1/2}.$$
 It solves $\log P_\mathrm{tot} = \log P$ for $\log\rho$ by a Newton step with a second-order correction: with $f = (\log P_\mathrm{tot} - \log P)/\chi_\rho$ (`PR8`), $\chi_\rho = \partial\log P_\mathrm{tot}/\partial\log\rho$ (`PR7`) and the curvature term `PR9`,
 $$\Delta\log\rho = -f - \tfrac12\,\mathrm{PR9}\,f^2,$$
 limited to $\pm 4$ dex, until $|\Delta| < 10^{-8}$, at most 20 iterations.
+
+    > **Question** ([[#L210-L222]]). **Unconverged return.** After 20 iterations without convergence the routine writes a message and returns at once (the `STOP` is commented out). It returns before `DL = DL8`, so `DL` and `D` keep the caller's starting guess, and the derivatives (all arguments) keep whatever the caller's variables held; no flag tells the caller. Is this fallback intended?
 3. **Debye–Hückel ramp.** With $c_0 = 2X + \tfrac32 Y + \tfrac12(Z + \alpha)$ (`CMFDH0`), $c_1 = X + Y + \tfrac12\alpha$ (`CMFDH1`) and $\alpha = \sum_i$ `DHNUE(i)*ZDH(i)` over the metal mixture, the composition factor $c_\mathrm{mix}$ is $c_0^{3/2}$ for non-degenerate electrons ($\eta <$ `ETADH0`), $c_0\sqrt{c_1}$ for degenerate ones ($\eta >$ `ETADH1`), and linear in $\eta$ between; the comment calls this "not correct but, hopefully, close enough".
 4. **Derivatives.** From the table's derivative columns it forms $\partial\ln P/\partial\ln T$ and $\partial\ln P/\partial\ln\rho$ and their second derivatives, then inverts them: $Q_{\rho P} = 1/\chi_\rho$, $Q_{\rho T} = -\chi_T/\chi_\rho$. The internal energy is $U = \tfrac32 P_\mathrm{ion}/\rho + U_e + 3P_\mathrm{rad}/\rho\;(+\,3P_\mathrm{DH}/\rho)$, and
 $$c_P = -\frac{P}{\rho T}Q_{\rho T}\,\chi_T + \frac{U}{T}\,\frac{\partial\ln U}{\partial\ln T}\Big|_\rho, \qquad \nabla_\mathrm{ad} = -\frac{P}{\rho T}\frac{Q_{\rho T}}{c_P}.$$
 
-**KC's changes.** The unused argument `X` was removed (2025-05-31).
-
 **From YREC's documentation.** [Microphysics in YREC](https://yrec.readthedocs.io/en/latest/microphysics.html) (The Base YREC EOS) and [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html): `LDH` applies the Debye–Hückel correction, the reduction of pressure by the mutual repulsion of electrons, within the degeneracy range set by `ETADH0` and `ETADH1`; the documentation recommends the defaults and gives them as `LDH` = TRUE, `ETADH0` = −2, `ETADH1` = 1.
 
+> **Question** ([[nmlpar_mod.f#L206-L208]]). **Debye–Hückel defaults.** The documentation gives `LDH` = TRUE and `ETADH0` = −2 as the (recommended) defaults; the code's initializers in `NMLPAR_MOD` are `LDH = .FALSE.` and `ETADH0 = -1.0D0` (`ETADH1 = 1.0D0` agrees). Which should the defaults be?
+
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`. This settles two former questions: `/DEBHU/`'s X element, named `XXDY` in EQSTAT, now has the one name `XXDH` in `DEBHU_MOD`, and the unused `/CONST3/` is gone.
-
-## Questions for the experts
-
-1. **Unconverged return.** After 20 iterations without convergence the routine writes a message and returns at once (the `STOP` is commented out). It returns before `DL = DL8`, so `DL` and `D` keep the caller's starting guess, and the derivatives (all arguments) keep whatever the caller's variables held. Is this fallback intended, and does any caller check for it?
-2. **Table edges.** The temperature index is forced into the table (`JT1` between 1 and 18) and the density index into 1..261; outside the table the values are extrapolated silently. Should a warning be written?
-3. **Debye–Hückel defaults.** The documentation gives `LDH` = TRUE and `ETADH0` = −2 as the (recommended) defaults; the code's initializers in `NMLPAR_MOD` are `LDH = .FALSE.` and `ETADH0 = -1.0D0` (`ETADH1 = 1.0D0` agrees). Which should the defaults be?
-
 
 ### EQRELV
 
