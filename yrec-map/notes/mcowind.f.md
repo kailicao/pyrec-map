@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `MCOWIND` returns the change in the angular velocity of the surface convection zone caused by magnetized-wind angular-momentum loss over a (diffusion) time step. It implements the newer wind law (G. Somers 3/17, "PMM-style", by its comment after van Saders and Pinsonneault, probably) with saturation, an optional Rossby scaling and the centrifugal correction of Matt et al. (2012, ApJ 754, L26). When the new law is off (`LMWIND` false) it hands over to the older [[cowind.f#COWIND|`COWIND`]].
+**Purpose.** `MCOWIND` returns the change in the angular velocity of the surface convection zone caused by magnetized-wind angular-momentum loss over a (diffusion) time step. It implements the newer wind law (G. Somers 3/17, "PMM-style," by its comment after van Saders and Pinsonneault, probably) with saturation, an optional Rossby scaling and the centrifugal correction of Matt et al. (2012, ApJ 754, L26). When the new law is off (`LMWIND` false) it hands over to the older [[cowind.f#COWIND|`COWIND`]].
 
 **How it fits.**
 - **Who calls it:** only [[seculr.f#SECULR|`SECULR`]], in the angular-momentum transport, once per iteration `IT` of the diffusion solution.

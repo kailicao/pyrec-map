@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** This file evolves the abundances over one time step when rotational mixing and nuclear burning act together. In its own words, it alternates "between nuclear burning plus gravitational settling and mixing in a series of progressively smaller timesteps, extrapolating to the answer for zero timestep". The diffusion coefficients, structure and reaction rates are held fixed during the step.
+**Purpose.** This file evolves the abundances over one time step when rotational mixing and nuclear burning act together. In its own words, it alternates "between nuclear burning plus gravitational settling and mixing in a series of progressively smaller timesteps, extrapolating to the answer for zero timestep." The diffusion coefficients, structure and reaction rates are held fixed during the step.
 
 **How it fits.**
 - **Inputs:** the arguments, the model (`HD`, `HL`, `HP`, `HR`, `HS`, `HS1`, `HS2`, `HT`, `HV`), the mixing coefficients `COD2`, the time step `DELTS`, the zones (`MRZONE`, `MXZONE`, `NRZONE`, `NZONE`, `LCZ`); `LEXCOM` from [[nmlpar_mod.f#NMLPAR_MOD|`NMLPAR_MOD`]] (whether the extended set of 15 species, with the light elements, is followed); `HCOMPP` in [[oldmod_mod.f#OLDMOD_MOD|`OLDMOD_MOD`]], the composition at the start of the step.
@@ -27,18 +27,35 @@ Only species 4 onward (from $^3$He) are extrapolated (`JBEG = 4`).
 
 ## Bugs, by priority
 
-1. **(d)** **NDIFCOM gets a region never set when `LOK` is false.** ([[#L28-L31]]; [[#L46-L49]]; [[#L103-L106]]) `IBEG`, `IEND`, `ECOD2` and `EM` are locals of BURSMIX, listed as input variables but set nowhere in it; only NDIFCOM sets them, through MIXGRID, and only when `LOK` is true. With `LOK` false, NDIFCOM passes them straight to MIXCOM ([[ndifcom.f#L64-L66]]). GETW passes the `LOK` that SECULR returns, which is false when SECULR finds no instability and leaves early ([[seculr.f#L202]], [[seculr.f#L289]]). What follows: On the first such call `IBEG` = `IEND` = 0 if the compiler zeroes saved locals, and MIXCOM reads `HCOMP(J,0)`, out of bounds ([[mixcom.f#L61]]), before finding nothing to do; after an earlier call with `LOK` true, MIXCOM mixes again the last region of that call, with its old coefficients, in a model SECULR found stable. Not reached at 7be4133, since `LBURS` is false ([[getw.f#L140]]). Read from the code, not run. **A possible fix:**
+1. **(cannot be reached)** **NDIFCOM gets a region never set when `LOK` is false.** ([[#L28-L31]]; [[#L46-L49]]; [[#L103-L106]]) `IBEG`, `IEND`, `ECOD2` and `EM` are locals of BURSMIX, listed as input variables but set nowhere in it; only NDIFCOM sets them, through MIXGRID, and only when `LOK` is true. With `LOK` false, NDIFCOM passes them straight to MIXCOM ([[ndifcom.f#L64-L66]]). GETW passes the `LOK` that SECULR returns, which is false when SECULR finds no instability and leaves early ([[seculr.f#L202]], [[seculr.f#L289]]). What follows: On the first such call `IBEG` = `IEND` = 0 if the compiler zeroes saved locals, and MIXCOM reads `HCOMP(J,0)`, out of bounds ([[mixcom.f#L61]]), before finding nothing to do; after an earlier call with `LOK` true, MIXCOM mixes again the last region of that call, with its old coefficients, in a model SECULR found stable.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to mix only when SECULR found unstable regions (LOK);
-    C IBEG, IEND, ECOD2 and EM are set only by such a call.
-                IF(LOK)THEN
-                   CALL NDIFCOM(DT,COD2,ECOD2,EM,HD,HL,HP,HR,HS,HS1,HS2,
-         *                      HSTOT,HV,IBEG,IEND,IMAX,IMIN,LCZ,LOK,M,
-         *                      HCOMP,JBEG,JEND)
-                ENDIF
+    **A possible fix:**
+
+    ```diff
+    --- a/src/bursmix.f
+    +++ b/src/bursmix.f
+    @@ -100,10 +100,15 @@
+                 CALL ROTMIX(DT,HCOMP,HS2,HT,M,MRZONE,MXZONE,
+          *               NRZONE,NZONE,HSTOT,HD,HS,HR,HP,LCZ,HS1)
+     C PERFORM MIXING
+    -            CALL NDIFCOM(DT,COD2,ECOD2,EM,HD,HL,HP,HR,HS,HS1,HS2,
+    +C 11/09/26 KC via Claude
+    +C code changed to mix only when SECULR found unstable regions (LOK);
+    +C IBEG, IEND, ECOD2 and EM are set only by such a call.
+    +            IF(LOK)THEN
+    +               CALL NDIFCOM(DT,COD2,ECOD2,EM,HD,HL,HP,HR,HS,HS1,HS2,
+     C      *                   HSTOT,HV,IBEG,IEND,IMAX,IMIN,LCZ,LOK,M,NTOT,  ! KC 2025-05-31
+    -     *                   HSTOT,HV,IBEG,IEND,IMAX,IMIN,LCZ,LOK,M,
+    -     *                   HCOMP,JBEG,JEND)
+    +     *                      HSTOT,HV,IBEG,IEND,IMAX,IMIN,LCZ,LOK,M,
+    +     *                      HCOMP,JBEG,JEND)
+    +            ENDIF
+                 IF(LEXCOM)THEN
+     C                CALL LIBURN2(DT,HCOMP,HD,HR,HS1,HS2,HT,JENV1,JENV0,M)  ! KC 2025-05-31
+                    CALL LIBURN2(DT,HCOMP,HR,HS1,HS2,HT,JENV1,JENV0,M)
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Cannot be reached at 7be4133. GETW sets `LBURS = .FALSE.` on every call ([[getw.f#L140]]) and calls BURSMIX only when it is true ([[getw.f#L455-L461]]); no namelist can change that. No counting line fired in any case run, the five rotating test cases run (`testsuite/Test_3Msolar_GS_rot_gray_OPALSCV_SF2_GS98_OP_CF10_RGp2diffrotI3cz2`, `testsuite/Test_solarGS98_difrotmixper18p4d1p0`, `testsuite/Test_m0p8feh+0p0GS98_rotp8p0d0p1mag1e4std_TAMS`, `testsuite/Test_m2p0_feh+0p0_vzams150_IES1_TAMS`, and `testsuite/Test_m2p0_feh+0p0_vzams150_IES2_TAMS`) among them. A run would reach it only if the extrapolation were switched on in GETW. Intent: none found.
 
 ### BURSMIX
 

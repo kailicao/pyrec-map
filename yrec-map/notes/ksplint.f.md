@@ -12,7 +12,7 @@ Outside the 4 points it extrapolates with the end interval's cubic. If two nodes
 
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE` with explicit declarations.
 
-**Changed since `a8a5950`.** The stop on two equal nodes now writes a message with the node and $x$ (it was "Ksplint failure", to the terminal only) to the terminal and to the `.short` file (the routine now uses `IOUNITS_MOD`), and exits with status 1, the code for run-time errors, instead of a bare `STOP` (`KNOWN_ISSUES.md`, issue 38).
+**Changed since `a8a5950`.** The stop on two equal nodes now writes a message with the node and $x$ (it was "Ksplint failure," to the terminal only) to the terminal and to the `.short` file (the routine now uses `IOUNITS_MOD`), and exits with status 1, the code for run-time errors, instead of a bare `STOP` (`KNOWN_ISSUES.md`, issue 38).
 
 ### KSPLINT
 

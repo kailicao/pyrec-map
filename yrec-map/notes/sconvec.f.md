@@ -26,7 +26,7 @@
    $$R_\Sigma = \sum \Bigl(1 - \frac{\mu_\mathrm{CZ}}{\mu}\Bigr)\,\Delta r .$$
    Stop when $R_\Sigma > R_\mathrm{max}$ (the limit, `LMAX` true) or when the shell is stable against the rescaled gradient, $f\,\nabla_\mathrm{rad} < \nabla_\mathrm{ad}$. The edge moves to the last unstable shell. In the walk, every quantity passed to `TPGRAD` is reset for the shell except `RL` (but see bug 2).
 
-    > **Question** ([[#L198]]; [[#L205]]; [[#L219]]). **"Overshoot" in the comments.** Comments speak of "OVERSHOOT" for what is semiconvective mixing here. Is this a wording leftover, to be changed to "semiconvection"?
+    **"Overshoot" in the comments means semiconvection.** The comments at [[#L198]], [[#L205]], and [[#L219]] speak of "OVERSHOOT," but the routine is the semiconvection of Castellani et al. (1971) ([[#L63-L65]]), and its own merger message says "MERGED DUE TO SEMICONVECTION" ([[#L282]]), so the word is a leftover.
 5. **Mergers.** If the top of zone $j$ is now above the bottom of zone $j+1$, they become one zone, and the list is shifted down (but see bug 1).
 
     > **Question** ([[#L278]]). **Touching zones.** Zones are merged only when they overlap (`MXZONE(J,2) .GT. MXZONE(J+1,1)`), not when they become adjacent (top of one = bottom of the next − 1), which leaves no radiative shell between them. Should adjacency also merge?
@@ -35,23 +35,47 @@
 
 ## Bugs, by priority
 
-1. **(a)** **A merger keeps the upper zone's top.** ([[#L278-L291]]) When zones $j$ and $j+1$ overlap, the merged zone takes the bottom of zone $j$ and the top of zone $j+1$ (`MXZONE(J+1,1) = MXZONE(J,1)`, then the list is shifted). The walk upward from zone 1's top (step 4) passes through any zone above it and can end beyond that zone's top; the merged zone then ends at the upper zone's top, below the edge just found, and the semiconvective region above it is not mixed. Only with `LSEMIC` (off by default) and a second zone within $R_\mathrm{max}$ of the first. Read from the code, not run. **A possible fix:**
+1. **(not reached)** **A merger keeps the upper zone's top.** ([[#L278-L291]]) When zones $j$ and $j+1$ overlap, the merged zone takes the bottom of zone $j$ and the top of zone $j+1$ (`MXZONE(J+1,1) = MXZONE(J,1)`, then the list is shifted). The walk upward from zone 1's top (step 4) passes through any zone above it and can end beyond that zone's top; the merged zone then ends at the upper zone's top, below the edge just found, and the semiconvective region above it is not mixed. Only with `LSEMIC` (off by default) and a second zone within $R_\mathrm{max}$ of the first.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to keep the higher of the two tops when two zones merge.
-             MXZONE(J+1,1) = MXZONE(J,1)
-             MXZONE(J+1,2) = MAX(MXZONE(J,2),MXZONE(J+1,2))
-             DO 90 K = J,NZONE-1
-    ...
+    **A possible fix:**
+
+    ```diff
+    --- a/src/sconvec.f
+    +++ b/src/sconvec.f
+    @@ -282,7 +282,10 @@
+        93    FORMAT(2X,'MIXED ZONES MERGED DUE TO SEMICONVECTION'
+          *          /2X,'OLD',2('[',I3,'-',I3,']'),
+          *          ' NEW','[',I3,'-',I3,']')
+    +C 11/09/26 KC via Claude
+    +C code changed to keep the higher of the two tops when two zones merge.
+              MXZONE(J+1,1) = MXZONE(J,1)
+    +         MXZONE(J+1,2) = MAX(MXZONE(J,2),MXZONE(J+1,2))
+              DO 90 K = J,NZONE-1
+                 DO 95 J2 = 1,2
+                    MXZONE(K,J2) = MXZONE(K+1,J2)
     ```
 
-2. **(d)** **The radius is not updated in the walk.** ([[#L144]]; [[#L227-L251]]) In the loop over shells `II`, every quantity passed to `TPGRAD` is reset for the shell, except `RL`, which stays at `HR(JMR)`. `TPGRAD`'s $\nabla_\mathrm{rad}$ does not use the radius ([[tpgrad.f#L80-L81]]), so the stability test is not affected today; only the gravity $G m/r^2$ that `TPGRAD` computes for the convective case is, and its results are not used here. A change that made $\nabla_\mathrm{rad}$ depend on $r$ would break the test. Read from the code, not run. **A possible fix:**
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached in any of 34 runs (26 of YREC's cases, from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning, and 8 made-up ones): In the one run with semiconvection, `sample_cases/UpperMS/Sample_m9p0feh+0p0GS98_yaleeos_sc_TAMS`, no two zones merged. It needs `LSEMIC` (which `parmin.f` refuses with any overshoot) and a second zone within the walk's reach; YREC's other semiconvective case, `sample_cases/UpperMS/Sample_m9p0feh+0p0GS98_yaleeos_sc_TAHB` (core helium burning), was not run.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to set RL for each shell of the walk, as the other
-    C structure variables are.
-                   SL = HS(II)
-                   RL = HR(II)
+2. **(harmless in the runs)** **The radius is not updated in the walk.** ([[#L144]]; [[#L227-L251]]) In the loop over shells `II`, every quantity passed to `TPGRAD` is reset for the shell, except `RL`, which stays at `HR(JMR)`. `TPGRAD`'s $\nabla_\mathrm{rad}$ does not use the radius ([[tpgrad.f#L80-L81]]), so the stability test is not affected today; only the gravity $G m/r^2$ that `TPGRAD` computes for the convective case is, and its results are not used here. A change that made $\nabla_\mathrm{rad}$ depend on $r$ would break the test.
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/sconvec.f
+    +++ b/src/sconvec.f
+    @@ -225,7 +225,11 @@
+                    IF(RSUM.GT.RMAX) GO TO 33
+     C TEST ON RESCALED RAD. GRADIENT FOR CONVECTION
+                    B = HL(II)
+    +C 11/09/26 KC via Claude
+    +C code changed to set RL for each shell of the walk, as the other
+    +C structure variables are.
+                    SL = HS(II)
+    +               RL = HR(II)
+                    PL = HP(II)
+                    TL = HT(II)
+                    DL = HD(II)
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The walk ran once in the 34 runs, at shell 380 of `sample_cases/UpperMS/Sample_m9p0feh+0p0GS98_yaleeos_sc_TAMS`, the only run with semiconvection, and there `RL` was not that shell's radius. With the fix, the track and `.store` file are identical (706 models, 0.0253726 Gyr), where a null change (nearly every opacity, all with $3 \le \log T \le 9$ and $-6 \le \log\rho \le 9.75$, times $1 + 10^{-10}$) moves $\log L$ by up to $7.56\times10^{-6}$ dex, as expected, since $\nabla_\mathrm{rad}$ does not use the radius. Fragile code.

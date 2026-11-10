@@ -5,7 +5,7 @@
 **How it fits.**
 - **Who calls it:** [[alsurfp.f#ALSURFP|ALSURFP]] (the Allard model atmospheres' surface pressures) and [[fpft.f#FPFT|FPFT]] (the rotational distortion factors).
 - **Modules:** `IOUNITS_MOD`, for the unit `ISHORT` of its error message.
-- **Limits:** at most 20 points (the arrays are fixed at 20, "for consistency with fpft", MHP 10/02).
+- **Limits:** at most 20 points (the arrays are fixed at 20, "for consistency with fpft," MHP 10/02).
 
 **The method.** Starting from the nearest tabulated point, the tableau of differences $C_{i}$, $D_{i}$ is built column by column,
 $$D_i \leftarrow \frac{(x_{i+j}-x)\,(C_{i+1}-D_i)}{x_i - x_{i+j}},\qquad C_i \leftarrow \frac{(x_i-x)\,(C_{i+1}-D_i)}{x_i - x_{i+j}},$$

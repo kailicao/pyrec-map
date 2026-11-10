@@ -12,10 +12,10 @@
 **The method.**
 1. If $j \le 0$ anywhere, stop with exit status 1. The branch that would halve the time step instead ([[#L160-L167]]) never runs (unused?).
 
-    > **Question** ([[#L149-L159]]). **No time-step cut.** The test `IF(IREDO.GT.0)` (replacing the commented-out `IREDO.GT.3`) stops the run at the first negative $j$, so the branch that halves the time step never runs, while the message still says "3 attempts at cutting timestep failed". Which is intended: the stop at once (and the message corrected), or up to three cuts?
+    > **Question** ([[#L149-L159]]). **No time-step cut.** The test `IF(IREDO.GT.0)` (replacing the commented-out `IREDO.GT.3`) stops the run at the first negative $j$, so the branch that halves the time step never runs, while the message still says "3 attempts at cutting timestep failed." Which is intended: the stop at once (and the message corrected), or up to three cuts?
 
 2. **Convergence:** $\delta_\mathrm{it} = \max_i |j_i - j_i^\mathrm{prev}|/j_i^\mathrm{prev}$; converged (`LOK`) if $\delta_\mathrm{it} \le$ `DJOK`. If `LOKAD` is set on entry, `LOK` starts true.
-3. **$\Omega$ from $j$:** call GETROT. Before the last iteration and while not converged, the tolerances `TOLERI` and `ACFPFT` are relaxed to $\max(10^{-2}\,\mathrm{DJOK}, \text{tolerance})$, "because the error in the diffusion is of order DJOK", and restored after.
+3. **$\Omega$ from $j$:** call GETROT. Before the last iteration and while not converged, the tolerances `TOLERI` and `ACFPFT` are relaxed to $\max(10^{-2}\,\mathrm{DJOK}, \text{tolerance})$, "because the error in the diffusion is of order DJOK," and restored after.
 4. **Gradient reversals:** from the surface inward, where $\Omega_i - \Omega_{i-1}$ is positive (by more than $10^{-15}$) but was not positive in the previous model (`WOLD`), mix the two shells (and any adjacent convection zone) to solid-body rotation with SOLID; then widen the range while the boundaries show new reversals.
 5. **Print** at the last iteration or on convergence: the largest $\Delta j/j$ over the step, and $\delta$ of each iteration.
 

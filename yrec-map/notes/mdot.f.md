@@ -16,7 +16,7 @@
    - `RMU` = $P\beta/(\rho T)$ (the gas constant over $\mu$) is recomputed at `JENV`, and a scale factor $\Delta\ln E = (\Delta M/M_\mathrm{cz})\,s_\mathrm{cen}/(\mathcal{R}/\mu)$, with $s_\mathrm{cen}$ = `SCEN`, gives $\Delta\log r = \tfrac23\Delta\ln E/\ln 10$, $\Delta\log T = -\Delta\log r$, $\Delta\log P = -4\Delta\log r$ (homologous expansion of the envelope: $P \propto r^{-4}$, $T \propto r^{-1}$ at fixed $m$; the mass term `DLNM` is set to zero);
    - if `JENV` = 1 (fully convective), $\log r$, $\log P$, $\log T$ of every point change by these amounts; otherwise only $P$ and $T$ at `JENV`, and the radii above it are stretched about $r_\mathrm{b} = r_\mathrm{JENV}$: $r \leftarrow r_\mathrm{b} + 10^{\Delta\log r}(r - r_\mathrm{b})$.
    
-   `MASSLOSS` sets `SCEN` = 0, so these changes are zero in practice: The code is kept for later work, as part of the experimental mass-loss section, "not finished", not "dead" (settled from `KNOWN_ISSUES.md`, issue 12, Nov 9, 2026).
+   `MASSLOSS` sets `SCEN` = 0, so these changes are zero in practice: The code is kept for later work, as part of the experimental mass-loss section, "not finished," not "dead" (settled from `KNOWN_ISSUES.md`, issue 12, Nov 9, 2026).
 
     > **Question** ([[#L173-L174]]). **The form of the expansion.** A commented-out line scaled the expansion by `SACC - SCEN`, the entropy of the accreted matter relative to the envelope's; the active one by `SCEN` alone. An expansion scaled by `SCEN` alone depends on the units, since the entropy is defined only up to an additive constant (it contains $\ln T$ and $\ln\rho$ in cgs). When the code is revived, is `SACC - SCEN` the intended form?
 
@@ -33,7 +33,7 @@
 
 **Design.** Several unconditional `WRITE(*,…)` lines report the step reduction, the angular momentum and the mass change.
 
-**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) lists `LMDOT`, "experimental mass-loss module", and `LSOLWIND`, mass loss scaled to the solar wind, "not implemented", among the experimental options.
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) lists `LMDOT`, "experimental mass-loss module," and `LSOLWIND`, mass loss scaled to the solar wind, "not implemented," among the experimental options.
 
 **Changed since `rp_1`.** COMMON blocks to modules, `IMPLICIT NONE`; `MASSCHG3` dropped (its three reals now zeroed locals, `LSOLWIND` from the namelist); the solar-wind branch guarded by `DMWSUN` > 0 (a bug fix: it would have given $\dot M$ = NaN). The call from `MASSLOSS` now matches the interface (fixed in massloss.f), which settles former question 1; former question 2 (`MASSCHG3` set nowhere) is settled by the authors' fix, which confirms it and keeps the option inert until the three parameters are given a source.
 
@@ -41,37 +41,59 @@
 
 ## Bugs, by priority
 
-1. **(a)** **Accretion past the disk's lifetime gives a negative step.** ([[#L146-L157]]; [[main.f#L981]]) With `LDISK` and accretion, `TEST = SAGE + 1.0d-9*DELTS/CSECYR` is the age at the end of the step, and when it exceeds `TDISK` the step is cut to `DELTS = (TDISK-SAGE)*1.0D9*CSECYR`. If `SAGE` already exceeds `TDISK`, this is negative: `DELM` = `DMDT*CMSUN*DELTS/CSECYR` is then negative, so the accretion is applied as a loss, and the main program goes on with a negative step (what it then does was not traced). The main program sets `SAGE = DAGE` only after the step's call to MASSLOSS ([[main.f#L981]]), so in the first step `SAGE` is unset (0 with zero-initialized storage), and from the second step on it is the model's age: a run that starts from a model older than `TDISK` reaches this. Only with `LMDOT`, `LDISK` (both off by default), and `DMDT0` > 0. Read from the code, not run. **A possible fix:**
+1. **(not reached)** **Accretion past the disk's lifetime gives a negative step.** ([[#L146-L157]]; [[main.f#L981]]) With `LDISK` and accretion, `TEST = SAGE + 1.0d-9*DELTS/CSECYR` is the age at the end of the step, and when it exceeds `TDISK` the step is cut to `DELTS = (TDISK-SAGE)*1.0D9*CSECYR`. If `SAGE` already exceeds `TDISK`, this is negative: `DELM` = `DMDT*CMSUN*DELTS/CSECYR` is then negative, so the accretion is applied as a loss, and the main program goes on with a negative step (what it then does was not traced). The main program sets `SAGE = DAGE` only after the step's call to MASSLOSS ([[main.f#L981]]), so in the first step `SAGE` is unset (0 with zero-initialized storage), and from the second step on it is the model's age: a run that starts from a model older than `TDISK` reaches this. Only with `LMDOT`, `LDISK` (both off by default), and `DMDT0` > 0.
 
-    ```fortran
-          IF(LDISK .AND. DMDT.GT.0.0D0)THEN
-             TEST = SAGE + 1.0d-9*DELTS/CSECYR
-    C 11/09/26 KC via Claude
-    C code changed to stop accreting, without a negative step, when the
-    C disk is already gone at the start of the step.
-             IF(SAGE.GE.TDISK)THEN
-                DMDT = 0.0D0
-                LDONE = .TRUE.
-             ELSE IF(TEST.GT.TDISK)THEN
-                DELTS = (TDISK-SAGE)*1.0D9*CSECYR
-                LDONE = .TRUE.
-             ELSE
-                LDONE = .FALSE.
-             ENDIF
-    ...
+    **A possible fix:**
+
+    ```diff
+    --- a/src/mdot.f
+    +++ b/src/mdot.f
+    @@ -146,7 +146,13 @@
+     C mhp 8/10 turn mass loss off when disk exhausted only when dm /dt > 0, e.g. accretion
+           IF(LDISK .AND. DMDT.GT.0.0D0)THEN
+              TEST = SAGE + 1.0d-9*DELTS/CSECYR
+    -         IF(TEST.GT.TDISK)THEN
+    +C 11/09/26 KC via Claude
+    +C code changed to stop accreting, without a negative step, when the
+    +C disk is already gone at the start of the step.
+    +         IF(SAGE.GE.TDISK)THEN
+    +            DMDT = 0.0D0
+    +            LDONE = .TRUE.
+    +         ELSE IF(TEST.GT.TDISK)THEN
+                 DELTS = (TDISK-SAGE)*1.0D9*CSECYR
+                 LDONE = .TRUE.
+              ELSE
     ```
 
-2. **(b)** **A stop without a message when there is no surface convection zone.** ([[#L118]]; [[massloss.f#L106-L122]]) `IF(JENV.EQ.M) STOP911` (that is, `STOP 911`) ends the run with only the stop code 911, written nowhere else, when the model has no surface convection zone. MASSLOSS handles that case (it sets `TAUCZ` = 0 and `JCZ` = `M`) and then calls MDOT anyway, so a run with mass change on reaches the stop as soon as its envelope turns radiative. Only with `LMDOT` (off by default). Read from the code, not run. **A possible fix:** say why the run stops (whether mass change should instead go on without a convection zone is the developers' choice):
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached: No run had `LMDOT` with `LDISK` and accretion; the two made-up Reimers runs ([[massloss.f#b1]]) lose mass, so they skip this test. The fix was not run. What would reach it: `LMDOT`, `LDISK`, and `DMDT0` > 0, from a starting model older than `TDISK`. Intent: The comment above the test, "turn mass loss off when disk exhausted only when dm /dt > 0, e.g. accretion," means to end the accretion, not to reverse it.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to say why the run stops when there is no surface
-    C convection zone.
-          IF(JENV.EQ.M) THEN
-             WRITE(*,*)'MDOT: NO SURFACE CONVECTION ZONE; STOPPED'
-             STOP 911
-          ENDIF
+2. **(stops the run)** **Checked by KC** (Nov 10, 2026). **A stop without a message when there is no surface convection zone.** ([[#L118]]; [[massloss.f#L106-L122]]) `IF(JENV.EQ.M) STOP911` (that is, `STOP 911`) ends the run with only the stop code 911, written nowhere else, when the model has no surface convection zone. MASSLOSS handles that case (it sets `TAUCZ` = 0 and `JCZ` = `M`) and then calls MDOT anyway, so a run with mass change on reaches the stop as soon as its envelope turns radiative. Only with `LMDOT` (off by default).
+
+    **A possible fix:** say why the run stops (whether mass change should instead go on without a convection zone is the developers' choice):
+
+    ```diff
+    --- a/src/mdot.f
+    +++ b/src/mdot.f
+    @@ -115,7 +115,13 @@
+     C      DMCZT = 10.0D0**HSTOT - HS1(JENV)
+           DMCZT = SUMDM
+     C COMPUTE MASS OF SURFACE CONVECTION ZONE BELOW FITTING POINT
+    -      IF(JENV.EQ.M) STOP911
+    +C 11/09/26 KC via Claude
+    +C code changed to say why the run stops when there is no surface
+    +C convection zone.
+    +      IF(JENV.EQ.M) THEN
+    +         WRITE(*,*)'MDOT: NO SURFACE CONVECTION ZONE; STOPPED'
+    +         STOP 911
+    +      ENDIF
+           IF(JENV.GT.1) THEN
+              DMCZ = HS1(M) - HS1(JENV)
+           ELSE
     ```
+
+    **How the code itself shows it.** MASSLOSS expects the case: When `JENV` equals `M`, it sets `TAUCZ = 0.0D0` and `JCZ = M` ([[massloss.f#L106-L122]]) rather than stopping, and MDOT's next lines handle the other end, a fully convective star, with `DMCZ = HS1(M)` ([[#L119-L123]]), but not this one. Elsewhere YREC meets a missing surface convection zone with a message: MIX writes "`NO SURFACE CZ - DIFFUSION NOT MEANINGFUL`" and goes on ("`DBG 2/92 CHANGED STOP TO JUST A WARNING MESSAGE, EXECUTION CONTINUES`", [[mix.f#L428-L433]]), and ROTMIX writes the same message before it stops with `STOP 1` ([[rotmix.f#L163-L170]]). Other run-time stops, such as CHECKJ's and WIND's, also write why first and use `STOP 1`, "`the run-time error code (issue 38)`" ([[checkj.f#L152-L159]]; [[wind.f#L72-L76]]); 911 is used as a stop code nowhere else in active code. The fix above keeps `STOP 911` and leaves two questions for the developers: Should this stop, too, use `STOP 1`, or should mass change go on without a convection zone, as diffusion does in MIX?
+
+    **Checked by running YREC** (Nov 9, 2026, the 1 $M_\odot$ runs repeated on Nov 10 with a private start model; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The line ran at every MDOT call of the two made-up Reimers runs ([[massloss.f#b1]]), 8,341 and 920 times (`JENV` from 1 to 685, `M` from 368 to 957), and `JENV` = `M` never held: The wrong Reimers rate ruins those runs first. With the Reimers rate fixed, both end here, at `STOP 911` with no message (exit status 143, that is 911 mod 256): the 3 $M_\odot$ star at model 129 (0.0017 Gyr), the 1 $M_\odot$ star at model 6,599 (12.595 Gyr, 0.707 $M_\odot$). So a run with mass change that reaches this test ends with only the stop code. No fix was run, since the page's fix adds only a message. Intent: MDOT's header says the routine has never run, since every namelist sets `LMDOT` = .FALSE.
 
 ### MDOT
 

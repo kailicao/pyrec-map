@@ -20,16 +20,27 @@ where $\epsilon_\mathrm{nuc}$ is `SESUM` and $\epsilon_7$ is `SEG(7,·)` (the gr
 
 ## Bugs, by priority
 
-1. **(c)** **The file is closed after each model.** ([[#L109]]; [[parmin.f#L956-L959]]) `WRTMIL` ends with `CLOSE(IMILNE)`, but the file is opened only once, in `PARMIN` (MHP 8/25, [[#L36]]). The next call writes to unit 21 unopened, which gfortran, like most compilers, sends to a default file (`fort.21`), so the Milne file holds only the first model written. Only with `LMILNE` (off by default). Read from the code, not run. **A possible fix:**
+1. **(not reached)** **The file is closed after each model.** ([[#L109]]; [[parmin.f#L956-L959]]) `WRTMIL` ends with `CLOSE(IMILNE)`, but the file is opened only once, in `PARMIN` (MHP 8/25, [[#L36]]). The next call writes to unit 21 unopened, which gfortran, like most compilers, sends to a default file (`fort.21`), so the Milne file holds only the first model written. Only with `LMILNE` (off by default).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to keep IMILNE open, since PARMIN opens it only once
-    C for the run.
-          ENDIF
-          RETURN
-          END
+    **A possible fix:**
+
+    ```diff
+    --- a/src/wrtmil.f
+    +++ b/src/wrtmil.f
+    @@ -105,7 +105,9 @@
+            NP1 = 1.0D0/SDEL(2,M)
+            WRITE(IMILNE,10)M,HS1(M),R,P,D,HCOMP(1,M),HL(M),
+          *                   U,V,W,NP1
+    +C 11/09/26 KC via Claude
+    +C code changed to keep IMILNE open, since PARMIN opens it only once
+    +C for the run.
+           ENDIF
+    -      CLOSE(IMILNE)
+           RETURN
+           END
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): not reached in any of 34 runs (26 of YREC's cases, from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning, and 8 made-up ones): `LMILNE` is off by default ([[nmlpar_mod.f#L58]]) and set in none of YREC's cases or documents. Not run: `LMILNE` on, with two or more models written. Intent: The comment at [[#L36]] says the file is now opened in PARMIN, so the `CLOSE` looks left over from when WRTMIL opened the file itself.
 
 ### WRTMIL
 

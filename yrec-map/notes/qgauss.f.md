@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** Ten-point Gauss–Legendre quadrature over the polar angle on one equipotential shell of a rotating star. It returns three integrals that [[fpft.f#FPFT|FPFT]] uses to find the shell's mean gravity $\langle g\rangle$ and $\langle g^{-1}\rangle$ ("find <g> and <g-1> across the shell by Gaussian quadrature", in FPFT's comment), and from them the distortion factors $f_P$ and $f_T$.
+**Purpose.** Ten-point Gauss–Legendre quadrature over the polar angle on one equipotential shell of a rotating star. It returns three integrals that [[fpft.f#FPFT|FPFT]] uses to find the shell's mean gravity $\langle g\rangle$ and $\langle g^{-1}\rangle$ ("find <g> and <g-1> across the shell by Gaussian quadrature," in FPFT's comment), and from them the distortion factors $f_P$ and $f_T$.
 
 **How it fits.**
 - **Inputs:** the upper limit `B` of the angle; the shell's data passed through to the integrand (`R0`, `HS`, `AINT`, `Q`, `W2`, `A`, the shell index `I`).

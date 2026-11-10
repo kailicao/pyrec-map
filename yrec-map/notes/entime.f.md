@@ -9,7 +9,7 @@
 
 **The method.**
 $$f = \max\left(\frac{|\Delta\log T_\mathrm{eff}|}{\Delta T_\mathrm{tri}}, \frac{|\Delta\log L|}{\Delta L_\mathrm{tri}}\right), \qquad f \leftarrow \min\!\left(\max\left(f, \frac{1}{a}\right), a\right), \qquad \mathtt{EDELT} = \frac{\Delta t}{f},$$
-with $a$ = `ATIME(13)`, the largest factor by which the step may change; $f = 1$ if nothing changed. A previous step of 0 thus gives `EDELT` = 0, which HTIMER does not catch ([[htimer.f#b1]]). The triangle's sizes are also copied into `HMAX(1:2)`, which nothing reads (unused?). The header's output line, "time step for requested change in P,T,R,L", is copied from [[ptime.f#PTIME|PTIME]]: Only $T_\mathrm{eff}$ and $L$ are tested here (settled from the code, Nov 9, 2026: [[#L68]]; [[#L73-L95]]).
+with $a$ = `ATIME(13)`, the largest factor by which the step may change; $f = 1$ if nothing changed. A previous step of 0 thus gives `EDELT` = 0, which HTIMER does not catch ([[htimer.f#b1]]). The triangle's sizes are also copied into `HMAX(1:2)`, which nothing reads (unused?). The header's output line, "time step for requested change in P,T,R,L," is copied from [[ptime.f#PTIME|PTIME]]: Only $T_\mathrm{eff}$ and $L$ are tested here (settled from the code, Nov 9, 2026: [[#L68]]; [[#L73-L95]]).
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`; the unused COMMON blocks are gone, which settles that half of former question 1.
 

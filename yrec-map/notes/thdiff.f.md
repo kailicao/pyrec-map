@@ -28,24 +28,37 @@
    $$w_s = A^{(p)}_s\,\frac{d\ln p}{dr} + A^{(T)}_s\,\frac{d\ln T}{dr} + \sum_t A^{(C)}_{st}\,\frac{d\ln C_t}{dr},$$
    multiplied by `KO*AC*CC` $= K_0 \left(\sum_s A_s C_s\right)\left(\sum_s C_s\right)$ with $K_0 = 2$; $\sum_s A_s C_s$ is only proportional to $\rho$ (the comment: "multiplied by $p/K_0$"). The callers then multiply the coefficients by $r^2T^{5/2}/\ln\Lambda$ ($r$ in $R_\odot$, $T$ in $10^7$ K; `FAC` in [[setup_grsett.f#SETUP_GRSETT|SETUP_GRSETT]] and [[microdiff_cod.f#MICRODIFF_COD|MICRODIFF_COD]]), which gives the flux in the units of the settling equation on [[grsett.f#GRSETT|GRSETT]]'s page.
 
-    > **Question** ([[#L278-L286]]). **The normalisation comment.** The comment says the results "must be multiplied by p/K_0", while the code multiplies by `KO*AC*CC` ($K_0 \sum A_s C_s \sum C_s$). Which units do the callers assume?
+    > **Question** ([[#L278-L286]]). **The normalisation comment.** The comment says the results "must be multiplied by p/K_0," while the code multiplies by `KO*AC*CC` ($K_0 \sum A_s C_s \sum C_s$). Which units do the callers assume?
 
-    > **Question** ([[#L112-L114]]; [[microdiff_cod.f#L130-L154]]; [[setup_grsett.f#L261-L275]]). **Is the Coulomb logarithm counted twice?** `THDIFF` puts the Coulomb logarithms `CL` into $K_{st}$, so its coefficients already scale as $1/\ln\Lambda$. [[microdiff_cod.f#MICRODIFF_COD|MICRODIFF_COD]] computes `TCL` per pair (a fit in the Debye length or interionic distance), passes it to `THDIFF`, and then multiplies by `FAC`, divided by a fixed `LN_LAMBDA = 2.2D0`; [[setup_grsett.f#SETUP_GRSETT|SETUP_GRSETT]] with `LTHOUL` (not `LTHOULFIT`) passes `TCL` = `LN_LAMBDA` (or the fitted `TCL` with `ILAMBDA = 4`) and again divides `FAC` by `LN_LAMBDA`; and the time unit of both callers "includes factor of 2.2 from ln lambda". Only the fitted branch (`LTHOULFIT`) is clearly free of $\ln\Lambda$. Do `THDIFF`'s outputs need the division by $\ln\Lambda$ again, or does `KO*AC*CC` normalise them to $\ln\Lambda = 1$? If not, settling with the full Thoul solution would be too slow by a factor of about $\ln\Lambda$ (to be checked against Thoul et al. 1994 before calling it an error).
+    > **Question** ([[#L112-L114]]; [[microdiff_cod.f#L130-L154]]; [[setup_grsett.f#L261-L275]]). **Is the Coulomb logarithm counted twice?** `THDIFF` puts the Coulomb logarithms `CL` into $K_{st}$, so its coefficients already scale as $1/\ln\Lambda$. [[microdiff_cod.f#MICRODIFF_COD|MICRODIFF_COD]] computes `TCL` per pair (a fit in the Debye length or interionic distance), passes it to `THDIFF`, and then multiplies by `FAC`, divided by a fixed `LN_LAMBDA = 2.2D0`; [[setup_grsett.f#SETUP_GRSETT|SETUP_GRSETT]] with `LTHOUL` (not `LTHOULFIT`) passes `TCL` = `LN_LAMBDA` (or the fitted `TCL` with `ILAMBDA = 4`) and again divides `FAC` by `LN_LAMBDA`; and the time unit of both callers "includes factor of 2.2 from ln lambda." Only the fitted branch (`LTHOULFIT`) is clearly free of $\ln\Lambda$. Do `THDIFF`'s outputs need the division by $\ln\Lambda$ again, or does `KO*AC*CC` normalise them to $\ln\Lambda = 1$? If not, settling with the full Thoul solution would be too slow by a factor of about $\ln\Lambda$ (to be checked against Thoul et al. 1994 before calling it an error).
 
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`.
 
 ## Bugs, by priority
 
-1. **(d)** **No check of the array sizes.** ([[#L48-L53]]; [[#L72]]) The work arrays hold at most `MMAX = 20` species (`NMAX = 42` equations), with no test that `M` ≤ 20; a larger `M` would write past them. Correct today: both callers pass `M` = 4 (`NSPEC`). Read from the code, not run. **A possible fix:**
+1. **(cannot be reached)** **No check of the array sizes.** ([[#L48-L53]]; [[#L72]]) The work arrays hold at most `MMAX = 20` species (`NMAX = 42` equations), with no test that `M` ≤ 20; a larger `M` would write past them. Correct today: both callers pass `M` = 4 (`NSPEC`).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to stop when M exceeds the size of the work arrays.
-          IF(M.GT.MMAX)THEN
-             WRITE(*,*) 'THDIFF: M EXCEEDS MMAX = ',MMAX
-             STOP
-          ENDIF
+    **A possible fix:**
+
+    ```diff
+    --- a/src/thdiff.f
+    +++ b/src/thdiff.f
+    @@ -68,6 +68,12 @@
+     
+     C Initialize parameters:
+     
+    +C 11/09/26 KC via Claude
+    +C code changed to stop when M exceeds the size of the work arrays.
+    +      IF(M.GT.MMAX)THEN
+    +         WRITE(*,*) 'THDIFF: M EXCEEDS MMAX = ',MMAX
+    +         STOP
+    +      ENDIF
+           KO=2
+           N=2*M+2
+           DO I=1,M
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Of 34 runs (26 of YREC's cases, from 0.04 to 9 $M_\odot$, with rotation, settling, and helium burning, and 8 made-up ones), the routine ran in the seven with settling, up to 37 million times per run (`testsuite/Test_solarM22M_difkur`), always with `M` = 4. It cannot be reached at 7be4133: Both callers pass `NSPEC` = 4 ([[microdiff_cod.f#L55]]; [[setup_grsett.f#L89]]). No fix was run, since the fix is a stop. Intent: `KNOWN_ISSUES.md` (line 1846) says that `NMAX` "is deliberately per-routine."
 
 ### THDIFF
 

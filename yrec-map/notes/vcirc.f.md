@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `VCIRC` estimates the velocities of the rotational mixing processes at each interface between shells of a radiative region: meridional (Eddington–Sweet) circulation, the Goldreich–Schubert–Fricke (GSF) instability, and the secular and dynamical shear instabilities. Its header comment: "skipping convective regions, check for instability against each secular mechanism; if unstable, compute a circulation velocity". The sum of the velocities, `HV`, sets the diffusion coefficient for angular momentum and mixing: each "velocity" becomes a diffusion coefficient over a length, $D = 4\pi f_w\,v\,r$ ([[codiff.f#CODIFF|CODIFF]]), so that, for example, $v_\mathrm{SS} \propto K/r$ gives $D_\mathrm{SS} \propto K$.
+**Purpose.** `VCIRC` estimates the velocities of the rotational mixing processes at each interface between shells of a radiative region: meridional (Eddington–Sweet) circulation, the Goldreich–Schubert–Fricke (GSF) instability, and the secular and dynamical shear instabilities. Its header comment: "skipping convective regions, check for instability against each secular mechanism; if unstable, compute a circulation velocity." The sum of the velocities, `HV`, sets the diffusion coefficient for angular momentum and mixing: each "velocity" becomes a diffusion coefficient over a length, $D = 4\pi f_w\,v\,r$ ([[codiff.f#CODIFF|CODIFF]]), so that, for example, $v_\mathrm{SS} \propto K/r$ gives $D_\mathrm{SS} \propto K$.
 
 **How it fits.**
 - **Inputs:** arguments from [[seculr.f#SECULR|SECULR]]: $\log r$ and $r$ (`HR`, `HRU`), the range `IMIN`–`IMAX`, the iteration `IT`, `LCZ`, `OMEGA`, the shear `QWLNR` (in `SECULR`, $\tfrac14(\Omega_i - \Omega_{i-1})$ times a radial factor), its limit for dynamical shear `QWRMAX` (from [[setupv.f#SETUPV|SETUPV]]), the total luminosity `CLTOT`, the time step `DT`, $\log P$, and the interpolation weights `FACI` (filled by `SETUPV`; formerly COMMON `INTFAC`, now owned by `SECULR`). Through modules, mostly filled by `SETUPV`: the velocity factors `FES1`–`FES3`, `FGSFK`, `FACT6` (`TAUKH_MOD`), `FACT1`–`FACT8` (`VFACT_MOD`), the shell-midpoint quantities (`INTVAR_MOD`: `RM`, `HGM`, `ALM`, …), the physics at each shell (`MDPHY_MOD`: $\mu$ `AMUM`, the viscosity `VISCM`, the thermal diffusivity `THDIFM`, …), the quadrupole moment and gravity (`QUADRU_MOD`: `QUAD`, `GG`), the $\theta$ terms (`OLDROT2_MOD`), and the namelist parameters in `NMLPAR_MOD` (formerly `VMULT`, `VMULT2`, `NOTRAN`, `VARFC`): the scale factors `FES`, `FGSF`, `FSS`, `FMU`, `FC`, `FESC`, `FGSFC`, `RCRIT` and the switches `IES`, `IGSF`, `IMU`, `LNOJ`, `LDIFAD`.
@@ -41,7 +41,7 @@
 
     > **Question** ([[#L595]]; [[#L269-L271]]; [[#L605]]). **Sign of the meridional velocity.** With `LDIFAD`, the circulation is signed, but `VES` is made positive by `ABS(FES*VES)` for every interface before `HV` is formed, so `HV` never sees a negative `VES`; only `VESA` (the advective part) keeps its sign. So `HV` takes $|v_\mathrm{ES}|$ of a signed circulation: intended?
 
-7. **No transport in the core** (`LNOJ`, 9/93): from `IMIN` outward, the velocities are zeroed while $L(r)/L_\mathrm{tot} < 0.99$, "to avoid numerical problems in the H-burning shell".
+7. **No transport in the core** (`LNOJ`, 9/93): from `IMIN` outward, the velocities are zeroed while $L(r)/L_\mathrm{tot} < 0.99$, "to avoid numerical problems in the H-burning shell."
 
     > **Question** ([[#L671-L687]]). **`LNOJ`'s threshold.** The core is defined as $L(r)/L_\mathrm{tot} < 0.99$, hard-coded. Should it be a parameter?
 
@@ -55,34 +55,83 @@
 
 ## Bugs, by priority
 
-1. **(a)** **The $\mu$ factor compounds on `FESTIME`.** ([[#L256]]; [[#L304-L317]]) The $\mu$ loop multiplies `FESTIME` (and `FV0`) by $f_\mu$ in place at every call. [[setupv.f#SETUPV|SETUPV]] sets them once per call of [[seculr.f#SECULR|SECULR]] ([[setupv.f#L337]]), before its iterations, and SECULR calls VCIRC once per iteration ([[seculr.f#L190-L191]], [[seculr.f#L230-L231]]), so at iteration $n$, `THN = FESTIME*(THM*QW-THP)/DT` carries the $n-1$ earlier factors ($f_\mu^{\,n-1}$ when $\mu$ does not change); and `THN` enters `VESA` and `VES` ([[#L257]], [[#L269]]), which the same loop then multiplies by $f_\mu$ once more. `FESTIME` is read nowhere else, and `FV0` nowhere at all. What follows: `THN` wrong from the second iteration on, only with `LDIFAD` (off by default) and `ITDIF2` > 1 (the default is 1). Read from the code, not run. **A possible fix:**
+1. **(cannot be reached)** **The $\mu$ factor compounds on `FESTIME`.** ([[#L256]]; [[#L304-L317]]) The $\mu$ loop multiplies `FESTIME` (and `FV0`) by $f_\mu$ in place at every call. [[setupv.f#SETUPV|SETUPV]] sets them once per call of [[seculr.f#SECULR|SECULR]] ([[setupv.f#L337]]), before its iterations, and SECULR calls VCIRC once per iteration ([[seculr.f#L190-L191]], [[seculr.f#L230-L231]]), so at iteration $n$, `THN = FESTIME*(THM*QW-THP)/DT` carries the $n-1$ earlier factors ($f_\mu^{\,n-1}$ when $\mu$ does not change); and `THN` enters `VESA` and `VES` ([[#L257]], [[#L269]]), which the same loop then multiplies by $f_\mu$ once more. `FESTIME` is read nowhere else, and `FV0` nowhere at all. What follows: `THN` wrong from the second iteration on, only with `LDIFAD` (off by default) and `ITDIF2` > 1 (the default is 1).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to stop rescaling FESTIME and FV0 in place: THN takes
-    C the mu factor through VES and VESA, and the rescaling compounded
-    C over SECULR's iterations.
-    C           FESTIME(I) = FESTIME(I)*QQQ
-    C           FV0(I) = FV0(I)*QQQ
+    **A possible fix:**
+
+    ```diff
+    --- a/src/vcirc.f
+    +++ b/src/vcirc.f
+    @@ -313,8 +313,12 @@
+                 DR = HRU(I) - HRU(I-1)
+                 V2 = 0.2D0*(Q0+Q1)*(OMEGA(I)-OMEGA(I-1))/DR/WM(I)
+     C ADD MU GRADIENTS TO VELOCITY ESTIMATES
+    -            FESTIME(I) = FESTIME(I)*QQQ
+    -            FV0(I) = FV0(I)*QQQ
+    +C 11/09/26 KC via Claude
+    +C code changed to stop rescaling FESTIME and FV0 in place: THN takes
+    +C the mu factor through VES and VESA, and the rescaling compounded
+    +C over SECULR's iterations.
+    +C           FESTIME(I) = FESTIME(I)*QQQ
+    +C           FV0(I) = FV0(I)*QQQ
+     C         WRITE(*,911)I,WM(I),VESA(I),V2,Q0,Q1,THN(I),VES(I),QQQ
+     C 911           FORMAT(I5,1P8E12.3)
+              END DO
     ```
 
-2. **(a)** **`CC` is never set.** ([[#L121-L122]]; [[#L286-L288]]) With `IMU = 3`, `TKHS = SQRT(VISCMI(I)*CC/THDIFMI(I))` uses the local `CC`, whose `DATA` statement (the speed of light) is commented out, so `CC` is undefined: zero if the compiler zeroes saved storage, which makes `TKHS` zero and `VMU` infinite (or NaN where $\mu$ is uniform). Then the reduction of step 6 ([[#L550-L556]]) never leaves a positive `VEST`, and `VES` always falls back to `ABS(FES*VES(I)/FM)`. Only with `IMU = 3` (the default is 1). Read from the code, not run. **A possible fix:**
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The rescaling ran in the four rotating test cases with `IMU` ≠ 3 (from about 0.65 to 2.2 million times, at SECULR's iterations 1 to 10, with $f_\mu$ from 0.13 to 1.28), so `FESTIME` does compound. But it is read only for `THN` in the `LDIFAD` branch ([[#L256]]), and PARMIN stops any run that sets `LDIFAD` with rotation ([[parmin.f#L999-L1006]]), so the wrong `THN` cannot be reached at 7be4133; the condition line never fired. What remains is a factor that compounds unread. Intent: none found.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to restore the speed of light, CC, used by TKHS.
-          DATA CC/2.99792458D10/
+2. **(changes results, small)** **Checked by KC** (Nov 10, 2026). **`CC` is never set.** ([[#L121-L122]]; [[#L286-L288]]) With `IMU = 3`, `TKHS = SQRT(VISCMI(I)*CC/THDIFMI(I))` uses the local `CC`, whose `DATA` statement (the speed of light) is commented out, so `CC` is undefined: zero if the compiler zeroes saved storage, which makes `TKHS` zero and `VMU` infinite (or NaN where $\mu$ is uniform). Then the reduction of step 6 ([[#L550-L556]]) never leaves a positive `VEST`, and `VES` always falls back to `ABS(FES*VES(I)/FM)`. Only with `IMU = 3` (the default is 1).
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/vcirc.f
+    +++ b/src/vcirc.f
+    @@ -119,7 +119,9 @@
+          *          QWLNR(JSON),QWRMAX(JSON),HV(JSON),VMU2(JSON),
+          *          HP(JSON)
+     C SPEED OF LIGHT.
+    -C       DATA CC/2.99792458D10/
+    +C 11/09/26 KC via Claude
+    +C code changed to restore the speed of light, CC, used by TKHS.
+    +      DATA CC/2.99792458D10/
+           SAVE
+     
+     C   SKIPPING CONVECTIVE REGIONS, CHECK FOR INSTABILITY AGAINST EACH
     ```
 
-3. **(a)** **`FES` for the GSF velocity.** ([[#L564-L568]]) With `IMU = 3`, when the reduced GSF velocity is not positive, `VGSF(I) = ABS(FES*VGSF(I)/FM)` uses `FES`, the circulation's factor, where the rest of the GSF branch uses `FGSF` ([[#L559]]). Only with `IMU = 3` and `FES` different from `FGSF` (both default to 1). Read from the code, not run. **A possible fix:**
+    **How the code itself shows it.** `CC` gets a value nowhere: Its only `DATA` line is commented out ([[#L122]], `C       DATA CC/2.99792458D10/`), and no other line assigns it, so the speed of light that this line comments out is the only value the code ever gave it, the value it had before the cleanup, which is what the fix above restores. The units, however, do not fit the comment above the formula, which calls `TKHS` the square root of Kippenhahn's timescale $t_\mathrm{KH}^*$ ([[#L284-L285]]): VISCOS computes the kinematic viscosity ([[viscos.f#L47]]) and the radiative diffusivity `THDIF` $= 16\sigma T^3/(3\kappa\rho^2 c_P)$ ([[viscos.f#L104-L107]]), both in cm$^2$ s$^{-1}$, so `VISCMI*CC/THDIFMI` with `CC` $= c$ has units of cm s$^{-1}$, and its square root is not a time. Was `CC` meant to be the speed of light here, or another constant (a length, or $c$ with a factor that the comment's equation (12) supplies)? The run below measures what restoring $c$ does; the right value is for the developers.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to scale the GSF velocity by FGSF, not FES.
-                VGSF(I) = ABS(FGSF*VGSF(I)/FM)
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The case run with `IMU = 3` (`testsuite/Test_m2p0_feh+0p0_vzams150_IES2_TAMS`) took the path 472,022 times, at shells 2 to 748, and `CC` was 0 every time, so `TKHS` was zero; the run, in the release build, went on without a message. With the speed of light restored, the track changes far beyond the noise: $\log L$ moves by up to 0.0056 dex, $\log T_\mathrm{eff}$ by 0.0020, and central $\log T$ by 0.0055 (at its end, 1.2 Gyr), against about $2\times10^{-8}$ for a null change (nearly every opacity, all with $3 \le \log T \le 9$ and $-6 \le \log\rho \le 9.75$, times $1 + 10^{-10}$, on the same case), and central $X$ by 0.00016 (at 0.076 Gyr), with the same 546 models. The other two cases with `IMU = 3` (`testsuite/Test_m2p0_feh+0p0_vzams150_NoJMixIES2_TAMS` and `testsuite/Test_m2p0_feh+0p0_vzams150_DRIES2_TAMS`) were not run. Intent: The speed of light was commented out as an unused variable (commit c6a51f3, "commented out unused variables detected by ifx"), when the `IMU = 3` branch was itself commented out; when that branch was switched back on (commit 49dfbec), the `DATA` line ([[#L121-L122]]) was not restored: a slip in restoring the branch, though whether $c$ is the right constant there is asked below.
+
+3. **(never occurred)** **`FES` for the GSF velocity.** ([[#L564-L568]]) With `IMU = 3`, when the reduced GSF velocity is not positive, `VGSF(I) = ABS(FES*VGSF(I)/FM)` uses `FES`, the circulation's factor, where the rest of the GSF branch uses `FGSF` ([[#L559]]). Only with `IMU = 3` and `FES` different from `FGSF` (both default to 1).
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/vcirc.f
+    +++ b/src/vcirc.f
+    @@ -562,7 +562,9 @@
+                    VGSFT = 0.0D0
+                 ENDIF
+                 IF(VGSFT.LE.0.0D0)THEN
+    -               VGSF(I) = ABS(FES*VGSF(I)/FM)
+    +C 11/09/26 KC via Claude
+    +C code changed to scale the GSF velocity by FGSF, not FES.
+    +               VGSF(I) = ABS(FGSF*VGSF(I)/FM)
+                 ELSE
+                    VGSF(I) = VGSFT
+                 ENDIF
     ```
 
-4. **(a)** **`IES = 2` with `LDIFAD` reuses the previous call's parts.** ([[#L202-L226]]; [[#L602-L607]]; [[#L629-L632]]) The `IES = 2` loop sets only `VES` and `RAT`; `THN`, `VESA`, `VESD`, `VESD2`, `VESD3` and `EQQCOD` keep the values of the previous call (they are not cleared at [[#L150-L156]]). With `LDIFAD`, they are then multiplied by $f_\mu$ and by `FES` again, and `VESD` gains `RM*(VGSF+VSS)` again, at every call, so it grows from call to call. Only with `IES = 2` and `LDIFAD` (both off by default). Read from the code, not run. **A possible fix:** a choice for the developers: stop with a message when `IES = 2` and `LDIFAD` are both set, or compute the `LDIFAD` parts in the `IES = 2` loop as the default loop does.
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): In `testsuite/Test_m2p0_feh+0p0_vzams150_IES2_TAMS` the fallback ran 473,160 times, but with `VGSF` = 0 every time, so the factor multiplied zero; and `FES` = `FGSF` = 1 in every namelist, so the condition line never fired. A run with `IMU = 3`, `FES` ≠ `FGSF`, and a positive GSF velocity would reach it; none was run. Intent: none found.
+
+4. **(cannot be reached)** **`IES = 2` with `LDIFAD` reuses the previous call's parts.** ([[#L202-L226]]; [[#L602-L607]]; [[#L629-L632]]) The `IES = 2` loop sets only `VES` and `RAT`; `THN`, `VESA`, `VESD`, `VESD2`, `VESD3` and `EQQCOD` keep the values of the previous call (they are not cleared at [[#L150-L156]]). With `LDIFAD`, they are then multiplied by $f_\mu$ and by `FES` again, and `VESD` gains `RM*(VGSF+VSS)` again, at every call, so it grows from call to call. Only with `IES = 2` and `LDIFAD` (both off by default).
+
+    **A possible fix:** a choice for the developers: stop with a message when `IES = 2` and `LDIFAD` are both set, or compute the `LDIFAD` parts in the `IES = 2` loop as the default loop does.
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): `testsuite/Test_m2p0_feh+0p0_vzams150_IES2_TAMS` took the `IES = 2` path 1,142 times, but never with `LDIFAD`: PARMIN stops any run that sets `LDIFAD` with rotation ([[parmin.f#L999-L1006]]), so the bug cannot be reached at 7be4133. What remains is code that no run takes.
 
 ### VCIRC
 

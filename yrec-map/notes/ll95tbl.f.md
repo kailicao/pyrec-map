@@ -25,19 +25,40 @@
 
 ## Bugs, by priority
 
-1. **(a)** **The $X = 1 - Z$ tables at $Z$ = 0.06 and 0.08 overwrite the $X = 0$ tables at $Z$ = 0.08 and 0.10.** ([[#L117]], [[#L176-L191]]; [[llot95a_mod.f#L46-L47]]) `NZ` gives $Z$ = 0.06 and 0.08 nine slots each (`NZ` = 100, 109, 118 for the last three $Z$, as `NUMXM` = 9, 9, 8 tables), but the table at $X = 1 - Z$ is stored at `NZ(IZ)+10`. For $Z$ = 0.06 that is slot 110, the slot of the $X = 0$ table at $Z$ = 0.08; for $Z$ = 0.08 it is slot 119, the $X = 0$ table at $Z$ = 0.10. The file is ordered by $X$ (in `GS98.OP17`, tables 125 and 126 are $X$ = 0.94, $Z$ = 0.06 and $X$ = 0.92, $Z$ = 0.08), so these two are read last and overwrite the $X = 0$ tables, while slots 109 and 118 stay empty. The readers use the same `NZ` and the index `JX`, so the $X = 1 - Z$ tables are found where they were stored, but a reader asking for $X = 0$ at $Z$ = 0.08 or 0.10 gets the opacity of a gas with $X \approx 0.93$: [[op954d.f#OP954D|`OP954D`]] ([[op954d.f#L45-L48]]) whenever the $Z$ stencil reaches 0.08 ($Z \ge 0.04$) and the $X$ stencil starts at $X = 0$ ($X < 0.2$), as in a helium-burning core, and always in `GETOPAC`'s helium-burning branch, which calls `GETOPAL95` at $Z = 0.1$ ([[getopac.f#L117-L120]]): There, for $X = 0$, the Lagrange weights in $Z$ and $X$ put all the weight on slot 119, so the interior opacity used for a metal-rich helium-burning core is that of $X = 0.92$, $Z = 0.08$; and [[op95ztab.f#OP95ZTAB|`OP95ZTAB`]] ([[op95ztab.f#L54-L67]]) when `ZOPAL951` > 0.04. Taken with every table file in this format (they all hold the same 126 compositions), in every helium-burning core whose $Z$ reaches 0.04. Read from the code and the table file, not run; the size of the error in $\kappa$ is not traced. **A possible fix,** in `LLOT95A_MOD`, giving every $Z$ ten slots (`LL95TBL` keeps its own `NUMXZ` = 126, the number of tables in the file):
+1. **(changes results, large)** **Checked by KC** (Nov 10, 2026). **The $X = 1 - Z$ tables at $Z$ = 0.06 and 0.08 overwrite the $X = 0$ tables at $Z$ = 0.08 and 0.10.** ([[#L117]], [[#L176-L191]]; [[llot95a_mod.f#L46-L47]]) `NZ` gives $Z$ = 0.06 and 0.08 nine slots each (`NZ` = 100, 109, 118 for the last three $Z$, as `NUMXM` = 9, 9, 8 tables), but the table at $X = 1 - Z$ is stored at `NZ(IZ)+10`. For $Z$ = 0.06 that is slot 110, the slot of the $X = 0$ table at $Z$ = 0.08; for $Z$ = 0.08 it is slot 119, the $X = 0$ table at $Z$ = 0.10. The file is ordered by $X$ (in `GS98.OP17`, tables 125 and 126 are $X$ = 0.94, $Z$ = 0.06 and $X$ = 0.92, $Z$ = 0.08), so these two are read last and overwrite the $X = 0$ tables, while slots 109 and 118 stay empty. The readers use the same `NZ` and the index `JX`, so the $X = 1 - Z$ tables are found where they were stored, but a reader asking for $X = 0$ at $Z$ = 0.08 or 0.10 gets the opacity of a gas with $X \approx 0.93$: [[op954d.f#OP954D|`OP954D`]] ([[op954d.f#L45-L48]]) whenever the $Z$ stencil reaches 0.08 ($Z \ge 0.04$) and the $X$ stencil starts at $X = 0$ ($X < 0.2$), as in a helium-burning core, and always in `GETOPAC`'s helium-burning branch, which calls `GETOPAL95` at $Z = 0.1$ ([[getopac.f#L117-L120]]): There, for $X = 0$, the Lagrange weights in $Z$ and $X$ put all the weight on slot 119, so the interior opacity used for a metal-rich helium-burning core is that of $X = 0.92$, $Z = 0.08$; and [[op95ztab.f#OP95ZTAB|`OP95ZTAB`]] ([[op95ztab.f#L54-L67]]) when `ZOPAL951` > 0.04. Taken with every table file in this format (they all hold the same 126 compositions), in every helium-burning core whose $Z$ reaches 0.04.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to give every Z ten table slots, so that the X=1-Z
-    C tables at Z = 0.06 and 0.08 (slot NZ+10) no longer overwrite the
-    C X=0 tables at Z = 0.08 and 0.10.
-          INTEGER*4, PARAMETER, PRIVATE :: NUMXZ = 130
-    ...
-          INTEGER*4 :: NZ(NUMZ) = (/0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110,
-         *  120/)
+    **A possible fix,** in `LLOT95A_MOD`, giving every $Z$ ten slots (`LL95TBL` keeps its own `NUMXZ` = 126, the number of tables in the file):
+
+    ```diff
+    --- a/src/llot95a_mod.f
+    +++ b/src/llot95a_mod.f
+    @@ -34,7 +34,11 @@
+           INTEGER*4, PARAMETER, PRIVATE :: NUMD = 19
+           INTEGER*4, PARAMETER, PRIVATE :: NUMT = 70
+           INTEGER*4, PARAMETER, PRIVATE :: NUMX = 10
+    -      INTEGER*4, PARAMETER, PRIVATE :: NUMXZ = 126
+    +C 11/09/26 KC via Claude
+    +C code changed to give every Z ten table slots, so that the X=1-Z
+    +C tables at Z = 0.06 and 0.08 (slot NZ+10) no longer overwrite the
+    +C X=0 tables at Z = 0.08 and 0.10.
+    +      INTEGER*4, PARAMETER, PRIVATE :: NUMXZ = 130
+           INTEGER*4, PARAMETER, PRIVATE :: NUMZ = 13
+     
+           REAL*8    :: TGR(NUMT)
+    @@ -44,6 +48,7 @@
+          *  0.08D0, 0.10D0/)
+           REAL*8    :: CAPPA2(NUMXZ,NUMT,NUMD)
+           INTEGER*4 :: NUMXM(NUMZ) = (/10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 9, 9, 8/)
+    -      INTEGER*4 :: NZ(NUMZ) = (/0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 109, 118/)
+    +      INTEGER*4 :: NZ(NUMZ) = (/0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110,
+    +     *  120/)
+     
+           END MODULE LLOT95A_MOD
     ```
 
+    **How the code itself shows it.** The reader stores each table by its position in the $X$ grid, not by its count: `N = NZ(IZ)+IX` ([[#L117]]), where `IX` = 10 is the table at $X = 1 - Z$ ([[#L118-L122]]). The loop at [[#L177-L190]] skips `IX` = 9 ($X$ = 0.95) for $Z$ = 0.06, 0.08, and 0.10 (`NMAX = NUMZ - 3`) but still reads `IX` = 10 for $Z$ = 0.06 and 0.08 (`NMAX = NUMZ - 1`), so each of these two $Z$ holds nine tables spread over ten positions. [[op95ztab.f#OP95ZTAB|`OP95ZTAB`]] reads the slots by $X$ position for every $Z$ as well: `NZ(IDZ)+I` for the tables 1–8 ([[op95ztab.f#L54-L59]]), `NZ(IDZ2)+9` for $X$ = 0.95 ([[op95ztab.f#L85-L88]]), and `NZ(IDZ2)+10` for $X = 1 - Z$ ([[op95ztab.f#L114-L117]]); so does [[op954d.f#OP954D|`OP954D`]], with `IZ = NZ(JZ+K-1)` and `IXZ = JX(K,J)+IZ` ([[op954d.f#L45-L48]]). `NZ`'s steps of 9 after $Z$ = 0.06 and 0.08 (100, 109, and 118; [[llot95a_mod.f#L47]]) follow `NUMXM`, the number of tables at each $Z$ ([[llot95a_mod.f#L46]]), which nothing else reads, while every index into `CAPPA2` counts positions. The fix makes the steps 10 throughout, as for the first ten $Z$.
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): 34 runs, 26 of YREC's cases (from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning) and 8 made-up ones (each one of YREC's cases with a few settings changed), of which one stopped in its first second. In all 33 others, the tables at $X$ = 0.94, $Z$ = 0.06 and $X$ = 0.92, $Z$ = 0.08 were stored over the $X = 0$ slots at the start. The 4-D interpolation then took one of them as the $X = 0$ table in six runs, all with helium-burning or giant cores, with the full weight in $X$ on it: 85 million times in YREC's `examples/run_from_zahb_to_tahb/ZAHB_m1p0feh+0p0_TAHB` run with the AAG21 table of [[getopal95.f#GETOPAL95|GETOPAL95]]'s bug 2, 64 million in `examples/run_from_zahb_to_tahb/ZAHB_m0p8feh+0p0_TAHB`, 31 million in `testsuite/Test_m9p0feh+0p0GS98_base_TAHB`, 29 million in `testsuite/Test_m0p95feh+0p0_GN93_TAHB`, and fewer in two more. With the fix, `testsuite/Test_m0p95feh+0p0_GN93_TAHB` changes by up to 0.36 dex in $\log L$, 0.083 dex in $\log T_c$, and 0.43 in central $Y$, against $1.7\times10^{-7}$ dex, $3.8\times10^{-8}$ dex, and $8\times10^{-9}$ for the null change used as a noise floor (nearly every opacity, all with $3 \le \log T \le 9$ and $-6 \le \log\rho \le 9.75$, times $1 + 10^{-10}$): real and large; the track ends at 0.0943 Gyr instead of 0.1293 (854 models instead of 966), both runs ending normally. On the 3 $M_\odot$ giant `testsuite/Test_3Msolar_GS_rot_gray_OPALSCV_SF2_GS98_OP_CF10_RGp2diffrotI3cz2`, the change is within the noise. Intent: none found.
 
 ### LL95TBL
 

@@ -2,7 +2,7 @@
 
 **Purpose.** `GETROT` turns a run of specific angular momentum $j(m)$ into a rotation curve $\Omega(m)$. Radiative shells are treated one at a time; each convection zone is given its rotation law as a whole. (Its comment calls it `GETW`, an older name.)
 
-> **Question** ([[#L21-L23]]). **A stale name.** The comment begins "GETW takes the angular momentum distribution…"; the routine is `GETROT`, and `GETW` is another routine. Should the comment name `GETROT`?
+**The comment names another routine.** It begins "GETW TAKES THE ANGULAR MOMENTUM DISTRIBUTION…" ([[#L21-L23]]), but the routine is `GETROT`, and [[getw.f#GETW|`GETW`]] is another routine, so the comment should name `GETROT`.
 
 **How it fits.**
 - **Who calls it:** [[checkj.f#CHECKJ|CHECKJ]], [[crrect.f#CRRECT|CRRECT]], [[getnewenv.f#GETNEWENV|GETNEWENV]], [[getw.f#GETW|GETW]], [[hpoint.f#HPOINT|HPOINT]] and [[midmod.f#MIDMOD|MIDMOD]].
@@ -16,23 +16,35 @@
 
 ## Bugs, by priority
 
-1. **(a)** **A one-shell convective surface is never treated.** ([[#L33-L37]]; [[#L51-L58]]) If only the last shell is convective (`LCZ(M)` true, `LCZ(M-1)` false), the loop marks the start of a convection zone at `I = M` and ends without calling `WCZIMP` or `SOLID` for it; the case `I.EQ.M` is reached only when the zone began below `M`. What follows: `OMEGA(M)`, `HI(M)`, `ETA2(M)`, `R0(M)` and `QIW(M)` keep the values they had before the call, and are not those of the current `HJM(M)` and structure. Only with rotation (`LROT`, off by default), and only for a model whose surface convection zone is a single shell; whether such models occur was not checked. Read from the code, not run. **A possible fix:**
+1. **(never occurred)** **A one-shell convective surface is never treated.** ([[#L33-L37]]; [[#L51-L58]]) If only the last shell is convective (`LCZ(M)` true, `LCZ(M-1)` false), the loop marks the start of a convection zone at `I = M` and ends without calling `WCZIMP` or `SOLID` for it; the case `I.EQ.M` is reached only when the zone began below `M`. What follows: `OMEGA(M)`, `HI(M)`, `ETA2(M)`, `R0(M)` and `QIW(M)` keep the values they had before the call, and are not those of the current `HJM(M)` and structure. Only with rotation (`LROT`, off by default), and only for a model whose surface convection zone is a single shell.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to treat a convection zone that starts at the last
-    C shell.
-                ELSE
-    C  CONVECTION ZONE START - SET LCONVZ TO T
-                   LCONVZ = .TRUE.
-                   JSTART = I
-                   IF(I.EQ.M) THEN
-                      JEND = M
-                      CALL WCZIMP(HD,HJM,HR,HS,HS2,JSTART,JEND,ETA2,HI,
-         *                 OMEGA,QIW,R0,M)
-                   ENDIF
-                ENDIF
+    **A possible fix:**
+
+    ```diff
+    --- a/src/getrot.f
+    +++ b/src/getrot.f
+    @@ -30,10 +30,18 @@
+                    JEND = I
+                    CALL SOLID(HD,HJM,HR,HS,HS2,JSTART,JEND,ETA2,HI,OMEGA,
+          *          QIW,R0,M)
+    +C 11/09/26 KC via Claude
+    +C code changed to treat a convection zone that starts at the last
+    +C shell.
+                 ELSE
+     C  CONVECTION ZONE START - SET LCONVZ TO T
+                    LCONVZ = .TRUE.
+                    JSTART = I
+    +               IF(I.EQ.M) THEN
+    +                  JEND = M
+    +                  CALL WCZIMP(HD,HJM,HR,HS,HS2,JSTART,JEND,ETA2,HI,
+    +     *                 OMEGA,QIW,R0,M)
+    +               ENDIF
+                 ENDIF
+              ELSE IF(.NOT.LCZ(I)) THEN
+     C  THE PREVIOUS SHELL WAS CONVECTIVE.  IF THIS ONE IS RADIATIVE, ENFORCE
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): A convection zone started in all five rotating test cases (from 6,703 times in `testsuite/Test_m2p0_feh+0p0_vzams150_IES2_TAMS` to 27,038 in `testsuite/Test_solarGS98_difrotmixper18p4d1p0`), at shells 1 to 928 in models of 350 to 1,070 shells, but never at the last shell: No model had a single-shell surface convection zone, not even in the 2 and 3 $M_\odot$ cases, so no run reached the bug. It needs a rotating model whose surface convection zone is a single shell; none of YREC's cases was found to have one. Intent: none found; the special case ([[#L51-L58]]) covers only a zone that began below the surface.
 
 ### GETROT
 

@@ -2,7 +2,9 @@
 
 **Purpose.** `SPLINT` evaluates a cubic spline at one point $x$, from the table $(x_i, y_i)$ and the second derivatives $y''_i$ computed beforehand: by [[splinj.f#SPLINJ|SPLINJ]], or, for the opacity routine GTPURZ, by [[cspline.f#CSPLINE|CSPLINE]] (computed there, or tabulated by ZSULAOL). The comments say it is taken from Numerical Recipes (Press et al., p. 89) and was changed from `REAL*4`, for the opacities, to `REAL*8` (MHP, 10/02).
 
-> **Question** ([[#L7-L10]]). **The comment's reference.** The header's "SPLINE ABOVE" is Numerical Recipes' text: its `spline` (with end slopes) is [[cspline.f#CSPLINE|CSPLINE]] here, while `spline.f` is an unrelated quadratic spline. A comment to update?
+The header's "OUTPUT OF SPLINE ABOVE" ([[#L7-L10]]) is Numerical Recipes' text: Its `spline` (with end slopes) is [[cspline.f#CSPLINE|CSPLINE]] here, while `spline.f` is an unrelated quadratic spline. The second derivatives come from [[splinj.f#SPLINJ|SPLINJ]] in BOOLE and CALCAD ([[boole.f#L48-L51]]; [[calcad.f#L347-L348]]) and from CSPLINE in GTPURZ, directly ([[gtpurz.f#L115-L116]]) and through the `ZSDORL` that ZSULAOL stores ([[gtpurz.f#L78-L82]]; [[zsulaol.f#L40-L44]]).
+
+> **Question** ([[#L7-L10]]). **The comment's reference.** Should the header name both `SPLINJ` and `CSPLINE` as the routines whose output `Y2A` is?
 
 **How it fits.**
 - **Who calls it:** [[boole.f#BOOLE|BOOLE]], [[calcad.f#CALCAD|CALCAD]], and the low-temperature opacity routine [[gtpurz.f#GTPURZ|GTPURZ]] (GTLAOL and GTLAOL2, and the table routine SULAOL, removed since `rp_1`, were the others).

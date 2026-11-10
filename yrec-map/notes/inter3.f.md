@@ -4,7 +4,7 @@
 
 **How it fits.** Called by [[setscv.f#SETSCV|`SETSCV`]] (interpolation in the SCV equation-of-state tables), [[surfp.f#SURFP|`SURFP`]] and [[kcsurfp.f#KCSURFP|`KCSURFP`]] (interpolation in gravity in the surface-pressure tables). No modules, no calls. The 4-point version is [[interp.f#INTERP|`INTERP`]].
 
-> **Question** ([[#L18-L19]]). **Stale comment.** The comment says `INTER3` is "the interpolation routine for density in the Livermore opacity tables", but its callers are the SCV EOS set-up and the surface-pressure routines. Is the comment from an older use, to be updated?
+**The header's "Livermore opacity tables" is from an older use.** The comment says `INTER3` is "the interpolation routine for density in the Livermore opacity tables" ([[#L18-L19]]), but its only callers are the SCV EOS set-up ([[setscv.f#L114]]; [[setscv.f#L193]]; [[setscv.f#L208]]; [[setscv.f#L242]]) and the surface-pressure routines ([[surfp.f#L81]]; [[kcsurfp.f#L90]]), none an opacity routine.
 
 **The method.** For nodes $a_1, a_2, a_3$ (`A`), the weights `B` and derivative weights `C` are
 

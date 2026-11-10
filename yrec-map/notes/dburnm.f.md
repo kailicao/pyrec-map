@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** The same deuterium burning as [[dburn.f#DBURN|DBURN]], for the substeps of a model in the middle of a time step: it is called by [[midmod.f#MIDMOD|MIDMOD]] with rates interpolated to the substep and with the accreted mass scaled to the substep's share ("unlike the routine called by MIX, the timestep here is only a portion of the total model DT"). Its header still says "DBURN".
+**Purpose.** The same deuterium burning as [[dburn.f#DBURN|DBURN]], for the substeps of a model in the middle of a time step: it is called by [[midmod.f#MIDMOD|MIDMOD]] with rates interpolated to the substep and with the accreted mass scaled to the substep's share ("unlike the routine called by MIX, the timestep here is only a portion of the total model DT"). Its header still says "DBURN."
 
 **How it fits.**
 - **Inputs:** as DBURN, plus `DRATEM`, `DRATEM0` (the rates at the end and start of the substep, interpolated in MIDMOD from `DRATE0`, `DRATE` with the fraction `FAC2`) and `FAC2` itself. `DT` is in seconds (MIDMOD's `FAC2 = DT/DELTS`), converted to Gyr with `DTT = DT*1.0D-9/CSECYR` (`CSECYR` from `CONSTANTS_MOD`, formerly `/CONST3/`). The other module data are DBURN's: `HCOMPP` from `OLDMOD_MOD`, `FMASSACC` from `DEUTER_MOD`, `LMDOT` and `COMPACC` from `NMLPAR_MOD`.
@@ -20,14 +20,28 @@ $$X_D = \frac{X_{D,\mathrm{old}}\,M + f_a X_{D,\mathrm{acc}}}{M + f_a}.$$
 
 ## Bugs, by priority
 
-1. **(d)** **`FMASSACC` is read under mass loss.** ([[#L109]]; [[#L140-L145]]) As in DBURN ([[dburn.f#b1]]): The accretion branch does not test `DMDT0 > 0`, so in a run that only loses mass it blends with an `FMASSACC` that [[mdot.f#MDOT|MDOT]] never set ([[mdot.f#L320]], [[deuter_mod.f#L30]]); with the usual zero start value the result is the same as without accretion. Only with `LMDOT` (off by default). Read from the code, not run. **A possible fix:**
+1. **(not reached)** **`FMASSACC` is read under mass loss.** ([[#L109]]; [[#L140-L145]]) As in DBURN ([[dburn.f#b1]]): The accretion branch does not test `DMDT0 > 0`, so in a run that only loses mass it blends with an `FMASSACC` that [[mdot.f#MDOT|MDOT]] never set ([[mdot.f#L320]], [[deuter_mod.f#L30]]); with the usual zero start value the result is the same as without accretion. Only with `LMDOT` (off by default).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to take the accretion branch only when mass is gained,
-    C since MDOT sets FMASSACC only then.
-          IF(LMDOT .AND. IEND.EQ.M .AND. DMDT0.GT.0.0D0)THEN
+    **A possible fix:**
+
+    ```diff
+    --- a/src/dburnm.f
+    +++ b/src/dburnm.f
+    @@ -106,7 +106,10 @@
+              R0 = R0 + DELRATE
+           END DO
+     C INCLUDE MASS ACCRETION FROM DEUTERIUM BURNING
+    -      IF(LMDOT .AND. IEND.EQ.M)THEN
+    +C 11/09/26 KC via Claude
+    +C code changed to take the accretion branch only when mass is gained,
+    +C since MDOT sets FMASSACC only then.
+    +      IF(LMDOT .AND. IEND.EQ.M .AND. DMDT0.GT.0.0D0)THEN
+     C ACCRETED MATTER IS EXPOSED TO BURNING FOR, ON
+     C AVERAGE. 1/2 OF THE TIMESTEP.  FMASSACC IS
+     C DEFINED AS DMDT*DT/ORIGINAL CZ MASS.
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached in any of 34 runs (26 of YREC's cases, from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning, and 8 made-up ones). DBURNM runs only in MIDMOD, which only GETW calls, in rotating runs, and the two made-up mass-loss runs (YREC's 3 $M_\odot$ main-sequence and 1 $M_\odot$ giant-branch cases with `LMDOT` and `LREIMER` on) do not rotate. Reaching it needs `LMDOT` with `LROT`, which no case of YREC's sets. In DBURN, where the same branch was taken under mass loss ([[dburn.f#b1]]), `FMASSACC` was 0 and the result unchanged.
 
 ### DBURNM
 

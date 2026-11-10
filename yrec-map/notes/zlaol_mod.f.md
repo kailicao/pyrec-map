@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `ZLAOL_MOD` holds the LAOL89 opacity table for pure metals ("pure Z", "DBG 12/95"), as read, used at high $Z$ and $T$ when `LPUREZ` is set. Shared by 3 routines. It replaces `COMMON/ZLAOL/` (MHP via Claude, 10/14/26). The dimensions (104 densities, 52 temperatures) are literal, as in the block.
+**Purpose.** `ZLAOL_MOD` holds the LAOL89 opacity table for pure metals ("pure Z," "DBG 12/95"), as read, used at high $Z$ and $T$ when `LPUREZ` is set. Shared by 3 routines. It replaces `COMMON/ZLAOL/` (MHP via Claude, 10/14/26). The dimensions (104 densities, 52 temperatures) are literal, as in the block.
 
 **What its variables hold, who sets them, who reads them.**
 - `ZOLAOL(104,52)`: the opacity $\kappa$ at each density and temperature (0 where the table has no entry); `ZORHO(104)`, `ZOT(52)`: the density and temperature grids; `NUMRHOZ`, `NUMTZ`: their sizes. All read from the file by [[rdzlaol.f#RDZLAOL|`RDZLAOL`]].

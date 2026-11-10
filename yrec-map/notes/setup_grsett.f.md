@@ -9,13 +9,13 @@
 - **Outputs:** `IBEGIN`, `IEND` (the range), `LALLCZ` (true when settling is skipped), `HRU`, `HTU` (radius and temperature in Bahcall–Loeb units), `HQPR`, `HS1`, `DT`, `STOT` converted in place, and the coefficients `COD1`, `COD2`, `QCOD1X`, `QCOD2X`; for metals, `COD1Z`, `COD2Z`, `QCOD1Z`, `QCOD2Z`, arguments whose storage `GRSETT` owns and passes on to [[model_to_equal.f#MODEL_TO_EQUAL|`MODEL_TO_EQUAL`]]. The conversion factors go to `CONFAC_MOD` (`CON_RAD`, `CON_MASS`, `CON_TEMP`, `CON_TIME`), shared with [[equal_to_model.f#EQUAL_TO_MODEL|`EQUAL_TO_MODEL`]] and the `MICRODIFF` routines.
 
 **The method.**
-1. **Range.** `IBEGIN` is the first shell above a convective core with $X >$ `XMIN`; `IEND` is the last shell below a convective envelope. The helium check then moves `IEND` down to the first shell at or below it with $Y >$ `YMIN` (settled from the code, Nov 9, 2026: `IEND = I` after label 47, [[#L149-L160]]). A fully convective model, or one with no shell above either limit, is skipped (`LALLCZ`), with a message; the comment before the helium check's exit says "HYDROGEN-FREE MODEL", but the test and the printed message are on helium ([[#L154-L156]]). The coefficients below are computed for every shell, 1 to `M`, not only within the range.
+1. **Range.** `IBEGIN` is the first shell above a convective core with $X >$ `XMIN`; `IEND` is the last shell below a convective envelope. The helium check then moves `IEND` down to the first shell at or below it with $Y >$ `YMIN` (settled from the code, Nov 9, 2026: `IEND = I` after label 47, [[#L149-L160]]). A fully convective model, or one with no shell above either limit, is skipped (`LALLCZ`), with a message; the comment before the helium check's exit says "HYDROGEN-FREE MODEL," but the test and the printed message are on helium ([[#L154-L156]]). The coefficients below are computed for every shell, 1 to `M`, not only within the range.
 2. **Units** (Bahcall and Loeb): $r$ in $R_\odot$ (6.9598×10$^{10}$ cm), $T$ in $10^7$ K, masses multiplied by `CON_MASS` $=10^{-2}/R_\odot^3$ ($R_\odot$ in cm), time in $2.7\times10^{13}$ yr ("includes factor of 2.2 from ln lambda").
 
-    > **Question** ([[#L168-L169]]; [[#L206]]). **$\ln\Lambda$ counted twice?** `CON_TIME` "includes factor of 2.2 from ln lambda", and `FAC` also divides by $\ln\Lambda$, which is 2.2 by default. Does the time unit already absorb the 2.2, so that dividing again gives a factor $1/2.2$ too many? Or is the comment about the unit's history only?
+    > **Question** ([[#L168-L169]]; [[#L206]]). **$\ln\Lambda$ counted twice?** `CON_TIME` "includes factor of 2.2 from ln lambda," and `FAC` also divides by $\ln\Lambda$, which is 2.2 by default. Does the time unit already absorb the 2.2, so that dividing again gives a factor $1/2.2$ too many? Or is the comment about the unit's history only?
 3. **Coulomb logarithm** $\ln\Lambda$, by `ILAMBDA`: 2.2 (default); Noerdlinger (1977), $\ln\Lambda = -19.7 - \tfrac12\ln\frac{4}{3X+1} - \tfrac12\ln\rho + \tfrac32\ln T$; Loeb (1989), $\ln\Lambda = -19.105747 - \tfrac12\ln\rho + \tfrac32\ln T$; or (4) a separate value for each pair of species from the Debye length or interionic distance, $\ln\Lambda_{ij} = 0.81245\,\ln\bigl(1 + 0.18769\,x_{ij}^{1.2}\bigr)$. Option 4 reaches only `THDIFF` (helium with `LTHOUL` true and `LTHOULFIT` false); `FAC` below, and the metals' factor, then use the default 2.2.
 
-    > **Question** ([[#L193-L204]]; [[#L228-L267]]; [[parmin.f#L1245-L1252]]). **`ILAMBDA`.** In the code, 2 is Noerdlinger's formula, 3 Loeb's, 4 (in the Thoul solution) a value from the local density and temperature, and any other value the constant 2.2; the default is 1, the constant. The documentation recommends 4 and calls it "a constant, 2.2". Which value is recommended, and should the default follow? (`LDIFLI` sets `ILAMBDA = 4` in [[parmin.f#PARMIN|PARMIN]]; `LTHOUL`, "rarely used" in the documentation, is also forced on by `LDIFZ` and `LDIFLI` there.)
+    > **Question** ([[#L193-L204]]; [[#L228-L267]]; [[parmin.f#L1245-L1252]]). **`ILAMBDA`.** In the code, 2 is Noerdlinger's formula, 3 Loeb's, 4 (in the Thoul solution) a value from the local density and temperature, and any other value the constant 2.2; the default is 1, the constant. The documentation recommends 4 and calls it "a constant, 2.2." Which value is recommended, and should the default follow? (`LDIFLI` sets `ILAMBDA = 4` in [[parmin.f#PARMIN|PARMIN]]; `LTHOUL`, "rarely used" in the documentation, is also forced on by `LDIFZ` and `LDIFLI` there.)
 4. **Helium coefficients.** The equation, in the comment's words, is
    $$\frac{\partial X}{\partial t} = \frac{1}{\rho r^2}\frac{\partial}{\partial r}\Bigl(D_1 + D_2\frac{\partial X}{\partial r}\Bigr),$$
    with $F = f_Y\,r^2 T^{5/2}/\ln\Lambda$ (`FAC`, $f_Y$ = `FGRY`). Without `LTHOUL` (Bahcall and Loeb):
@@ -27,22 +27,44 @@
     > **Question** ([[#L275-L285]]). **Derivatives from the fits, coefficients from `THDIFF`.** With `LTHOUL` and not `LTHOULFIT`, $A_P$ and $A_T$ come from `THDIFF`, but their $X$-derivatives (`QAPX`, `QATX`) and $A_C$ always come from the quadratic fits. Is this intended as an approximation, and how far do the fits' derivatives stray from those of `THDIFF`'s coefficients over the range of $X$ in a solar model?
 5. **Metals** (with `LDIFZ` and `LTHOUL`): the same form with Thoul's coefficients for fully ionized iron, $f_Z$ = `FGRZ`, and the factor `CSTDIFFMIX` on $D_1$. `LDIFZ` always comes with `LTHOUL`, since [[parmin.f#PARMIN|PARMIN]] sets `LTHOUL` (and `LDIFY`) whenever `LDIFZ` is on, so the metals' coefficients are always set when they are used (settled from the code, Nov 9, 2026: [[parmin.f#L1239-L1242]]; [[#L295-L319]]).
 
-**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) (Gravitational settling & microscopic diffusion): `LDIFY`, `LDIFZ`, `LDIFLI` turn on the settling of helium, metals and the light species; `FGRY`, `FGRZ` (default 1) scale the diffusion coefficients of helium and metals (for example 0.75 without rotational mixing); `XMIN` and `YMIN` (1.0D-3) turn diffusion off at low central $X$ (and, the documentation says, low surface $Y$). `ILAMBDA` chooses the Coulomb logarithm of the collision integrals: the documentation's line reads "4 (recommended) is a constant, 2.2". Among the rarely used options: `LTHOUL`, the formalism of Thoul et al., and `LTHOULFIT`, its published fit instead of the full solution (not recommended).
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) (Gravitational settling & microscopic diffusion): `LDIFY`, `LDIFZ`, `LDIFLI` turn on the settling of helium, metals and the light species; `FGRY`, `FGRZ` (default 1) scale the diffusion coefficients of helium and metals (for example 0.75 without rotational mixing); `XMIN` and `YMIN` (1.0D-3) turn diffusion off at low central $X$ (and, the documentation says, low surface $Y$). `ILAMBDA` chooses the Coulomb logarithm of the collision integrals: the documentation's line reads "4 (recommended) is a constant, 2.2." Among the rarely used options: `LTHOUL`, the formalism of Thoul et al., and `LTHOULFIT`, its published fit instead of the full solution (not recommended).
 
 **Changed since `rp_1`.** The metals' coefficients `COD1Z`, `COD2Z`, `QCOD1Z`, `QCOD2Z` are arguments (formerly `/GRAVSZ/`); the unused `/GSCOF/` is dropped; otherwise declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 
 ## Bugs, by priority
 
-1. **(a)** **The derivatives miss the mixing factors.** ([[#L288-L291]]; [[#L311]]; [[#L316]]) With `LTHOUL`, `COD1` and `COD2` are multiplied by `CSTMIXING`, but their $X$-derivatives `QCOD1X`, `QCOD2X` are not; `COD1Z` is multiplied by `CSTDIFFMIX*CSTMIXING`, but its derivative `QCOD1Z` by `CSTMIXING` only. [[grsett.f#GRSETT|`GRSETT`]] uses the derivatives to correct the coefficients for the change in $X$ (and $Z$) within the step ([[grsett.f#L173-L185]]; [[get_imp_diffco.f#L19-L21]]), so with a factor other than 1 the correction is that of the unscaled coefficient. What follows: The second-order correction of the settling coefficients is off by the factor; the size of the effect was not estimated. Only with `LTHOUL` (off by default; forced on by `LDIFZ` and `LDIFLI`) and `CSTMIXING` or `CSTDIFFMIX` set to a value other than 1 (both default 1). Read from the code, not run. **A possible fix:**
+1. **(not reached)** **The derivatives miss the mixing factors.** ([[#L288-L291]]; [[#L311]]; [[#L316]]) With `LTHOUL`, `COD1` and `COD2` are multiplied by `CSTMIXING`, but their $X$-derivatives `QCOD1X`, `QCOD2X` are not; `COD1Z` is multiplied by `CSTDIFFMIX*CSTMIXING`, but its derivative `QCOD1Z` by `CSTMIXING` only. [[grsett.f#GRSETT|`GRSETT`]] uses the derivatives to correct the coefficients for the change in $X$ (and $Z$) within the step ([[grsett.f#L173-L185]]; [[get_imp_diffco.f#L19-L21]]), so with a factor other than 1 the correction is that of the unscaled coefficient. What follows: The second-order correction of the settling coefficients is off by the factor; the size of the effect was not estimated. Only with `LTHOUL` (off by default; forced on by `LDIFZ` and `LDIFLI`) and `CSTMIXING` or `CSTDIFFMIX` set to a value other than 1 (both default 1).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to scale the X-derivatives by the same mixing factors
-    C as the coefficients.
-                COD1(I) = CSTMIXING*FAC*HQPR(I)*X*(AP+AT)
-                COD2(I) = CSTMIXING*FAC*AC
-                QCOD1X(I) = CSTMIXING*FAC*HQPR(I)*(AP+AT+X*(QAPX+QATX))
-                QCOD2X(I) = CSTMIXING*FAC*QACX
-    ...
-                   QCOD1Z(I) = CSTDIFFMIX*CSTMIXING*FAC*HQPR(I)*(AP+AT)
+    **A possible fix:**
+
+    ```diff
+    --- a/src/setup_grsett.f
+    +++ b/src/setup_grsett.f
+    @@ -285,10 +285,13 @@
+                 QACX = -1.42D0 + 1.294D0*X
+     CFD 10/09 Mimic Mixing to reduce settling.
+     C            COD1(I) = FAC*HQPR(I)*X*(AP+AT)
+    +C 11/09/26 KC via Claude
+    +C code changed to scale the X-derivatives by the same mixing factors
+    +C as the coefficients.
+                 COD1(I) = CSTMIXING*FAC*HQPR(I)*X*(AP+AT)
+                 COD2(I) = CSTMIXING*FAC*AC
+    -            QCOD1X(I) = FAC*HQPR(I)*(AP+AT+X*(QAPX+QATX))
+    -            QCOD2X(I) = FAC*QACX
+    +            QCOD1X(I) = CSTMIXING*FAC*HQPR(I)*(AP+AT+X*(QAPX+QATX))
+    +            QCOD2X(I) = CSTMIXING*FAC*QACX
+              ENDIF
+     C        METAL DIFFUSION, USING THE THOUL ET AL. COEFFICIENTS FOR FULLY
+     C        IONIZED IRON.
+    @@ -313,7 +316,7 @@
+     C old ver.     COD2Z(I) = ABS(FAC*AH)
+     C old ver.     QCOD1Z(I) = FAC*HQPR(I)*(AP+AT)
+                    COD2Z(I) = CSTMIXING*ABS(FAC*AH)
+    -               QCOD1Z(I) = CSTMIXING*FAC*HQPR(I)*(AP+AT)
+    +               QCOD1Z(I) = CSTDIFFMIX*CSTMIXING*FAC*HQPR(I)*(AP+AT)
+                    QCOD2Z(I) = 0.0D0
+                 ENDIF
+              ENDIF
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): not reached in any of 34 runs (26 of YREC's cases, from 0.04 to 9 $M_\odot$, with rotation, settling, and helium burning, and 8 made-up ones). These lines belong to the old settling routines (`LNEWDIF` false), which no case uses: Every case with settling sets `LNEWDIF` and `LDIFLI`, and the documentation lists `LNEWDIF` among the legacy options (`docs/source/namelist_physics.md`, line 285). Reaching them takes `LDIFY` or `LDIFZ` with `LNEWDIF` false and `LDIFLI` off, since `LDIFLI` forces `LNEWDIF` on ([[parmin.f#L1239-L1251]]), with `LTHOUL` and `CSTMIXING` or `CSTDIFFMIX` other than 1; no case sets either, and the documentation does not mention them. Intent: The comments "CFD 10/09 Mimic Mixing to reduce settling" ([[#L286]]) and "old ver.     QCOD1Z(I) = FAC*HQPR(I)*(AP+AT)" ([[#L314]]) show that the coefficients and `QCOD1Z` were edited to take the factors and `QCOD1X` and `QCOD2X` were not, which looks like an unfinished edit.

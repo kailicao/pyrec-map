@@ -33,7 +33,7 @@
 2. **Calibration set-up:** [[setcal.f#SETCAL|`SETCAL`]] for a solar calibration (`LCALS`; it changes the kind cards and sets `LSOL` false, and `LPTIME`, `KTTAU` are saved to be restored at each cycle; `DLDX`, `DRDX`, `DLDA`, `DRDA`, `LSOL` start at zero and false, so that the final test of `LSOL` is defined without a calibration), [[setscal.f#SETSCAL|`SETSCAL`]] for a star of given $L$, $T_\mathrm{eff}$ (`LCALST`).
 3. **Kind-card loop** (`DO 200 NK = 1, NUMRUN`): set the run's $X$, $Z$, mixing length and envelope options; [[starin.f#STARIN|`STARIN`]] reads (or keeps) the starting model and rescales it if asked; stop if `LROT` is set but $\Omega = 0$ (exit status 3, an input error); disable each stop condition the starting model has already passed, by negating its target, and say so; [[wrthead.f#WRTHEAD|`WRTHEAD`]]; for He-flash runs (`LKUTHE`) store the model with `WRTLST`; [[findsh.f#FINDSH|`FINDSH`]] (the H-burning shell and convection-zone edges); [[htimer.f#HTIMER|`HTIMER`]] (the first step); zero the entropy terms, and clear `LBLIOLD` ([[prevcz_mod.f|`PREVCZ_MOD`]]), so that [[liburn.f#LIBURN|`LIBURN`]] does not reuse the previous kind card's end-of-step rates for the surface zone.
 
-    > **Question** ([[#L565-L574]]; [[#L578-L579]]). **The He-flash copy to `ILAST`.** The comment says time-step cutting "requires a model stored in logical unit ILAST or it will crash", but the copy runs only if `LPUNCH`, which is false on the first kind card (and again after `PUTSTORE`); it also passes `JCORE` before `FINDSH` has set it for this kind card. Since a failed model now stops the run rather than cutting the step (step 2 of the evolution step), is the copy still needed, and if so, should it be unconditional, after `FINDSH`?
+    > **Question** ([[#L565-L574]]; [[#L578-L579]]). **The He-flash copy to `ILAST`.** The comment says time-step cutting "requires a model stored in logical unit ILAST or it will crash," but the copy runs only if `LPUNCH`, which is false on the first kind card (and again after `PUTSTORE`); it also passes `JCORE` before `FINDSH` has set it for this kind card. Since a failed model now stops the run rather than cutting the step (step 2 of the evolution step), is the copy still needed, and if so, should it be unconditional, after `FINDSH`?
 
 4. **Model loop** (`DO 100 MODELN = 1, NMODLS(NK)`), the evolution step, below.
 5. **End of a kind card** (label 110): `PUTSTORE` the last model if asked; for a solar calibration, every third kind card [[chkcal.f#CHKCAL|`CHKCAL`]] compares $L$, $R$ (and the surface $Z/X$) with the targets and either ends (`LSOL`) or starts another cycle; the counter `ICONV` starts at 1 and the calibration gives up, silently, when it reaches 15 (the comment still says 10). The radius comes from $L = 4\pi R^2\sigma T_\mathrm{eff}^4$ (`RLL`, with `BL` = $\log(L/L_\odot)$):
@@ -42,7 +42,7 @@ $$\log\frac{R}{R_\odot} = \tfrac12\Bigl[\log\frac{L}{L_\odot} + \log L_\odot - \
 
 **The evolution step** (one pass of the model loop).
 1. Output switches: rewind `ISHORT` if `LRWSH`; turn on pulsation output on the last model, at chosen ages (`AGEOUT`, JVS 02/11) or at the final age; [[pdist.f#PDIST|`PDIST`]] if `LPOUT`.
-2. **After a failed model** (label 15). If the previous attempt diverged or did not converge (`LARGE`), call `STARIN` again. Despite the comment "STARIN called here for timestep cutting", STARIN does not cut the step: with `LARGE` set it prints "RUN STOPPED" and stops (`starin.f`, lines 225–232). So a failed model ends the run.
+2. **After a failed model** (label 15). If the previous attempt diverged or did not converge (`LARGE`), call `STARIN` again. Despite the comment "STARIN called here for timestep cutting," STARIN does not cut the step: with `LARGE` set it prints "RUN STOPPED" and stops (`starin.f`, lines 225–232). So a failed model ends the run.
 3. **Ageing?** `LAGE` is true when `MODEL` ≥ 0, unless the kind card only relaxes a rescaled model (`IRESCA` = 2, except for pre-main-sequence models with $\log T_c$ < 6.6, which are aged as a failsafe unless `L_ZERODT_PREMS` is set). With `L_ZERODT_PREMS` (a `CONTROL` namelist switch, default false), a rescale card (`KINDRN` = 2) is a true zero-time-step rescale for a pre-main-sequence model too; the comment notes that a static solution then exists only if nuclear burning can carry the luminosity (as deuterium burning does at the deuterium birthline), and that the next evolved run should fix its step with `SETDT`, since `HTIMER` would otherwise take the stored step, which can be far too long.
 
     > **Question** ([[#L714-L715]]). **The $\log T_c < 6.6$ failsafe.** A rescale card is aged for a pre-main-sequence model when $\log T_c$ < 6.6, a hard-coded value (MHP 7/98). Where does 6.6 come from (roughly where deuterium burning ends?), and would a namelist value be clearer?
@@ -79,19 +79,32 @@ for the next step's guess, level 3 (`NITER3`) and level 4 (`NITER4`), which repe
 
 ## Bugs, by priority
 
-1. **(c)** **The stop conditions are ignored on rescale-and-evolve runs.** ([[parmin.f#L1396-L1405]]; [[parmin.f#L1463]]; [[#L1087-L1108]]) Every stop test of the model loop, and the check that disables a stop the starting model has already passed ([[#L430]]), requires `LENDAG(NK)`. PARMIN sets `LENDAG` only for evolve runs (`KINDRN` = 1); on a `KINDRN` = 3 run it keeps the module's value, which has no initializer ([[runloop_mod.f#L62]]; zero, so false, as built), so such a run ignores `ENDAGE`, `END_DCEN`, `END_XCEN` and `END_YCEN` and stops only after `NMODLS(NK)` models (or a failure). The User Guide presents these as stopping runs (`docs/source/userguide.md`, lines 109–111), with no exception for `KINDRN` = 3. A deck that sets an end age on a rescale-and-evolve run would silently run all its models. (`LSETDT`, the fixed time step, is likewise set only for evolve runs; not traced further.) Read from the code, not run. **A possible fix** (in parmin.f, in the `KINDRN(NKIND).EQ.3` branch):
+1. **(never occurred)** **The stop conditions are ignored on rescale-and-evolve runs.** ([[parmin.f#L1396-L1405]]; [[parmin.f#L1463]]; [[#L1087-L1108]]) Every stop test of the model loop, and the check that disables a stop the starting model has already passed ([[#L430]]), requires `LENDAG(NK)`. PARMIN sets `LENDAG` only for evolve runs (`KINDRN` = 1); on a `KINDRN` = 3 run it keeps the module's value, which has no initializer ([[runloop_mod.f#L62]]; zero, so false, as built), so such a run ignores `ENDAGE`, `END_DCEN`, `END_XCEN` and `END_YCEN` and stops only after `NMODLS(NK)` models (or a failure). The User Guide presents these as stopping runs (`docs/source/userguide.md`, lines 109–111), with no exception for `KINDRN` = 3. A deck that sets an end age on a rescale-and-evolve run would silently run all its models. (`LSETDT`, the fixed time step, is likewise set only for evolve runs; not traced further.)
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to set the stop switch for a rescale and evolve card,
-    C as for an evolve card.
-                IF(ENDAGE(NKIND).GT.0.0D0 .OR. END_DCEN(NKIND).GT.0.0D0
-         * .OR. END_XCEN(NKIND).GT.0.0D0 .OR. END_YCEN(NKIND).GT.0.0D0)THEN
-                   LENDAG(NKIND)=.TRUE.
-                ELSE
-                   LENDAG(NKIND)=.FALSE.
-                ENDIF
+    **A possible fix** (in parmin.f, in the `KINDRN(NKIND).EQ.3` branch):
+
+    ```diff
+    --- a/src/parmin.f
+    +++ b/src/parmin.f
+    @@ -1468,6 +1468,15 @@
+                 RESCAL(2,NKIND) = RSCLX(NKIND)
+                 RESCAL(3,NKIND) = RSCLZ(NKIND)
+                 RESCAL(4,NKIND) = RSCLCM(NKIND)
+    +C 11/09/26 KC via Claude
+    +C code changed to set the stop switch for a rescale and evolve card,
+    +C as for an evolve card.
+    +            IF(ENDAGE(NKIND).GT.0.0D0 .OR. END_DCEN(NKIND).GT.0.0D0
+    +     * .OR. END_XCEN(NKIND).GT.0.0D0 .OR. END_YCEN(NKIND).GT.0.0D0)THEN
+    +               LENDAG(NKIND)=.TRUE.
+    +            ELSE
+    +               LENDAG(NKIND)=.FALSE.
+    +            ENDIF
+                 IF (LFIRST(NKIND)) THEN
+                    WRITE(IOWR,550) NKIND
+                    WRITE(ISHORT,550) NKIND
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged). A rescale-and-evolve card with a stop target set was run in the only case that has one, `sample_cases/UpperMS/Sample_m9p0feh+0p0GS98_none_TAHB` (`END_YCEN(1)` = 0.0001 with `NMODLS(1)` = 2): The stop test was skipped at both models, but central $Y$ stayed above the target, so no stop was missed. The fix was not run, since no case reaches the condition. What would reach it: a `KINDRN` = 3 card whose `ENDAGE`, `END_DCEN`, `END_XCEN`, or `END_YCEN` is reached within its `NMODLS` models, such as an end age on a pre-main-sequence card. Intent: none found; the User Guide states the stops without exception.
 
 ### (file level)
 

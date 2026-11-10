@@ -45,14 +45,28 @@ which, with $\rho_T = -\delta$ and $c_P = P\delta/(\rho T\nabla_\mathrm{ad})$, i
 
 ## Bugs, by priority
 
-1. **(d)** **The nuclear terms at exactly `TCUT(1)`.** ([[#L281]]; [[#L416]]; [[#L425-L427]]) ENGEB is called, and `EG(1..6)` set, only where `TL.GT.TCUT(1)`, but the store into `SESUM` and `SEG` is skipped only where `HT(IM).LT.TCUT(1)`. At a shell with $\log T$ exactly equal to `TCUT(1)`, `SESUM` and `SEG(1..6)` get the previous shell's `EG` (or values from an earlier call), while `QL` has no nuclear term there. Correct today in practice, since an exact equality of a real is unlikely, but the two tests disagree. Read from the code, not run. **A possible fix:**
+1. **(never occurred)** **The nuclear terms at exactly `TCUT(1)`.** ([[#L281]]; [[#L416]]; [[#L425-L427]]) ENGEB is called, and `EG(1..6)` set, only where `TL.GT.TCUT(1)`, but the store into `SESUM` and `SEG` is skipped only where `HT(IM).LT.TCUT(1)`. At a shell with $\log T$ exactly equal to `TCUT(1)`, `SESUM` and `SEG(1..6)` get the previous shell's `EG` (or values from an earlier call), while `QL` has no nuclear term there. Correct today in practice, since an exact equality of a real is unlikely, but the two tests disagree.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to skip the nuclear terms with the same test as the
-    C call to ENGEB.
-             IF(HT(IM).LE.TCUT(1)) THEN
+    **A possible fix:**
+
+    ```diff
+    --- a/src/coefft.f
+    +++ b/src/coefft.f
+    @@ -413,7 +413,10 @@
+     C MHP 10/02 LSHORT NOT USED, OMIT
+     C         LSHORT = .NOT.LONG .AND. MOD(MODEL,NPRT1).EQ.0
+     C  ZERO OUT NUCLEAR ENERGY TERMS IF T < NUCLEAR CUTOFF.
+    -         IF(HT(IM).LT.TCUT(1)) THEN
+    +C 11/09/26 KC via Claude
+    +C code changed to skip the nuclear terms with the same test as the
+    +C call to ENGEB.
+    +         IF(HT(IM).LE.TCUT(1)) THEN
+                 SESUM(IM) = 0.0D0
+                 SEG(7,IM) = HHC(IM)
+                 DO J = 1,6
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The store of the nuclear terms ran in 33 of 34 runs (26 of YREC's cases, from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning, and 8 made-up ones; one of these, with `FCORE` = 1.0, stopped in its first second), from 49,743 to about 72 million times each, at $\log T$ = 5.5 to 8.40 and shells 1 to 3239; $\log T$ never equaled `TCUT(1)` exactly, so the two tests never disagreed and results are unchanged today. No fix was run. Intent: The comment above the test, "ZERO OUT NUCLEAR ENERGY TERMS IF T < NUCLEAR CUTOFF.," matches the `.LT.` and says nothing of the equal case.
 
 ### COEFFT
 

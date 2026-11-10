@@ -13,10 +13,10 @@
 
     > **Question** ([[#L85-L91]]). **The shell's middle and end.** `JXMID` counts points rather than recording an index; it equals the first point with $X > X_\mathrm{surf}/2$ only if the composition increases monotonically outward (and likewise `JXBEG`, the first point with $X >$ `ATIME(1)`, as the header says). Is that guaranteed?
 
-    > **Question** ([[#L57-L59]]; [[#L72-L73]]; [[#L83]]). **A comment's variable.** The comments speak of `ENDSHL`; the code uses `DLMIN` and `XLEND` = `DLMIN*HL(M)`. Should the comments name `XLEND`?
+    **`ENDSHL` is a stale name.** The comments speak of `ENDSHL` ([[#L57-L59]]; [[#L72-L73]]), but the code uses `DLMIN`, the fraction, and `XLEND` = `DLMIN*HL(M)`, the threshold in $L$ ([[#L83]]), so the comments could name those.
 2. **Core:** `JCORE` is the last point of the run of convective points from the centre.
 3. **Envelope:** `JENV` is the first point of the run of convective points from the surface.
-4. For a fully convective star (`JENV` = 1), `JCORE` is set to 1, "because JCORE is used in computing the nuclear timestep, and putting it at the surface does strange things".
+4. For a fully convective star (`JENV` = 1), `JCORE` is set to 1, "because JCORE is used in computing the nuclear timestep, and putting it at the surface does strange things."
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 

@@ -13,7 +13,7 @@
 1. **Mixing.** For a convection zone, the starting abundances are the mass-weighted means $\bar x_j = \sum_i x_{j,i}\,\Delta m_i / \sum_i \Delta m_i$ over the zone (elements 1–11), and so are the rates. If the zone's (or shell's) first point is below `TCUT(1)`, it only homogenizes and returns.
 
     > **Question** ([[#L196-L222]]). **Mass-averaged rates in convective cores.** In a convection zone the rates themselves are mass-averaged and the zone burns as one, with the mean abundances. Averaging the rates rather than the products rate × abundances is exact only for instantaneous mixing. Is that adequate for ³He and the CN isotopes in convective cores, where the burning time of ¹²C can be shorter than the convective turnover time, and is a diffusive treatment of convective mixing planned?
-2. **Equations.** Only the seven abundant species are followed, as the YREC paper's "full non-equilibrium burning" (§2.3.4, with ¹⁸O, step 4). The coefficients below show that a rate can stand for more than one reaction: $-3r_1X^2$ takes three protons per pp reaction (p+p→d and d+p→³He), and $-2X\,r_6\,{}^{14}\mathrm{N}$ two per ¹⁴N+p; ¹⁵N and ¹⁷O, "not currently used" (the comment), do not appear. Which chains each rate stands for, and why the nuclei between are skipped, is the question at the end of this step. Primordial deuterium and the light elements are burned separately, by [[dburn.f#DBURN|`DBURN`]] and [[liburn.f#LIBURN|`LIBURN`]]. The rates `HR`$_j$ are, in the comment's words, "per gigayear per amu", to be "multiplied by the mass fractions of the reactants and the atomic weight (in amu) of the product to get the rate of change of the mass fraction", which gives the form below (how $N_A$ and the $1/A$ factors enter is [[rates.f#q4]]). With $\Delta t$ in Gyr and $A_k$ the species' mass numbers (1, 3, 4, 12, 13, 14, 16), the residuals are
+2. **Equations.** Only the seven abundant species are followed, as the YREC paper's "full non-equilibrium burning" (§2.3.4, with ¹⁸O, step 4). The coefficients below show that a rate can stand for more than one reaction: $-3r_1X^2$ takes three protons per pp reaction (p+p→d and d+p→³He), and $-2X\,r_6\,{}^{14}\mathrm{N}$ two per ¹⁴N+p; ¹⁵N and ¹⁷O, "not currently used" (the comment), do not appear. Which chains each rate stands for, and why the nuclei between are skipped, is the question at the end of this step. Primordial deuterium and the light elements are burned separately, by [[dburn.f#DBURN|`DBURN`]] and [[liburn.f#LIBURN|`LIBURN`]]. The rates `HR`$_j$ are, in the comment's words, "per gigayear per amu," to be "multiplied by the mass fractions of the reactants and the atomic weight (in amu) of the product to get the rate of change of the mass fraction," which gives the form below (how $N_A$ and the $1/A$ factors enter is [[rates.f#q3]]). With $\Delta t$ in Gyr and $A_k$ the species' mass numbers (1, 3, 4, 12, 13, 14, 16), the residuals are
 $$G_k(w) = w_k - w_k^0 - A_k\,\Delta t\,R_k(w),$$
 where $w = (X, {}^3\mathrm{He}, Y, {}^{12}\mathrm{C}, {}^{13}\mathrm{C}, {}^{14}\mathrm{N}, {}^{16}\mathrm{O})$ are the end-of-step abundances (so the scheme is implicit) and, with $r_n$ the rate `GRn` and $f_3$ = `HF1`, $f_4 = 1-f_3$ (the branching of ¹⁵N + p to ¹²C + α or to ¹⁶O):
 $$R_X = -3r_1X^2 + 2r_2\,{}^3\mathrm{He}^2 - r_3\,{}^3\mathrm{He}\,Y - r_4X\,{}^{12}\mathrm{C} - r_5X\,{}^{13}\mathrm{C} - 2X\,(r_6\,{}^{14}\mathrm{N} + r_7\,{}^{16}\mathrm{O}),$$
@@ -28,7 +28,7 @@ The reactions by the comments: $r_1$ pp, $r_2$ ³He+³He, $r_3$ ³He+⁴He, $r_4
 
     > **Question** ([[#L349-L360]]). **The diagonal shortcut.** When all off-diagonal entries are below $10^{-8}$, `SIMEQC` is skipped and the correction is the residual $G_k$ itself, not $G_k/J_{kk}$. The diagonal entries are $1 + A_k\Delta t\,(\dots)$, close to 1 only for small rates; is the undivided step intended?
 
-    > **Question** ([[#L234-L237]]). **A comment that no longer holds.** The comment on the first guess speaks of calls from `CRRECT` with `ITLVL` > 1 ("USE THE PREVIOUS RESULT"), an argument now removed; the code uses the shell below, or the shell's own `HCOMP` for shell 1. Should the comment be updated?
+    **The comment on the first guess is out of date.** It still speaks of calls from `CRRECT` with `ITLVL` > 1 ("USE THE PREVIOUS RESULT," [[#L234-L237]]), an argument now removed; the code takes the result for the shell below, or the shell's own `HCOMP` for shell 1, with no `ITLVL` branch ([[#L238-L254]]), as the comment's next lines say (settled from the code, Nov 10, 2026).
 
     > **Question** ([[#L354]]; [[#L395]]). **Hard-coded thresholds.** $10^{-8}$ for zeroing matrix entries and $5\times10^{-7}$ for resetting $Z$. Are these still appropriate, or should they be settings beside `CMIN`, `ABSTOL` and `RELTOL`?
 4. **After convergence.** ¹⁸O explicitly: $x_{18} = x_{18}^0 + 18\,\Delta t\,r_{11}\,Y\,{}^{14}\mathrm{N}$. If the previous model's $X$ at the zone's top (`HCOMPP(1,IEND)`) is below $5\times10^{-7}$, $Z$ is reset to $1 - X - {}^3\mathrm{He} - Y$ from the new values; otherwise $Z$ is the zone's mean at the start of the step. All shells of the zone get the same new values. Mixing is thus taken to be instantaneous: the YREC paper (§2.3.5) calls this usually an excellent approximation, which breaks down in such cases as AGB shell flashes.
@@ -37,7 +37,7 @@ The reactions by the comments: $r_1$ pp, $r_2$ ³He+³He, $r_3$ ³He+⁴He, $r_4
 
     > **Question** ([[#L395-L399]]). **The switch for $Z$.** Until the previous model's $X$ at the zone's top falls below $5\times10^{-7}$, $Z$ is held at its starting mean, although CNO processing and ¹²C(α,γ) change its parts; after, $Z = 1 - X - {}^3\mathrm{He} - Y$, so the C and O made by helium burning count as metals (as the opacity's $Z > 0.1$ branch in [[getopac.f#GETOPAC|`GETOPAC`]] assumes). Why the switch at that threshold, and does $X + {}^3\mathrm{He} + Y + Z$ stay exactly 1 before it?
 
-    > **Question** ([[#L400-L410]]; [[#L121-L127]]). **¹⁵N and ¹⁷O are not mixed in burning zones.** When a convection zone burns, elements 8 and 10 of `HCOMP` are left unchanged (only the non-burning branch homogenizes all 11). They enter the Debye–Hückel composition `ZDH` ([[crrect.f#L141-L142]]); do they matter anywhere else?
+    In a burning zone, elements 8 and 10 (¹⁵N and ¹⁷O) are left as they were ([[#b2]]).
 
 **From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) (Nuclear reaction & burning options) gives the solver's settings: `CMIN` (1.0D-20), the smallest abundance followed; `ABSTOL` and `RELTOL` (1.0D-5, 1.0D-4), the absolute and relative convergence criteria for the changes in abundance; `KEMMAX` (50), the largest number of substeps; and `TCUT(1)` (6.5), the $\log T$ above which $\epsilon_\mathrm{nuc}$ is computed, the other `TCUT` entries being thresholds for later burning stages. Its advice: only `TCUT` is adjusted from the defaults (6.5 is too high for deuterium burning on the pre-main sequence), and the others should not be changed without good reason.
 
@@ -47,16 +47,54 @@ The reactions by the comments: $r_1$ pp, $r_2$ ³He+³He, $r_3$ ³He+⁴He, $r_4
 
 ## Bugs, by priority
 
-1. **(c)** **The error message gives a fixed limit of 50.** ([[#L377-L385]]) When the iteration has not converged after `KEMMAX` iterations, the message says "RUN STOPPED AFTER 50 ATTEMPTS", while the limit is `KEMMAX` (50 by default, a namelist setting). With another `KEMMAX`, the message gives the wrong count. Read from the code, not run. **A possible fix:**
+1. **(not reached)** **The error message gives a fixed limit of 50.** ([[#L377-L385]]) When the iteration has not converged after `KEMMAX` iterations, the message says "RUN STOPPED AFTER 50 ATTEMPTS," while the limit is `KEMMAX` (50 by default, a namelist setting). With another `KEMMAX`, the message gives the wrong count.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to print the iteration limit KEMMAX, not a fixed 50.
-                WRITE (ISHORT,1000) IBEGIN,KEMMAX
-     1000       FORMAT(1X,39('>'),40('<')/1X,'ERROR IN SUBROUTINE KEMCOM'/
-         *      1X,'UNABLE TO SOLVE FOR NEW ABUNDANCES IN SHELL',I4/1X,
-         *      'RUN STOPPED AFTER',I4,' ATTEMPTS')
+    **A possible fix:**
+
+    ```diff
+    --- a/src/kemcom.f
+    +++ b/src/kemcom.f
+    @@ -377,10 +377,12 @@
+              IF(ICON.GE.KEMMAX) THEN
+     C MHP 10/02 IU not defined
+     C            WRITE (ISHORT,1000) IU
+    -            WRITE (ISHORT,1000) IBEGIN
+    +C 11/09/26 KC via Claude
+    +C code changed to print the iteration limit KEMMAX, not a fixed 50.
+    +            WRITE (ISHORT,1000) IBEGIN,KEMMAX
+      1000       FORMAT(1X,39('>'),40('<')/1X,'ERROR IN SUBROUTINE KEMCOM'/
+          *      1X,'UNABLE TO SOLVE FOR NEW ABUNDANCES IN SHELL',I4/1X,
+    -     *      'RUN STOPPED AFTER 50 ATTEMPTS')
+    +     *      'RUN STOPPED AFTER',I4,' ATTEMPTS')
+     C 10/30/26 MHP via Claude: bare STOP -> STOP 1, the run-time error code (issue 38).
+                 STOP 1
+              ELSE
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached in any of 34 runs (26 of YREC's cases, from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning, and 8 made-up ones): The network always converged within `KEMMAX` = 50 iterations, the value in every case, so the message was never printed. It is wrong only with another `KEMMAX`, a namelist setting that no case changes, and then only when the network fails.
+
+2. **(never occurred)** **¹⁵N and ¹⁷O are not mixed in burning zones.** ([[#L400-L410]]; [[#L121-L127]]) When a convection zone burns, loop 40 gives every shell of the zone the new values of nine species but leaves elements 8 and 10 of `HCOMP` (¹⁵N and ¹⁷O) as they were, whereas the non-burning branch homogenizes all 11 ([[#L121-L127]]). Within the step nothing repairs it: [[crrect.f#CRRECT|CRRECT]] resets `HCOMP` to `HCOMPP` before calling [[mix.f#MIX|MIX]] at `ITLVL` > 2 ([[crrect.f#L150-L158]]), and MIX's own homogenization ([[mix.f#L360-L397]]) runs only with `LSEMIC` or at `ITLVL` = 1; after convergence, [[mixcz.f#MIXCZ|MIXCZ]] mixes all 11 species again, over the shells that `LC` flags convective ([[main.f#L977]]; [[mixcz.f#L63-L110]]). What follows: ¹⁵N and ¹⁷O can stay unmixed in a burning convection zone. They enter only the Debye–Hückel composition `ZDH` (with `LDH`, off by default: [[crrect.f#L141-L142]]; [[coefft.f#L212-L213]]) and the output.
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/kemcom.f
+    +++ b/src/kemcom.f
+    @@ -407,6 +407,11 @@
+              HCOMP(9,IU) = W(7)
+              HCOMP(3,IU) = Z
+              HCOMP(11,IU) = XO18
+    +C 11/10/26 KC via Claude
+    +C code changed to give N15 and O17 their zone means, as the
+    +C non-burning branch does.
+    +         HCOMP(8,IU) = XSUM(8)
+    +         HCOMP(10,IU) = XSUM(10)
+        40 CONTINUE
+       200 RETURN
+           END
+    ```
+
+    **Checked by running YREC** (Nov 10, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): A burning convection zone reached loop 40 11,559 times in the five cases run: 807 times in `testsuite/Test_m1p0feh+0p0GS98_base_TAMS`, 266 in `testsuite/Test_m0p3feh+0p0GS98_base_ZAMS` (which sets `LDH`, so `ZDH` is read), 1,489 in `testsuite/Test_m1p4feh+0p0GS98_dif_TAMS` (with diffusion), 4,567 in `testsuite/Test_m0p8feh+0p0GS98_rotp8p0d0p1mag1e4std_TAMS` (with rotation), and 4,430 in `examples/run_standard_solar_model/Test_solarcal_noGS_norot`. Not once did a shell's ¹⁵N or ¹⁷O differ from the zone's mean by more than a relative $10^{-10}$: The zones were already uniform in both, so leaving them changed nothing. The fix was not run, since it would move these values by less than that. What would reach it: a burning zone spreading over layers of different ¹⁵N or ¹⁷O, which KEMCOM's network, not following them, cannot make. Intent: The comment calls the two "not currently used" ([[#L79]]).
 
 ### KEMCOM
 

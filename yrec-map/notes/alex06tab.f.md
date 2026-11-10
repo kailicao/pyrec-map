@@ -24,7 +24,7 @@ The 4th value of $X$ needs its own indexing near the corner of the grid ($X = 1 
 
 The tabulated quantity is $\log \kappa$, as GETALEX06 uses it (READALEX06 reads it with format `F7.3`); the interpolation is linear in $\log\kappa$.
 
-**Design.** All state is in modules; the routine has no arguments. It stops the run on a bad composition (`STOP 1`), with a message that names "ALEX06", written to the terminal and the `.short` file (`ISHORT`, from `IOUNITS_MOD`).
+**Design.** All state is in modules; the routine has no arguments. It stops the run on a bad composition (`STOP 1`), with a message that names "ALEX06," written to the terminal and the `.short` file (`ISHORT`, from `IOUNITS_MOD`).
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE` (the unused `NUMXZ` parameter is now in `ALOT06ALL_MOD`).
 
@@ -32,18 +32,28 @@ The tabulated quantity is $\log \kappa$, as GETALEX06 uses it (READALEX06 reads 
 
 ## Bugs, by priority
 
-1. **(a)** **The 4th node in $X$ is tested on `IZ`, not on `IX`.** ([[#L56-L68]]; [[#L91-L104]]; [[#L117-L121]]) The 4th table in $X$ is at $X = 1 - Z$ only when `IX = NUMX-3` (lines 93–104 read it from the ninth set, or from $X = 0.9$ at $Z = 0.10$); otherwise it is the table at `XXG06(IX+3)`. But its abscissa `QR(4)` is $1 - $ `ZE` whenever `IZ = NUMZ-3`, that is, for $Z > 0.06$, and `XXG06(IX+3)` otherwise. Two cases follow. (i) For $Z > 0.06$ and $X \le 0.8$ (`IX` ≤ `NUMX-4`), the 4th node is placed at $1 - Z$, between 0.88 and 0.94, instead of at its table's $X$ (for example 0.8 for $0.5 < X \le 0.7$, 0.9 for $0.7 < X \le 0.8$), so the Lagrange weights in $X$ are those of a wrong grid; this holds for any $X$ up to 0.8 (and, with an error of at most 0.02, for $X > 0.8$ at $Z \ge 0.10$, where `IX = NUMX-4` and the table is at 0.9). (ii) For $Z \le 0.06$ and $X > 0.8$ (`IX = NUMX-3`), the 4th node is placed at `XXG06(9)` = 1.0, while its table is at $X = 1 - Z$, up to 0.06 lower. Only with `LALEX06` (off by default in the code; recommended by YREC's User Guide), at $\log T \le$ `TMOLMAX`; case (i) only for $Z > 0.06$, case (ii) only for $X > 0.8$. Read from the code, not run; the size of the error in $\kappa$ was not computed. **A possible fix:**
+1. **(harmless in the runs)** **The 4th node in $X$ is tested on `IZ`, not on `IX`.** ([[#L56-L68]]; [[#L91-L104]]; [[#L117-L121]]) The 4th table in $X$ is at $X = 1 - Z$ only when `IX = NUMX-3` (lines 93–104 read it from the ninth set, or from $X = 0.9$ at $Z = 0.10$); otherwise it is the table at `XXG06(IX+3)`. But its abscissa `QR(4)` is $1 - $ `ZE` whenever `IZ = NUMZ-3`, that is, for $Z > 0.06$, and `XXG06(IX+3)` otherwise. Two cases follow. (i) For $Z > 0.06$ and $X \le 0.8$ (`IX` ≤ `NUMX-4`), the 4th node is placed at $1 - Z$, between 0.88 and 0.94, instead of at its table's $X$ (for example 0.8 for $0.5 < X \le 0.7$, 0.9 for $0.7 < X \le 0.8$), so the Lagrange weights in $X$ are those of a wrong grid; this holds for any $X$ up to 0.8 (and, with an error of at most 0.02, for $X > 0.8$ at $Z \ge 0.10$, where `IX = NUMX-4` and the table is at 0.9). (ii) For $Z \le 0.06$ and $X > 0.8$ (`IX = NUMX-3`), the 4th node is placed at `XXG06(9)` = 1.0, while its table is at $X = 1 - Z$, up to 0.06 lower. Only with `LALEX06` (off by default in the code; recommended by YREC's User Guide), at $\log T \le$ `TMOLMAX`; case (i) only for $Z > 0.06$, case (ii) only for $X > 0.8$.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to place the 4th node in X at 1-Z when the 4th table
-    C is the X = 1-Z one (IX = NUMX-3), and at XXG06(IX+3) otherwise.
-          IF(IX.EQ.NUMX-3)THEN
-             QR(4) = 1.0D0-ZE
-          ELSE
-             QR(4) = XXG06(IX+3)
-          ENDIF
+    **A possible fix:**
+
+    ```diff
+    --- a/src/alex06tab.f
+    +++ b/src/alex06tab.f
+    @@ -114,7 +114,10 @@
+           DO I = 1,3
+              QR(I) = XXG06(IX+I-1)
+           END DO
+    -      IF(IZ.EQ.NUMZ-3)THEN
+    +C 11/09/26 KC via Claude
+    +C code changed to place the 4th node in X at 1-Z when the 4th table
+    +C is the X = 1-Z one (IX = NUMX-3), and at XXG06(IX+3) otherwise.
+    +      IF(IX.EQ.NUMX-3)THEN
+              QR(4) = 1.0D0-ZE
+           ELSE
+              QR(4) = XXG06(IX+3)
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): 34 runs, 26 of YREC's cases (from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning) and 8 made-up ones (each one of YREC's cases with a few settings changed), of which one stopped in its first second. The interpolation in $X$ ran in all 33 others, 1 to 1,540 times a run, always at a surface $Z$ of 0.001 to 0.019, so case (i) was never reached. Case (ii) was: In `testsuite/Test_m1p4feh+0p0GS98_dif_TAMS`, diffusion drains helium from the surface, $X$ rises to 0.80–0.97, and the 4th node stood at 1.0 instead of $1 - Z$ in 363 calls. With the fix, that track moves by up to 0.0062 dex in $\log L$ and 0.013 dex in $\log T_c$ (819 models instead of 820, end age 3.40008 Gyr instead of 3.40039), within the noise: The null change used as a noise floor (nearly every opacity, all with $3 \le \log T \le 9$ and $-6 \le \log\rho \le 9.75$, times $1 + 10^{-10}$) moves $\log L$ by 0.057 dex and $\log T_c$ by 0.032 dex on that case. Case (i) needs a surface $Z$ above 0.06, which no run had, so it was not tested. Intent: none found; the comment at lines 91–92 places the $X = 1 - Z$ table by `IX`, as the fix does.
 
 ### ALEX06TAB
 

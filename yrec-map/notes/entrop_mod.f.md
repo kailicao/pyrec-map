@@ -7,6 +7,6 @@
 - The main program zeroes them at the start of a run and when `LNEWS` is off or the step is not positive, sets them after each converged model ("7/91 store changes in the structure"), and reads them to estimate the next model's structure: $\Delta T = $ `HTT0*DELTS`, and so on.
 - `HPOINT` interpolates them onto the new mass grid when points are added or removed ("7/91 add entropy term interpolation").
 
-**Design.** A blanket `USE ENTROP_MOD`. The comments call them "entropy terms", but they hold time derivatives of the structure.
+**Design.** A blanket `USE ENTROP_MOD`. The comments call them "entropy terms," but they hold time derivatives of the structure.
 
 **Changed since `rp_1`.** New file: `COMMON/ENTROP/` as a module.

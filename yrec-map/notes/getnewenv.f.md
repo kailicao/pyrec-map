@@ -1,8 +1,8 @@
 ## Explanation
 
-**Purpose.** `GETNEWENV` moves the outer fitting point of the interior model outward, by turning part of the envelope into new interior points, so that the envelope again holds the fraction of the mass it held before the step's mass change ($\log(m_\mathrm{fit}/M)$ = `SENVOLD`). Its header (MHP 07/02): "move the outer fitting point when the total mass is being decreased; add new points by dropping a sinkline from the surface down and including new points up to the desired envelope mass". It integrates the envelope once from the surface, then copies the points between the old and the new fitting point into the model.
+**Purpose.** `GETNEWENV` moves the outer fitting point of the interior model outward, by turning part of the envelope into new interior points, so that the envelope again holds the fraction of the mass it held before the step's mass change ($\log(m_\mathrm{fit}/M)$ = `SENVOLD`). Its header (MHP 07/02): "move the outer fitting point when the total mass is being decreased; add new points by dropping a sinkline from the surface down and including new points up to the desired envelope mass." It integrates the envelope once from the surface, then copies the points between the old and the new fitting point into the model.
 
-**When it runs.** The main program calls it when [[massloss.f#MASSLOSS|MASSLOSS]] has set `LNEWFIT`, which it does whenever its rate `DMDT` is positive (massloss.f line 131), whichever rate applies: the constant `DMDT0` or the Reimers rate `CREIM`$\,L/(gR)$. [[mdot.f#MDOT|MDOT]] adds `DELM` = `DMDT`$\cdot\Delta t$ to the total mass, so a positive `DMDT` raises $M$ while the interior points keep their masses, and the envelope above the last point grows; main.f's comment reads "restore prior fitting point if mass accretion is being included". The defaults of both rates are negative (`DMDT0` = $-10^{-14}$, `CREIM` = $-4\times10^{-13}$, parmin.f), so with them the routine is not called; the header's "mass is being decreased" disagrees with this trigger.
+**When it runs.** The main program calls it when [[massloss.f#MASSLOSS|MASSLOSS]] has set `LNEWFIT`, which it does whenever its rate `DMDT` is positive (massloss.f line 131), whichever rate applies: the constant `DMDT0` or the Reimers rate `CREIM`$\,L/(gR)$. [[mdot.f#MDOT|MDOT]] adds `DELM` = `DMDT`$\cdot\Delta t$ to the total mass, so a positive `DMDT` raises $M$ while the interior points keep their masses, and the envelope above the last point grows; main.f's comment reads "restore prior fitting point if mass accretion is being included." The defaults of both rates are negative (`DMDT0` = $-10^{-14}$, `CREIM` = $-4\times10^{-13}$, parmin.f), so with them the routine is not called; the header's "mass is being decreased" disagrees with this trigger.
 
 > **Question** ([[#L2-L5]]; [[massloss.f#L131]]). **Header and trigger.** The header says the routine is for a decreasing total mass, but it runs only when `DMDT` > 0, which MDOT applies as a mass gain (`SMASS = SMASS + DELM/CMSUN`, [[mdot.f#L262]]); main.f's comment says accretion. With mass loss (`DMDT` < 0) MDOT instead compresses the convective-envelope shells and no points are added. Is the header out of date, or was the routine meant for mass loss too?
 
@@ -37,31 +37,69 @@ With spots (fraction $f$ = `SPOTF`, temperature ratio $x$ = `SPOTX`) and a conve
 
 ## Bugs, by priority
 
-1. **(a)** **`OMEGA` is a local array.** ([[#L74-L75]]; [[#L281-L299]]; [[#L300]]) `OMEGA` is not an argument: It is declared in `DIMENSION` and is local. In step 6, the solid-body and general cases read `OMEGA(MM)`, which is never set in this routine before (it keeps whatever an earlier call left, or its initial value at the first call), so the new points' $j$ (`HJM(J) = OMEGA(MM)*HI(J)`, or through `W0`) comes from that stale value. Then `GETROT` overwrites the local `OMEGA` and the result is used only for $E_\mathrm{rot}$, while the main program goes on to call FPFT with its own `OMEGA`, which has no values for the new points ([[main.f#L1040-L1045]]). What follows: wrong specific angular momentum for the accreted shells and wrong $f_P$, $f_T$ there until the next GETROT. Only with rotation (`LROT`) and a positive mass-change rate (both off by default); with them, the default `WALPCZ` = 0 takes the solid-body case. Read from the code, not run. **A possible fix:**
+1. **(not reached)** **`OMEGA` is a local array.** ([[#L74-L75]]; [[#L281-L299]]; [[#L300]]) `OMEGA` is not an argument: It is declared in `DIMENSION` and is local. In step 6, the solid-body and general cases read `OMEGA(MM)`, which is never set in this routine before (it keeps whatever an earlier call left, or its initial value at the first call), so the new points' $j$ (`HJM(J) = OMEGA(MM)*HI(J)`, or through `W0`) comes from that stale value. Then `GETROT` overwrites the local `OMEGA` and the result is used only for $E_\mathrm{rot}$, while the main program goes on to call FPFT with its own `OMEGA`, which has no values for the new points ([[main.f#L1040-L1045]]). What follows: wrong specific angular momentum for the accreted shells and wrong $f_P$, $f_T$ there until the next GETROT. Only with rotation (`LROT`) and a positive mass-change rate (both off by default); with them, the default `WALPCZ` = 0 takes the solid-body case.
 
-    ```fortran
-          SUBROUTINE GETNEWENV(SENVOLD,HCOMP,HD,HL,HP,HR,HS,HS1,HS2,
-         *                     HSTOT,HT,LC,ETA2,HI,HJM,QIW,R0,
-         *                     HKEROT,BL,SJTOT,SKEROT,TEFFL,M,LNEW,CMIXL,
-         *                     OMEGA)
-    C 11/09/26 KC via Claude
-    C code changed to take OMEGA from the main program as an argument; the
-    C local array was read at OMEGA(MM) before it was set, and the values
-    C GETROT gives it did not reach the main program's FPFT.
-    ...
+    **A possible fix:**
+
+    ```diff
+    --- a/src/getnewenv.f
+    +++ b/src/getnewenv.f
+    @@ -6,7 +6,12 @@
+           SUBROUTINE GETNEWENV(SENVOLD,HCOMP,HD,HL,HP,HR,HS,HS1,HS2,
+     C      *                     HSTOT,HT,LC,ETA2,HG,HI,HJM,QIW,R0,  ! KC 2025-05-31
+          *                     HSTOT,HT,LC,ETA2,HI,HJM,QIW,R0,
+    -     *                     HKEROT,BL,SJTOT,SKEROT,TEFFL,M,LNEW,CMIXL)
+    +     *                     HKEROT,BL,SJTOT,SKEROT,TEFFL,M,LNEW,CMIXL,
+    +     *                     OMEGA)
+    +C 11/09/26 KC via Claude
+    +C code changed to take OMEGA from the main program as an argument; the
+    +C local array was read at OMEGA(MM) before it was set, and the values
+    +C GETROT gives it did not reach the main program's FPFT.
+     C 10/15/26 MHP via Claude
+     C code changed to take JSON from DIMENSIONS_MOD instead of declaring
+     C PARAMETER(JSON=5000) here.
+    --- a/src/main.f
+    +++ b/src/main.f
+    @@ -1040,7 +1040,8 @@
+                 CALL GETNEWENV(SENVOLD,HCOMP,HD,HL,HP,HR,HS,HS1,HS2,
+     C     *                     HSTOT,HT,LC,ETA2,HG,HI,HJM,QIW,R0,  ! KC 2025-05-31
+          *                     HSTOT,HT,LC,ETA2,HI,HJM,QIW,R0,
+    -     *                     HKEROT,BL,SJTOT,SKEROT,TEFFL,M,LNEW,CMIXL)
+    +     *                     HKEROT,BL,SJTOT,SKEROT,TEFFL,M,LNEW,CMIXL,
+    +     *                     OMEGA)
+     C CALCULATE FP AND FT GIVEN OMEGA FOR THE NEW POINT DISTRIBUTION
+                 CALL FPFT(HD,HR,HS,M,OMEGA,ETA2,FP,FT,HG,R0)
+                 LNEWFIT = .FALSE.
     ```
 
     with `OMEGA` added at the end of the call in main.f (line 1043).
 
-2. **(d)** **A sign error in the interpolation of $X$ and $Z$.** ([[#L217-L218]]) When the new fitting point lies between the last interior point and the first envelope point, `HCOMP(1,J) = HCOMP(1,M)+FX*(HCOMP(1,M)-ENVX(JM))`, and the same for $Z$. Every other interpolation is $a + f(b - a)$; this one is $a + f(a - b)$. Harmless today: `ENVX` and `ENVZ` hold the surface `X`, `Z`, which are `HCOMP(1,M)`, `HCOMP(3,M)` (step 4), so the difference is zero. It would matter once the envelope's composition varied. Read from the code, not run. **A possible fix:**
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): GETNEWENV ran in none of 34 runs (26 of YREC's cases, from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning, and 8 made-up ones; one of these, with `FCORE` = 1.0, stopped in its first second). Two made-up runs had mass loss on (`LMDOT` and `LREIMER`), but the routine runs only for a mass gain (`DMDT` > 0, [[massloss.f#L131-L132]]), which no case or document sets. A rotating run with `LMDOT` and `DMDT0` > 0 would reach it; none was run. No fix was run. Intent: none found.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to interpolate X and Z from the last interior point
-    C toward the envelope point, as for the other quantities.
-                   HCOMP(1,J) = HCOMP(1,M)+FX*(ENVX(JM)-HCOMP(1,M))
-                   HCOMP(3,J) = HCOMP(3,M)+FX*(ENVZ(JM)-HCOMP(3,M))
+2. **(not reached)** **A sign error in the interpolation of $X$ and $Z$.** ([[#L217-L218]]) When the new fitting point lies between the last interior point and the first envelope point, `HCOMP(1,J) = HCOMP(1,M)+FX*(HCOMP(1,M)-ENVX(JM))`, and the same for $Z$. Every other interpolation is $a + f(b - a)$; this one is $a + f(a - b)$. Harmless today: `ENVX` and `ENVZ` hold the surface `X`, `Z`, which are `HCOMP(1,M)`, `HCOMP(3,M)` (step 4), so the difference is zero. It would matter once the envelope's composition varied.
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/getnewenv.f
+    +++ b/src/getnewenv.f
+    @@ -214,8 +214,11 @@
+                    HR(J) = HR(M)+FX*(ENVR(JM)-HR(M))
+                    HS(J) = X1
+                    HT(J) = HT(M)+FX*(ENVT(JM)-HT(M))
+    -               HCOMP(1,J) = HCOMP(1,M)+FX*(HCOMP(1,M)-ENVX(JM))
+    -               HCOMP(3,J) = HCOMP(3,M)+FX*(HCOMP(3,M)-ENVZ(JM))
+    +C 11/09/26 KC via Claude
+    +C code changed to interpolate X and Z from the last interior point
+    +C toward the envelope point, as for the other quantities.
+    +               HCOMP(1,J) = HCOMP(1,M)+FX*(ENVX(JM)-HCOMP(1,M))
+    +               HCOMP(3,J) = HCOMP(3,M)+FX*(ENVZ(JM)-HCOMP(3,M))
+                    DO K = 4,JEND
+                       HCOMP(K,J) = HCOMP(K,M)
+                    END DO
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): not reached, as for [[#b1]]: GETNEWENV runs only for a mass gain (`DMDT` > 0, [[massloss.f#L131-L132]]), and no run gained mass. No fix was run. Intent: none found.
 
 ### GETNEWENV
 

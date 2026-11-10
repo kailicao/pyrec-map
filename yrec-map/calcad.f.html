@@ -1,5 +1,5 @@
 <!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>calcad.f · PyREC scaffolding (from YREC development, 7be4133)</title><link rel='icon' type='image/svg+xml' href='../logo.svg'><script>function hlLines(){document.querySelectorAll('.line.hl').forEach(function(e){e.classList.remove('hl')});var m=location.hash.match(/^#([LP])(\d+)(?:-[LP](\d+))?$/);if(!m)return;var first=null;var col=document.querySelector('aside.codecol');if(col)col.dataset.view=m[1]==='P'?'p':'f';for(var i=+m[2];i<=+(m[3]||m[2]);i++){var e=document.getElementById(m[1]+i);if(!e)continue;e.classList.add('hl');first=first||e;for(var p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;}if(!first)return;var pane=first.closest('.panes');if(pane){pane.scrollTop=first.offsetTop-pane.clientHeight/2;}else first.scrollIntoView({block:'center'});}addEventListener('hashchange',hlLines);addEventListener('DOMContentLoaded',hlLines);document.addEventListener('click',function(ev){var a=ev.target.closest&&ev.target.closest('a[href^="#L"],a[href^="#P"]');if(!a||!document.querySelector('aside.codecol'))return;ev.preventDefault();history.pushState(null,'',a.getAttribute('href'));hlLines();});</script><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
-<header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ calcad.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#design'>Design</a></li><li><a href='#bugs'>Suspected bugs, by priority</a></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-CALCAD'>CALCAD</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
+<header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ calcad.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#design'>Design</a></li><li><a href='#bugs'>Suspected bugs, checked by running the code</a><ol><li><a href='#b1'>1. Step sizes not restored</a></li><li><a href='#b2'>2. The interior&#x27;s Z</a></li><li><a href='#b3'>3. ICZ may be stale</a></li><li><a href='#b4'>4. FXIONJ is a scalar</a></li><li><a href='#b5'>5. EOS errors ignored</a></li><li><a href='#b6'>6. Output format</a></li><li><a href='#b7'>7. A short profile</a></li><li><a href='#b8'>8. The surface point is left out of the integrals</a></li></ol></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-CALCAD'>CALCAD</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>calcad.f</h1>
 <p class='muted'>542 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f'>on GitHub (7be4133)</a></p>
 <p><strong>Python version</strong>: <code>calcad.py</code>, 295 lines, on the right (switch to Python above the code).</p>
@@ -8,7 +8,7 @@
 <h2 id='how-it-fits'>How it fits</h2>
 <div class='notes'><ul>
 <li><strong>Inputs:</strong> the arguments, the interior model <code>HR</code>, <code>HD</code>, <code>HP</code>, <code>HT</code> ($\log r$, $\log\rho$, $\log P$, $\log T$), <code>HCOMP</code> (composition), <code>M</code> (last interior point), <code>JENV</code> (the base of the convection zone), <code>RCZL</code> ($\log r_\mathrm{CZ}/R_\odot$), <code>BL</code>, <code>TEFFL</code>, <code>FP</code>, <code>FT</code>, <code>HSTOT</code>, <code>DAGE</code> (the age), <code>CMIXL</code> (the mixing length, passed on to ENVINT).</li>
-<li><strong>Who calls it:</strong> <a href="../yrec-map/wrtout.f.html#def-WRTOUT">WRTOUT</a>, when the options <code>LACOUT</code> and <code>LADON</code> are on and the model has a convective envelope (<code>JENV &gt; 1</code>) (<a href="../yrec-map/wrtout.f.html#L696-L700">lines 696–700</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/wrtout.f#L696-L700' title='these lines on GitHub'>↗</a>). <code>LACOUT</code> is in no namelist and set nowhere, so it keeps its initial value, false (<a href="../yrec-map/acdpth_mod.f.html#L55">line 55</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/acdpth_mod.f#L55' title='these lines on GitHub'>↗</a>), and CALCAD never runs today (settled from the code, Nov 9, 2026; see <a href="../yrec-map/acdpth_mod.f.html#def-ACDPTH_MOD"><code>ACDPTH_MOD</code></a>).</li>
+<li><strong>Who calls it:</strong> <a href="../yrec-map/wrtout.f.html#def-WRTOUT">WRTOUT</a>, when the options <code>LACOUT</code> and <code>LADON</code> are on and the model has a convective envelope (<code>JENV &gt; 1</code>) (<a href="../yrec-map/wrtout.f.html#L696-L700">wrtout.f, lines 696–700</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/wrtout.f#L696-L700' title='these lines on GitHub'>↗</a>). <code>LACOUT</code> is in no namelist and set nowhere, so it keeps its initial value, false (<a href="../yrec-map/acdpth_mod.f.html#L55">acdpth_mod.f, line 55</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/acdpth_mod.f#L55' title='these lines on GitHub'>↗</a>), and CALCAD never runs today (settled from the code, Nov 9, 2026; see <a href="../yrec-map/acdpth_mod.f.html#def-ACDPTH_MOD"><code>ACDPTH_MOD</code></a>).</li>
 <li><strong>What it calls:</strong> <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a> (the envelope, which fills <code>/ENVSTRUCT/</code>); for the sound speed, <a href="../yrec-map/esac06.f.html#def-ESAC06">ESAC06</a> (OPAL 2006 EOS) or <a href="../yrec-map/eqstat2.f.html#def-EQSTAT2">EQSTAT2</a>; <a href="../yrec-map/splinj.f.html#def-SPLINJ">SPLINJ</a> and <a href="../yrec-map/splint.f.html#def-SPLINT">SPLINT</a> to interpolate at $r_\mathrm{CZ}$; <a href="../yrec-map/boole.f.html#def-BOOLE">BOOLE</a> to integrate.</li>
 <li><strong>Outputs:</strong> in <code>/ACDPTH/</code>, <a class='term' href='../glossary.html#var-tnorm'><code>TNORM</code></a>, <a class='term' href='../glossary.html#var-tcz'><code>TCZ</code></a>, <a class='term' href='../glossary.html#var-tauczn'><code>TAUCZN</code></a> $= t_\mathrm{CZ}/t_\mathrm{norm}$, <a class='term' href='../glossary.html#var-tatmos'><code>TATMOS</code></a> (always 0, see below) and <a class='term' href='../glossary.html#var-deladj'><code>DELADJ</code></a> ($\nabla_\mathrm{ad}$ at each point). WRTOUT prints them in its output columns (its comment: columns 68–70). A line to <a class='term' href='../glossary.html#var-ishort'><code>ISHORT</code></a> at every call; with <a class='term' href='../glossary.html#var-lclcd'><code>LCLCD</code></a>, the full profile to unit <a class='term' href='../glossary.html#var-iclcd'><code>ICLCD</code></a>.</li>
 <li><strong>Modules:</strong> <a href="../yrec-map/acdpth_mod.f.html#def-ACDPTH_MOD"><code>ACDPTH_MOD</code></a> (with ENVINT, <a href="../yrec-map/getopal95.f.html#def-GETOPAL95">GETOPAL95</a>, the main program, PARMIN, WRTOUT; it also holds the output switches <code>LCLCD</code>, <code>LADON</code>, <code>LACOUT</code>); <a href="../yrec-map/envstruct_mod.f.html#def-ENVSTRUCT_MOD"><code>ENVSTRUCT_MOD</code></a> (the envelope profile, filled by ENVINT); <a href="../yrec-map/nmlpar_mod.f.html#def-NMLPAR_MOD"><code>NMLPAR_MOD</code></a> (the integration step sizes <a class='term' href='../glossary.html#var-atmbeg'><code>ATMBEG</code></a> … <a class='term' href='../glossary.html#var-envmax'><code>ENVMAX</code></a> and <a class='term' href='../glossary.html#var-atmstp'><code>ATMSTP</code></a>, <a class='term' href='../glossary.html#var-envstp'><code>ENVSTP</code></a>, the spot parameters <a class='term' href='../glossary.html#var-spotf'><code>SPOTF</code></a>, <a class='term' href='../glossary.html#var-spotx'><code>SPOTX</code></a>, and the switch <a class='term' href='../glossary.html#var-lopale06'><code>LOPALE06</code></a>); <a href="../yrec-map/eos06misc_mod.f.html#def-EOS06MISC_MOD"><code>EOS06MISC_MOD</code></a> (ESAC06's output <a class='term' href='../glossary.html#var-eos'><code>EOS</code></a>); <code>COMP_MOD</code>, <code>CONSTANTS_MOD</code>, <code>IOUNITS_MOD</code> (the units <code>ISHORT</code>, <code>ICLCD</code>) and <code>DIMENSIONS_MOD</code>.</li>
@@ -21,8 +21,7 @@ $$\log R = \tfrac12(\log L - \log 4\pi - \log\sigma - 4\log T_\mathrm{eff}), \qq
 For a spotted star (<code>SPOTF</code> $\ne 0$, <code>SPOTX</code> $\ne 1$) and only when <code>JENV = M</code>, the envelope uses the ambient temperature
 $$\log T_\mathrm{amb} = \log T_\mathrm{eff} - \tfrac14\log_{10}\!\left(f_s x_s^4 + 1 - f_s\right),$$
 with $f_s$ = <code>SPOTF</code> (the spot filling factor) and $x_s$ = <code>SPOTX</code> (probably the spot-to-ambient temperature ratio).</p>
-<aside class='question' id='q1'><p><strong>Question 1</strong> (<a href="#L228-L232">lines 228–232</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L228-L232' title='these lines on GitHub'>↗</a>; <a href="#L328">line 328</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L328' title='these lines on GitHub'>↗</a>). <strong>Spots only at <code>JENV = M</code>.</strong> The ambient temperature is used only when <code>JENV = M</code>, which is also exactly the case in which no convection zone is found (<code>TCZ</code> needs <code>JENV &lt; M</code>), so the spot correction applies only to stars for which <code>TCZ = 0</code>. <a href="../yrec-map/wrtmod.f.html#def-WRTMOD">WRTMOD</a> has the same condition (<a href="../yrec-map/wrtmod.f.html#L228">line 228</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/wrtmod.f#L228' title='these lines on GitHub'>↗</a>). Why that condition?</p>
-</aside>
+<p><code>JENV = M</code> holds when no surface convection zone is found (<a href="../yrec-map/findsh.f.html#L113-L120">findsh.f, lines 113–120</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/findsh.f#L113-L120' title='these lines on GitHub'>↗</a>), so the spot correction here applies only to stars without one, the opposite of the routines that test <code>LC(M)</code> (<a href="../yrec-map/stitch.f.html#b6">stitch.f, suspected bug 6</a>).</p>
 </li>
 <li>
 <p><strong>One profile.</strong> The interior points $1..M$, then envelope points $2..N_\mathrm{env}$, in linear units, $T$ in $10^6$ K.</p>
@@ -36,91 +35,155 @@ The code stores the inverse sound speed $1/c_s$, with $c_s = \sqrt{\Gamma_1 P/\r
 <p><strong>Integrate</strong> with Boole's rule:
 $$t_\mathrm{norm} = \int_0^{R} \frac{dr}{c_s}, \qquad t_\mathrm{CZ} = \int_{r_\mathrm{CZ}}^{R} \frac{dr}{c_s},$$
 in seconds. For $t_\mathrm{CZ}$, the point just below $r_\mathrm{CZ}$ is replaced by $r_\mathrm{CZ}$ itself, with $1/c_s$ from a cubic spline through 7 neighboring points.</p>
-<aside class='question' id='q2'><p><strong>Question 2</strong> (<a href="#L310">line 310</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L310' title='these lines on GitHub'>↗</a>; <a href="#L322">line 322</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L322' title='these lines on GitHub'>↗</a>; <a href="#L249-L256">lines 249–256</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L249-L256' title='these lines on GitHub'>↗</a>). <strong>The last point.</strong> <code>K = M + NUMENV - 2</code> is passed to BOOLE as the number of points, but the profile has $M + N_\mathrm{env} - 1$ points, so the outermost point is left out of both integrals. Is this intended (the surface point having $c_s$ ill-defined)?</p>
-</aside>
+<p>The surface point of the profile is left out of both integrals (<a href="#b8">suspected bug 8</a>).</p>
 </li>
 <li>
 <p>$\tau_\mathrm{CZ,n} = t_\mathrm{CZ}/t_\mathrm{norm}$.</p>
 </li>
 </ol>
 <p>The atmosphere's acoustic depth (<code>TATMOS</code>) was computed by a section now commented out (<a href="#L387-L437">lines 387–437</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L387-L437' title='these lines on GitHub'>↗</a>), so it is always 0.</p>
-<aside class='question' id='q3'><p><strong>Question 3</strong> (<a href="#L186">line 186</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L186' title='these lines on GitHub'>↗</a>; <a href="#L444-L446">lines 444–446</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L444-L446' title='these lines on GitHub'>↗</a>). <strong>The atmosphere's acoustic depth.</strong> <code>TATMOS</code> is always 0, yet it is written to <code>ISHORT</code> at every call. Should the atmosphere part be restored or removed?</p>
+<aside class='question' id='q1'><p><strong>Question 1</strong> (<a href="#L186">line 186</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L186' title='these lines on GitHub'>↗</a>; <a href="#L444-L446">lines 444–446</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L444-L446' title='these lines on GitHub'>↗</a>). <strong>The atmosphere's acoustic depth.</strong> <code>TATMOS</code> is always 0, yet it is written to <code>ISHORT</code> at every call. Should the atmosphere part be restored or removed?</p>
 </aside></div>
 <h2 id='design'>Design</h2>
 <div class='notes'><p>The header lists <code>IACAT</code>, <code>IJLAST</code> and other output switches, some marked "obsolete?" (<code>IACAT</code> and the other unused unit numbers are no longer in the module). Many local variables and arrays remain from the commented-out sections.</p></div>
-<h2 id='bugs'>Suspected bugs, by priority</h2>
-<p class='muted'>(a) may give wrong results; (b) may crash; (c) misbehaves silently (a wrong message, an ignored setting); (d) fragile: correct today, but breaks on a change or an unusual input.</p>
-<div class='notes'><ol>
-<li id='b1'>
-<p><strong>(a)</strong> <strong>Step sizes not restored.</strong> (<a href="#L196-L207">lines 196–207</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L196-L207' title='these lines on GitHub'>↗</a>; <a href="#L233-L235">lines 233–235</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L233-L235' title='these lines on GitHub'>↗</a>; <a href="../yrec-map/wrtmod.f.html#L237-L242">lines 237–242</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/wrtmod.f#L237-L242' title='these lines on GitHub'>↗</a>) The routine saves <code>ATMBEG</code>, <a class='term' href='../glossary.html#var-atmmin'><code>ATMMIN</code></a>, <a class='term' href='../glossary.html#var-atmmax'><code>ATMMAX</code></a>, <a class='term' href='../glossary.html#var-envbeg'><code>ENVBEG</code></a>, <a class='term' href='../glossary.html#var-envmin'><code>ENVMIN</code></a>, <code>ENVMAX</code> in <code>ABEG0</code> … <code>EMAX0</code>, sets them to <code>ATMSTP</code>/<code>ENVSTP</code> for its own envelope integration, and never restores them. Later envelope integrations in the same run (the surface boundary condition at every step) then use the fixed steps. <a href="../yrec-map/wrtmod.f.html#def-WRTMOD">WRTMOD</a>, whose code the comment says CALCAD copied (<a href="#L194-L195">lines 194–195</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L194-L195' title='these lines on GitHub'>↗</a>), does restore them. Not reachable today (<code>LACOUT</code> is set nowhere, above). Read from the code, not run. <strong>A possible fix:</strong></p>
-<pre class='hlb'><code><span class='hc'>C 11/09/26 KC via Claude</span>
-<span class='hc'>C code changed to restore the integration step sizes after the</span>
-<span class='hc'>C envelope integration, as WRTMOD does.</span>
-      <span class='hk'>CALL</span> ENVINT(BJ,FPLJ,FTLJ,GLJ,HSTOT,IXXJ,LPRTJ,LSBC0J,
-     *         PLIMJ,RLJ,ATEFFL,XJ,ZJ,DUM1,IDUMJ,KATMJ,KENVJ,KSAHAJ,
-     *         DUM2,DUM3,DUM4,LPULPTJ,CMIXL)
-      ATMBEG = ABEG0
-      ATMMIN = AMIN0
-      ATMMAX = AMAX0
-      ENVBEG = EBEG0
-      ENVMIN = EMIN0
-      ENVMAX = EMAX0
+<h2 id='bugs'>Suspected bugs, checked by running the code</h2>
+<p class='muted'>Each bug is marked by what running the code showed: (changes results, large) or (small), the fix moving a run clearly beyond a null change; (stops the run); (wrong output), the fix changing only what is written; (harmless in the runs), within the noise; (never occurred), the code ran but the fault did not; (not reached); (cannot be reached), a guard prevents it; (withdrawn), the suspicion was wrong.</p>
+<div class='notes'><section class='bug' id='b1'><h3 class='bug'>1. <strong class='bk-fragile'>(cannot be reached)</strong> Step sizes not restored.</h3><p>(<a href="#L196-L207">lines 196–207</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L196-L207' title='these lines on GitHub'>↗</a>; <a href="#L233-L235">lines 233–235</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L233-L235' title='these lines on GitHub'>↗</a>; <a href="../yrec-map/wrtmod.f.html#L237-L242">wrtmod.f, lines 237–242</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/wrtmod.f#L237-L242' title='these lines on GitHub'>↗</a>) The routine saves <code>ATMBEG</code>, <a class='term' href='../glossary.html#var-atmmin'><code>ATMMIN</code></a>, <a class='term' href='../glossary.html#var-atmmax'><code>ATMMAX</code></a>, <a class='term' href='../glossary.html#var-envbeg'><code>ENVBEG</code></a>, <a class='term' href='../glossary.html#var-envmin'><code>ENVMIN</code></a>, <code>ENVMAX</code> in <code>ABEG0</code> … <code>EMAX0</code>, sets them to <code>ATMSTP</code>/<code>ENVSTP</code> for its own envelope integration, and never restores them. Later envelope integrations in the same run (the surface boundary condition at every step) then use the fixed steps. <a href="../yrec-map/wrtmod.f.html#def-WRTMOD">WRTMOD</a>, whose code the comment says CALCAD copied (<a href="#L194-L195">lines 194–195</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L194-L195' title='these lines on GitHub'>↗</a>), does restore them. Not reachable today (<code>LACOUT</code> is set nowhere, above).</p>
+<p><strong>A possible fix:</strong></p>
+<p class='diff-file'>calcad.f</p><pre class='diff'><code><span class='hunk'>@@ <a href='#L230-L238'>lines 230–238</a> @@</span>
+       ELSE
+             ATEFFL = TEFFL
+       ENDIF
+<span class='add'>+C 11/09/26 KC via Claude</span>
+<span class='add'>+C code changed to restore the integration step sizes after the</span>
+<span class='add'>+C envelope integration, as WRTMOD does.</span>
+       CALL ENVINT(BJ,FPLJ,FTLJ,GLJ,HSTOT,IXXJ,LPRTJ,LSBC0J,
+      *         PLIMJ,RLJ,ATEFFL,XJ,ZJ,DUM1,IDUMJ,KATMJ,KENVJ,KSAHAJ,
+      *         DUM2,DUM3,DUM4,LPULPTJ,CMIXL)
+<span class='add'>+      ATMBEG = ABEG0</span>
+<span class='add'>+      ATMMIN = AMIN0</span>
+<span class='add'>+      ATMMAX = AMAX0</span>
+<span class='add'>+      ENVBEG = EBEG0</span>
+<span class='add'>+      ENVMIN = EMIN0</span>
+<span class='add'>+      ENVMAX = EMAX0</span>
+ C      G Somers END
 </code></pre>
-</li>
-<li id='b2'>
-<p><strong>(a)</strong> <strong>The interior's $Z$.</strong> (<a href="#L246-L247">lines 246–247</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L246-L247' title='these lines on GitHub'>↗</a>; <a href="#L283">line 283</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L283' title='these lines on GitHub'>↗</a>) <code>STARZ(I) = HCOMP(3,M)</code> for every interior point: the envelope's $Z$, not the local one, while <code>STARX(I)</code> takes the local $X$. It is used only on the non-OPAL path (EQSTAT2, when <code>LOPALE06</code> is off, its default). With diffusion or burning that changes $Z$, the interior $Z$ differs. Not reachable today (<code>LACOUT</code> is set nowhere, above). Read from the code, not run. <strong>A possible fix:</strong></p>
-<pre class='hlb'><code><span class='hc'>C 11/09/26 KC via Claude</span>
-<span class='hc'>C code changed to take the local Z at each interior point, as for X.</span>
-            STARZ(I)=HCOMP(<span class='hn'>3</span>,I)
+<p><strong>Checked by running YREC</strong> (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached in any of 34 runs: 26 of YREC's cases, from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning, and 8 made-up ones; it cannot be reached at 7be4133, since CALCAD runs only when <code>LACOUT</code> is true, and <code>LACOUT</code> is false in the source and in no namelist (<a href="../yrec-map/acdpth_mod.f.html#b1">acdpth_mod.f, suspected bug 1</a>). The fix was not run. Since nothing goes wrong until that switch is opened, it is fragile code, to be fixed before <code>LACOUT</code> is made settable. Intent: none found; <a href="../yrec-map/wrtmod.f.html#def-WRTMOD">WRTMOD</a>, which the comment says this code copies, restores the step sizes. Related: <a href="../yrec-map/stitch.f.html#def-STITCH">STITCH</a> sets the same six step sizes and does not restore them either (<a href="../yrec-map/stitch.f.html#b1">stitch.f, suspected bug 1</a>); it runs at each store with <code>LSTORE</code>, <code>LSTCH</code>, and <code>LSTENV</code> on, and its check in the same round found a real but small effect ($\log L$ by up to 5.8e-5 dex, against 9.4e-9 dex for the null change).</p></section><section class='bug' id='b2'><h3 class='bug'>2. <strong class='bk-fragile'>(cannot be reached)</strong> The interior's $Z$.</h3><p>(<a href="#L246-L247">lines 246–247</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L246-L247' title='these lines on GitHub'>↗</a>; <a href="#L283">line 283</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L283' title='these lines on GitHub'>↗</a>) <code>STARZ(I) = HCOMP(3,M)</code> for every interior point: the envelope's $Z$, not the local one, while <code>STARX(I)</code> takes the local $X$. It is used only on the non-OPAL path (EQSTAT2, when <code>LOPALE06</code> is off, its default). With diffusion or burning that changes $Z$, the interior $Z$ differs. Not reachable today (<code>LACOUT</code> is set nowhere, above).</p>
+<p><strong>A possible fix:</strong></p>
+<p class='diff-file'>calcad.f</p><pre class='diff'><code><span class='hunk'>@@ <a href='#L244-L250'>lines 244–250</a> @@</span>
+             STARD(I)=DEXP(CLN*HD(I))
+             STARP(I)=DEXP(CLN*HP(I))
+             STARX(I)=HCOMP(1,I)
+<span class='del'>-            STARZ(I)=HCOMP(3,<span class='dw'>M</span>)</span>
+<span class='add'>+C 11/09/26 KC via Claude</span>
+<span class='add'>+C code changed to take the local Z at each interior point, as for X.</span>
+<span class='add'>+            STARZ(I)=HCOMP(3,<span class='dw'>I</span>)</span>
+ 34      CONTINUE
+       DO 35, I=1,NUMENV-1
+             STARR(M+I)=DEXP(CLN*ENVR(I+1))
 </code></pre>
-</li>
-<li id='b3'>
-<p><strong>(a)</strong> <strong><code>ICZ</code> may be stale.</strong> (<a href="#L333-L351">lines 333–351</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L333-L351' title='these lines on GitHub'>↗</a>; <a href="#L370-L373">lines 370–373</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L370-L373' title='these lines on GitHub'>↗</a>) <code>ICZ</code>, the point just below $r_\mathrm{CZ}$, is set only when a pair of points brackets $r_\mathrm{CZ}$, and is kept between calls (<code>SAVE</code>). Inside the loop, the replacement at <code>I.EQ.ICZ</code> is tested before the bracket is found, so a value from an earlier call that is below this call's bracket matches first: The spline replaces a point below $r_\mathrm{CZ}$, <code>FLG</code> is set, and the real point just below $r_\mathrm{CZ}$ is not replaced, so $t_\mathrm{CZ}$ starts from that point instead of $r_\mathrm{CZ}$. If no pair brackets $r_\mathrm{CZ}$, the old <code>ICZ</code> is used (undefined at the first call; 0 makes loop 27 read <code>STARR(0)</code>). The 7-point stencil <code>ICZ-3 … ICZ+3</code> is also not checked against the end of the profile. Not reachable today (<code>LACOUT</code> is set nowhere, above). Read from the code, not run. <strong>A possible fix:</strong></p>
-<pre class='hlb'><code><span class='hc'>C 11/09/26 KC via Claude</span>
-<span class='hc'>C code changed to reset ICZ at each call and to find the bracket</span>
-<span class='hc'>C before the replacement is tested.</span>
-                  IENDJ=<span class='hn'>0</span>
-                  FLG=<span class='hn'>0</span>
-                  ICZ=<span class='hn'>0</span>
-                  <span class='hk'>DO</span> <span class='hn'>22</span>, I=<span class='hn'>1</span>,K
-                        <span class='hk'>IF</span> (ICZ<span class='hk'>.EQ.</span><span class='hn'>0</span> <span class='hk'>.AND.</span> STARR(I)<span class='hk'>.LE.</span>RCZ(<span class='hn'>1</span>) <span class='hk'>.AND.</span>
-     *                      STARR(I+<span class='hn'>1</span>)<span class='hk'>.GE.</span>RCZ(<span class='hn'>1</span>)) <span class='hk'>THEN</span>
-                              ICZ = I
-                        <span class='hk'>ENDIF</span>
-...
+<p><strong>Checked by running YREC</strong> (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached in the same 34 runs; it cannot be reached at 7be4133, since CALCAD runs only when <code>LACOUT</code> is true, and <code>LACOUT</code> is false in the source and in no namelist (<a href="../yrec-map/acdpth_mod.f.html#b1">acdpth_mod.f, suspected bug 1</a>). Once it runs, this needs <code>LOPALE06</code> off (as in <code>testsuite/Test_solarGS98_yaleeos</code>) and a $Z$ that varies inside, as with diffusion. The fix was not run. Since nothing goes wrong until that switch is opened, it is fragile code, to be fixed before <code>LACOUT</code> is made settable. Intent: none found; the envelope loop takes the outer point's $X$ and $Z$ throughout (<a href="#L249-L256">lines 249–256</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L249-L256' title='these lines on GitHub'>↗</a>), while this loop takes the local $X$.</p></section><section class='bug' id='b3'><h3 class='bug'>3. <strong class='bk-fragile'>(cannot be reached)</strong> <code>ICZ</code> may be stale.</h3><p>(<a href="#L333-L351">lines 333–351</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L333-L351' title='these lines on GitHub'>↗</a>; <a href="#L370-L373">lines 370–373</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L370-L373' title='these lines on GitHub'>↗</a>) <code>ICZ</code>, the point just below $r_\mathrm{CZ}$, is set only when a pair of points brackets $r_\mathrm{CZ}$, and is kept between calls (<code>SAVE</code>). Inside the loop, the replacement at <code>I.EQ.ICZ</code> is tested before the bracket is found, so a value from an earlier call that is below this call's bracket matches first: The spline replaces a point below $r_\mathrm{CZ}$, <code>FLG</code> is set, and the real point just below $r_\mathrm{CZ}$ is not replaced, so $t_\mathrm{CZ}$ starts from that point instead of $r_\mathrm{CZ}$. If no pair brackets $r_\mathrm{CZ}$, the old <code>ICZ</code> is used (undefined at the first call; 0 makes loop 27 read <code>STARR(0)</code>). The 7-point stencil <code>ICZ-3 … ICZ+3</code> is also not checked against the end of the profile. Not reachable today (<code>LACOUT</code> is set nowhere, above).</p>
+<p><strong>A possible fix:</strong></p>
+<p class='diff-file'>calcad.f</p><pre class='diff'><code><span class='hunk'>@@ <a href='#L330-L339'>lines 330–339</a> @@</span>
+
+
+ C      get the location of the convection zone, and count nonzero entries:
+<span class='add'>+C 11/09/26 KC via Claude</span>
+<span class='add'>+C code changed to reset ICZ at each call and to find the bracket</span>
+<span class='add'>+C before the replacement is tested.</span>
+                   IENDJ=0
+                   FLG=0
+<span class='add'>+                  ICZ=0</span>
+                   DO 22, I=1,K
+<span class='del'>-                        IF (STARR(I).LE.RCZ(1) .AND.<span class='dw'> STARR(I+1).GE.RCZ(1)) THEN</span></span>
+<span class='add'>+                        IF (<span class='dw'>ICZ.EQ.0 .AND. </span>STARR(I).LE.RCZ(1) .AND.</span>
+<span class='add'>+     *                      STARR(I+1).GE.RCZ(1)) THEN</span>
+                               ICZ = I
+                         ENDIF
 </code></pre>
 <p>(A call with no bracket would still need a decision, such as <code>TCZ</code> = 0.)</p>
-</li>
-<li id='b4'>
-<p><strong>(b)</strong> <strong><code>FXIONJ</code> is a scalar.</strong> (<a href="#L82">line 82</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L82' title='these lines on GitHub'>↗</a>; <a href="#L292">line 292</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L292' title='these lines on GitHub'>↗</a>; <a href="../yrec-map/eqstat2.f.html#L54">line 54</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/eqstat2.f#L54' title='these lines on GitHub'>↗</a>; <a href="../yrec-map/eqstat2.f.html#L171-L173">lines 171–173</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/eqstat2.f#L171-L173' title='these lines on GitHub'>↗</a>) CALCAD passes the scalar <code>FXIONJ</code> where EQSTAT2 declares <code>FXION(3)</code> and writes three elements, so EQSTAT2 writes past it, into whatever CALCAD stores next. On the non-OPAL path (<code>LOPALE06</code> off, its default). Not reachable today (<code>LACOUT</code> is set nowhere, above). Read from the code, not run. <strong>A possible fix:</strong></p>
-<pre class='hlb'><code><span class='hc'>C 11/09/26 KC via Claude</span>
-<span class='hc'>C code changed to declare FXIONJ with the three elements EQSTAT2</span>
-<span class='hc'>C fills.</span>
-      <span class='hk'>REAL</span>*<span class='hn'>8</span> FXIONJ(<span class='hn'>3</span>)
+<p><strong>Checked by running YREC</strong> (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached in the same 34 runs; it cannot be reached at 7be4133, since CALCAD runs only when <code>LACOUT</code> is true, and <code>LACOUT</code> is false in the source and in no namelist (<a href="../yrec-map/acdpth_mod.f.html#b1">acdpth_mod.f, suspected bug 1</a>). Once it runs, a stale <code>ICZ</code> needs a second call with a surface convection zone. The fix was not run. Since nothing goes wrong until that switch is opened, it is fragile code, to be fixed before <code>LACOUT</code> is made settable. Intent: none found.</p></section><section class='bug' id='b4'><h3 class='bug'>4. <strong class='bk-fragile'>(cannot be reached)</strong> <code>FXIONJ</code> is a scalar.</h3><p>(<a href="#L82">line 82</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L82' title='these lines on GitHub'>↗</a>; <a href="#L292">line 292</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L292' title='these lines on GitHub'>↗</a>; <a href="../yrec-map/eqstat2.f.html#L54">eqstat2.f, line 54</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/eqstat2.f#L54' title='these lines on GitHub'>↗</a>; <a href="../yrec-map/eqstat2.f.html#L171-L173">eqstat2.f, lines 171–173</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/eqstat2.f#L171-L173' title='these lines on GitHub'>↗</a>) CALCAD passes the scalar <code>FXIONJ</code> where EQSTAT2 declares <code>FXION(3)</code> and writes three elements, so EQSTAT2 writes past it, into whatever CALCAD stores next. On the non-OPAL path (<code>LOPALE06</code> off, its default). Not reachable today (<code>LACOUT</code> is set nowhere, above).</p>
+<p><strong>A possible fix:</strong></p>
+<p class='diff-file'>calcad.f</p><pre class='diff'><code><span class='hunk'>@@ <a href='#L79-L87'>lines 79–87</a> @@</span>
+ C explicit declarations.
+       IMPLICIT NONE
+       REAL*8 AMUJ,ATEFFL,BET14J,BETAIJ,BETAJ,BL,CHRH,CHT,CMIXL,CVJ,DAGE,
+<span class='del'>-     *       DELAJ,EMUJ,ETAJ,FP,FPLJ,FT,FTLJ,<span class='dw'>FXIONJ,</span>HCOMP,HD,HP,HR,</span>
+<span class='add'>+     *       DELAJ,EMUJ,ETAJ,FP,FPLJ,FT,FTLJ,HCOMP,HD,HP,HR,</span>
+      *       HSTOT,HT,QAPJ,QATJ,QCPJ,QCPPJ,QCPTJ,QDPJ,QDTJ,QDTPJ,QDTTJ,
+      *       RCZ,RCZL,RMUJ,STD,STDL,STP,STPL,STT,STTL,STX,STZ,TEFFL
+<span class='add'>+C 11/09/26 KC via Claude</span>
+<span class='add'>+C code changed to declare FXIONJ with the three elements EQSTAT2</span>
+<span class='add'>+C fills.</span>
+<span class='add'>+      REAL*8 FXIONJ(3)</span>
+       INTEGER IORDER,IRAD,JENV,KHI,KLO,M,MV,MX,NR,NT
+       LOGICAL*4 LATMOJ,LCALCJ,LDERIJ
+ C 10/9/26 MHP via Claude
 </code></pre>
 <p>(with <code>FXIONJ</code> dropped from the <code>REAL*8</code> list at <a href="#L82">line 82</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L82' title='these lines on GitHub'>↗</a>).</p>
-</li>
-<li id='b5'>
-<p><strong>(c)</strong> <strong>EOS errors ignored.</strong> (<a href="#L269-L273">lines 269–273</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L269-L273' title='these lines on GitHub'>↗</a>) ESAC06's alternate return <code>*999</code> jumps to the next statement, so a failed EOS call uses the <code>EOS</code> values of the previous point; ESAC06 writes a message to <code>ISHORT</code>, but CALCAD goes on. Only with <code>LOPALE06</code>, for points outside the OPAL table. Not reachable today (<code>LACOUT</code> is set nowhere, above). Read from the code, not run. <strong>A possible fix:</strong> a choice for the developers: fall back to EQSTAT2 for that point, as the EOS does elsewhere outside the table, or stop.</p>
-</li>
-<li id='b6'>
-<p><strong>(c)</strong> <strong>Output format.</strong> (<a href="#L445-L446">lines 445–446</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L445-L446' title='these lines on GitHub'>↗</a>) Format 67 has no space before "Acoustic depth of atmopshere" (also misspelled), so the line runs the two together. Not reachable today (<code>LACOUT</code> is set nowhere, above). Read from the code, not run. <strong>A possible fix:</strong></p>
-<pre class='hlb'><code>C 11/09/26 KC via Claude
-C code changed to separate and correct the last label of format 67.
-67       FORMAT(1X,'Acoustic depth to CZ:',F14.8,2X,'Acoustic depth to center',
-     *F13.7,2X,'Normalized taucz:',F11.9,2X,'Acoustic depth of atmosphere:',
-     *F16.8,2X)
+<p><strong>Checked by running YREC</strong> (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached in the same 34 runs; it cannot be reached at 7be4133, since CALCAD runs only when <code>LACOUT</code> is true, and <code>LACOUT</code> is false in the source and in no namelist (<a href="../yrec-map/acdpth_mod.f.html#b1">acdpth_mod.f, suspected bug 1</a>). Once it runs, this needs <code>LOPALE06</code> off. The write past <code>FXIONJ</code> cannot be counted without reading the memory it overwrites, so only the call was to be counted. The fix was not run. Since nothing goes wrong until that switch is opened, it is fragile code, to be fixed before <code>LACOUT</code> is made settable. Intent: none found.</p></section><section class='bug' id='b5'><h3 class='bug'>5. <strong class='bk-fragile'>(cannot be reached)</strong> EOS errors ignored.</h3><p>(<a href="#L269-L273">lines 269–273</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L269-L273' title='these lines on GitHub'>↗</a>) ESAC06's alternate return <code>*999</code> jumps to the next statement, so a failed EOS call uses the <code>EOS</code> values of the previous point; ESAC06 writes a message to <code>ISHORT</code>, but CALCAD goes on. Only with <code>LOPALE06</code>, for points outside the OPAL table. Not reachable today (<code>LACOUT</code> is set nowhere, above).</p>
+<p><strong>A possible fix:</strong> a choice for the developers: fall back to EQSTAT2 for that point, as the EOS does elsewhere outside the table, or stop.</p>
+<p><strong>Checked by running YREC</strong> (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached in the same 34 runs; it cannot be reached at 7be4133, since CALCAD runs only when <code>LACOUT</code> is true, and <code>LACOUT</code> is false in the source and in no namelist (<a href="../yrec-map/acdpth_mod.f.html#b1">acdpth_mod.f, suspected bug 1</a>). Once it runs, this needs <code>LOPALE06</code> on and points outside the OPAL table (<a href="../yrec-map/esac06.f.html#L488-L494">esac06.f, lines 488–494</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/esac06.f#L488-L494' title='these lines on GitHub'>↗</a>). The fix (measurement only: recomputing such a point with EQSTAT2) was not run. Since nothing goes wrong until that switch is opened, it is fragile code, to be fixed before <code>LACOUT</code> is made settable. Intent: none found.</p></section><section class='bug' id='b6'><h3 class='bug'>6. <strong class='bk-fragile'>(cannot be reached)</strong> Output format.</h3><p>(<a href="#L445-L446">lines 445–446</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L445-L446' title='these lines on GitHub'>↗</a>) Format 67 has no space before "Acoustic depth of atmopshere" (also misspelled), so the line runs the two together. Not reachable today (<code>LACOUT</code> is set nowhere, above).</p>
+<p><strong>A possible fix:</strong></p>
+<p class='diff-file'>calcad.f</p><pre class='diff'><code><span class='hunk'>@@ <a href='#L442-L449'>lines 442–449</a> @@</span>
+
+ C Output acoustic depth info to ISHORT
+       WRITE(ISHORT,67)TCZ,TNORM,TAUCZN,TATMOS
+<span class='add'>+C 11/09/26 KC via Claude</span>
+<span class='add'>+C code changed to separate and correct the last label of format 67.</span>
+ 67       FORMAT(1X,&#x27;Acoustic depth to CZ:&#x27;,F14.8,2X,&#x27;Acoustic depth to center&#x27;,
+<span class='del'>-     *F13.7,2X,&#x27;Normalized taucz:&#x27;,F11.9,<span class='dw'> </span>&#x27;Acoustic depth of <span class='dw'>atmopshere</span>:&#x27;,<span class='dw'>F16.8,2X)</span></span>
+<span class='add'>+     *F13.7,2X,&#x27;Normalized taucz:&#x27;,F11.9,<span class='dw'>2X,</span>&#x27;Acoustic depth of <span class='dw'>atmosphere</span>:&#x27;,</span>
+<span class='add'>+     *F16.8,2X)</span>
+
+ C 555            CONTINUE
+ C--------------------------------------------------------------
 </code></pre>
-</li>
-<li id='b7'>
-<p><strong>(d)</strong> <strong>A short profile.</strong> (<a href="#L317-L322">lines 317–322</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L317-L322' title='these lines on GitHub'>↗</a>; <a href="#L441">line 441</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L441' title='these lines on GitHub'>↗</a>; <a href="../yrec-map/boole.f.html#L56-L63">lines 56–63</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/boole.f#L56-L63' title='these lines on GitHub'>↗</a>) If <code>K ≤ 3</code>, <code>NN = 2</code> and BOOLE returns 0, so <code>TAUCZN</code> divides by zero. A profile that short does not occur in a real model. Not reachable today (<code>LACOUT</code> is set nowhere, above). Read from the code, not run. <strong>A possible fix:</strong></p>
-<pre class='hlb'><code><span class='hc'>C 11/09/26 KC via Claude</span>
-<span class='hc'>C code changed to leave TAUCZN at zero when TNORM is zero.</span>
-      TAUCZN=<span class='hn'>0.0D0</span>
-      <span class='hk'>IF</span> (TNORM<span class='hk'>.GT.</span><span class='hn'>0.0D0</span>) TAUCZN=TCZ/TNORM
+<p><strong>Checked by running YREC</strong> (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached in the same 34 runs; it cannot be reached at 7be4133, since CALCAD runs only when <code>LACOUT</code> is true, and <code>LACOUT</code> is false in the source and in no namelist (<a href="../yrec-map/acdpth_mod.f.html#b1">acdpth_mod.f, suspected bug 1</a>). The fix was not run. Since nothing goes wrong until that switch is opened, it is a defect only in output that is never written, to be fixed before <code>LACOUT</code> is made settable. Intent: none found.</p></section><section class='bug' id='b7'><h3 class='bug'>7. <strong class='bk-fragile'>(cannot be reached)</strong> A short profile.</h3><p>(<a href="#L317-L322">lines 317–322</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L317-L322' title='these lines on GitHub'>↗</a>; <a href="#L441">line 441</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L441' title='these lines on GitHub'>↗</a>; <a href="../yrec-map/boole.f.html#L56-L63">boole.f, lines 56–63</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/boole.f#L56-L63' title='these lines on GitHub'>↗</a>) If <code>K ≤ 3</code>, <code>NN = 2</code> and BOOLE returns 0, so <code>TAUCZN</code> divides by zero. A profile that short does not occur in a real model. Not reachable today (<code>LACOUT</code> is set nowhere, above).</p>
+<p><strong>A possible fix:</strong></p>
+<p class='diff-file'>calcad.f</p><pre class='diff'><code><span class='hunk'>@@ <a href='#L437-L444'>lines 437–444</a> @@</span>
+ c      CALL BOOLE(ATMOSR,ATMOSC,V,NN,TATMOS)
+
+ C Output normalized acoustic depth
+<span class='add'>+C 11/09/26 KC via Claude</span>
+<span class='add'>+C code changed to leave TAUCZN at zero when TNORM is zero.</span>
+       TAUCZN=0.0D0
+<span class='del'>-      TAUCZN=TCZ/TNORM</span>
+<span class='add'>+      <span class='dw'>IF (TNORM.GT.0.0D0) </span>TAUCZN=TCZ/TNORM</span>
+
+ C Output acoustic depth info to ISHORT
+       WRITE(ISHORT,67)TCZ,TNORM,TAUCZN,TATMOS
 </code></pre>
-</li>
-</ol></div>
+<p><strong>Checked by running YREC</strong> (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached in the same 34 runs; it cannot be reached at 7be4133, since CALCAD runs only when <code>LACOUT</code> is true, and <code>LACOUT</code> is false in the source and in no namelist (<a href="../yrec-map/acdpth_mod.f.html#b1">acdpth_mod.f, suspected bug 1</a>), and <code>K</code> ≤ 3 needs a profile of 5 points or fewer. The fix was not run. Intent: none found.</p></section><section class='bug' id='b8'><h3 class='bug'>8. <strong class='bk-fragile'>(cannot be reached)</strong> The surface point is left out of the integrals.</h3><p>(<a href="#L310-L322">lines 310–322</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L310-L322' title='these lines on GitHub'>↗</a>; <a href="#L241-L256">lines 241–256</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L241-L256' title='these lines on GitHub'>↗</a>; <a href="../yrec-map/boole.f.html#L41-L52">boole.f, lines 41–52</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/boole.f#L41-L52' title='these lines on GitHub'>↗</a>) Loops 34 and 35 build a profile of $M + N_\mathrm{env} - 1$ points, and the sound speed is computed at all of them (<a href="#L264">line 264</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L264' title='these lines on GitHub'>↗</a>; <a href="#L278">line 278</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L278' title='these lines on GitHub'>↗</a>), but <code>K = NUMENV-1+M-1</code> (<a href="#L310">line 310</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L310' title='these lines on GitHub'>↗</a>), one point fewer, is passed to BOOLE as the number of points, and BOOLE integrates over its first <code>N</code> points only (<a href="../yrec-map/boole.f.html#L41-L52">boole.f, lines 41–52</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/boole.f#L41-L52' title='these lines on GitHub'>↗</a>). The profile for $t_\mathrm{CZ}$ ends at point <code>K</code> too (<a href="#L370-L373">lines 370–373</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L370-L373' title='these lines on GitHub'>↗</a>). What follows: Both $t_\mathrm{norm}$ and $t_\mathrm{CZ}$ leave out the outermost interval, between the envelope's last two points, although the sound speed at the surface point is computed as at the others. Not reachable today (<code>LACOUT</code> is set nowhere, above).</p>
+<p><strong>A possible fix:</strong></p>
+<p class='diff-file'>calcad.f</p><pre class='diff'><code><span class='hunk'>@@ <a href='#L307-L314'>lines 307–314</a> @@</span>
+
+
+ C Integrate for the full acoustic depth for normalization
+<span class='del'>-      K=NUMENV-1+M<span class='dw'>-1</span></span>
+<span class='del'>-      U=MOD(<span class='dw'>(NUMENV-1+M-1)</span>,4)</span>
+<span class='add'>+C 11/10/26 KC via Claude</span>
+<span class='add'>+C code changed to integrate over all M+NUMENV-1 points of the profile,</span>
+<span class='add'>+C the surface point included.</span>
+<span class='add'>+      K=NUMENV-1+M</span>
+<span class='add'>+      U=MOD(<span class='dw'>K</span>,4)</span>
+       IF (U.NE.0) THEN
+             NN=K+4-U+1
+       ELSE
+<span class='hunk'>@@ <a href='#L332-L338'>lines 332–338</a> @@</span>
+ C      get the location of the convection zone, and count nonzero entries:
+                   IENDJ=0
+                   FLG=0
+<span class='del'>-                  DO 22, I=1,K</span>
+<span class='add'>+C 11/10/26 KC via Claude</span>
+<span class='add'>+C code changed to stop the search one point short of K, so that</span>
+<span class='add'>+C STARR(I+1) stays inside the profile.</span>
+<span class='add'>+                  DO 22, I=1,K<span class='dw'>-1</span></span>
+                         IF (STARR(I).LE.RCZ(1) .AND. STARR(I+1).GE.RCZ(1)) THEN
+                               ICZ = I
+                         ENDIF
+</code></pre>
+<p><strong>Checked by running YREC</strong> (Nov 10, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached in five of YREC's cases, <code>testsuite/Test_m1p0feh+0p0GS98_base_TAMS</code>, <code>testsuite/Test_m0p3feh+0p0GS98_base_ZAMS</code>, <code>testsuite/Test_m1p4feh+0p0GS98_dif_TAMS</code> (with diffusion), <code>testsuite/Test_m0p8feh+0p0GS98_rotp8p0d0p1mag1e4std_TAMS</code> (with rotation), and <code>examples/run_standard_solar_model/Test_solarcal_noGS_norot</code> (the solar calibration): A line at <a href="#L310">line 310</a><a class='gh' href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L310' title='these lines on GitHub'>↗</a> never counted a call. It cannot be reached at 7be4133, since CALCAD runs only when <code>LACOUT</code> is true, and <code>LACOUT</code> is false in the source and in no namelist (<a href="../yrec-map/acdpth_mod.f.html#b1">acdpth_mod.f, suspected bug 1</a>). The fix was not run; since nothing goes wrong until that switch is opened, it is fragile code, to be fixed before <code>LACOUT</code> is made settable. Intent: none found.</p></section></div>
 <h2 id='definitions'>Definitions</h2>
 <section class='def' id='def-CALCAD'><h3><span class='kind'>subroutine</span>CALCAD</h3>
 <p class='muted'><a href='#L48-L509'>lines 48–509</a> · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/calcad.f#L48-L509'>GitHub</a></p>

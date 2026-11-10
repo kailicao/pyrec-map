@@ -13,11 +13,11 @@
   $$C_\pm = C_V^2 \pm C_A^2 + (n-1)\bigl(C_V'^2 \pm C_A'^2\bigr),\qquad C_V = \tfrac12 + 2\sin^2\theta_W,\ C_A = \tfrac12,\ C_V' = 1 - C_V,\ C_A' = 1 - C_A,$$
   ($C_+$ is `tfac1`, $C_-$ is `tfac2`, `tfac3` $= C_-/C_+$, `tfac4` $= C_+/2$, `tfac5` $= C_-/2$), $g(\lambda)$ a polynomial in $\lambda^2$ and $f_\mathrm{pair}$ a rational function of $\xi$ and $\lambda$.
 
-    > **Question** ([[#L109]]; [[#L117]]). **Number of flavors.** The comment gives "xnufam … = 3.02 plus/minus 0.005 (1998)", the code uses 3.0. Which value is meant, and should the comment say so?
+    > **Question** ([[#L109]]; [[#L117]]). **Number of flavors.** The comment gives "xnufam … = 3.02 plus/minus 0.005 (1998)," the code uses 3.0. Which value is meant, and should the comment say so?
 
 - **Plasma** (eqs. 4.1–4.11): transverse and longitudinal plasmon terms with a correction factor $f_{xy}$.
 - **Photoneutrino** (eqs. 3.2–3.8): a Fourier-type fit in $\tau = \log_{10}(T/10^7)$, with coefficient sets for $10^7$–$10^8$, $10^8$–$10^9$ and above $10^9$ K; negative results are set to zero.
-- **Bremsstrahlung** (eqs. 5.1–5.26): the weakly degenerate form when $T > 0.01\,T_F$, with $T_F = 5.9302\times10^9\bigl(\sqrt{1 + 1.018(\rho Y_e/10^6)^{2/3}} - 1\bigr)$ K; otherwise the liquid-metal form "with C12 parameters (not too different for other elements)".
+- **Bremsstrahlung** (eqs. 5.1–5.26): the weakly degenerate form when $T > 0.01\,T_F$, with $T_F = 5.9302\times10^9\bigl(\sqrt{1 + 1.018(\rho Y_e/10^6)^{2/3}} - 1\bigr)$ K; otherwise the liquid-metal form "with C12 parameters (not too different for other elements)."
 - **Recombination** (eqs. 6.5–6.14): with the chemical potential $\nu$ from $\mathcal F_{1/2}^{-1}$, only for $-20 \le \nu \le 10$.
 
     > **Question** ([[#L1212-L1232]]; [[#L1237]]). **Recombination limited to $-20 \le \nu \le 10$.** Outside this range the recombination loss is zero. Is that a property of Itoh's fit, or a cut that could matter in degenerate cores?
@@ -28,12 +28,28 @@ The sum is converted from erg cm$^{-3}$ s$^{-1}$ to erg g$^{-1}$ s$^{-1}$ by div
 
 ## Bugs, by priority
 
-1. **(a)** **A typo in `tfac2`.** ([[#L124-L125]]) The parameter is `tfac2 = cv*cv - ca*ca + (xnufam-1.0d0) * (cvp*cvp - cap-cap)`. By the pattern of `tfac1` and the definition of $C_-$, the last term should be `cvp*cvp - cap*cap`. As written it is $C_V'^2 - 2C_A' = C_V'^2 - 1$, so $C_-$ = −1.318 instead of 0.182, and `tfac3` $= C_-/C_+$ = −0.784 instead of 0.108. `tfac3` enters the pair rate as $1 + $ `tfac3`$\,q_\mathrm{pair}$ ([[#L356-L357]]) and the photoneutrino rate as $1 - $ `tfac3`$\,q_\mathrm{phot}$ ([[#L834-L835]]), and `tfac5` enters both bremsstrahlung forms ([[#L1015]], [[#L1171]]). Taken whenever `LNULOS1` is on (off by default, on in most of the repository's namelists) and $\log T$ is above `TCUT(5)`. Read from the code, not run; the effect on the total loss was not computed. **A possible fix:**
+1. **(changes results, small)** **Checked by KC** (Nov 10, 2026). **A typo in `tfac2`.** ([[#L124-L125]]) The parameter is `tfac2 = cv*cv - ca*ca + (xnufam-1.0d0) * (cvp*cvp - cap-cap)`. By the pattern of `tfac1` and the definition of $C_-$, the last term should be `cvp*cvp - cap*cap`. As written it is $C_V'^2 - 2C_A' = C_V'^2 - 1$, so $C_-$ = −1.318 instead of 0.182, and `tfac3` $= C_-/C_+$ = −0.784 instead of 0.108. `tfac3` enters the pair rate as $1 + $ `tfac3`$\,q_\mathrm{pair}$ ([[#L356-L357]]) and the photoneutrino rate as $1 - $ `tfac3`$\,q_\mathrm{phot}$ ([[#L834-L835]]), and `tfac5` enters both bremsstrahlung forms ([[#L1015]], [[#L1171]]). Taken whenever `LNULOS1` is on (off by default, on in most of the repository's namelists) and $\log T$ is above `TCUT(5)`.
 
-    ```fortran
-    c 11/09/26 KC via Claude
-    c code changed to square cap in tfac2, as in tfac1 and C- of Itoh et al.
-         8                  tfac2  = cv*cv - ca*ca +
-         9                           (xnufam-1.0d0) * (cvp*cvp - cap*cap),
+    **A possible fix:**
+
+    ```diff
+    --- a/src/sneut.f
+    +++ b/src/sneut.f
+    @@ -121,8 +121,10 @@
+          5                  cap    = 1.0d0 - ca,
+          6                  tfac1  = cv*cv + ca*ca +
+          7                           (xnufam-1.0d0) * (cvp*cvp+cap*cap),
+    +c 11/09/26 KC via Claude
+    +c code changed to square cap in tfac2, as in tfac1 and C- of Itoh et al.
+          8                  tfac2  = cv*cv - ca*ca +
+    -     9                           (xnufam-1.0d0) * (cvp*cvp - cap-cap),
+    +     9                           (xnufam-1.0d0) * (cvp*cvp - cap*cap),
+          &                  tfac3  = tfac2/tfac1,
+          1                  tfac4  = 0.5d0 * tfac1,
+          2                  tfac5  = 0.5d0 * tfac2,
     ```
+
+    **How the code itself shows it.** The routine cites Itoh et al. (ApJS 102, 411, 1996) for its rates ([[#L9]]), and its other sums of couplings follow one pattern: `tfac1 = cv*cv + ca*ca + (xnufam-1.0d0) * (cvp*cvp+cap*cap)` ([[#L122-L123]]) and `tfac6 = cv*cv + 1.5d0*ca*ca + (xnufam - 1.0d0)*(cvp*cvp + 1.5d0*cap*cap)` ([[#L129-L130]]), in which each primed term repeats its unprimed one, squares included. `tfac2` is the same sum with the axial term subtracted, `cv*cv - ca*ca`, and only its primed part, `cvp*cvp - cap-cap` ([[#L124-L125]]), is linear in `cap`. The two are used as a pair: `tfac4` and `tfac5` are half of `tfac1` and `tfac2` ([[#L127-L128]]), and both bremsstrahlung forms take `tfac4*fbrem - tfac5*gbrem` and `tfac4*fliq - tfac5*gliq` ([[#L1015]], [[#L1171]]). The fix squares `cap` as `tfac1` and `tfac6` do.
+
+    **Checked by running YREC** (Nov 9, 2026, the counts of `testsuite/Test_m1p0feh+0p0GS98_base_HeIgnite` repeated on Nov 10 with a private start model; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Of 34 runs (26 of YREC's cases, from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning, and 8 made-up ones), the four that set `LNULOS1` and pass $\log T$ = 7.5 computed the losses, at $\log T$ = 7.50 to 8.07: 33,460,185 times in `testsuite/Test_m1p0feh+0p0GS98_base_HeIgnite`, 101,222 in `examples/class_exercises/exercise_4/Grid_m4p0feh+0p0GS98_std25_TAMS`, and 32,030 and 10,622 in the rotating `testsuite/Test_m2p0_feh+0p0_vzams150_IES1_TAMS` and `testsuite/Test_m2p0_feh+0p0_vzams150_IES2_TAMS`. In every call the pair, photo, and bremsstrahlung terms, which use `tfac3` and `tfac5`, carried from 1% to all of the loss. With the fix, `IES2` keeps its 546 models and end age, and moves $\log L$ by up to $7.95\times10^{-5}$ dex and $\log T_c$ by $3.31\times10^{-5}$, against $1.58\times10^{-8}$ and $1.72\times10^{-8}$ for a null change (nearly every opacity, all with $3 \le \log T \le 9$ and $-6 \le \log\rho \le 9.75$, times $1 + 10^{-10}$): a real effect, but a small one. `IES1`'s track is unchanged in the compared columns but for central $X$ ($10^{-11}$), though all three files differ beyond 2% in columns the comparison does not cover. The giant-branch case, where the losses matter most, was not run with the fix.
 

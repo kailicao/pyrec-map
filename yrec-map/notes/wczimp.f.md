@@ -1,8 +1,8 @@
 ## Explanation
 
-**Purpose.** `WCZIMP` sets the rotation of a convection zone (shells `ISTART`–`IEND`) at fixed total angular momentum, as `wcz.f` (removed since `rp_1`) did, and adds options to impose a rotation profile on the radiative interior below the surface convection zone (JNT, 2015/05/14, copied into this code 2025/09/03–04). `IMPJMOD` ("impose J model", [[parmin.f#PARMIN|PARMIN]]'s comment) chooses: 0, no effect; 1, solid-body rotation; 2, a solid-body core decoupled from the surface convection zone; 3, a solid-body core coupled to it.
+**Purpose.** `WCZIMP` sets the rotation of a convection zone (shells `ISTART`–`IEND`) at fixed total angular momentum, as `wcz.f` (removed since `rp_1`) did, and adds options to impose a rotation profile on the radiative interior below the surface convection zone (JNT, 2015/05/14, copied into this code 2025/09/03–04). `IMPJMOD` ("impose J model," [[parmin.f#PARMIN|PARMIN]]'s comment) chooses: 0, no effect; 1, solid-body rotation; 2, a solid-body core decoupled from the surface convection zone; 3, a solid-body core coupled to it.
 
-> **Question** ([[#L40-L47]]). **Dates in the comments.** The header says "copy of 2025/05/14", the next comments "2015/05/14"; `PARMIN` says "05/15". Which is the original date?
+**The original date is 2015/05/14.** The header says "copy of 2025/05/14" ([[#L40]]), but the later comments of the same change say "COPY OF 2015/05/14" ([[#L52]]) and "REPLICATING 2015/05/14" ([[#L77]]), and `PARMIN` says "JNT 05/15" ([[parmin.f#L273]]), so the header's 2025 is a typo.
 
 **How it fits.**
 - **Who calls it:** [[getrot.f#GETROT|GETROT]] and [[getw.f#GETW|GETW]] (in place of `WCZ` since 09/25).

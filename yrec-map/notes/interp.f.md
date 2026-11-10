@@ -4,7 +4,7 @@
 
 **How it fits.** Called by [[eqscve.f#EQSCVE|`EQSCVE`]] and [[eqscvg.f#EQSCVG|`EQSCVG`]] (the SCV equation of state), [[getalex06.f#GETALEX06|`GETALEX06`]] and [[getopal95.f#GETOPAL95|`GETOPAL95`]] (opacity tables; `YALO3D` is removed since `rp_1`), and [[microdiff_mte.f#MICRODIFF_MTE|`MICRODIFF_MTE`]] and [[model_to_equal.f#MODEL_TO_EQUAL|`MODEL_TO_EQUAL`]] (regridding for diffusion). No modules, no calls. The version without derivatives is [[intrp2.f#INTRP2|`INTRP2`]]; the 3-point one is [[inter3.f#INTER3|`INTER3`]].
 
-> **Question** ([[#L16-L18]]). **Stale comment.** The comment calls it "the interpolation routine for the VandenBerg opacity tables (CAPPA)"; it now serves the EOS, several opacity tables, and the diffusion grids. A comment to update?
+**The header's "VandenBerg opacity tables" is from an older use.** The comment calls it "THE INTERPOLATION ROUTINE FOR THE VANDENBERG OPACITY TABLES(CAPPA)" ([[#L16-L18]]); it now serves the SCV EOS ([[eqscve.f#EQSCVE|EQSCVE]], [[eqscvg.f#EQSCVG|EQSCVG]]), the opacity tables of [[getopal95.f#GETOPAL95|GETOPAL95]] and [[getalex06.f#GETALEX06|GETALEX06]], and the diffusion grids ([[microdiff_mte.f#MICRODIFF_MTE|MICRODIFF_MTE]], [[model_to_equal.f#MODEL_TO_EQUAL|MODEL_TO_EQUAL]]), so the comment could describe a general four-point Lagrange interpolation.
 
 **The method.** For nodes $a_1,\dots,a_4$,
 

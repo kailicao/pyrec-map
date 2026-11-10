@@ -16,11 +16,11 @@ $$R = \frac{\rho}{T_6^{\,3}} .$$
 
 The tables at $X = 1-Z$ exist for 15 values of $Z$ only (none for $Z = 0.1$), so there are $8 \times 16 + 15 = 143$ compositions (`NUMXZ`), stored at index $(i_X - 1)\cdot 16 + i_Z$ ([[#L82]]; [[#L121]]).
 
-> **Question** ([[#L58-L61]]; [[#L101-L104]]). **Stale comment.** The comment on the storage index, repeated in both loops, speaks of "15 sets of metal abundance with 7 sets of hydrogen", while the code reads 16 values of $Z$ and 9 of $X$ (the ninth at $X = 1-Z$, with 15 tables). Should it be brought up to date?
+**The comment on the storage index is stale.** Repeated in both loops ([[#L58-L61]]; [[#L101-L104]]), it speaks of "15 sets of metal abundance with 7 sets of hydrogen," while the code reads `NUMZ` = 16 values of $Z$ and `NUMX` = 9 of $X$ ([[#L37-L38]]), the ninth at $X = 1-Z$ with 15 tables, as above.
 
 **The method.** For each composition, the routine reads the header ($X$, $Z$) and checks it against the grid; reads the $\log R$ row and checks it; then reads the 85 temperature rows in descending order of $T$, checking each $\log T$ against `TGR06`. A mismatch prints an error (to the terminal only) and stops the run with exit status 3, the code for input errors, except for the check of $X$ and $Z$ in the first loop, whose `STOP` is commented out (bug 1).
 
-> **Question** ([[#L73-L74]]; [[#L114-L115]]). **Only 16 of 19 densities checked.** Both loops check `R0GRTAB(KK)` for `KK = 1, 16`, not up to `NUMD` = 19, so the last three values of $\log R$ (0, 0.5, 1) are read but not checked. Is that on purpose (for example, for tables whose last columns differ), or should the loop run to `NUMD`? The $\log R$ rows of `alexmol06gs98.tab` would show whether the full check passes.
+**The check could cover all 19 densities.** Both loops check `R0GRTAB(KK)` for `KK = 1, 16` ([[#L73-L74]]; [[#L114-L115]]), not up to `NUMD` = 19, so the last three values of $\log R$ (0, 0.5, 1) are read but not checked. The table gives no reason for it: All 143 "log T" rows of `input/opacity/molecular/alexmol06gs98.tab` hold the same 19 values as `R0GR06` ([[galot06_mod.f#L46-L47]]), so a check to `NUMD` would pass (checked from the file, Nov 10, 2026).
 
 > **Question** ([[#L65]]; [[#L74]]; [[#L88]]; [[#L108]]; [[#L115]]; [[#L126]]). **Exact comparisons of reals.** The checks compare values read with `F9.6`, `F7.3` or `F5.3` against the grids' literals with `.NE.`. This works when the decimal strings in the file read to the same binary numbers as the literals (they do for values written with these formats, such as 0.350000 or -7.500), but a table written with a slightly different rounding would stop the run. Should the checks use a tolerance, such as $10^{-6}$?
 
@@ -30,23 +30,52 @@ The tables at $X = 1-Z$ exist for 15 values of $Z$ only (none for $Z = 0.1$), so
 
 ## Bugs, by priority
 
-1. **(c)** **A check that does not stop.** ([[#L63-L70]]) In the first loop (the eight values of $X$ below $1-Z$), the `STOP` after a mismatch of the header's $X$ or $Z$ is commented out (line 69), so the run goes on after printing "RUN STOPPED", and the table is stored under the composition the grid expects. In the second loop the same check stops the run (lines 106–112). What follows: A table file in another order or with other compositions is read without stopping, if its $\log R$ and $\log T$ rows match. Only with `LALEX06` (off by default in the code; recommended by YREC's User Guide). Read from the code, not run. **A possible fix:**
+1. **(never occurred)** **A check that does not stop.** ([[#L63-L70]]) In the first loop (the eight values of $X$ below $1-Z$), the `STOP` after a mismatch of the header's $X$ or $Z$ is commented out (line 69), so the run goes on after printing "RUN STOPPED," and the table is stored under the composition the grid expects. In the second loop the same check stops the run (lines 106–112). What follows: A table file in another order or with other compositions is read without stopping, if its $\log R$ and $\log T$ rows match. Only with `LALEX06` (off by default in the code; recommended by YREC's User Guide).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to stop on a mismatch of X or Z in the first loop too,
-    C as the second loop does.
-                IF(XX.NE.XXG06(I) .OR. ZZ.NE.ZZG06(II))THEN
-                   WRITE(*,15)XXG06(I),XX,ZZG06(II),ZZ
-                   STOP 3
-                ENDIF
+    **A possible fix:**
+
+    ```diff
+    --- a/src/readalex06.f
+    +++ b/src/readalex06.f
+    @@ -62,11 +62,14 @@
+     C HEADER INFORMATION: X AND Z; CHECK FOR CONSISTENCY
+                 READ(IALEX06,10)XX,ZZ
+      10   FORMAT(30X,F9.6,7X,F9.6//)
+    +C 11/09/26 KC via Claude
+    +C code changed to stop on a mismatch of X or Z in the first loop too,
+    +C as the second loop does.
+                 IF(XX.NE.XXG06(I) .OR. ZZ.NE.ZZG06(II))THEN
+                    WRITE(*,15)XXG06(I),XX,ZZG06(II),ZZ
+      15   FORMAT(1X,'ERROR IN ALEXANDER OPACITY TABLES:'/
+          *       1X,'EXPECTED AND ACTUAL X,Z',4F7.2,' RUN STOPPED')
+    -C               STOP
+    +               STOP 3
+                 ENDIF
+                 READ(IALEX06,20)(R0GRTAB(K),K=1,NUMD)
+      20   FORMAT(6X,19F7.3)
     ```
 
-2. **(c)** **No `STATUS='OLD'`.** ([[#L54]]) The file is opened without `STATUS`, so with a wrong name the `OPEN` creates an empty file of that name, and the run fails at the first `READ` (line 63), at the end of the file, with the compiler's message rather than one that names the missing table. Read from the code, not run. **A possible fix:**
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): 34 runs, 26 of YREC's cases (from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning) and 8 made-up ones (each one of YREC's cases with a few settings changed), of which one stopped in its first second. The check ran 128 times in each of the 33 others (one per table, $X$ = 0 to 0.9, $Z$ = 0 to 0.1), and never found a mismatch in `alexmol06gs98.tab`, the table every case reads. What would reach it: a table file in another order or with other compositions. The fix is a stop, so it was not run. Intent: The `STOP` was commented out with no reason given; the second loop's check stops.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to open the table with STATUS='OLD', so that a wrong
-    C file name stops the run at the OPEN.
-          OPEN(UNIT=IALEX06,FILE=FALEX06,STATUS='OLD')
+2. **(never occurred)** **No `STATUS='OLD'`.** ([[#L54]]) The file is opened without `STATUS`, so with a wrong name the `OPEN` creates an empty file of that name, and the run fails at the first `READ` (line 63), at the end of the file, with the compiler's message rather than one that names the missing table.
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/readalex06.f
+    +++ b/src/readalex06.f
+    @@ -51,7 +51,10 @@
+           REAL*8 R0GRTAB(NUMD),XX,ZZ,T
+     C INITIALIZE INDEX OF PREVIOUS CLOSEST POINTS AND ENVELOPE ABUNDANCES
+           SAVE
+    -      OPEN(UNIT=IALEX06,FILE=FALEX06)
+    +C 11/09/26 KC via Claude
+    +C code changed to open the table with STATUS='OLD', so that a wrong
+    +C file name stops the run at the OPEN.
+    +      OPEN(UNIT=IALEX06,FILE=FALEX06,STATUS='OLD')
+     C READ IN INITIAL X AND Z; ENSURE THAT THEY HAVE THE EXPECTED VALUES.
+           DO I = 1,NUMX-1
+              DO II = 1, NUMZ
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The `OPEN` ran once in each of the 33 runs, and the file always existed. What would reach it: a wrong `FALEX06`. The fix is a stop, so it was not run. Intent: none found.

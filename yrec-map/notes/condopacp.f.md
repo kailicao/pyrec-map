@@ -22,18 +22,36 @@
 
 ## Bugs, by priority
 
-1. **(b)** **A point on the table's last temperature or density stops the run.** ([[#L99-L109]]) `HUNT` returns `N` for a value equal to the last grid value ([[#L269-L276]]), and the tests after it treat `N` as out of range, so the run stops ("CONINTER: T out of range", "CONINTER: rho out of range"). [[condopacpint.f#CONDOPACPINT|`CONDOPACPINT`]] guards its calls with limits that include the table's upper edges, $\log T \le 9$ and $\log\rho \le 9.75$ ([[condopacpint.f#L54]]), so a point at exactly $\log T = 9$ or $\log\rho = 9.75$ passes the guard and stops the run. Only with `LcondOpacP` (off by default, set in all 51 decks of the test suite and recommended by the user guide), and only at exactly these values, so rare. Read from the code, not run. **A possible fix:**
+1. **(never occurred)** **A point on the table's last temperature or density stops the run.** ([[#L99-L109]]) `HUNT` returns `N` for a value equal to the last grid value ([[#L269-L276]]), and the tests after it treat `N` as out of range, so the run stops ("CONINTER: T out of range," "CONINTER: rho out of range"). [[condopacpint.f#CONDOPACPINT|`CONDOPACPINT`]] guards its calls with limits that include the table's upper edges, $\log T \le 9$ and $\log\rho \le 9.75$ ([[condopacpint.f#L54]]), so a point at exactly $\log T = 9$ or $\log\rho = 9.75$ passes the guard and stops the run. Only with `LcondOpacP` (off by default, set in all 51 decks of the test suite and recommended by the user guide), and only at exactly these values, so rare.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to accept a point on the table's last temperature or
-    C density, which HUNT returns as JLO = N, in the last interval.
-          call HUNT(AT,MAXT,TLG,IT)
-          IF(IT.EQ.MAXT.AND.TLG.LE.AT(MAXT)) IT=MAXT-1
-    ...
-          call HUNT(AR,MAXR,RLG,IR)
-          IF(IR.EQ.MAXR.AND.RLG.LE.AR(MAXR)) IR=MAXR-1
+    **A possible fix:**
+
+    ```diff
+    --- a/src/condopacp.f
+    +++ b/src/condopacp.f
+    @@ -96,7 +96,11 @@
+           ZLG=dlog10(Zion)
+           call HUNT(AZ,MAXZ,ZLG,IZ)
+           if (IZ.eq.0.or.IZ.eq.MAXZ) stop'CONINTER: Z out of range'
+    +C 11/09/26 KC via Claude
+    +C code changed to accept a point on the table's last temperature or
+    +C density, which HUNT returns as JLO = N, in the last interval.
+           call HUNT(AT,MAXT,TLG,IT)
+    +      IF(IT.EQ.MAXT.AND.TLG.LE.AT(MAXT)) IT=MAXT-1
+     
+     C      if (IT.eq.0.or.IT.eq.MAXT) stop'CONINTER: T out of range'
+           if (IT.eq.0.or.IT.eq.MAXT) then
+    @@ -106,6 +110,7 @@
+           endif
+     
+           call HUNT(AR,MAXR,RLG,IR)
+    +      IF(IR.EQ.MAXR.AND.RLG.LE.AR(MAXR)) IR=MAXR-1
+           if (IR.eq.0.or.IR.eq.MAXR) stop'CONINTER: rho out of range'
+           ITM=max0(1,IT-1)
+           ITP=min0(MAXT,IT+2)
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): 34 runs, 26 of YREC's cases (from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning) and 8 made-up ones (each one of YREC's cases with a few settings changed), of which one stopped in its first second. The table lookup ran in all 33 others, from 0.18 million to 223 million times a run, at $\log T$ = 3 to 8.40 and $\log\rho$ = −6 to 7.45. No point fell on the table's last temperature or density, and no run stopped here, so the fix was not run. What would reach it: a point at exactly $\log T = 9$ or $\log\rho = 9.75$, beyond the conditions of every run. Intent: none found; the temperature stop was rewritten to print the indices ([[#L101-L106]]), keeping the test.
 
 ### CONDOPACP
 

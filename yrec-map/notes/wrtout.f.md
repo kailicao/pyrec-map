@@ -25,7 +25,7 @@
 
     > **Question** ([[#L382-L384]]). **The helium flash's threshold.** The temperature maximum during the helium flash is the first one above $\log T = 7.98$, a hard-coded value. Where does it come from, and should it be a setting?
 
-6. **Neutrino detectors:** capture rates as linear combinations of the eight fluxes (pp, pep, hep, $^7$Be, $^8$B, $^{13}$N, $^{15}$O, $^{17}$F) with cross sections (from Bahcall's book, p. 207, table 8.2, by the comment) for $^7$Li, $^{37}$Cl, $^{71}$Ga, $^{81}$Br, $^{98}$Mo, $^{115}$In; and for the track, Cl and Ga in SNU with a second table (`CLSNUF`, `GASNUF`, "Neutrino Astrophysics p. 207", with $^{37}$Cl changes after Bahcall & Pinsonneault). The summary's labels give these rates and the fluxes in erg (bug 2).
+6. **Neutrino detectors:** capture rates as linear combinations of the eight fluxes (pp, pep, hep, $^7$Be, $^8$B, $^{13}$N, $^{15}$O, $^{17}$F) with cross sections (from Bahcall's book, p. 207, table 8.2, by the comment) for $^7$Li, $^{37}$Cl, $^{71}$Ga, $^{81}$Br, $^{98}$Mo, $^{115}$In; and for the track, Cl and Ga in SNU with a second table (`CLSNUF`, `GASNUF`, "Neutrino Astrophysics p. 207," with $^{37}$Cl changes after Bahcall & Pinsonneault). The summary's labels give these rates and the fluxes in erg (bug 2).
 
     > **Question** ([[#L404-L413]]; [[#L165-L171]]). **Two tables of cross sections.** The $^{37}$Cl rate printed in the summary uses 1.09×10⁴ for $^8$B (`FL37CL`), the track's `CLSNU` 1.14×10⁴; the Ga values differ too (for example $^7$Be: 73.2 against 71.7). Which are current?
 
@@ -46,37 +46,76 @@
 
 ## Bugs, by priority
 
-1. **(c)** **Track version 2 without rotation writes rotation values never set.** ([[#L594-L608]]; [[#L630-L634]]) In the branch for `ITRVER` 1 and 2, `ROTP`, `ROTV`, and `HICZ` are set only with `LROT`, but version 2 writes them always (format 1540). Without rotation they hold what an earlier call left, or, in a run that never set them, undefined values (zero with a compiler that zero-initializes `SAVE`d locals). `HICZ`, the surface zone's moment of inertia, is then not computed at all, while version 0 computes it without rotation ([[#L477-L485]]). Only with `ITRVER` = 2 (the default is 1) and `LROT` off. Read from the code, not run. **A possible fix:**
+1. **(not reached)** **Track version 2 without rotation writes rotation values never set.** ([[#L594-L608]]; [[#L630-L634]]) In the branch for `ITRVER` 1 and 2, `ROTP`, `ROTV`, and `HICZ` are set only with `LROT`, but version 2 writes them always (format 1540). Without rotation they hold what an earlier call left, or, in a run that never set them, undefined values (zero with a compiler that zero-initializes `SAVE`d locals). `HICZ`, the surface zone's moment of inertia, is then not computed at all, while version 0 computes it without rotation ([[#L477-L485]]). Only with `ITRVER` = 2 (the default is 1) and `LROT` off.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to set ROTP, ROTV and HICZ without rotation too, as
-    C for ITRVER = 0.
-                IF(LROT) THEN
-    ...
-                ELSE
-                   ROTP = 0.0D0
-                   ROTV = 0.0D0
-                   HICZ = 0.0D0
-                   IF(JENV.LT.M)THEN
-                      DO K = JENV,M
-                         HICZ = HICZ + CC23*HS2(K)*EXP(2.0D0*CLN*HR(K))
-                      END DO
-                   ENDIF
-                ENDIF
+    **A possible fix:**
+
+    ```diff
+    --- a/src/wrtout.f
+    +++ b/src/wrtout.f
+    @@ -592,6 +592,9 @@
+          *        (HCOMP(I,M),I=1,3),HCOMP(3,M)/HCOMP(1,M)
+      1520       FORMAT(1X,1P8E16.8,/,1X,1P8E16.8)
+     C ROTATION I/O
+    +C 11/09/26 KC via Claude
+    +C code changed to set ROTP, ROTV and HICZ without rotation too, as
+    +C for ITRVER = 0.
+                 IF(LROT) THEN
+     C MHP 8/25 removed limit on rotation period output
+     C     ROTP = MIN(9999.0D0,0.5D0*C4PI/OMEGA(M)/8.64D4)
+    @@ -605,6 +608,15 @@
+                    ELSE
+                       HICZ = 0.0D0
+                    ENDIF
+    +            ELSE
+    +               ROTP = 0.0D0
+    +               ROTV = 0.0D0
+    +               HICZ = 0.0D0
+    +               IF(JENV.LT.M)THEN
+    +                  DO K = JENV,M
+    +                     HICZ = HICZ + CC23*HS2(K)*EXP(2.0D0*CLN*HR(K))
+    +                  END DO
+    +               ENDIF
+                 ENDIF
+     C        Get location of bottom, middle, top of B burning shell.
+                 IF(LSHELL) THEN
     ```
 
-2. **(c)** **The summary gives the neutrino fluxes and capture rates in erg.** ([[#L401-L403]]; [[#L423-L426]]) Format 160 labels the fluxes "1E10ERG/CM^2", and format 2160 the capture rates "NEUTRINO ENERGIES (1.E-36ERG)". The fluxes `FLUXTOT` are numbers of neutrinos, in units of $10^{10}$ cm⁻² s⁻¹ ([[engeb.f#ENGEB|ENGEB]], step 8), and a flux in these units times a cross section in $10^{-46}$ cm² (the $^8$B coefficient 1.09×10⁴ for $^{37}$Cl is $1.09\times10^{-42}$ cm²) is a capture rate in units of $10^{-36}$ per target atom per second, that is, in SNU, the unit the track gives the same sums ([[#L451-L458]]; `Cl_snu`, `Ga_snu` in [[wrthead.f#L138]]). What follows: wrong units in the `.short` file only; nothing reads them back. The lines are written for every model, with nonzero values only with `LSNU` (off by default). Read from the code, not run. **A possible fix:**
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): not reached in any of 34 runs (26 of YREC's cases, from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning, and 8 made-up ones): Every one of YREC's cases sets `ITRVER` = 0, as the documentation strongly recommends (`docs/source/namelist_control.md`, line 138). Not run: `ITRVER` = 2 without `LROT`. Intent: The branch for version 0 computes `HICZ` without rotation, with the comment "ADDED SURFACE CZ MOMENT OF INERTIA CALCULATION TO NON-ROTATING MODELS" ([[#L464-L466]]); this branch did not get the change.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to label the neutrino fluxes and capture rates in
-    C their units.
-      160 FORMAT(1X,'NEUTRINOS 1E10/CM^2/S PP,PEP,HEP,BE7,',
-         *  'B8,N13,O15,F17:', 1P8E9.2)
-    ...
-     2160 FORMAT(1X,'NEUTRINO CAPTURE RATES (SNU): 7Li=', 1PE9.2,
+2. **(wrong output)** **Checked by KC** (Nov 10, 2026). **The summary gives the neutrino fluxes and capture rates in erg.** ([[#L401-L403]]; [[#L423-L426]]) Format 160 labels the fluxes "1E10ERG/CM^2," and format 2160 the capture rates "NEUTRINO ENERGIES (1.E-36ERG)." The fluxes `FLUXTOT` are numbers of neutrinos, in units of $10^{10}$ cm⁻² s⁻¹ ([[engeb.f#ENGEB|ENGEB]], step 8), and a flux in these units times a cross section in $10^{-46}$ cm² (the $^8$B coefficient 1.09×10⁴ for $^{37}$Cl is $1.09\times10^{-42}$ cm²) is a capture rate in units of $10^{-36}$ per target atom per second, that is, in SNU, the unit the track gives the same sums ([[#L451-L458]]; `Cl_snu`, `Ga_snu` in [[wrthead.f#L138]]). What follows: wrong units in the `.short` file only; nothing reads them back. The lines are written for every model, with nonzero values only with `LSNU` (off by default).
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/wrtout.f
+    +++ b/src/wrtout.f
+    @@ -399,7 +399,10 @@
+           ENDIF
+     C     PRINT OUT NEUTRINO RATES FROM ENGEB CALCULATION
+           WRITE(ISHORT,160) (FLUXTOT(I),I=1,8)
+    -  160 FORMAT(1X,'NEUTRINOS 1E10ERG/CM^2 PP,PEP,HEP,BE7,',
+    +C 11/09/26 KC via Claude
+    +C code changed to label the neutrino fluxes and capture rates in
+    +C their units.
+    +  160 FORMAT(1X,'NEUTRINOS 1E10/CM^2/S PP,PEP,HEP,BE7,',
+          *  'B8,N13,O15,F17:', 1P8E9.2)
+     C DBG 7/93 from Bahcall's book p 207 table 8.2
+           FL7LI = 0.0D0*FLUXTOT(1)+665.0D0*FLUXTOT(2)+8.4D4*FLUXTOT(3)+
+    @@ -421,7 +424,7 @@
+          *        248.0D0*FLUXTOT(4)+2.5D4*FLUXTOT(5)+224.0D0*FLUXTOT(6)+
+          *        355.0D0*FLUXTOT(7)+356.0D0*FLUXTOT(8)
+           WRITE(ISHORT,2160) FL7LI,FL37CL,FL71GA,FL81BR,FL98MO,FL115IN
+    - 2160 FORMAT(1X,'NEUTRINO ENERGIES (1.E-36ERG): 7Li=', 1PE9.2,
+    + 2160 FORMAT(1X,'NEUTRINO CAPTURE RATES (SNU): 7Li=', 1PE9.2,
+          * ' 37Cl=',1PE9.2,' 71Ga=',1PE9.2,' 81Br=',1PE9.2,' 98Mo=',
+          * 1PE9.2, ' 115In=', 1PE9.2)
+           FITMAS = HS1(M)/CMSUN
     ```
+
+    **How the outputs show it.** In `examples/run_standard_solar_model/Test_solarcal_noGS_norot`, at the final model 449, the `.short` file gives "37Cl= 5.83E+00" and "71Ga= 1.19E+02" under "NEUTRINO ENERGIES (1.E-36ERG)" ([[#L423-L426]]). The `.track` gives the same sums as Cl_snu 6.027E+00 and Ga_snu 1.181E+02 ([[#L451-L458]]; [[#L558]]), as does the `.snu` file (6.027 and 118.101; [[main.f#L1212]]); they differ only by coefficients (the ⁸B term for ³⁷Cl is 1.09×10⁴ here, 1.14×10⁴ in `CLSNUF`). The fluxes the `.short` file labels "1E10ERG/CM^2" (6.05E+00 for pp; [[#L401-L403]]) are the `.track`'s pp_neut to F17_neut columns (6.049E+00 for pp): numbers of neutrinos.
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The two lines were written at every model of the 33 runs that got past their start, with nonzero fluxes at nearly every model (the $^8$B flux up to 272, in units of $10^{10}$ cm⁻² s⁻¹). With the labels corrected, `examples/giant_differential_rotation/Test_3Msolar_GS_rot_gray_OPALSCV_SF2_GS98_OP_CF10_RGp2diffrotI3cz2` and `testsuite/Test_m0p3feh+0p0GS98_scv_ZAMS` have identical tracks and `.store` files; only their `.short` files differ, where the labels are. Intent: none found; the commented-out header of version 0 has the same "erg" ([[wrthead.f#L103]]).
 
 ### WRTOUT
 

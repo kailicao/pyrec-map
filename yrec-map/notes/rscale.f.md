@@ -12,7 +12,7 @@
 1. **$X$.** Every shell's $X$ is multiplied by $X_\mathrm{new}/X_\mathrm{surf}$, capped at $X_\mathrm{new}$. `XENV` is deliberately not changed, since it fixes the mean molecular weight of the Yale equation of state from the first run (MHP 7/99). `XENV` and `ZENV` are the reference composition for which [[starin.f#STARIN|`STARIN`]] computes `AMUENV` (the sum of $X_i/A_i$ over the elements) and the number fractions `FXENV` of the elements used in the Saha ionization ([[eqsaha.f#EQSAHA|`EQSAHA`]]); in each shell, [[mu.f#MU|`MU`]] and [[eqstat2.f#EQSTAT2|`EQSTAT2`]] then correct these for the shell's $X - X_\mathrm{env}$ and $Z - Z_\mathrm{env}$ rather than recompute them, so changing `XENV` alone would make it disagree with `AMUENV` and `FXENV`.
 2. **$Z$.** The same amount is added in every shell, $Z_j \to \max(0, Z_j + \Delta Z)$ with $\Delta Z = Z_\mathrm{new} - Z_\mathrm{surf}$, and species 5–11 (C12 through O18) are multiplied by $Z_j^\mathrm{new}/Z_j^\mathrm{old}$.
 
-    > **Question** ([[#L123-L125]]; [[#L131-L133]]). **He3 and the $Z$ rescaling.** The comment says "THE CNO CYCLE ELEMENTS AND HE3 ARE MULTIPLIED BY THE RATIO", but the loop covers species 5–11 only; He3 is species 4 and is not scaled. Which is meant?
+    > **Question** ([[#L123-L125]]; [[#L131-L133]]). **He3 and the $Z$ rescaling.** The comment says "THE CNO CYCLE ELEMENTS AND HE3 ARE MULTIPLIED BY THE RATIO," but the loop covers species 5–11 only; He3 is species 4 and is not scaled. Which is meant?
 
 3. **One species** (`LNEWCP`, main sequence only): set to `XNEWCP` everywhere; with `LREL`, `XNEWCP` is first converted from the astronomers' scale, $X_\mathrm{sp} = 10^{\,\texttt{XNEWCP}-12}\,X_\mathrm{surf}$, into a local (`XTARG`), leaving `XNEWCP` as set.
 
@@ -32,9 +32,9 @@
 7. **$Y$** is reset everywhere to $1 - X - Z - X_\mathrm{He3}$.
 8. **ZRAMP** (if `LZRAMP` and the three parameters are positive): with $f = m/M_*$, $Z$ is set to $Z_c$ (`RSCLZC`) for $f <$ `RSCLZM1`, and rises linearly to the surface $Z$ between `RSCLZM1` and `RSCLZM2`; $X$ absorbs the change, and species 5–11 are multiplied by $Z_\mathrm{new}/Z_\mathrm{old}$, as in step 2.
 
-**For users** (from YREC's [User Guide](https://yrec.readthedocs.io/en/latest/userguide.html)). The targets are the control namelist's `RSCLM`, `RSCLX`, `RSCLZ` and `RSCLCM` for each run (copied by [[parmin.f#PARMIN|`PARMIN`]] into `RESCAL` for `KINDRN` = 2 or 3); a negative value means no rescaling. A typical job rescales a library model to the wanted mass, composition and mixing length with a few zero-time-step models, then evolves it; a large change, such as a solar-metallicity template turned into a very metal-poor star, may need several rescalings in turn. The User Guide also advises care, or a starting model made by a script, for core-helium-burning stars, where `RSCLM` stretches only the envelope, `RSCLCM` sets the helium core's mass and `RSCLX` acts on the envelope (the core has no hydrogen), as steps 1, 5 and 6 do. It does not say that zero also means "no change".
+**For users** (from YREC's [User Guide](https://yrec.readthedocs.io/en/latest/userguide.html)). The targets are the control namelist's `RSCLM`, `RSCLX`, `RSCLZ` and `RSCLCM` for each run (copied by [[parmin.f#PARMIN|`PARMIN`]] into `RESCAL` for `KINDRN` = 2 or 3); a negative value means no rescaling. A typical job rescales a library model to the wanted mass, composition and mixing length with a few zero-time-step models, then evolves it; a large change, such as a solar-metallicity template turned into a very metal-poor star, may need several rescalings in turn. The User Guide also advises care, or a starting model made by a script, for core-helium-burning stars, where `RSCLM` stretches only the envelope, `RSCLCM` sets the helium core's mass and `RSCLX` acts on the envelope (the core has no hydrogen), as steps 1, 5 and 6 do. It does not say that zero also means "no change."
 
-**Design.** Several unconditional `write(*,*)` lines ("Entering old method", "SENV", "Envelope") print to the terminal in the horizontal-branch mass rescaling; they look like debugging left on. Many others are commented out.
+**Design.** Several unconditional `write(*,*)` lines ("Entering old method," "SENV," "Envelope") print to the terminal in the horizontal-branch mass rescaling; they look like debugging left on. Many others are commented out.
 
 > **Question** ([[#L242-L245]]; [[#L288-L291]]). **Debug output.** Can these `write(*,*)` lines be removed, or put behind a debug flag?
 
@@ -44,24 +44,53 @@
 
 ## Bugs, by priority
 
-1. **(c)** **The error message for one species names no species.** ([[#L175-L178]]; [[#L38]]) When the target abundance of the one species is 1 or more, format 1004 prints `ICOMP`, a local that is declared and never set (the species index is `INEWCP`), and ends "Z NOT RESCALED" whatever the species. Only the message is wrong: The abundance is left unchanged, as intended. Only with `LNEWCP` (a rescale card on the main sequence with a target $\ge 1$). Read from the code, not run. **A possible fix:**
+1. **(not reached)** **The error message for one species names no species.** ([[#L175-L178]]; [[#L38]]) When the target abundance of the one species is 1 or more, format 1004 prints `ICOMP`, a local that is declared and never set (the species index is `INEWCP`), and ends "Z NOT RESCALED" whatever the species. Only the message is wrong: The abundance is left unchanged, as intended. Only with `LNEWCP` (a rescale card on the main sequence with a target $\ge 1$).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to print the species index INEWCP, and to name the
-    C species, not Z, as the quantity not rescaled.
-                   WRITE(ISHORT,1004)INEWCP,NK,XTARG
-     1004       FORMAT(1X,'ERROR IN SUBROUTINE RSCALE'/1X,'RESCALING OF ',
-         *      'SPECIES ',I3,' IN KIND CARD # ',I3,' FAILED - DESIRED COMP',F9.6/1X,
-         *      'GREATER THAN UNITY.  SPECIES NOT RESCALED')
+    **A possible fix:**
+
+    ```diff
+    --- a/src/rscale.f
+    +++ b/src/rscale.f
+    @@ -172,10 +172,13 @@
+                 ELSE
+     C  ERROR - RESCALED ABUNDANCE >100% - ABUNDANCE NOT CHANGED
+     C               ACOMP = ANEWCP
+    -               WRITE(ISHORT,1004)ICOMP,NK,XTARG
+    +C 11/09/26 KC via Claude
+    +C code changed to print the species index INEWCP, and to name the
+    +C species, not Z, as the quantity not rescaled.
+    +               WRITE(ISHORT,1004)INEWCP,NK,XTARG
+      1004       FORMAT(1X,'ERROR IN SUBROUTINE RSCALE'/1X,'RESCALING OF ',
+          *      'SPECIES ',I3,' IN KIND CARD # ',I3,' FAILED - DESIRED COMP',F9.6/1X,
+    -     *      'GREATER THAN UNITY.  Z NOT RESCALED')
+    +     *      'GREATER THAN UNITY.  SPECIES NOT RESCALED')
+                 ENDIF
+              ENDIF
+     C  RESCALE STAR MASS BY MULTIPLYING ALL MASS POINTS IN THE STAR BY
     ```
 
-2. **(d)** **The "new method" does not check the new total mass against the core.** ([[#L300-L305]]; [[#L310-L311]]; [[#L320-L322]]) The old method stops when the new envelope above the shell would be negative ([[#L250-L258]]), which is exactly when its scale factor would be negative. The new method checks only the old model (`CHKENV`, the old total minus the core), not the target: If `RESCAL(1,NK)` is at or below the core mass `COROLD`, `SFACTOR` is zero or negative, and `HS(I)` for `I` $\ge$ `JXBEG` becomes the log of a mass at or below the core's, or of a negative number (NaN), with no message. Only for a horizontal-branch model with less than $0.01\,M_\odot$ outside the core and a target total mass below its core mass, which is not a sensible input; so this is fragile code rather than a wrong result in practice. Read from the code, not run. **A possible fix:**
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged). The block was not reached in the 34 cases run: The one case run that sets `LNEWCP` (`testsuite/Test_3Msolar_GS_rot_gray_OPALSCV_SF2_GS98_OP_CF10_RGp2diffrotI3cz2`, `XNEWCP` = 1.5D-5) did not enter it, and in every YREC case that sets `LNEWCP` the target is 1.5D-5, below 1. No fix was run, since it changes only a message. What would reach it: a rescale card on a model with central hydrogen, with `LNEWCP` on and a target of 1 or more. Intent: none found.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to check the new total mass as well as the old against
-    C the core, so that the scale factor below is positive, as the old
-    C method's check of ENVNEW makes it.
-                CHKENV = DMIN1((10**HSTOT)/CMSUN,RESCAL(1,NK))-COROLD
+2. **(not reached)** **The "new method" does not check the new total mass against the core.** ([[#L300-L305]]; [[#L310-L311]]; [[#L320-L322]]) The old method stops when the new envelope above the shell would be negative ([[#L250-L258]]), which is exactly when its scale factor would be negative. The new method checks only the old model (`CHKENV`, the old total minus the core), not the target: If `RESCAL(1,NK)` is at or below the core mass `COROLD`, `SFACTOR` is zero or negative, and `HS(I)` for `I` $\ge$ `JXBEG` becomes the log of a mass at or below the core's, or of a negative number (NaN), with no message. Only for a horizontal-branch model with less than $0.01\,M_\odot$ outside the core and a target total mass below its core mass, which is not a sensible input; so this is fragile code rather than a wrong result in practice.
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/rscale.f
+    +++ b/src/rscale.f
+    @@ -297,7 +297,11 @@
+     c            write(*,*)(10**HS(JXEND))/CMSUN,' end'
+     c            write(*,*)(10**HS(M))/CMSUN,' M'
+     c            write(*,*)(10**HSTOT)/CMSUN,' total'
+    -            CHKENV = ((10**HSTOT)/CMSUN)-COROLD
+    +C 11/09/26 KC via Claude
+    +C code changed to check the new total mass as well as the old against
+    +C the core, so that the scale factor below is positive, as the old
+    +C method's check of ENVNEW makes it.
+    +            CHKENV = DMIN1((10**HSTOT)/CMSUN,RESCAL(1,NK))-COROLD
+                 IF(CHKENV.LE.0.0D0)THEN
+                    WRITE(ISHORT,69)ENVOLD,ENVOLD+DENV,RESCAL(1,NK),SMASS
+     C 10/30/26 MHP via Claude: bare STOP -> STOP 1, the run-time error code (issue 38).
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged). The "new method" was not taken in the 34 cases run, the horizontal-branch cases among them (`testsuite/Test_m0p95feh+0p0_GN93_TAHB`, `examples/run_from_zahb_to_tahb/ZAHB_m0p8feh+0p0_TAHB`). No fix was run, since it only turns the case into the existing stop. What would reach it: a horizontal-branch rescale card with less than $0.01\,M_\odot$ outside the core and a target total mass at or below the core mass. Intent: none found.

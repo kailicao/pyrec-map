@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** Computes the moment of inertia `HI` of each shell of a rotating, distorted model, and its derivative with respect to $\ln A$, $A$ being the distortion parameter below, `QIW` $= dI/d\ln A$, which at fixed shape ($\eta_2$, $r_0$) is $\tfrac12\,\Omega\,\partial I/\partial\Omega$ (since $A \propto \Omega^2$; the comments name it a derivative in $\Omega$, [[#L50]], and SOLID uses it as one, a suspected bug: [[solid.f#b2]]). The comment: "Moment of inertia is calculated by the method used in Wai-Yuen Law's thesis (Yale, 1980) p.61", and "MOMI assumes that SHAPE has already been called".
+**Purpose.** Computes the moment of inertia `HI` of each shell of a rotating, distorted model, and its derivative with respect to $\ln A$, $A$ being the distortion parameter below, `QIW` $= dI/d\ln A$, which at fixed shape ($\eta_2$, $r_0$) is $\tfrac12\,\Omega\,\partial I/\partial\Omega$ (since $A \propto \Omega^2$; the comments name it a derivative in $\Omega$, [[#L50]], and SOLID uses it as one, a suspected bug: [[solid.f#b2]]). The comment: "Moment of inertia is calculated by the method used in Wai-Yuen Law's thesis (Yale, 1980) p.61," and "MOMI assumes that SHAPE has already been called."
 
 **How it fits.**
 - **Inputs:** the shape parameters `ETA2` (Radau's $\eta_2$) and `R0` (the characteristic radius $r_0$ of the equipotential, $r = r_0(1 - AP_2)$) per shell, from [[shape.f#SHAPE|SHAPE]]; $\log r$ (`HR`), $\log m$ (`HS`), the shell masses `HS2`, the angular velocities `OMEGA`, and the shell range `JSTART..JEND`.

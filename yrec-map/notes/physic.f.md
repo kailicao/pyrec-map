@@ -2,7 +2,7 @@
 
 **Purpose.** Recomputes the auxiliary physics at every shell of a model: equation of state, opacity, temperature gradients and convection, mean molecular weight, then the thermal diffusivity and viscosity, and the largest angular velocity gradient that is stable against the shear instability. Its comment: "find actual and adiabatic temperature gradients, opacity, and mean molecular weight for all radiative shells" (the loop in fact covers all shells).
 
-> **Question** ([[#L81-L86]]). **The comment's "radiative shells".** The loop covers all shells, convective ones included. Should the comment say "all shells"?
+**The loop covers all shells.** The comment speaks of "ALL RADIATIVE SHELLS" ([[#L81-L82]]), but the loop `DO 30 IM = 1,M` ([[#L86]]) skips no shell, convective ones included, so the comment could say "all shells."
 
 **How it fits.**
 - **Inputs:** the model (`HCOMP`, `HD`, `HG` (gravity), `HL`, `HP`, `HR`, `HS`, `HT`, all logarithmic except `HL`, `HG` and `HCOMP`), the rotational distortion factors `FP`, `FT`, `M`, `TEFFL` and the mixing length `CMIXL` (a new argument, formerly in `/CONST3/`), passed on to `TPGRAD`; the envelope composition from `COMP_MOD` and `COMP2_MOD`; the switch `LDH` (`NMLPAR_MOD`), with the Debye–Hückel abundances it sets in `DEBHU_MOD`; `CLN` from `CONSTANTS_MOD`.

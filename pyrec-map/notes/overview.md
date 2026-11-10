@@ -68,9 +68,9 @@ Each family against the home page's topics and the routines whose behavior its d
 | --- | --- | --- |
 | `eos` | The equation of state | [[eqstat.f]], [[eqstat2.f]], [[oeqos06.f]], [[eqscve.f]], [[eqsaha.f]] |
 | `opacity` | Opacities | [[getopac.f]], [[getopal95.f]], [[getalex06.f]], [[gtpurz.f]], [[condopacpint.f]] |
-| `atmosphere` | Atmospheres, the envelope and the boundary conditions | [[surfbc.f]], [[envint.f]], [[qatm.f]], [[qenv.f]], [[surfp.f]], [[alsurfp.f]] |
-| `network` | Nuclear reactions, energy generation and neutrinos | [[engeb.f]], [[rates.f]], [[kemcom.f]], [[liburn.f]], [[sneut.f]] |
-| `convection` | Convection, overshoot and the mixing of composition | [[tpgrad.f]], [[convec.f]], [[oversh.f]], [[sconvec.f]], [[mix.f]], [[mixcz.f]] |
+| `atmosphere` | Atmospheres, the envelope, and the boundary conditions | [[surfbc.f]], [[envint.f]], [[qatm.f]], [[qenv.f]], [[surfp.f]], [[alsurfp.f]] |
+| `network` | Nuclear reactions, energy generation, and neutrinos | [[engeb.f]], [[rates.f]], [[kemcom.f]], [[liburn.f]], [[sneut.f]] |
+| `convection` | Convection, overshoot, and the mixing of composition | [[tpgrad.f]], [[convec.f]], [[oversh.f]], [[sconvec.f]], [[mix.f]], [[mixcz.f]] |
 | `diffusion` | Microscopic diffusion and settling | [[microdiff.f]], [[grsett.f]] |
 | `rotation` | Rotation (both topics) | [[getrot.f]], [[getw.f]], [[seculr.f]], [[rotmix.f]], [[vcirc.f]] |
 | `mass_loss` | Angular-momentum loss and mass loss | [[massloss.f]], [[mdot.f]], [[wind.f]], [[mwind.f]] |

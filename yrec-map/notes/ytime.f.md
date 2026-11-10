@@ -17,7 +17,7 @@
 
 - **Otherwise:** with $Y_\mathrm{core}$ at `JCORE` and $q = 5.85\times10^{17}$ erg/g (the commented-out `Q3A`), if $Y_\mathrm{core} \ge$ `ATIME(1)`,
   $$\Delta Y = \min(\texttt{ATIME(4)},\ \texttt{ATIME(5)}\,Y_\mathrm{core}),\qquad \Delta t = \frac{q}{L_\odot}\,\frac{m}{L/L_\odot}\,\Delta Y$$
-  at `JCORE`. `ATIME(1)` is one threshold for both elements by design: [[xtime.f#XTIME|XTIME]] compares the central $X$ with it, this routine $Y_\mathrm{core}$; REMAP's comment calls it the "minimum central abundance to use core burning dt criterion", and the documentation of `TIME_CORE_MIN`, the "minimum X,Y for using core vs shell burning criteria" (settled from the code and the documentation, Nov 9, 2026: [[#L123]]; [[remap.f#L260-L261]]).
+  at `JCORE`. `ATIME(1)` is one threshold for both elements by design: [[xtime.f#XTIME|XTIME]] compares the central $X$ with it, this routine $Y_\mathrm{core}$; REMAP's comment calls it the "minimum central abundance to use core burning dt criterion," and the documentation of `TIME_CORE_MIN`, the "minimum X,Y for using core vs shell burning criteria" (settled from the code and the documentation, Nov 9, 2026: [[#L123]]; [[remap.f#L260-L261]]).
 
     > **Question** ([[#L122-L127]]; [[#L171-L173]]). **$Y$ or $1 - Z$?** `YCORE = 1D0 - HCOMP(3,JCORE)` is $X + Y$, not $Y$ (`HCOMP(2,·)`). In a helium core $X \approx 0$ and the two agree, but during hydrogen burning they do not. With the defaults (`ATIME(4)` = 0.02, `ATIME(5)` = 0.3) $\Delta Y$ is the same for both unless $Y_\mathrm{core} < 0.067$, so the choice matters little in practice. Is $1 - Z$ intended?
 

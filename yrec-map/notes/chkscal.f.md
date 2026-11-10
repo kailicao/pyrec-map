@@ -12,7 +12,7 @@
 $$\frac{R}{R_\odot} = \frac{\sqrt{L/(4\pi\sigma)}}{T_\mathrm{eff}^2\,R_\odot}.$$
 If the track has not crossed $R_*$ since the previous model, store $L$, the age and $R$, and return.
 
-    > **Question** ([[#L81-L82]]; [[#L96]]). **Linear or log radius.** The comments call `ALR` and `ALRI` "log(R/Rsun)", but the code computes $R/R_\odot$ itself; `SR` is described as $R/R_\odot$, so the comparison is consistent and the interpolation is linear in $R$. Can the comments say $R/R_\odot$?
+    **The radius is linear, not a logarithm.** The comments call `ALR` and `ALRI` "log(R/Rsun)" ([[#L81-L82]]), but the code computes $R/R_\odot$ itself ([[#L96]]) and compares it with `SR`, which is $R/R_\odot$ ([[#L79]], [[#L98]]), so the comparison is consistent, the interpolation is linear in $R$, and the comments are stale.
 
     > **Question** ([[#L97-L117]]). **The first crossing only.** The comment "Check if track has passed through Teff the right number of times" has no code behind it: The first crossing of $R_*$ (in either direction) is used. For tracks that cross $R_*$ more than once (pre-main sequence, then main sequence), is the first crossing the right one?
 2. At the crossing, interpolate linearly in $R$ between the two models for $\log L$ and the age at $R_*$.
@@ -24,31 +24,50 @@ $$X_\mathrm{new} = X + \frac{X - X_\mathrm{prev}}{\log L_R - \log L_{R,\mathrm{p
 
 ## Bugs, by priority
 
-1. **(a)** **A false crossing at the start of a run that begins above $R_*$.** ([[#L97-L103]]; [[setscal.f#L107]]; [[main.f#L1119-L1123]]) `ALRI` starts at 0 ([[setscal.f#L107]]) and is not updated at a crossing ([[#L118-L178]] leave it as it was), and main.f's first call of each run is at its second model (the first only sets `TEFFI`). If that model's radius is above $R_*$ (a pre-main-sequence start with $R_*$ on the main sequence, say), the test `ALR.GT.SR.AND.ALRI.LE.SR` ([[#L98]]) holds at once: `LPASSR` ends the run at its second model, and $L$ and the age "at $R_*$" are interpolated between this model and `BLI`, `AGEI`, which are unset in the first run (saved locals with no `DATA`). Since `ALRI` stays 0, every later run stops the same way, and the secant step works on these values. When the track starts below $R_*$, the first comparison of each later run is made against the previous run's last stored model rather than the run's own, which is harmless as long as every run starts on the same side of $R_*$. Only with `LCALST` (off by default, [[nmlpar_mod.f#L160]]) and a track that starts above $R_*$; a track that starts below $R_*$ and expands through it is not affected. Read from the code, not run. **A possible fix** (in main.f, then here):
+1. **(not reached)** **A false crossing at the start of a run that begins above $R_*$.** ([[#L97-L103]]; [[setscal.f#L107]]; [[main.f#L1119-L1123]]) `ALRI` starts at 0 ([[setscal.f#L107]]) and is not updated at a crossing ([[#L118-L178]] leave it as it was), and main.f's first call of each run is at its second model (the first only sets `TEFFI`). If that model's radius is above $R_*$ (a pre-main-sequence start with $R_*$ on the main sequence, say), the test `ALR.GT.SR.AND.ALRI.LE.SR` ([[#L98]]) holds at once: `LPASSR` ends the run at its second model, and $L$ and the age "at $R_*$" are interpolated between this model and `BLI`, `AGEI`, which are unset in the first run (saved locals with no `DATA`). Since `ALRI` stays 0, every later run stops the same way, and the secant step works on these values. When the track starts below $R_*$, the first comparison of each later run is made against the previous run's last stored model rather than the run's own, which is harmless as long as every run starts on the same side of $R_*$. Only with `LCALST` (off by default, [[nmlpar_mod.f#L160]]) and a track that starts above $R_*$; a track that starts below $R_*$ and expands through it is not affected.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to mark the first model of each run, so that CHKSCAL
-    C starts its search from the run's own models.
-                 IF(MODELN.EQ.1) THEN
-                    TEFFI = 10.0D0**TEFFL
-                    ALRI = -1.0D0
-                 ELSE
-    ...
+    **A possible fix** (in main.f, then here):
+
+    ```diff
+    --- a/src/main.f
+    +++ b/src/main.f
+    @@ -1116,8 +1116,12 @@
+     C TEST IF MODEL IS NEAR DESIRED Teff AND L. IF NOT RESCALE AND TRY AGAIN.
+              IF (LCALST .AND. .NOT. LSTAR) THEN
+                 IF(MOD(NK,2).EQ.0)THEN
+    +C 11/09/26 KC via Claude
+    +C code changed to mark the first model of each run, so that CHKSCAL
+    +C starts its search from the run's own models.
+                  IF(MODELN.EQ.1) THEN
+                     TEFFI = 10.0D0**TEFFL
+    +                ALRI = -1.0D0
+                  ELSE
+                     CALL CHKSCAL(BL, TEFFL, DAGE, NK,ALRI,LSTAR,LPASSR)
+                     IF(LPASSR) GOTO 200
     ```
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to store the first model of a run without testing it.
-          ALR = SQRT((10.0D0**BL)*CLSUN/(C4PI*CSIG))/(TEFF*TEFF*CRSUN)
-          IF(ALRI.LT.0.0D0) THEN
-             BLI = BL
-             AGEI = DAGE
-             ALRI = ALR
-             RETURN
-          ENDIF
-    ...
+    ```diff
+    --- a/src/chkscal.f
+    +++ b/src/chkscal.f
+    @@ -93,7 +93,15 @@
+     C     If not store L and age and return.
+           LPASSR=.FALSE.
+           TEFF = 10.0D0**TEFFL
+    +C 11/09/26 KC via Claude
+    +C code changed to store the first model of a run without testing it.
+           ALR = SQRT((10.0D0**BL)*CLSUN/(C4PI*CSIG))/(TEFF*TEFF*CRSUN)
+    +      IF(ALRI.LT.0.0D0) THEN
+    +         BLI = BL
+    +         AGEI = DAGE
+    +         ALRI = ALR
+    +         RETURN
+    +      ENDIF
+           IF(ALR.GT.ALRI) THEN
+              IF(.NOT.(ALR.GT.SR.AND.ALRI.LE.SR)) THEN
+                   BLI = BL
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged). No run reached `CHKSCAL` in the 34 cases run: `LCALST` is off by default ([[nmlpar_mod.f#L160]]) and in all of YREC's cases, and no user document offers it (`docs/archive/F90_CONVERSION_PLAN.md`, line 247: "no case sets `LCALST`"). What would reach it: `LCALST` on, with a track whose second model lies above $R_*$, such as a pre-main-sequence start with $R_*$ on the main sequence. Intent: none found.
 
 ### CHKSCAL
 

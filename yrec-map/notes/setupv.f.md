@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** Prepares, once per call of the rotational-mixing step, the structural factors that the stability criteria and circulation velocities need at each interface between shells. Its comment explains the scheme: stability is computed for the interface $i/i-1$ and stored in element $i$; each criterion is "a combination of variables stored at each shell multiplied by a gradient between the shells", which must stay below a critical number. `SETUPV` computes the parts that "do not change during a diffusion timestep"; [[vcirc.f#VCIRC|`VCIRC`]] multiplies them by the current $\Omega$ gradients.
+**Purpose.** Prepares, once per call of the rotational-mixing step, the structural factors that the stability criteria and circulation velocities need at each interface between shells. Its comment explains the scheme: stability is computed for the interface $i/i-1$ and stored in element $i$; each criterion is "a combination of variables stored at each shell multiplied by a gradient between the shells," which must stay below a critical number. `SETUPV` computes the parts that "do not change during a diffusion timestep"; [[vcirc.f#VCIRC|`VCIRC`]] multiplies them by the current $\Omega$ gradients.
 
 **How it fits.**
 - **Who calls it:** [[seculr.f#SECULR|`SECULR`]], once per time step, before the iterations.
@@ -13,7 +13,7 @@
 
     > **Question** ([[#L340]]). **The definition of `ETA`.** `ETA = 2.0D0*CC23*RM(I)**3/CG/HS3(I)`, that is $2\cdot\tfrac23\,r^3/(G m)$. Is the factor 2 part of the physics or a leftover (the comment block gives no formula)?
 
-    > **Question** ([[#L320-L335]]; [[#L358-L361]]; [[#L392]]). **Two floors for $\nabla_\mathrm{ad} - \nabla$.** `FACT1` and `QWRMAX` use a floor of $10^{-3}$; `FESTIME` and `FGSFK` use `DDEL` with the end-dependent floor `DMIN`; `DDELM` adds the $\mu$ gradient. The comment says 1/(∇ad − ∇) "is set to a maximum of 10^6", but the floor $10^{-3}$ gives a maximum of $10^3$. Which is intended?
+    > **Question** ([[#L320-L335]]; [[#L358-L361]]; [[#L392]]). **Two floors for $\nabla_\mathrm{ad} - \nabla$.** `FACT1` and `QWRMAX` use a floor of $10^{-3}$; `FESTIME` and `FGSFK` use `DDEL` with the end-dependent floor `DMIN`; `DDELM` adds the $\mu$ gradient. The comment says 1/(∇ad − ∇) "is set to a maximum of 10^6," but the floor $10^{-3}$ gives a maximum of $10^3$. Which is intended?
 
 3. **Eddington–Sweet circulation** (Endal and Sofia, paper II, as cited): $v_\mathrm{ES} = $ `FACT1`·`FACT2`·$\Omega^2$, with
    $$\texttt{FACT1} = \frac{1}{(\partial\ln\rho/\partial\ln T)\,\max(\nabla_\mathrm{ad}-\nabla,\,10^{-3})},\qquad \texttt{FACT2} = \frac{\nabla_\mathrm{ad}}{g}\,\eta\,\Bigl(\epsilon - \frac{L}{m}\Bigr).$$

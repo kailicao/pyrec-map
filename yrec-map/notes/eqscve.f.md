@@ -16,7 +16,7 @@
 1. The table is in $\log T$ and $\log P_\mathrm{gas}$, with $P_\mathrm{gas} = \beta P$. Out of table if $\log T$ is outside `TLOGX`, if $\log P_\mathrm{gas} < 4$, or if it is above the last pressure of the stencil's lowest-temperature row.
 2. Find the 4×4 stencil (`IDTSCV`, `IDP`), starting from the last one. For each of the 4 temperatures, a natural spline in $\log P_\mathrm{gas}$ gives five quantities (columns 2–6 of `TABLENV`: $\log\rho$, $Q_{\rho T}$, $Q_{\rho P}$, $c_P$, $\partial U/\partial T$); a second spline in $\log T$ gives their values at the point. Column 5, the tabulated $c_P$ (`TEMPT(4)`, `QCP0`), is interpolated but never used, since step 4 rebuilds $c_P$ from $\partial U/\partial T$: unused? ([[#L384]]).
 
-    > **Question** ([[#L102-L103]]; [[#L164-L166]]; [[#L407-L409]]). **One pressure grid for four temperatures.** The pressure abscissae are always taken from the row `IDTSCV` (the lowest temperature of the stencil), also for the other three rows. The ionization step (5) also uses `TABLENV`'s pressures for `TABLEX` and `TABLEY`; `TABLENV`'s pressures are `TABLEX`'s ([[setscv.f#L165]]). That is right only if every row of the tables has the same pressure grid. Is it so in the SCV tables?
+    **One pressure grid serves all four temperatures.** The pressure abscissae are always taken from the row `IDTSCV`, the lowest temperature of the stencil, also for the other three rows ([[#L102-L103]]; [[#L164-L166]]), and the ionization step (5) uses `TABLENV`'s pressures, which are `TABLEX`'s ([[setscv.f#L165]]), for `TABLEX` and `TABLEY` too ([[#L407-L409]]). That is right: In `input/eos/scv`, every row of `h_tab_i.dat` and `he_tab_i.dat` (63 temperatures) is a prefix of one grid, $\log P_\mathrm{gas} = 4.00$, $4.20$, …, its length growing with $T$ from 30 to 76 points, so the row `IDTSCV` is the shortest of the stencil and its pressures are those of the three hotter rows; the metal table `z_tab_i.dat`, read in reverse order ([[setups.f#L388-L389]]), has the same pressures row by row (checked from the files, Nov 10, 2026).
 
 3. **Smoothing at stencil changes.** When the point is within `TOLST` = 0.032 in $\log T$ (or `TOLSP` = 0.08 in $\log P$) of the edge of the middle interval, the routine also interpolates on the stencil shifted by one, and blends the two linearly (`FST`, `FSP`), so that the result does not jump when the stencil changes.
 4. **Radiation.** The tables hold the gas alone. With $Q_{\rho P,0}$ and $Q_{\rho T,0}$ from the table,
@@ -32,13 +32,27 @@ and likewise for He$^{++}$ (the code's formula for H$^+$; see bug 1).
 
 ## Bugs, by priority
 
-1. **(a)** **H$_2$ counted as one hydrogen nucleus.** ([[#L463]]; [[setscv.f#L58-L59]]) In step 5 the denominator `XTF_H2 + XTF_H1 + XTF_HP` counts each H$_2$ molecule once, but it holds two hydrogen nuclei, and the comment says the result is "the fraction XHP of hydrogen nuclei that are singly ionized" ([[#L460]]). `SETSCV` counts the nuclei with the factor 2 for the same table columns (its `1+3*TABLEX(I,J,2)+TABLEX(I,J,3)` is twice $2x_{\mathrm{H}_2} + x_\mathrm{H} + x_{\mathrm{H}^+}$). So `FXION(1)` is too large wherever H$_2$ is present; it is read by the conductive opacity ([[condopacpint.f#L39]]) and written to the outputs. Where H$_2$ is abundant, few H nuclei are ionized, so the absolute error is probably small; not traced. Only with `LSCV` (off by default, [[nmlpar_mod.f#L258]]). Read from the code, not run. **A possible fix:**
+1. **(harmless in the runs)** **H$_2$ counted as one hydrogen nucleus.** ([[#L463]]; [[setscv.f#L58-L59]]) In step 5 the denominator `XTF_H2 + XTF_H1 + XTF_HP` counts each H$_2$ molecule once, but it holds two hydrogen nuclei, and the comment says the result is "the fraction XHP of hydrogen nuclei that are singly ionized" ([[#L460]]). `SETSCV` counts the nuclei with the factor 2 for the same table columns (its `1+3*TABLEX(I,J,2)+TABLEX(I,J,3)` is twice $2x_{\mathrm{H}_2} + x_\mathrm{H} + x_{\mathrm{H}^+}$). So `FXION(1)` is too large wherever H$_2$ is present; it is read by the conductive opacity ([[condopacpint.f#L39]]) and written to the outputs. Where H$_2$ is abundant, few H nuclei are ionized, so the absolute error is probably small; not traced. Only with `LSCV` (off by default, [[nmlpar_mod.f#L258]]).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to count the two hydrogen nuclei of each H2 molecule.
-          XHP = XTF_HP / (2D0*XTF_H2 + XTF_H1 + XTF_HP)
+    **A possible fix:**
+
+    ```diff
+    --- a/src/eqscve.f
+    +++ b/src/eqscve.f
+    @@ -460,7 +460,9 @@
+     C We are seeking the fraction XHP of hydrogen nuclei that are singly ionized,
+     C the fraction XHeP of helium huclei that are singly ionized and XHePP, the
+     C helium fraction that is doubly ionized.
+    -      XHP = XTF_HP / (XTF_H2 + XTF_H1 + XTF_HP)
+    +C 11/09/26 KC via Claude
+    +C code changed to count the two hydrogen nuclei of each H2 molecule.
+    +      XHP = XTF_HP / (2D0*XTF_H2 + XTF_H1 + XTF_HP)
+           XHeP = XTF_HeP / (XTF_He + XTF_HeP + XTF_HePP)
+           XHePP = XTF_HePP / (XTF_He + XTF_HeP + XTF_HePP)
+     
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged). The path was taken in 32 of the 34 cases run, from 28,366 to 40,729,900 times, at $\log T$ from 3.40 to 6, and H$_2$ was present (the condition) in all 32, with a molecular fraction up to 0.80: in `testsuite/Test_m0p3feh+0p0GS98_scv_ZAMS`, for example, at 1,175,356 of 1,319,735 calls. With the page's fix, that case's track moves by at most $10^{-11}$ in $\log L$, against $10^{-9}$ for a null change (nearly every opacity, all with $3 \le \log T \le 9$ and $-6 \le \log\rho \le 9.75$, times $1 + 10^{-10}$), with the same 259 models and end age; in `testsuite/Test_m0p95feh+0p0_GN93_TAHB`, $\log L$ moves by at most $3\times10^{-8}$ dex and $\log T_\mathrm{eff}$ by $10^{-7}$, against $1.67\times10^{-7}$ and $1.54\times10^{-8}$ for a null change, with the same 966 models and end age. Both runs' `.short` and `.store` files differ beyond 2%, which YREC's iterations make likely for almost any change. So the fix moves these tracks by no more than $10^{-7}$ dex, at the level of the noise. Intent: none found. The same miscount in [[eqscvg.f#b1]] changes a 0.04 $M_\odot$ track well beyond the noise, so a run whose envelope composition reaches such layers could show it here.
 
 ### EQSCVE
 

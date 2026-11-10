@@ -21,15 +21,29 @@ The metals' abundances on the grid, `EZ` and `EZ_H`, are interpolated from `HCOM
 
 ## Bugs, by priority
 
-1. **(a)** **The first midpoint's search runs over the wrong indices.** ([[#L91-L97]]) The search for the model point above the first midpoint `ER(1)` runs over `IU = 2..NPT`: model indices from 2, bounded by the number of *equal-grid* points, rather than `IBEGIN+1..IEND`. Since `NPT` is at least `IEND - IBEGIN` (every model spacing in the range is at least `DRMIN`), the search finds the right point whenever `IBEGIN + 1 <= NPT`; when `IBEGIN` is larger (a large convective or hydrogen-exhausted core under a radiative zone of few, evenly spaced shells), `IU` falls back to `NPT`, and the first midpoint's mass, coefficients, and $X$ are extrapolated from two points far below it. Whether models reach this case was not traced. Only with `LDIFY` (off by default) and `LNEWDIF` false (the default). Read from the code, not run. **A possible fix:**
+1. **(not reached)** **The first midpoint's search runs over the wrong indices.** ([[#L91-L97]]) The search for the model point above the first midpoint `ER(1)` runs over `IU = 2..NPT`: model indices from 2, bounded by the number of *equal-grid* points, rather than `IBEGIN+1..IEND`. Since `NPT` is at least `IEND - IBEGIN` (every model spacing in the range is at least `DRMIN`), the search finds the right point whenever `IBEGIN + 1 <= NPT`; when `IBEGIN` is larger (a large convective or hydrogen-exhausted core under a radiative zone of few, evenly spaced shells), `IU` falls back to `NPT`, and the first midpoint's mass, coefficients, and $X$ are extrapolated from two points far below it. Whether models reach this case was not traced. Only with `LDIFY` (off by default) and `LNEWDIF` false (the default).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to search the model points of the settling range,
-    C not the indices 2..NPT of the equal grid.
-          DO 15 IU=IBEGIN+1,IEND
-             IF(HRU(IU).GE.ER(1))GOTO 17
-       15 CONTINUE
-          IU=IEND
-       17 CONTINUE
+    **A possible fix:**
+
+    ```diff
+    --- a/src/model_to_equal.f
+    +++ b/src/model_to_equal.f
+    @@ -88,10 +88,13 @@
+     C  AT EQUALLY SPACED ZONE MIDPOINTS.
+     C
+     C  FIRST POINT : LINEAR INTERPOLATION BETWEEN STARTING POINT AND 2ND PT.
+    -      DO 15 IU=2,NPT
+    +C 11/09/26 KC via Claude
+    +C code changed to search the model points of the settling range,
+    +C not the indices 2..NPT of the equal grid.
+    +      DO 15 IU=IBEGIN+1,IEND
+              IF(HRU(IU).GE.ER(1))GOTO 17
+        15 CONTINUE
+    -      IU=NPT
+    +      IU=IEND
+        17 CONTINUE
+           FX=(ER(1)-HRU(IU-1))/(HRU(IU)-HRU(IU-1))
+           EM_H(1) = HS1(IU-1)+FX*(HS1(IU)-HS1(IU-1))
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): not reached in any of 34 runs (26 of YREC's cases, from 0.04 to 9 $M_\odot$, with rotation, settling, and helium burning, and 8 made-up ones). These lines belong to the old settling routines (`LNEWDIF` false), which no case uses: Every case with settling sets `LNEWDIF` and `LDIFLI`, and the documentation lists `LNEWDIF` among the legacy options (`docs/source/namelist_physics.md`, line 285). Reaching them takes `LDIFY` or `LDIFZ` with `LNEWDIF` false and `LDIFLI` off, since `LDIFLI` forces `LNEWDIF` on ([[parmin.f#L1239-L1251]]), and a model whose `IBEGIN` exceeds `NPT`. The same search in the new routines ([[microdiff_mte.f#b1]]) never failed in the seven runs with settling. Intent: The comment "FIRST POINT : LINEAR INTERPOLATION BETWEEN STARTING POINT AND 2ND PT." ([[#L90]]) names the point above `IBEGIN`, which the search is meant to find.

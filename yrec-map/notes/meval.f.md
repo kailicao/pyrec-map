@@ -12,17 +12,31 @@
 
 ## Bugs, by priority
 
-1. **(d)** **No point of evaluation within the data.** ([[#L107-L121]]; [[#L138-L144]]; [[#L242-L243]]) When every `XVAL` lies below `XTAB(1)` and `NUME` > 1, loop 30 leaves `START` = `NUME+1`; after the extrapolation the code goes on to label 80 and calls `SEARCH` with `XVAL(NUME+1)`, outside the points of evaluation, and if that value equals a data abscissa it writes `YVAL(NUME+1)` (label 90). When every `XVAL` lies above `XTAB(NUM)` and `NUME` > 1, loop 50 leaves `END` = 0, the loop over the in-range points is empty, and line 243 reads `XVAL(0)`, outside the array. What follows: The values returned for `1..NUME` are right in both cases (the end interval's spline), but the reads are out of range: `XVAL(0)` is caught by `-fcheck=all` (the flags of the `devel` build) and read as whatever lies before the array otherwise; `XVAL(NUME+1)` and `YVAL(NUME+1)` lie within the declared size `JSON` unless `NUME` = `JSON`. Only when no point of a regridding lies within the old grid, which the callers' grids should not allow (not traced). Read from the code, not run. **A possible fix:**
+1. **(never occurred)** **No point of evaluation within the data.** ([[#L107-L121]]; [[#L138-L144]]; [[#L242-L243]]) When every `XVAL` lies below `XTAB(1)` and `NUME` > 1, loop 30 leaves `START` = `NUME+1`; after the extrapolation the code goes on to label 80 and calls `SEARCH` with `XVAL(NUME+1)`, outside the points of evaluation, and if that value equals a data abscissa it writes `YVAL(NUME+1)` (label 90). When every `XVAL` lies above `XTAB(NUM)` and `NUME` > 1, loop 50 leaves `END` = 0, the loop over the in-range points is empty, and line 243 reads `XVAL(0)`, outside the array. What follows: The values returned for `1..NUME` are right in both cases (the end interval's spline), but the reads are out of range: `XVAL(0)` is caught by `-fcheck=all` (the flags of the `devel` build) and read as whatever lies before the array otherwise; `XVAL(NUME+1)` and `YVAL(NUME+1)` lie within the declared size `JSON` unless `NUME` = `JSON`. Only when no point of a regridding lies within the old grid, which the callers' grids should not allow (not traced).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to go straight to the extrapolation above XTAB(NUM)
-    C when no point of evaluation lies within the data, so that XVAL and
-    C YVAL are not used outside 1..NUME.
-      80  IF (END .LT. START) GO TO 200
+    **A possible fix:**
+
+    ```diff
+    --- a/src/meval.f
+    +++ b/src/meval.f
+    @@ -140,7 +140,11 @@
+     C
+     C SEARCH LOCATES THE INTERVAL IN WHICH THE FIRST IN-RANGE POINT OF
+     C EVALUATION LIES.
+    -  80  IF ((NUME .EQ. 1) .AND. (END .NE. NUME)) GO TO 200
+    +C 11/09/26 KC via Claude
+    +C code changed to go straight to the extrapolation above XTAB(NUM)
+    +C when no point of evaluation lies within the data, so that XVAL and
+    +C YVAL are not used outside 1..NUME.
+    +  80  IF (END .LT. START) GO TO 200
+           CALL SEARCH(XTAB,NUM,XVAL(START),LCN,FND)
+     C
+           LCN1=LCN+1
     ```
 
     With `NUME` = 1 this is the old test (`END` = 0 < `START` = 1); when every point lies below `XTAB(1)`, label 210's loop is then empty.
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Label 80 was reached in 33 of 34 runs (26 of YREC's cases, from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning, and 8 made-up ones; one of these, with `FCORE` = 1.0, stopped in its first second), from 400 to 342,520 times each, always with the first point in range (`START` = 1) and `END` from 9 to 3455; `END` < `START` never held. A regridding with no point inside the old grid would reach it; none was run. No fix was run. Intent: The comment at [[#L245-L246]] shows that the paths to labels 200 and 210 were patched before ("NUM1 could be improperly set," llp 8/19/08), not this one.
 
 ### MEVAL
 

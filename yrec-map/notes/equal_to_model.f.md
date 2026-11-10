@@ -20,17 +20,61 @@ where $X_3$ is $^3$He (`HCOMP(4,·)`). With metal diffusion, $Z$ changes the sam
 
 ## Bugs, by priority
 
-1. **(b)** **Division by $Z$.** ([[#L52]]; [[#L103]]; [[#L122]]) With metal diffusion, each shell's metal species are scaled by `ZZ2 = ZZ/HCOMP(3,I)`, the new $Z$ over the old; a shell with $Z = 0$ divides by zero, and rows 5–11 become NaN (or infinite). What follows: A metal-free model (Population III) cannot be run with `LDIFZ`. Only with `LDIFZ` (off by default) and `LNEWDIF` false, in a shell with $Z = 0$. Read from the code, not run. **A possible fix** (the same at lines 103 and 122):
+1. **(not reached)** **Division by $Z$.** ([[#L52]]; [[#L103]]; [[#L122]]) With metal diffusion, each shell's metal species are scaled by `ZZ2 = ZZ/HCOMP(3,I)`, the new $Z$ over the old; a shell with $Z = 0$ divides by zero, and rows 5–11 become NaN (or infinite). What follows: A metal-free model (Population III) cannot be run with `LDIFZ`. Only with `LDIFZ` (off by default) and `LNEWDIF` false, in a shell with $Z = 0$.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to leave the metal species unscaled where Z was zero.
-                IF(HCOMP(3,I).GT.0.0D0)THEN
-                   ZZ2 = ZZ/HCOMP(3,I)
-                ELSE
-                   ZZ2 = 1.0D0
-                ENDIF
+    **A possible fix** (the same at lines 103 and 122):
+
+    ```diff
+    --- a/src/equal_to_model.f
+    +++ b/src/equal_to_model.f
+    @@ -49,7 +49,13 @@
+              DO I = IBEGIN,1,-1
+                 ZMAX = 1.0D0 - HCOMP(1,I) - HCOMP(4,I)
+                 ZZ=MIN(HCOMP(3,I)+EZ(1),ZMAX)
+    -            ZZ2 = ZZ/HCOMP(3,I)
+    +C 11/09/26 KC via Claude
+    +C code changed to leave the metal species unscaled where Z was zero.
+    +            IF(HCOMP(3,I).GT.0.0D0)THEN
+    +               ZZ2 = ZZ/HCOMP(3,I)
+    +            ELSE
+    +               ZZ2 = 1.0D0
+    +            ENDIF
+                 HCOMP(3,I) = ZZ
+                 DO J = 5,11
+                    HCOMP(J,I) = ZZ2*HCOMP(J,I)
+    @@ -100,7 +106,13 @@
+                 DZMOD = FACINTERP(1)*EZ(K0)+FACINTERP(2)*EZ(K0+1)+
+          *             FACINTERP(3)*EZ(K0+2)+FACINTERP(4)*EZ(K0+3)
+                 ZZ = MIN(HCOMP(3,I)+DZMOD,ZMAX)
+    -            ZZ2 = ZZ/HCOMP(3,I)
+    +C 11/09/26 KC via Claude
+    +C code changed to leave the metal species unscaled where Z was zero.
+    +            IF(HCOMP(3,I).GT.0.0D0)THEN
+    +               ZZ2 = ZZ/HCOMP(3,I)
+    +            ELSE
+    +               ZZ2 = 1.0D0
+    +            ENDIF
+                 HCOMP(3,I)=ZZ
+                 DO J = 5,11
+                    HCOMP(J,I) = ZZ2*HCOMP(J,I)
+    @@ -119,7 +131,13 @@
+              ZMIN = 0.0D0
+              DO I = IEND,M
+                 ZZ = MAX(HCOMP(3,I)+EZ(NPT),ZMIN)
+    -            ZZ2 = ZZ/HCOMP(3,I)
+    +C 11/09/26 KC via Claude
+    +C code changed to leave the metal species unscaled where Z was zero.
+    +            IF(HCOMP(3,I).GT.0.0D0)THEN
+    +               ZZ2 = ZZ/HCOMP(3,I)
+    +            ELSE
+    +               ZZ2 = 1.0D0
+    +            ENDIF
+                 HCOMP(3,I) = ZZ
+                 DO J = 5,11
+                    HCOMP(J,I) = ZZ2*HCOMP(J,I)
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): not reached in any of 34 runs (26 of YREC's cases, from 0.04 to 9 $M_\odot$, with rotation, settling, and helium burning, and 8 made-up ones). These lines belong to the old settling routines (`LNEWDIF` false), which no case uses: Every case with settling sets `LNEWDIF` and `LDIFLI`, and the documentation lists `LNEWDIF` among the legacy options (`docs/source/namelist_physics.md`, line 285). Reaching them takes `LDIFY` or `LDIFZ` with `LNEWDIF` false and `LDIFLI` off, since `LDIFLI` forces `LNEWDIF` on ([[parmin.f#L1239-L1251]]), and in addition a shell with $Z = 0$; no case has a metal-free model. Intent: none found.
 
 ### EQUAL_TO_MODEL
 

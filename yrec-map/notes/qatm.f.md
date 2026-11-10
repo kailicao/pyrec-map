@@ -2,7 +2,7 @@
 
 **Purpose.** The right-hand side of the atmosphere integration: with $\log\tau$ as the independent variable and $\log P$ as the dependent one, it returns $d\log P/d\log\tau$ from a $T$–$\tau$ relation. Its comment: "QATM calculates the derivative d(P)/d(tau), using the Eddington approximation for a T-tau relation."
 
-> **Question** ([[#L36-L39]]; [[#L77-L83]]). **The comment.** It says the routine computes $dP/d\tau$ "using the Eddington approximation"; it computes $d\log P/d\log\tau$ with any of three relations (`KTTAU` = 0, 1, 2). Should the comment be corrected?
+**The comment names one relation of three.** It says the routine computes $dP/d\tau$ "USING THE EDDINGTON APPROXIMATION FOR A T-TAU RELATION" ([[#L36-L39]]), but it computes $d\log P/d\log\tau$ with any of three $T(\tau)$ relations, chosen by `KTTAU` = 0, 1, 2 ([[#L77-L83]]), so the comment is stale.
 
 **How it fits.**
 - **Inputs:** `X0` $=\log\tau$, `Y(1)` $=\log P$; $\log g$ (`GL`), the distortion factor `FPL`, `TEFFL`, $X$, $Z$; the choice of relation `KTTAU` from [[nmlpar_mod.f#NMLPAR_MOD|`NMLPAR_MOD`]] and `HRAS` from [[atmos_mod.f#ATMOS_MOD|`ATMOS_MOD`]]; `LPUMOD` (pulsation output) from [[pulse1_mod.f#PULSE1_MOD|`PULSE1_MOD`]].

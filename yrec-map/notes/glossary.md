@@ -59,7 +59,7 @@ The Fortran logical unit numbers of every input and output file, all `INTEGER*4`
 - **`iopatm`**: unit 26, the atmosphere for a pulsation code (also opened by [[pdist.f#PDIST|`PDIST`]]).
 - **`iopenv`**: unit 25, the envelope for a pulsation code.
 - **`iopmod`**: unit 24, the interior model for a pulsation code.
-- **`iopurez`**: unit 62, the pure-metal ("pure Z", $Z = 1$) LAOL89 opacity table, read by [[rdzlaol.f#RDZLAOL|`RDZLAOL`]] (PARMIN's comment calls it "pure CN").
+- **`iopurez`**: unit 62, the pure-metal ("pure Z," $Z = 1$) LAOL89 opacity table, read by [[rdzlaol.f#RDZLAOL|`RDZLAOL`]] (PARMIN's comment calls it "pure CN").
 - **`iowr`**: unit 6, the status output (the screen); the [[main.f#(file level)|main program]] sets it to 9 before calling PARMIN, which overwrites it.
 - **`irun`**: unit 13, the `PHYSICS` namelist, read by PARMIN.
 - **`iscvh`**: unit 72, the hydrogen table of the SCV equation of state, read by [[setups.f#SETUPS|`SETUPS`]].
@@ -239,7 +239,7 @@ The run's settings that the physics routines read: the members of the `CONTROL` 
 - **`ies`**: the circulation formula in [[vcirc.f#VCIRC|`VCIRC`]]: 2 for Kippenhahn & Möllenhoff (1974), any other value for Zahn (1991); default 1. *Name:* I for a choice, Eddington–Sweet.
 - **`igsf`**: the stability condition for the GSF (and ABCD) instabilities in [[vcirc.f#VCIRC|`VCIRC`]]: 1 none (recommended), 2 the angular-velocity gradient against viscosity and thermal diffusion, 0 that plus a mean-molecular-weight condition; default 1.
 - **`ilambda`**: the formula for the Coulomb logarithm $\ln\Lambda$ in the collision integrals of settling (the documentation: 4, recommended, the constant 2.2); default 1; PARMIN sets 4 with `LDIFLI`; read by [[setup_grsett.f#SETUP_GRSETT|`SETUP_GRSETT`]]; also in `DERIVED`.
-- **`impjmod`**: the rotation profile imposed on the radiative interior below the surface convection zone ("impose J model", PARMIN's comment): 0 none, 1 solid-body rotation, 2 a solid-body core decoupled from the convection zone, 3 a solid-body core coupled at its base; default 0; PARMIN sets 1 with `LSOLID` (and `LROT`); read by [[seculr.f#SECULR|`SECULR`]], [[wczimp.f#WCZIMP|`WCZIMP`]], [[getw.f#GETW|`GETW`]] and [[midmod.f#MIDMOD|`MIDMOD`]].
+- **`impjmod`**: the rotation profile imposed on the radiative interior below the surface convection zone ("impose J model," PARMIN's comment): 0 none, 1 solid-body rotation, 2 a solid-body core decoupled from the convection zone, 3 a solid-body core coupled at its base; default 0; PARMIN sets 1 with `LSOLID` (and `LROT`); read by [[seculr.f#SECULR|`SECULR`]], [[wczimp.f#WCZIMP|`WCZIMP`]], [[getw.f#GETW|`GETW`]] and [[midmod.f#MIDMOD|`MIDMOD`]].
 - **`imu`**: the treatment of $\mu$ gradients in [[vcirc.f#VCIRC|`VCIRC`]]: 3 for the $\mu$ currents of Kippenhahn & Möllenhoff (1974), any other value for the factor of Zahn & Maeder (1998); default 1.
 - **`inewcp`**: derived (with `LNEWCP`), the row of `HCOMP` of the species named by `ANEWCP` (its position in PARMIN's list plus 3); read by [[rscale.f#RSCALE|`RSCALE`]].
 - **`ipver`**: in `CONTROL`, the format of the pulsation output; default 1; read by [[wrtmod.f#WRTMOD|`WRTMOD`]] and [[envint.f#ENVINT|`ENVINT`]]. *Name:* Pulsation VERsion.
@@ -763,7 +763,7 @@ The rates of change of the structure variables over the last step, for a better 
 - **`hll0`**: the relative change of $L$ over the last step, $2(L-L_\mathrm{old})/(L+L_\mathrm{old})$, per second, `(JSON)`; set by the [[main.f#(file level)|main program]], interpolated by [[hpoint.f#HPOINT|`HPOINT`]] when the grid changes.
 - **`hpp0`**: the change of $\log P$ over the last step divided by the step `DELTS` (s$^{-1}$), `(JSON)`; set by the [[main.f#(file level)|main program]], interpolated by [[hpoint.f#HPOINT|`HPOINT`]].
 - **`hrr0`**: the change of $\log r$ per second over the last step, `(JSON)`; set by the [[main.f#(file level)|main program]], interpolated by [[hpoint.f#HPOINT|`HPOINT`]].
-- **`htt0`**: the change of $\log T$ over the last step divided by `DELTS` (s$^{-1}$), `(JSON)`; set by the [[main.f#(file level)|main program]], interpolated by [[hpoint.f#HPOINT|`HPOINT`]]. The comments call these four "entropy terms", but they are time derivatives of the structure.
+- **`htt0`**: the change of $\log T$ over the last step divided by `DELTS` (s$^{-1}$), `(JSON)`; set by the [[main.f#(file level)|main program]], interpolated by [[hpoint.f#HPOINT|`HPOINT`]]. The comments call these four "entropy terms," but they are time derivatives of the structure.
 
 ## ENVPRT_MOD
 
@@ -1251,7 +1251,7 @@ Work arrays of the interpolations by [[osplin.f#OSPLIN|`OSPLIN`]] between the mo
 
 ## TAUKH_MOD
 
-Factors at each interface of the rotating model, set by [[setupv.f#SETUPV|`SETUPV`]] once per step for [[vcirc.f#VCIRC|`VCIRC`]]'s circulation velocities (the name, from "Kelvin–Helmholtz", is older than its content). Below, at the interface: $m$ the mass, $\rho$, $g$, $L/m$, $\eta = \tfrac23 r^3/(Gm)$ (`SETUPV`'s local `ETA`), $\Delta\nabla = \nabla_\mathrm{ad}-\nabla$ (floored) and $F = P/(g\,\Delta\nabla\,c_P\,\rho\,T)$.
+Factors at each interface of the rotating model, set by [[setupv.f#SETUPV|`SETUPV`]] once per step for [[vcirc.f#VCIRC|`VCIRC`]]'s circulation velocities (the name, from "Kelvin–Helmholtz," is older than its content). Below, at the interface: $m$ the mass, $\rho$, $g$, $L/m$, $\eta = \tfrac23 r^3/(Gm)$ (`SETUPV`'s local `ETA`), $\Delta\nabla = \nabla_\mathrm{ad}-\nabla$ (floored) and $F = P/(g\,\Delta\nabla\,c_P\,\rho\,T)$.
 
 - **`fact6`**: the term of the Eddington–Sweet velocity in the derivative of $\Omega^2 r^2$, $-(\nabla_\mathrm{ad}/g)(L/m)/(4\pi G\rho r)$, `(JSON)`; read by `VCIRC`.
 - **`fes1`**: the Zahn-type term $2\eta F\,(L/m - \epsilon)$, `(JSON)`; read by `SETUPV` and `VCIRC`. *Name:* F (factor), ES (Eddington–Sweet), 1.
@@ -1264,7 +1264,7 @@ Factors at each interface of the rotating model, set by [[setupv.f#SETUPV|`SETUP
 
 The velocities of rotational mixing at each interface, computed by [[vcirc.f#VCIRC|`VCIRC`]] and turned into diffusion coefficients by [[codiff.f#CODIFF|`CODIFF`]].
 
-- **`hle`**: a length scale ("characteristic velocity length scales", CODIFF's comment), `(JSON)`; set to 0 at every interface by [[codiff.f#CODIFF|`CODIFF`]] (its assignments are commented out); written by [[checkj.f#CHECKJ|`CHECKJ`]] as "LENGTH".
+- **`hle`**: a length scale ("characteristic velocity length scales," CODIFF's comment), `(JSON)`; set to 0 at every interface by [[codiff.f#CODIFF|`CODIFF`]] (its assignments are commented out); written by [[checkj.f#CHECKJ|`CHECKJ`]] as "LENGTH."
 - **`ves`**: the Eddington–Sweet circulation velocity, cm s$^{-1}$, `(JSON)`; set by [[vcirc.f#VCIRC|`VCIRC`]]; read by `CODIFF`, `CHECKJ`, [[putstore.f#PUTSTORE|`PUTSTORE`]], [[stitch.f#STITCH|`STITCH`]]. *Name:* V, Eddington–Sweet.
 - **`ves0`**: the previous iteration's `VES`, `(JSON)`; saved by `VCIRC` from the second iteration on, which averages old and new.
 - **`vgsf`**: the Goldreich–Schubert–Fricke velocity, cm s$^{-1}$, `(JSON)`; set by [[vcirc.f#VCIRC|`VCIRC`]]. *Name:* V, GSF.
@@ -1308,7 +1308,7 @@ Factors at each interface from which the circulation velocities and the stabilit
 
 ## ZLAOL_MOD
 
-The LAOL89 opacity table for pure metals ("pure Z", "DBG 12/95"), as read by [[rdzlaol.f#RDZLAOL|`RDZLAOL`]], used at high $Z$ and $T$ when `LPUREZ` is set.
+The LAOL89 opacity table for pure metals ("pure Z," "DBG 12/95"), as read by [[rdzlaol.f#RDZLAOL|`RDZLAOL`]], used at high $Z$ and $T$ when `LPUREZ` is set.
 
 - **`numrhoz`**: the number of densities in the table (at most 104); read by [[rdzlaol.f#RDZLAOL|`RDZLAOL`]]. *Name:* NUMber of RHO, Z table.
 - **`numtz`**: the number of temperatures in the table (at most 52); read by [[rdzlaol.f#RDZLAOL|`RDZLAOL`]]. *Name:* NUMber of T, Z table.

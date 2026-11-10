@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** Mixing of composition by rotationally induced instabilities, as part of angular momentum transport. Its comment: it "calculates the diffusion of composition due to angular momentum transport", by transforming to an equally spaced grid ("in radius", the comment says; the grid is in fact in the coordinate $\chi$ of [[getgrid.f#GETGRID|GETGRID]]), solving a diffusion equation and transforming back. It finds each unstable region and hands it to [[mixgrid.f#MIXGRID|MIXGRID]] (the grid) and [[mixcom.f#MIXCOM|MIXCOM]] (the solve).
+**Purpose.** Mixing of composition by rotationally induced instabilities, as part of angular momentum transport. Its comment: it "calculates the diffusion of composition due to angular momentum transport," by transforming to an equally spaced grid ("in radius," the comment says; the grid is in fact in the coordinate $\chi$ of [[getgrid.f#GETGRID|GETGRID]]), solving a diffusion equation and transforming back. It finds each unstable region and hands it to [[mixgrid.f#MIXGRID|MIXGRID]] (the grid) and [[mixcom.f#MIXCOM|MIXCOM]] (the solve).
 
 **How it fits.**
 - **Inputs:** the diffusion step `DT` (s); the mixing coefficients `COD2` at the model points; the transport velocities `HV` (a region is unstable where `HV > 0`); the model (`HD`, `HL`, `HP`, `HR`, `HS`, `HS1`, `HS2`, `HSTOT`); the convection flags `LCZ` (overshoot included); the search range `IMIN..IMAX`; the flag `LOK` (final iteration); and the species range `JBEG..JEND`.

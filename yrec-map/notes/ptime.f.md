@@ -14,3 +14,6 @@ with $a_k$ = `ATIME(k)`, and $f = 1$ if nothing changed. The shells where the ma
 > **Question** ([[#L67]]; [[#L107-L108]]; [[#L122-L124]]). **The luminosity criterion.** $\Delta L/\bar L$ is compared with `ATIME(11)` $\times\ln 10$, which makes `ATIME(11)` a limit on $\Delta\log L$, whereas the header calls it "delta L/L" (and the documentation of `TIME_DL`, "max local ΔL"). Which is meant?
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/OLDMOD/` to `OLDMOD_MOD`, `ATIME` of `/CTLIM/` to `NMLPAR_MOD`; the unused `/CONST/`–`/CONST3/` dropped), `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.
+
+> **Question** ([[#L107-L108]]). **The luminosity's relative change.** `TESTL` divides the change of the shell's luminosity, `HLO(I)-HL(I)`, by the mean of `HL(I)` and `HL(I-1)`, the new value of the shell below, not by the mean of its old and new values as a relative change in time would. Is the mean over two shells intended (a point-centered value), or a slip for `HLO(I)`? Noticed while sorting the questions (Nov 10, 2026); not checked by running YREC.
+

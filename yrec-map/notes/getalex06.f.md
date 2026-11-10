@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `GETALEX06` returns the low-temperature (molecular) opacity from the low-temperature opacities of Ferguson et al. (2005), called ALEX06 in the code ([[readalex06.f#READALEX06|`READALEX06`]]; "Alexander low T opacities", per its header, MHP 3/09) for a given $\rho$, $T$, $X$, $Z$, with its logarithmic derivatives.
+**Purpose.** `GETALEX06` returns the low-temperature (molecular) opacity from the low-temperature opacities of Ferguson et al. (2005), called ALEX06 in the code ([[readalex06.f#READALEX06|`READALEX06`]]; "Alexander low T opacities," per its header, MHP 3/09) for a given $\rho$, $T$, $X$, $Z$, with its logarithmic derivatives.
 
 **How it fits.**
 - **Who calls it:** only [[getopac.f#GETOPAC|GETOPAC]], when $\log T \le$ `TMOLMAX` and `LALEX06` is set.
@@ -27,23 +27,33 @@ $$\left.\frac{\partial\log\kappa}{\partial\log T}\right|_\rho = \left.\frac{\par
 
 ## Bugs, by priority
 
-1. **(c)** **The derivative is not extrapolated with the value.** ([[#L90-L96]]; [[#L108-L111]]; [[#L113-L120]]; [[#L126-L129]]) Above the largest $\log R$ of the table ($\log R > 1$), $\log\kappa$ is extrapolated linearly from the last two columns, but `QOPR`, and so `QOD` $=\partial\log\kappa/\partial\log\rho|_T$, is the derivative of the cubic at the table edge, not the slope of the extrapolation. `QOT` is then converted to fixed $\rho$ with this `QOD` (line 129). What follows: There, the returned derivatives do not match the returned opacity; where they are used (the linearized equations) was not traced. Only with `LALEX06` (off by default in the code; recommended by YREC's User Guide) and at $\log T \le$ `TMOLMAX`. Read from the code, not run. **A possible fix:**
+1. **(harmless in the runs)** **The derivative is not extrapolated with the value.** ([[#L90-L96]]; [[#L108-L111]]; [[#L113-L120]]; [[#L126-L129]]) Above the largest $\log R$ of the table ($\log R > 1$), $\log\kappa$ is extrapolated linearly from the last two columns, but `QOPR`, and so `QOD` $=\partial\log\kappa/\partial\log\rho|_T$, is the derivative of the cubic at the table edge, not the slope of the extrapolation. `QOT` is then converted to fixed $\rho$ with this `QOD` (line 129). What follows: There, the returned derivatives do not match the returned opacity; where they are used (the linearized equations) was not traced. Only with `LALEX06` (off by default in the code; recommended by YREC's User Guide) and at $\log T \le$ `TMOLMAX`.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to give the extrapolated opacity its own derivative
-    C in log R, the slope of the linear extrapolation.
-          IF(LINEAR)THEN
-             DO I = 1,4
-                II = IT+I-1
-                OP(I) = OP(I)+(RR-R)*(CAPALEX06(II,NUMD)-
-         *      CAPALEX06(II,NUMD-1))/(R0GR06(NUMD)-R0GR06(NUMD-1))
-                QOPR(I) = (CAPALEX06(II,NUMD)-CAPALEX06(II,NUMD-1))/
-         *      (R0GR06(NUMD)-R0GR06(NUMD-1))
-             END DO
-             R = RR
-          ENDIF
+    **A possible fix:**
+
+    ```diff
+    --- a/src/getalex06.f
+    +++ b/src/getalex06.f
+    @@ -110,11 +110,16 @@
+          *           FXRD(3)*CAPALEX06(II,ID+2) +
+          *           FXRD(4)*CAPALEX06(II,ID+3)
+           END DO
+    +C 11/09/26 KC via Claude
+    +C code changed to give the extrapolated opacity its own derivative
+    +C in log R, the slope of the linear extrapolation.
+           IF(LINEAR)THEN
+              DO I = 1,4
+                 II = IT+I-1
+                 OP(I) = OP(I)+(RR-R)*(CAPALEX06(II,NUMD)-
+          *      CAPALEX06(II,NUMD-1))/(R0GR06(NUMD)-R0GR06(NUMD-1))
+    +            QOPR(I) = (CAPALEX06(II,NUMD)-CAPALEX06(II,NUMD-1))/
+    +     *      (R0GR06(NUMD)-R0GR06(NUMD-1))
+              END DO
+              R = RR
+           ENDIF
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): 34 runs, 26 of YREC's cases (from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning) and 8 made-up ones (each one of YREC's cases with a few settings changed), of which one stopped in its first second. The extrapolation ran in five of the 33 others, all low-mass stars: 12 million times in the 0.04 $M_\odot$ brown dwarf `examples/run_from_dbl_to_zams/Test_m0040_feh0_noGS_ZAMS`, fewer in the 0.1, 0.3, and 0.8 $M_\odot$ cases, at $\log T$ = 2.71 to 4.10 and $\log R$ = 1 to 15.6, that is, up to 14.6 beyond the table's last column. In the brown dwarf the derivative differed from the slope by more than 0.001 at 45 million of the 49 million temperature points (four a call). With the fix, the brown dwarf moves by up to $9.4\times10^{-5}$ dex in $\log L$ and $7.7\times10^{-6}$ dex in $\log T_c$, against $2.5\times10^{-5}$ and $1.5\times10^{-6}$ for the null change used as a noise floor (nearly every opacity, all with $3 \le \log T \le 9$ and $-6 \le \log\rho \le 9.75$, times $1 + 10^{-10}$): four to five times the noise, so small, and not clearly real (748 models in both, end age 8,683 Gyr instead of 8,681). The track of `testsuite/Test_m0p3feh+0p0GS98_scv_ZAMS` is identical with the fix. The returned derivative disagrees with the returned opacity at 45 million of 49 million points, whatever the track does; its effect on the track is the same size as that of [[condopacpint.f#CONDOPACPINT|CONDOPACPINT]]'s bug 4 on the same case, so likely the same amplified noise. Intent: none found.
 
 ### GETALEX06
 

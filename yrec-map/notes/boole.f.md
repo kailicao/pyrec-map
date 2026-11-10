@@ -21,7 +21,7 @@ over $p = \lfloor (NN-1)/4 \rfloor$ groups. If $NN - 1$ is not a multiple of 4, 
 
 The local arrays `XI`, `YI`, `XD`, `YD`, `D2X` have sizes set by the arguments `N` and `NN` (automatic arrays, standard in Fortran 90), and `H` and `S` are arrays of length 1 used as scalars ([[#L36-L37]]).
 
-**Changed since `rp_1`.** Declarations only: `IMPLICIT NONE` with explicit declarations; `SCALEX` is now the double-precision `1D-11` (it was the single-precision `1e-11`, about $4\times10^{-9}$ off in relative terms), which changes only rounding, since the result is scaled back; the header comment now names `SPLINJ` and `SPLINT` (question 4 of `rp_1`, the header naming "numerical recipes SPLINE", is settled and removed).
+**Changed since `rp_1`.** Declarations only: `IMPLICIT NONE` with explicit declarations; `SCALEX` is now the double-precision `1D-11` (it was the single-precision `1e-11`, about $4\times10^{-9}$ off in relative terms), which changes only rounding, since the result is scaled back; the header comment now names `SPLINJ` and `SPLINT` (question 4 of `rp_1`, the header naming "numerical recipes SPLINE," is settled and removed).
 
 ### BOOLE
 

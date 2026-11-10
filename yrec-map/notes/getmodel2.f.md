@@ -16,24 +16,48 @@
 
 ## Bugs, by priority
 
-1. **(b)** **The number of shells is not checked.** ([[#L57-L58]], [[#L103-L106]]) The header record gives `M` and, in the same `READ`, stores `HS(M)`; the loop over the shells then fills `HS(1:M)` and the other arrays of `JSON` = 5000 elements. Nothing checks that 1 ≤ `M` ≤ `JSON`, so a damaged file, or a model of more than 5000 shells, writes outside the arrays (the default build has no bounds checks, `src/Makefile` line 132; `make devel` adds them). A read error or an end of file, which has no `END=` or `ERR=`, stops the run with the compiler's run-time message, which does not name the file. Read from the code, not run; any input model in this format takes this path. **A possible fix:**
+1. **(never occurred)** **The number of shells is not checked.** ([[#L57-L58]], [[#L103-L106]]) The header record gives `M` and, in the same `READ`, stores `HS(M)`; the loop over the shells then fills `HS(1:M)` and the other arrays of `JSON` = 5000 elements. Nothing checks that 1 ≤ `M` ≤ `JSON`, so a damaged file, or a model of more than 5000 shells, writes outside the arrays (the default build has no bounds checks, `src/Makefile` line 132; `make devel` adds them). A read error or an end of file, which has no `END=` or `ERR=`, stops the run with the compiler's run-time message, which does not name the file.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to check the number of shells before it is used as an
-    C index, as GETYREC7 checks the shells' masses.
-          READ(IREAD,10) ATEMP,MODEL,M,SMASS,TEFFL,BL,HSTOT,DAGE,
-         *   DDAGE,HS(1),HSM
-          IF(M.LT.1 .OR. M.GT.JSON) THEN
-             WRITE(*,*) 'GETMODEL2: NUMBER OF SHELLS ',M,
-         *      ' OUTSIDE 1 TO ',JSON,'. RUN STOPPED'
-             STOP 3
-          ENDIF
-          HS(M) = HSM
-    ...
+    **A possible fix:**
+
+    ```diff
+    --- a/src/getmodel2.f
+    +++ b/src/getmodel2.f
+    @@ -24,8 +24,8 @@
+     C explicit declarations.
+           IMPLICIT NONE
+           REAL*8 BL,CCCMAX,CFENV,CMIXL,DAGE,DDAGE,FTRI,HCOMP,HD,HL,HP,HR,HS,
+    -     *       HSTOT,HT,OMEGA,PDISK,PS,RS,SMASS,TDISK,TEFFL,TLUMX,TRIL,
+    -     *       TRIT,TS,WMAX
+    +     *       HSM,HSTOT,HT,OMEGA,PDISK,PS,RS,SMASS,TDISK,TEFFL,TLUMX,
+    +     *       TRIL,TRIT,TS,WMAX
+           INTEGER I,IO,IREAD,J,JCORE,JENV,K,M,MODEL
+           LOGICAL*4 LC,LDIFY,LDIFZ,LDISK,LEXCOM,LINSTB,LJDOT0,LOVSTC,LOVSTE,
+          *       LOVSTM,LPUREZ,LROT,LSEMIC
+    @@ -54,8 +54,17 @@
+           REWIND(IREAD)
+     
+     C get the header record
+    +C 11/09/26 KC via Claude
+    +C code changed to check the number of shells before it is used as an
+    +C index, as GETYREC7 checks the shells' masses.
+           READ(IREAD,10) ATEMP,MODEL,M,SMASS,TEFFL,BL,HSTOT,DAGE,
+    -     *   DDAGE,HS(1),HS(M)
+    +     *   DDAGE,HS(1),HSM
+    +      IF(M.LT.1 .OR. M.GT.JSON) THEN
+    +         WRITE(*,*) 'GETMODEL2: NUMBER OF SHELLS ',M,
+    +     *      ' OUTSIDE 1 TO ',JSON,'. RUN STOPPED'
+    +         STOP 3
+    +      ENDIF
+    +      HS(M) = HSM
+      10   FORMAT(A5,2I8,5F16.12,1PE18.10,0P2F16.12)
+     
+     C Get the flags describing the input physics and the information that
     ```
 
     with `HSM` declared `REAL*8`.
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The header was read in all 33 runs (YREC's cases, and the made-up variants of them used for other pages), once each, three times in the solar calibration `examples/run_standard_solar_model/Test_solarcal_noGS_norot`, with `M` from 441 to 2,118 shells and model numbers from −3 to 852. `M` never left 1 to `JSON`, so no run wrote outside the arrays, and the fix was not run. What would reach it: a damaged model file, or one of more than 5,000 shells; nothing stops such a file before the arrays are overrun. Any input model in this format takes this path. No comment says the check was left out on purpose.
 
 ### GETMODEL2
 

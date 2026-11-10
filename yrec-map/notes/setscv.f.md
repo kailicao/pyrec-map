@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** Builds the equation-of-state table for the envelope's mixture from the SCV (Saumon–Chabrier–Van Horn, by the module's name `SCVEOS_MOD`, "MHP 5/97") tables of pure hydrogen, pure helium and metals, which [[setups.f#SETUPS|`SETUPS`]] has read. It adds the entropy of mixing, and computes by finite differences the derivatives the structure equations need. (The header comment, "evaluate the EOS with the new tables and call eqstat … and compare", describes an earlier purpose; the routine calls neither.)
+**Purpose.** Builds the equation-of-state table for the envelope's mixture from the SCV (Saumon–Chabrier–Van Horn, by the module's name `SCVEOS_MOD`, "MHP 5/97") tables of pure hydrogen, pure helium and metals, which [[setups.f#SETUPS|`SETUPS`]] has read. It adds the entropy of mixing, and computes by finite differences the derivatives the structure equations need. (The header comment, "evaluate the EOS with the new tables and call eqstat … and compare," describes an earlier purpose; the routine calls neither.)
 
 **How it fits.**
 - **Who calls it:** [[starin.f#STARIN|`STARIN`]], once the starting model's envelope composition is known.
@@ -23,42 +23,78 @@
    and the same for $\partial\ln\rho/\partial\ln T$; the entropy is $S = X S_X + Y S_Y + S_\mathrm{mix}$, and $c_P$ follows, with the metals' term added. The radiation pressure `PRAD` $= aT^4/3$ is added to `P` and `PL` ([[#L122-L126]]), but neither is used afterwards (unused?), nor is `QPT0` ([[#L144]], unused?): The table stays on the gas-pressure grid (`TABLENV(I,J,1)` is `TABLEX(I,J,1)`), and [[eqscve.f#EQSCVE|`EQSCVE`]] adds radiation itself, looking the table up at the gas pressure $\beta P$ (settled from the code, Nov 9, 2026: [[eqscve.f#L52-L53]], [[eqscve.f#L159-L160]]). Stored: `TABLENV(·,·,1..6)` = $\log P$, $\log\rho$, $\partial\ln\rho/\partial\ln T$, $\partial\ln\rho/\partial\ln P$, $c_P$, $dU/dT$.
 4. **Derivatives,** by three-point Lagrange differentiation in $\ln T$ and $\ln P$: of $\partial\ln\rho/\partial\ln T$ in $\ln P$ and $\ln T$, of $\partial\ln P/\partial\ln\rho$ in $\ln\rho$, of $\ln c_P$ in $\ln T$, and of $dU/dT$ in $\ln P$ and $\ln T$; stored in columns 7–12. The derivative of $\ln c_P$ in $\ln P$, `QCPP`, is computed but not stored ([[#L218]], unused?). Of the table, [[eqscve.f#EQSCVE|`EQSCVE`]] reads columns 1–6 and [[eqscvg.f#EQSCVG|`EQSCVG`]] column 1; columns 7–12 are read nowhere at 7be4133.
 
-    > **Question** ([[#L173-L179]]; [[#L225-L236]]). **The comment's list of derivatives.** The list before the loop names "D LN DEL(AD)/D LN P" and "D LN DEL(AD)/D LN T", but the code computes the derivatives of $dU/dT$ (`QAP`, `QAT`), and it names `D LN CP / D LN P`, which is not stored. Should the comment list what the columns hold?
+    **The comment's list of derivatives is stale.** The list before the loop ([[#L173-L179]]) names `D LN CP / D LN P`, "D LN DEL(AD)/D LN P," and "D LN DEL(AD)/D LN T," but columns 7–12 hold `QDTP`, `QDTT`, `QPDD`, `QCPT`, `QAP`, and `QAT` ([[#L245-L250]]): The derivatives of $dU/dT$ (`QAP`, `QAT`: [[#L225-L236]]) take the place of those of $\nabla_\mathrm{ad}$, and `QCPP`, $d\ln c_P/d\ln P$, is computed ([[#L218]]) but not stored.
 
 **Changed since `rp_1`.** The module variable `IDT` is renamed `IDTSCV` (in `SCVEOS_MOD`, also used by `EQSCVE` and `EQSCVG`); the unused `/NMLPAR/` is dropped; otherwise declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 
 ## Bugs, by priority
 
-1. **(a)** **`QSMIXT` reads the entropy of mixing beyond the lower row's pressures.** ([[#L150-L151]]) The temperature derivative of `SMIX` at row `I`, point `J` takes `SMIX(IDTSCV..IDTSCV+2, J)`, but the first loop sets `SMIX(I',J)` only for `J` up to `NPTSX(I')` ([[#L38-L39]]). In the shipped tables (`input/eos/scv/h_tab_i.dat`) `NPTSX` grows with temperature (30 points at $\log T = 2.10$, 38 at $3.54$, 49 at $3.62$, and 76 from $5.14$), so at the high-pressure end of a row with more points than the row below, the lower neighbor's value is one that was never set (zero in practice, as a module array). `QSMIXT` enters $\partial\ln S/\partial\ln T$ and so $c_P$, column 5 ([[#L153-L154]], [[#L159-L160]]), which EQSCVE interpolates, and EQSCVE uses such points: At its lowest row `IDTSCV` it reads pressures up to `NPTSX(IDTSCV)` ([[eqscve.f#L102-L128]]), and that row's derivative used row `IDTSCV-1`. Only with `LSCV` (off by default, [[nmlpar_mod.f#L258]]; on in several test-suite cases, such as `Test_m0p3feh+0p0GS98_scv_ZAMS`). Read from the code, not run; how far the wrong $c_P$ reaches a model was not traced. **A possible fix,** with the protection the code already uses for `QCPT` ([[#L219-L223]]), which takes the neighbor's last point at a lower pressure:
+1. **(harmless in the runs)** **`QSMIXT` reads the entropy of mixing beyond the lower row's pressures.** ([[#L150-L151]]) The temperature derivative of `SMIX` at row `I`, point `J` takes `SMIX(IDTSCV..IDTSCV+2, J)`, but the first loop sets `SMIX(I',J)` only for `J` up to `NPTSX(I')` ([[#L38-L39]]). In the shipped tables (`input/eos/scv/h_tab_i.dat`) `NPTSX` grows with temperature (30 points at $\log T = 2.10$, 38 at $3.54$, 49 at $3.62$, and 76 from $5.14$), so at the high-pressure end of a row with more points than the row below, the lower neighbor's value is one that was never set (zero in practice, as a module array). `QSMIXT` enters $\partial\ln S/\partial\ln T$ and so $c_P$, column 5 ([[#L153-L154]], [[#L159-L160]]), which EQSCVE interpolates, and EQSCVE can use such points: At its lowest row `IDTSCV` it reads pressures up to `NPTSX(IDTSCV)` ([[eqscve.f#L102-L128]]), and that row's derivative used row `IDTSCV-1`. Only with `LSCV` (off by default, [[nmlpar_mod.f#L258]]; on in several test-suite cases, such as `Test_m0p3feh+0p0GS98_scv_ZAMS`).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to keep the neighbor rows within their own pressures,
-    C as for QCPT below.
-                QSMIXT = 0.0D0
+    **A possible fix,** with the protection the code already uses for `QCPT` ([[#L219-L223]]), which takes the neighbor's last point at a lower pressure:
+
+    ```diff
+    --- a/src/setscv.f
+    +++ b/src/setscv.f
+    @@ -147,8 +147,15 @@
+     C ENTROPY.  OBEYS ADDITIVE VOLUME RULE, BUT ALSO NEED TO INCLUDE THE
+     C ENTROPY OF MIXING.
+                 S0 = X*SX + Y*SY + SMIX(I,J)
+    -            QSMIXT = FTD(1)*SMIX(IDTSCV,J)+FTD(2)*SMIX(IDTSCV+1,J)+
+    -     *               FTD(3)*SMIX(IDTSCV+2,J)
+    +C 11/09/26 KC via Claude
+    +C code changed to keep the neighbor rows within their own pressures,
+    +C as for QCPT below.
+    +            QSMIXT = 0.0D0
+    +            DO K = 1,3
+    +               II = IDTSCV+K-1
+    +               JJ = MIN(NPTSX(II),J)
+    +               QSMIXT = QSMIXT + FTD(K)*SMIX(II,JJ)
+    +            END DO
+     C D LN S/ D LN T
+                 QST0 = (X*SX*TABLEX(I,J,9) + Y*SY*TABLEY(I,J,9) +
+          *              QSMIXT)/S0
+    ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged). In all 32 runs with `LSCV` on, each call of `SETSCV` built 3,720 table points, of which 46 read an unset `SMIX` of a neighboring row, at $\log T$ from 2.18 to 5.14 and $\log P$ from 10 to 19. A second counting line in `EQSCVE`, where a model point's stencil reads such an entry of row `IDTSCV` (it does not cover the stencils shifted for smoothing), never fired, the 0.04 and 0.1 $M_\odot$ cases included. With the page's fix, `testsuite/Test_m0p3feh+0p0GS98_scv_ZAMS` and `examples/run_standard_solar_model/Test_solarcal_noGS_norot` give identical `.track` and `.store` files. Intent: none found; the same code protects `QCPT` ([[#L219-L223]]). The wrong entries were never read by a counted stencil in any run, and the fix changed no output, so the table is wrong but no result was; this is fragile code.
+
+2. **(harmless in the runs)** **The same reads in `QDTT` and `QAT`, where a fix is undone.** ([[#L212-L213]]; [[#L226-L231]]) `QDTT` reads `TABLENV(IDTSCV..IDTSCV+2, J, 3)` with no protection, and in the loop for `QAT` the line `QR(K) = TABLENV(ii,jj,6)` with `jj = min(NPTSX(ii),j)` is overwritten by the next, `QR(K) = TABLENV(IDTSCV+K-1,J,6)`, so the protection has no effect. Both read unset entries as `QSMIXT` does (the lower neighbor's entries at the high-pressure end of a row with more points than the row below, which were never set: [[#b1]]), but they go into columns 8 and 12, which nothing reads at 7be4133 (EQSCVE reads columns 1–6). Correct today; wrong as soon as a routine uses these columns.
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/setscv.f
+    +++ b/src/setscv.f
+    @@ -209,8 +209,15 @@
+     C DERIVATIVES OF D LN RHO/ D LN T
+                QDTP = TABLENV(I,IDP,3)*FPD(1)+TABLENV(I,IDP+1,3)*FPD(2)
+          *           +TABLENV(I,IDP+2,3)*FPD(3)
+    -           QDTT = TABLENV(IDTSCV,J,3)*FTD(1)+TABLENV(IDTSCV+1,J,3)*FTD(2)
+    -     *           +TABLENV(IDTSCV+2,J,3)*FTD(3)
+    +C 11/09/26 KC via Claude
+    +C code changed to keep the neighbor rows within their own pressures
+    +C in QDTT, and to drop the line that undid it in QAT.
+    +           QDTT = 0.0D0
+    +           DO K = 1,3
+    +              ii = IDTSCV+K-1
+    +              jj = min(NPTSX(ii),j)
+    +              QDTT = QDTT + TABLENV(ii,jj,3)*FTD(K)
+    +           END DO
+     C DERIVATIVES OF LN CP
                 DO K = 1,3
-                   II = IDTSCV+K-1
-                   JJ = MIN(NPTSX(II),J)
-                   QSMIXT = QSMIXT + FTD(K)*SMIX(II,JJ)
+                   QR(K) = DLOG(TABLENV(I,IDP+K-1,5))
+    @@ -225,9 +232,8 @@
+     C DERIVATIVES OF DU/DT
+                DO K = 1,3
+                   ii = IDTSCV+K-1
+    -            jj = min(NPTSX(ii),j)
+    -            QR(K) = TABLENV(ii,jj,6)
+    -              QR(K) = TABLENV(IDTSCV+K-1,J,6)
+    +              jj = min(NPTSX(ii),j)
+    +              QR(K) = TABLENV(ii,jj,6)
                 END DO
+                QAT = QR(1)*FTD(1)+QR(2)*FTD(2)+QR(3)*FTD(3)
+                DO K = 1,3
     ```
 
-2. **(d)** **The same reads in `QDTT` and `QAT`, where a fix is undone.** ([[#L212-L213]]; [[#L226-L231]]) `QDTT` reads `TABLENV(IDTSCV..IDTSCV+2, J, 3)` with no protection, and in the loop for `QAT` the line `QR(K) = TABLENV(ii,jj,6)` with `jj = min(NPTSX(ii),j)` is overwritten by the next, `QR(K) = TABLENV(IDTSCV+K-1,J,6)`, so the protection has no effect. Both read unset entries as in bug 1, but they go into columns 8 and 12, which nothing reads at 7be4133 (EQSCVE reads columns 1–6). Correct today; wrong as soon as a routine uses these columns. Read from the code, not run. **A possible fix:**
-
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to keep the neighbor rows within their own pressures
-    C in QDTT, and to drop the line that undid it in QAT.
-               QDTT = 0.0D0
-               DO K = 1,3
-                  ii = IDTSCV+K-1
-                  jj = min(NPTSX(ii),j)
-                  QDTT = QDTT + TABLENV(ii,jj,3)*FTD(K)
-               END DO
-    ...
-               DO K = 1,3
-                  ii = IDTSCV+K-1
-                  jj = min(NPTSX(ii),j)
-                  QR(K) = TABLENV(ii,jj,6)
-               END DO
-    ```
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged). As for `QSMIXT` ([[#b1]]), 46 of each call's 3,720 points read unset entries, in all 32 runs with `LSCV` on. With the page's fix, `testsuite/Test_m0p3feh+0p0GS98_scv_ZAMS` and `examples/run_standard_solar_model/Test_solarcal_noGS_norot` give identical `.track` and `.store` files, as expected, since columns 8 and 12 are read nowhere. Intent: The protected lines at [[#L220-L229]] show what was meant; [[#L230]] undoes them.

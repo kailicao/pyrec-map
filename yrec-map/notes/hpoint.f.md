@@ -33,7 +33,7 @@ with $\delta_m$ = `HPTTOL(2)`, $\delta_L$ = `HPTTOL(9)` times the largest $L$, a
 $$\texttt{HS1}_i = m_i,\qquad \texttt{HS2}_i = \tfrac12\,(m_{i+1} - m_{i-1}),\qquad \texttt{HS2}_1 = \tfrac12(m_2 + m_1),\qquad \texttt{HS2}_M = M_* - \tfrac12(m_{M-1}+m_M).$$
 8. **Rotation.** First guess of the moment of inertia $I_i = \tfrac23\,\Delta m_i\,r_i^2$; overshoot zones (`OVROT`); moment of inertia (`MOMI`); $\Omega$ from the conserved specific angular momentum (`GETROT`); the distortion terms (`FPFT`); `MOMI` again; then the totals $J = \sum j_i\Delta m_i$ and $K = \sum \tfrac12\Omega_i j_i \Delta m_i$, printed against the previous ones; and the old rotation state saved in `OLDROT`.
 
-    > **Question** ([[#L782-L787]]). **The JNT comment.** JNT (2025-09-03) added the first call to `MOMI`, before `GETROT`, with the comment "WALPCZ does run in this version but I don't think it can hurt". Is the extra `MOMI` call still needed?
+    > **Question** ([[#L782-L787]]). **The JNT comment.** JNT (2025-09-03) added the first call to `MOMI`, before `GETROT`, with the comment "WALPCZ does run in this version but I don't think it can hurt." Is the extra `MOMI` call still needed?
 
 9. **Physics at the start of the step** (rotating models, or light elements with envelope overshoot): `PHYSIC` at the new points; the results stored in `OLDPHY`, `DWMAX`, and the shear term
 $$\theta_i = \frac{\bar r^{\,4}}{G\,\bar m}\,\bar\Omega\,\frac{\Delta\Omega}{\Delta r}$$
@@ -42,7 +42,7 @@ $$\theta_i = \frac{\bar r^{\,4}}{G\,\bar m}\,\bar\Omega\,\frac{\Delta\Omega}{\De
 
 **Design.** It prints the flag points and the old and new numbers of points to the short output every step, and a full table of old and new points to the debug unit every `NPOINT` models when `LDEBUG` is on. Several module arrays of the old model (`HPO`, `HTO`, `HDO`) serve as scratch space before receiving their final contents.
 
-**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) (Rarely used options) gives `TENV0` and `TENV1` (defaults 3.0 and 9.0, in $\log T$) as the minimum and maximum temperature of the envelope integration, and says "Code stops below this" and "Code stops above this". The mesh tolerances `HPTTOL` that `HPOINT` applies are documented under their newer names on [[remap.f#REMAP|REMAP's page]].
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) (Rarely used options) gives `TENV0` and `TENV1` (defaults 3.0 and 9.0, in $\log T$) as the minimum and maximum temperature of the envelope integration, and says "Code stops below this" and "Code stops above this." The mesh tolerances `HPTTOL` that `HPOINT` applies are documented under their newer names on [[remap.f#REMAP|REMAP's page]].
 
 **Changed since `rp_1`.** `CMIXL` is a new argument, passed on to `PHYSIC` (it was in `/CONST3/`); COMMON blocks to modules, `IMPLICIT NONE`; the namelist parameters it reads (from `/CTOL/`, `/CTLIM/`, `/DPMIX/`, `/FLAG/`, `/ROT/`, `/CCOUT1/`, `/CCOUT2/` before) now come from `NMLPAR_MOD`, and unused declarations are gone. No question is settled.
 
@@ -50,99 +50,197 @@ $$\theta_i = \frac{\bar r^{\,4}}{G\,\bar m}\,\bar\Omega\,\frac{\Delta\Omega}{\De
 
 ## Bugs, by priority
 
-1. **(a)** **The start-of-step energy generation is interpolated against the new mass points.** ([[#L602]]; [[#L733-L740]]; [[#L751-L758]]) The block "MHP 6/00 interpolated in energy generation at start of timestep" runs after loop 1000 has copied the new points `HSS` into `HS`, so `OSPLIN` fits `SESUM` and `SESUM + SEG(6,·) + SEG(7,·)`, which are on the old points, against `HS(1..MNEW)` (the new points) and, when the old model had more points, the old `HS(MNEW+1..M)` after them, whose masses are then not increasing. `ESUMO` and `EPSO` thus hold roughly the old values copied index by index, shifted wherever points were added or removed. What follows: MIDMOD interpolates `ESUMM` and `EPSM` from them ([[midmod.f#L159]]; [[midmod.f#L166-L168]]), which SETUPV ([[setupv.f#L155-L156]]) and the rotational mixing grids ([[mixgrid.f#L156]]; [[rotgrid.f#L251]]) use, in rotating runs (`LROT`, off by default) and with `LEXCOM` and `LOVSTE`. Read from the code, not run. **A possible fix** (the block moved before loop 1000):
+1. **(harmless in the runs)** **The start-of-step energy generation is interpolated against the new mass points.** ([[#L602]]; [[#L733-L740]]; [[#L751-L758]]) The block "MHP 6/00 interpolated in energy generation at start of timestep" runs after loop 1000 has copied the new points `HSS` into `HS`, so `OSPLIN` fits `SESUM` and `SESUM + SEG(6,·) + SEG(7,·)`, which are on the old points, against `HS(1..MNEW)` (the new points) and, when the old model had more points, the old `HS(MNEW+1..M)` after them, whose masses are then not increasing. `ESUMO` and `EPSO` thus hold roughly the old values copied index by index, shifted wherever points were added or removed. What follows: MIDMOD interpolates `ESUMM` and `EPSM` from them ([[midmod.f#L159]]; [[midmod.f#L166-L168]]), which SETUPV ([[setupv.f#L155-L156]]) and the rotational mixing grids ([[mixgrid.f#L156]]; [[rotgrid.f#L251]]) use, in rotating runs (`LROT`, off by default) and with `LEXCOM` and `LOVSTE`.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to interpolate the energy generation at the start of the
-    C timestep before HS takes the new points, so that SESUM is fitted
-    C against its own (old) mass points.
-    C MHP 6/00 INTERPOLATED IN ENERGY GENERATION AT START OF TIMESTEP
-          IF(LROT .OR. (LEXCOM .AND. LOVSTE))THEN
-             CALL OSPLIN(HSS,ESUMO,HS,SESUM,NTAB,NTOT)
-             DO IM = 1,M
-                YTAB(IM) = SESUM(IM)+SEG(6,IM)+SEG(7,IM)
-             END DO
-             CALL OSPLIN(HSS,EPSO,HS,YTAB,NTAB,NTOT)
-          ENDIF
-    C TRANSFER NEW POINTS.
-          DO 1000 J = 1,MNEW
-    ...
-     1000 CONTINUE
-    ...
-          WRITE(ISHORT,1020) M,MNEW
-    ```
+    **A possible fix** (the block moved before loop 1000):
 
-2. **(b)** **The flag array can overflow.** ([[#L73]]; [[#L223-L227]]; [[#L264-L267]]; [[#L287-L290]]; [[#L294]]) `NFLAG` has 100 elements, and the gradient tests stop at `IFLAG` = 100; but when they end with `IFLAG` = 99, the base of the overshoot region and the base of the finely zoned region are flagged after them, and label 130 writes `NFLAG(101)` = `M`, past the array, which the sort then reads. This needs `LOVSTE` and a nonzero `HPTTOL(7)` (both off by default), a convective envelope, and exactly 98 flags set before them. Read from the code, not run. **A possible fix:**
-
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to add the overshoot and fine-zoning flags only while
-    C NFLAG has room for them and for M.
-    ...
-                IF(JOS.GT.1 .AND. IFLAG.LT.100)THEN
-                   NFLAG(IFLAG) = JOS
-                   IFLAG = IFLAG + 1
-                ENDIF
-    ...
-                IF(JFINE.GT.1 .AND. IFLAG.LT.100)THEN
-                   NFLAG(IFLAG) = JFINE
-                   IFLAG = IFLAG + 1
-                ENDIF
-    ```
-
-3. **(c)** **`ALPHAE` taken as a depth in $\log_{10}P$.** ([[#L252-L255]]; [[main.f#L803-L804]]) The base of envelope overshoot is the first point where $\log_{10}P - \log_{10}P(\texttt{JENV}) >$ `ALPHAE`. The documentation gives `ALPHAE` as the "envelope overshoot in pressure scale heights", and main.f uses it so (`PSCAL0` = `ALPHAE` $\cdot H_p$); an overshoot of $\alpha H_p$ is about $\Delta\ln P = \alpha$, that is $\Delta\log_{10}P \approx 0.43\,\alpha$. The point flagged as the base of the overshoot region is thus about 2.3 times deeper in $\log P$ than the overshoot, which changes only where the mesh keeps a fixed point (`PMAX3`, computed from it, is unused). With `LOVSTE` (off by default). Read from the code, not run. **A possible fix:**
-
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to measure the overshoot depth ALPHAE in pressure scale
-    C heights, as a change of ln P, not of log P.
-              DO 191 JOS = JENV-1,1,-1
-                 IF(HP(JOS)-HP(JENV).GT.ALPHAE/CLN)GOTO 193
-      191       CONTINUE
-    ```
-
-4. **(c)** **The debug table prints new values under "old points".** ([[#L436-L441]]; [[#L493-L499]]; [[#L648-L655]]; [[#L713-L720]]) Under the heading "OLD POINTS", the columns X, Z, and O16 print `HKO`, `HFO`, and `HCOMP(9,·)`: `HKO` and `HFO` hold $X$ and $Z$ interpolated at the new points (before the $X$ and $Z$ insertions of step 4), and `HCOMP` has already been moved to the new points (loop 850). The comments also say these values go into `HIO` and `HGO`. Only with `LDEBUG` (off by default). Read from the code, not run. **A possible fix:**
-
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to keep the old X, Z and O16 for the debug table, which
-    C printed values at the new points under OLD POINTS.
-          DO J = 1,M
-             HKO(J) = HCOMP(1,J)
-             HFO(J) = HCOMP(3,J)
-             YTAB(J) = HCOMP(9,J)
-          END DO
-          DO 850 I = 1,IEND
-    ...
-             WRITE(IDEBUG,920) (I,HS(I),HP(I),HT(I),HR(I),HL(I),
-         *   HKO(I),HFO(I),YTAB(I),I,HSS(I),HPO(I),HTO(I),
-         *   HRO(I),HLO(I),HCOMP(1,I),HCOMP(3,I),HCOMP(9,I), I = 1,MINMIN)
-    ...
-                WRITE(IDEBUG,930) (I,HS(I),HP(I),HT(I),HR(I),HL(I),
-         *      HKO(I),HFO(I),YTAB(I),I=MINMIN,M)
-    ```
-
-5. **(d)** **A third equal flag survives.** ([[#L309-L320]]) After removing a duplicate, the loop still advances `I`, so the entry moved into place is not compared with the one before it, and of three equal flags in a row two remain. The duplicate makes the placement add a point at almost the same $\chi$, hence the same mass ([[#L398-L419]]), which the removal of points closer than `HPTTOL(1)` ($10^{-8}$ in $\log m$ by default) then deletes ([[#L542-L556]]); so this is correct today, but a zero `HPTTOL(1)` would leave two points at the same mass. Read from the code, not run. **A possible fix:**
-
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to compare the entry moved into place with the one
-    C before it, so that no flag is kept twice.
-          I = 2
-      160 CONTINUE
-          IF(NFLAG(I).EQ.NFLAG(I-1))THEN
-           IF(I.LT.IFLAG) THEN
-              DO 170 J = I,IFLAG-1
-                 NFLAG(J) = NFLAG(J+1)
-      170       CONTINUE
+    ```diff
+    --- a/src/hpoint.f
+    +++ b/src/hpoint.f
+    @@ -729,6 +729,18 @@
            ENDIF
-           IFLAG = IFLAG - 1
-          ELSE
-           I = I + 1
-          ENDIF
-          IF(I.LE.IFLAG) GOTO 160
+     
+     
+    +C 11/09/26 KC via Claude
+    +C code changed to interpolate the energy generation at the start of the
+    +C timestep before HS takes the new points, so that SESUM is fitted
+    +C against its own (old) mass points.
+    +C MHP 6/00 INTERPOLATED IN ENERGY GENERATION AT START OF TIMESTEP
+    +      IF(LROT .OR. (LEXCOM .AND. LOVSTE))THEN
+    +         CALL OSPLIN(HSS,ESUMO,HS,SESUM,NTAB,NTOT)
+    +         DO IM = 1,M
+    +            YTAB(IM) = SESUM(IM)+SEG(6,IM)+SEG(7,IM)
+    +         END DO
+    +         CALL OSPLIN(HSS,EPSO,HS,YTAB,NTAB,NTOT)
+    +      ENDIF
+     C TRANSFER NEW POINTS.
+           DO 1000 J = 1,MNEW
+            HS(J) = HSS(J)
+    @@ -748,14 +760,6 @@
+               R0(J) = R0X(J)
+      1005    CONTINUE
+           ENDIF
+    -C MHP 6/00 INTERPOLATED IN ENERGY GENERATION AT START OF TIMESTEP
+    -      IF(LROT .OR. (LEXCOM .AND. LOVSTE))THEN
+    -         CALL OSPLIN(HSS,ESUMO,HS,SESUM,NTAB,NTOT)
+    -         DO IM = 1,M
+    -            YTAB(IM) = SESUM(IM)+SEG(6,IM)+SEG(7,IM)
+    -         END DO
+    -         CALL OSPLIN(HSS,EPSO,HS,YTAB,NTAB,NTOT)
+    -      ENDIF
+           WRITE(ISHORT,1020) M,MNEW
+      1020 FORMAT(' POINTS  OLD',I5,'   NEW',I5)
+           M = MNEW
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): taken at every rezoning in 7 of 34 runs (26 of YREC's cases, from 0.04 to 9 $M_\odot$, with rotation, settling, and helium burning, and 8 made-up ones): the five rotating ones (`testsuite/Test_solarGS98_difrotmixper18p4d1p0`, `testsuite/Test_m0p8feh+0p0GS98_rotp8p0d0p1mag1e4std_TAMS`, `testsuite/Test_m2p0_feh+0p0_vzams150_IES1_TAMS` and `_IES2_TAMS`, and `testsuite/Test_3Msolar_GS_rot_gray_OPALSCV_SF2_GS98_OP_CF10_RGp2diffrotI3cz2`), `examples/run_from_zahb_to_tahb/ZAHB_m0p8feh+0p0_TAHB` (`LOVSTE`), and a made-up helium-burning case (`examples/run_from_zahb_to_tahb/ZAHB_m1p0feh+0p0_TAHB` with the AAG21 opacity table), 546 to 2,250 times per run. Every time, the old and new points differed (models of 350 to 3,455 points). With the fix, the 3 $M_\odot$ giant's track is identical, and the 0.8 $M_\odot$ track moves by up to $6.4\times10^{-5}$ dex in $\log L$, against $1.4\times10^{-4}$ for a null change (nearly every opacity, all with $3 \le \log T \le 9$ and $-6 \le \log\rho \le 9.75$, times $1 + 10^{-10}$): within the noise, with the same number of models (1,853 and 763). The fix was not run on the 2 $M_\odot$, solar, or helium-burning cases, where these rates may weigh more. Intent: none found.
+
+2. **(never occurred)** **The flag array can overflow.** ([[#L73]]; [[#L223-L227]]; [[#L264-L267]]; [[#L287-L290]]; [[#L294]]) `NFLAG` has 100 elements, and the gradient tests stop at `IFLAG` = 100; but when they end with `IFLAG` = 99, the base of the overshoot region and the base of the finely zoned region are flagged after them, and label 130 writes `NFLAG(101)` = `M`, past the array, which the sort then reads. This needs `LOVSTE` (off by default) and a nonzero `HPTTOL(7)` (zero by default, but every case of YREC sets it through `LNEWVARS`, with `TOL_CZBASE_FINE_WIDTH` from 0.1 to 0.4: [[remap.f#L249]]), a convective envelope, and exactly 98 flags set before them.
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/hpoint.f
+    +++ b/src/hpoint.f
+    @@ -261,7 +261,10 @@
+               ELSE
+                  PMAX3 = HPTTOL(10)
+               ENDIF
+    -            IF(JOS.GT.1)THEN
+    +C 11/09/26 KC via Claude
+    +C code changed to add the overshoot and fine-zoning flags only while
+    +C NFLAG has room for them and for M.
+    +            IF(JOS.GT.1 .AND. IFLAG.LT.100)THEN
+                    NFLAG(IFLAG) = JOS
+                    IFLAG = IFLAG + 1
+                 ENDIF
+    @@ -284,7 +287,7 @@
+               IF(MOD(DELP,HPTTOL(10)).NE.0D0)NP=NP+1
+               PMAX2 = DELP/DFLOAT(NP)
+               IF(PMAX2.EQ.0.0D0)PMAX2 = HPTTOL(10)
+    -            IF(JFINE.GT.1)THEN
+    +            IF(JFINE.GT.1 .AND. IFLAG.LT.100)THEN
+                    NFLAG(IFLAG) = JFINE
+                    IFLAG = IFLAG + 1
+                 ENDIF
+    ```
+
+    **Checked by running YREC** (Nov 9, 2026, the counts of `testsuite/Test_m1p0feh+0p0GS98_base_HeIgnite` repeated on Nov 10 with a private start model; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The base of the finely zoned region was flagged in 26 of the 34 runs, up to 7,196 times per run (`testsuite/Test_m1p0feh+0p0GS98_base_HeIgnite`), but with at most 21 flags set before it, far from the 98 needed; `NFLAG(101)` was never written. Not reached: It would take a run with `LOVSTE` and about a hundred jumps in $X$, $Z$, or $\Omega$ to flag. Intent: The message "MORE THAN 100 FLAG POINTS-FIRST 100 RETAINED" ([[#L225]]) shows that 100 flags were meant to be the limit.
+
+3. **(changes results, large)** **Checked by KC** (Nov 10, 2026). **`ALPHAE` taken as a depth in $\log_{10}P$.** ([[#L252-L255]]; [[main.f#L803-L804]]) The base of envelope overshoot is the first point where $\log_{10}P - \log_{10}P(\texttt{JENV}) >$ `ALPHAE`. The documentation gives `ALPHAE` as the "envelope overshoot in pressure scale heights," and main.f uses it so (`PSCAL0` = `ALPHAE` $\cdot H_p$); an overshoot of $\alpha H_p$ is about $\Delta\ln P = \alpha$, that is $\Delta\log_{10}P \approx 0.43\,\alpha$. The point flagged as the base of the overshoot region is thus about 2.3 times deeper in $\log P$ than the overshoot, where the mesh keeps a fixed point (`PMAX3`, computed from it, is unused); the run below shows that this changes the track. With `LOVSTE` (off by default).
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/hpoint.f
+    +++ b/src/hpoint.f
+    @@ -61,6 +61,10 @@
+          *       HT,OMEGA,OMEGAL,PMAX1,PMAX2,PMAX3,PMAX4,PMAX5,PS,QIW,R0,RS,
+          *       SJTOT,SKEROT,SUMJ,SUMKE,TEFFL,TESTP,WLBOT,WLTOP,WMID,X,
+          *       XTAB,Y,Y2,YTAB
+    +C 11/10/26 KC via Claude
+    +C code changed to declare the scale height and radius used to find
+    +C the base of the envelope overshoot.
+    +      REAL*8 PSCALD,ROS
+           INTEGER I,I0,ID,IEND,IFLAG,IIFLG,IM,ISTORE,IXFLAG,IXX,J,JBEG,
+          *       JCORE,JEND,JENV,JFINE,JJ,JOS,JPREV,JXBEG,K,KHI,KLO,M,
+          *       MINMIN,MM,MNEW,MODEL,MRZONE,MXZONE,NFLAG,NN,NP,NPT,NRZONE,
+    @@ -249,8 +253,15 @@
+               I = JENV
+               JOS = JENV
+            ELSE
+    +C 11/10/26 KC via Claude
+    +C code changed to find the base of the overshoot region as OVERSH sets
+    +C it: the first point more than ALPHAE pressure scale heights (from
+    +C HSUBP, at the base of the convection zone) below JENV in radius,
+    +C not ALPHAE in log P.
+    +          CALL HSUBP(HCOMP,HD,HP,HR,HS,HT,JENV,PSCALD)
+    +          ROS = DEXP(CLN*HR(JENV)) - ALPHAE*PSCALD
+               DO 191 JOS = JENV-1,1,-1
+    -             IF(HP(JOS)-HP(JENV).GT.ALPHAE)GOTO 193
+    +             IF(DEXP(CLN*HR(JOS)).LT.ROS)GOTO 193
+       191       CONTINUE
+       193       JOS = JOS + 1
+               DELP = HP(JOS)-HP(JENV)
+    ```
+
+    **How the code itself shows it.** Every other line that reads `ALPHAE` takes it as a length in pressure scale heights. OVERSH, which sets the mixed region whose base this point marks, says so, "`ALPHAE IS THE DESIRED OVERSHOOT (IN SCALE HEIGHTS).`", and multiplies the scale height from HSUBP by it, `PSCALD = PSCALD*ALPHAE` ([[oversh.f#L102-L104]]); it then moves the edge of the mixed region down by that radial distance ([[oversh.f#L124-L130]]). main.f forms the same length for light-element burning, `PSCAL0 = ALPHAE*EXP(CLNDP*(HP(JENV)+2.0D0*HR(JENV)-HD(JENV)-CGL-HS(JENV)))`, that is $\alpha_e P r^2/(\rho G m)$ ([[main.f#L803-L804]], also [[main.f#L1025-L1026]]), and GETW the same with its midpoint arrays ([[getw.f#L390-L391]]), and the documentation reads "Envelope overshoot in pressure scale heights" (`docs/source/namelist_physics.md`, line 69). Over a distance $\alpha_e H_p$, $\ln P$ changes by about $\alpha_e$; `HP` holds $\log_{10}P$, so the matching difference is about `ALPHAE/CLN`, with `CLN = CLNDP = DLOG(10.0D0)` ([[setups.f#L134-L135]]), the version the run below measured; it is exact only if $H_p$ were constant over the region, and $H_p$ shrinks inward. The fix above therefore uses OVERSH's own criterion, the radius $\alpha_e H_p$ below the base of the zone with $H_p$ from HSUBP there ([[hsubp.f#L75]]), so that HPOINT's point falls at the edge OVERSH mixes to. That is the only overshoot scheme YREC has for the envelope; core overshoot can also be limited to a fraction `BETAC` of the core's radius (`LOVMAX`, [[oversh.f#L86-L89]]), which does not apply here.
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): taken at every model of the two runs with envelope overshoot (`ALPHAE` = 0.5), `examples/run_from_zahb_to_tahb/ZAHB_m0p8feh+0p0_TAHB` (1,803 times) and the made-up `examples/run_from_zahb_to_tahb/ZAHB_m1p0feh+0p0_TAHB` with the AAG21 opacity table, also run for [[#b1]] (2,250), and every time the base found with $\alpha_e/\ln 10$ was another point (the points flagged lay between 1,654 and 3,155, the corrected ones between 1,684 and 3,170). With the fix as first written (`ALPHAE/CLN` in place of `ALPHAE`, an approximate version of the fix above), `ZAHB_m0p8feh+0p0_TAHB` changes well above the noise: $\log L$ by up to 0.334 dex, against $2.0\times10^{-7}$ for a null change; $\log T_\mathrm{eff}$ by 0.0356, against $3.3\times10^{-7}$; $\log T_c$ by 0.0752, against $1.6\times10^{-7}$; and central $Y$ by up to 0.279, against $6.9\times10^{-8}$. The run ends after 1,855 models at 0.2356 Gyr instead of 1,804 at 0.2297. The fix acts through the mesh alone, so this also shows how sensitive helium burning is to the zoning. Intent: The documentation gives `ALPHAE` in pressure scale heights, and main.f uses it so ([[main.f#L803-L804]]).
+
+4. **(not reached)** **The debug table prints new values under "old points."** ([[#L436-L441]]; [[#L493-L499]]; [[#L648-L655]]; [[#L713-L720]]) Under the heading "OLD POINTS," the columns X, Z, and O16 print `HKO`, `HFO`, and `HCOMP(9,·)`: `HKO` and `HFO` hold $X$ and $Z$ interpolated at the new points (before the $X$ and $Z$ insertions of step 4), and `HCOMP` has already been moved to the new points (loop 850). The comments also say these values go into `HIO` and `HGO`. Only with `LDEBUG` (off by default).
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/hpoint.f
+    +++ b/src/hpoint.f
+    @@ -645,6 +645,14 @@
+       914 CONTINUE
+     
+     
+    +C 11/09/26 KC via Claude
+    +C code changed to keep the old X, Z and O16 for the debug table, which
+    +C printed values at the new points under OLD POINTS.
+    +      DO J = 1,M
+    +         HKO(J) = HCOMP(1,J)
+    +         HFO(J) = HCOMP(3,J)
+    +         YTAB(J) = HCOMP(9,J)
+    +      END DO
+           DO 850 I = 1,IEND
+            DO 833 J = 1,M
+               HPO(J) = HCOMP(I,J)
+    @@ -711,13 +719,13 @@
+       910    FORMAT('1',20X,'OLD POINTS',54X,'NEW POINTS'/2(3X,'N',5X,'S',
+          *   8X,'P',7X,'T',7X,'R',8X,'L',7X,'X',4X,'Z',3X,'O16',1X) )
+              WRITE(IDEBUG,920) (I,HS(I),HP(I),HT(I),HR(I),HL(I),
+    -     *   HKO(I),HFO(I),HCOMP(9,I),I,HSS(I),HPO(I),HTO(I),
+    +     *   HKO(I),HFO(I),YTAB(I),I,HSS(I),HPO(I),HTO(I),
+          *   HRO(I),HLO(I),HCOMP(1,I),HCOMP(3,I),HCOMP(9,I), I = 1,MINMIN)
+       920    FORMAT( 2(1X,I3,F11.7,F8.4,F8.5,F8.4,1PE9.2,0PF6.3,2F5.3) )
+              IF(M.GT.MINMIN) THEN
+                 MINMIN = MINMIN + 1
+                 WRITE(IDEBUG,930) (I,HS(I),HP(I),HT(I),HR(I),HL(I),
+    -     *      HKO(I),HFO(I),HCOMP(9,I),I=MINMIN,M)
+    +     *      HKO(I),HFO(I),YTAB(I),I=MINMIN,M)
+       930       FORMAT( 1X,I3,F11.7,F8.4,F8.5,F8.4,1PE9.2,0PF6.3,2F5.3)
+              ELSE IF(MNEW.GT.MINMIN) THEN
+                 MINMIN = MINMIN + 1
+    ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): not reached in any of the 34 runs; it needs `LDEBUG` with `NPOINT` below 9999, which no case sets. Intent: `HKO` and `HFO` are reused as scratch arrays ("USING HIO AS DUMMY ARRAY," [[#L448]]), so the columns look like a side effect of that reuse.
+
+5. **(never occurred)** **A third equal flag survives.** ([[#L309-L320]]) After removing a duplicate, the loop still advances `I`, so the entry moved into place is not compared with the one before it, and of three equal flags in a row two remain. The duplicate makes the placement add a point at almost the same $\chi$, hence the same mass ([[#L398-L419]]), which the removal of points closer than `HPTTOL(1)` ($10^{-8}$ in $\log m$ by default) then deletes ([[#L542-L556]]); so this is correct today, but a zero `HPTTOL(1)` would leave two points at the same mass.
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/hpoint.f
+    +++ b/src/hpoint.f
+    @@ -306,6 +306,9 @@
+       150 CONTINUE
+           IF(.NOT.LDONE) GOTO 140
+     C ENSURE THAT POINTS ARENT FLAGGED MORE THAN ONCE.
+    +C 11/09/26 KC via Claude
+    +C code changed to compare the entry moved into place with the one
+    +C before it, so that no flag is kept twice.
+           I = 2
+       160 CONTINUE
+           IF(NFLAG(I).EQ.NFLAG(I-1))THEN
+    @@ -315,8 +318,9 @@
+       170       CONTINUE
+            ENDIF
+            IFLAG = IFLAG - 1
+    +      ELSE
+    +       I = I + 1
+           ENDIF
+    -      I = I + 1
+           IF(I.LE.IFLAG) GOTO 160
+       180 CONTINUE
+           WRITE(ISHORT,185) (NFLAG(J),J=1,IFLAG)
+    ```
+
+    **Checked by running YREC** (Nov 9, 2026, the counts of `testsuite/Test_m1p0feh+0p0GS98_base_HeIgnite` repeated on Nov 10 with a private start model; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): A duplicate flag was removed in 6 of the 34 runs, up to 193 times per run (`testsuite/Test_m1p0feh+0p0GS98_base_HeIgnite`; also the 1.4, 3, and 9 $M_\odot$ cases), and a third equal flag never followed. The fix was not run. Every case sets `HPTTOL(1)` (as `TOL_DM_MIN`, $5\times10^{-11}$) above zero, so the removal of close points would still catch a duplicate. Intent: "ENSURE THAT POINTS ARENT FLAGGED MORE THAN ONCE." ([[#L308]]).
 
 ### HPOINT
 

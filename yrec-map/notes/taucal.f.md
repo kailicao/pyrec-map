@@ -34,19 +34,31 @@
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/OVRTRN/` to `OVRTRN_MOD`, `/ROT/` to `NMLPAR_MOD`, the constants to `CONSTANTS_MOD`; the unused `/COMP/` and `/DEUTER/` dropped), the array size `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.
 
+> **Question** ([[#L84-L99]]). **`IMAX` when no zone ends.** `IMAX` is set only inside loop 71, when the walk down from the surface leaves a convection zone ([[#L88-L89]]); if no shell does (no zone, or one reaching shell 1), it keeps whatever value it had, and [[#L99]] tests `IMAX .LT. 1` on it. Should `IMAX` be set before the loop (the commented-out older version set it after a loop of its own, [[#L80-L81]])? Noticed while sorting this page's questions (Nov 10, 2026); not checked by running YREC, and TAUCAL runs only with `LNEWTCZ` off (step 5).
+
 ## Bugs, by priority
 
-1. **(a)** **`ICZTOP` is not set for a single zone.** ([[#L87-L98]]; [[#L152-L153]]; [[#L159-L163]]) `ICZTOP`, the top of the deeper zone, is set only when the loop finds two zones ([[#L94]]). But the test that chooses the averaging method evaluates `HR(ICZTOP)` for every zone ([[#L152-L153]]), and the averaging itself, which the first condition can select for a single zone, sums over shells `IMAX` to `ICZTOP` and takes the width from `HR(ICZTOP)`. For a single zone, `ICZTOP` keeps the value `SAVE`d from an earlier call with two zones, and is undefined if there was none (an index of 0 would read outside `HR`). What follows: The choice of method and, if averaging is chosen, `TAUCZ` depend on an earlier model's zone. Only with the old method (`LNEWTCZ` false; the default is true), when the envelope holds the zone's base. Read from the code, not run. **A possible fix:** take the top of a single zone as `ICZTOP`:
+1. **(not reached)** **`ICZTOP` is not set for a single zone.** ([[#L87-L98]]; [[#L152-L153]]; [[#L159-L163]]) `ICZTOP`, the top of the deeper zone, is set only when the loop finds two zones ([[#L94]]). But the test that chooses the averaging method evaluates `HR(ICZTOP)` for every zone ([[#L152-L153]]), and the averaging itself, which the first condition can select for a single zone, sums over shells `IMAX` to `ICZTOP` and takes the width from `HR(ICZTOP)`. For a single zone, `ICZTOP` keeps the value `SAVE`d from an earlier call with two zones, and is undefined if there was none (an index of 0 would read outside `HR`). What follows: The choice of method and, if averaging is chosen, `TAUCZ` depend on an earlier model's zone. Only with the old method (`LNEWTCZ` false; the default is true), when the envelope holds the zone's base.
 
-    ```fortran
-                ELSE IF( LCZ(I) .AND. .NOT. LCZEX) THEN !First convective point from surface
-                      LCZEX = .TRUE.
-    C 11/09/26 KC via Claude
-    C code changed to set ICZTOP for a single zone too: the thin-zone test
-    C and the average below use it.  A second zone overwrites it.
-                      ICZTOP = I
-                ENDIF
+    **A possible fix:** take the top of a single zone as `ICZTOP`:
+
+    ```diff
+    --- a/src/taucal.f
+    +++ b/src/taucal.f
+    @@ -94,6 +94,10 @@
+                       ICZTOP = I
+                 ELSE IF( LCZ(I) .AND. .NOT. LCZEX) THEN !First convective point from surface
+                       LCZEX = .TRUE.
+    +C 11/09/26 KC via Claude
+    +C code changed to set ICZTOP for a single zone too: the thin-zone test
+    +C and the average below use it.  A second zone overwrites it.
+    +                  ICZTOP = I
+                 ENDIF
+        71    CONTINUE
+              IF(IMAX .LT. 1)THEN
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached: TAUCAL runs only with `LNEWTCZ` off ([[envint.f#L937]]), and no case of YREC turns it off. The fix was not run. What would reach it: `LNEWTCZ` = .FALSE., with the base of a single surface convection zone inside the envelope. No comment says a single zone should use an earlier `ICZTOP`.
 
 ### TAUCAL
 

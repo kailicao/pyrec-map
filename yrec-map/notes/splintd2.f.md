@@ -6,7 +6,7 @@
 
 **How it fits.**
 - **Who calls it:** only [[hpoint.f#HPOINT|HPOINT]], after [[splinc.f#SPLINC|SPLINC]].
-- **Modules:** `IOUNITS_MOD`, for the unit `ISHORT` of its error message ("ERROR IN SPLINT ROUTINE: TWO ABSCISSAE COINCIDE", with the abscissa and $x$, also written to the terminal, then `STOP 1`).
+- **Modules:** `IOUNITS_MOD`, for the unit `ISHORT` of its error message ("ERROR IN SPLINT ROUTINE: TWO ABSCISSAE COINCIDE," with the abscissa and $x$, also written to the terminal, then `STOP 1`).
 
 **Changed since `rp_1`.** Declarations only: `/LUOUT/` to `IOUNITS_MOD`, the array size `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.
 

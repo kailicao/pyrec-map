@@ -14,7 +14,7 @@
     > **Question** ([[#L85-L89]]; [[#L211-L213]]; [[main.f#L1051-L1057]]). **The relaxation branch.** The comment says a negative `DELTS` marks a model being relaxed, but main.f passes `DABS(DELTS)` after every model, so the branch can only be reached at the first call of a kind card (with the step from `STARIN`); relaxation steps otherwise go through all the criteria. The routine also returns `ABS(DELTS)`, and the `ENDAGE` truncation applies to every branch. Is the negative branch still needed?
 
 2. A fixed step for this run (`LSETDT(NK)`): $\Delta t$ = `SETDT(NK)` years, skip to the end.
-3. If $\log T_c > 7.1$ and the gravitational luminosity `TLUMX(7)` is negative, switch the structure criterion off (`LPTIME` = false) for the rest of the job. Its comment is cut short ("this is done when"); the purpose is in REMAP's comment, "this is used only in the pre-MS and disabled for MS stars automatically", and in the documentation of `LSTRUCT_TIME`, "disabled once Lgrav<0 (minimum radius, close to ZAMS)" (settled from the code and the documentation, Nov 9, 2026: [[#L96-L104]]; [[remap.f#L283-L285]]).
+3. If $\log T_c > 7.1$ and the gravitational luminosity `TLUMX(7)` is negative, switch the structure criterion off (`LPTIME` = false) for the rest of the job. Its comment is cut short ("this is done when"); the purpose is in REMAP's comment, "this is used only in the pre-MS and disabled for MS stars automatically," and in the documentation of `LSTRUCT_TIME`, "disabled once Lgrav<0 (minimum radius, close to ZAMS)" (settled from the code and the documentation, Nov 9, 2026: [[#L96-L104]]; [[remap.f#L283-L285]]).
 
     > **Question** ([[#L98-L104]]; [[main.f#L383]]; [[main.f#L1154]]). **The `LPTIME` switch-off lasts for the job.** Once off, `LPTIME` stays off for all later kind cards of the job; main.f restores it only at each solar-calibration cycle. Should a later kind card that starts again from a pre-main-sequence model turn it back on, and should it stay off through the subgiant branch, where the structure changes fast?
 
@@ -37,19 +37,32 @@ leaving out the first term when $\Delta t_\mathrm{prev} \le 1$ s.
 
 ## Bugs, by priority
 
-1. **(d)** **A zero previous step passes through the envelope-triangle criterion.** ([[#L158-L162]]; [[#L171-L182]]; [[entime.f#L92-L95]]) ENTIME returns `DELTS/FAC` with `FAC` $\ge 1/$`ATIME(13)`, so a previous step of 0 (or under 1 s) gives an `EDELT` of at most `ATIME(13)` times it. Unlike `PDELT` and `DELTSW` ([[#L116]]; [[#L131]]), it is not replaced by $10^{20}$, and when the previous step is at most 1 s the minimum ([[#L181]]) takes it: The next step is again under 1.5 s, or 0 for every later model. This needs `LTRIST` (off by default) with `LPTIME` off; whether a run reaches HTIMER with such a step was not traced. Read from the code, not run. **A possible fix:**
+1. **(harmless in the runs)** **A zero previous step passes through the envelope-triangle criterion.** ([[#L158-L162]]; [[#L171-L182]]; [[entime.f#L92-L95]]) ENTIME returns `DELTS/FAC` with `FAC` $\ge 1/$`ATIME(13)`, so a previous step of 0 (or under 1 s) gives an `EDELT` of at most `ATIME(13)` times it. Unlike `PDELT` and `DELTSW` ([[#L116]]; [[#L131]]), it is not replaced by $10^{20}$, and when the previous step is at most 1 s the minimum ([[#L181]]) takes it: The next step is again under 1.5 s, or 0 for every later model. This needs `LTRIST` (off by default) with `LPTIME` off.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to set the envelope-triangle timestep arbitrarily large
-    C when it is below 1 s, as is done for PDELT and DELTSW.
-          IF(LTRIST .AND. .NOT. LPTIME) THEN
-           CALL ENTIME(DELTS,HL,TEFFL,M,EDELT)
-          ELSE
-           EDELT = 1.0D20
-          ENDIF
-          IF(EDELT.LT.1.0D0)EDELT=1.0D20
+    **A possible fix:**
+
+    ```diff
+    --- a/src/htimer.f
+    +++ b/src/htimer.f
+    @@ -155,11 +155,15 @@
+     C  04/14 JVS ADDED TIMESTEP GOVERNOR BASED ON THE SIZE OF THE ENVELOPE
+     C  TRIANGLE. TIMESTEPS ARE RESTRICTED SUCH THAT THE MODEL DOES NOT MOVE
+     C  MORE THAN TRIDL OR TRIDT
+    +C 11/09/26 KC via Claude
+    +C code changed to set the envelope-triangle timestep arbitrarily large
+    +C when it is below 1 s, as is done for PDELT and DELTSW.
+           IF(LTRIST .AND. .NOT. LPTIME) THEN
+            CALL ENTIME(DELTS,HL,TEFFL,M,EDELT)
+           ELSE
+            EDELT = 1.0D20
+           ENDIF
+    +      IF(EDELT.LT.1.0D0)EDELT=1.0D20
+     
+     C     LIMIT INCREASE IN TIME STEP FROM ONE MODEL TO THE NEXT FOR MODELS
+     C     WITH A NON-ZERO TIMESTEP.
     ```
+
+    **Checked by running YREC** (Nov 9, 2026, the two 1 $M_\odot$ runs repeated on Nov 10 with a private start model; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The envelope-triangle step was computed in 10 of 34 runs (26 of YREC's cases, from 0.04 to 9 $M_\odot$, with rotation, settling, and helium burning, and 8 made-up ones), up to 8,572 times per run (`testsuite/Test_m1p0feh+0p0GS98_base_HeIgnite`), always with `LTRIST` on and after `LPTIME` had been switched off. It came out below 1 s in one run only, a made-up one (`testsuite/Test_m1p0feh+0p0GS98_base_HeIgnite` with Reimers mass loss, `LMDOT` and `LREIMER` on), 919 times: The previous step was already 0.0020 to 0.0046 s, and `EDELT`, 0.0026 to 0.0060 s, kept the next one as small, so the star's age stayed at its starting 9.864 Gyr. That run stops with a convergence failure, with the fix or without it, after the same 919 models at the same age; the harness finds the track and the stored model identical, and the track does not differ at any common age. The fix does not change how the run ends. Intent: The guard after `PTIME` and `WTIME` says "A ZERO TIMESTEP IN THE MODEL WILL FRITZ OUT THE CODE" ([[#L114-L116]]); the `EDELT` line, added later ("04/14 JVS"), has none.
 
 ### HTIMER
 

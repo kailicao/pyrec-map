@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** The second derivatives of a cubic spline through tabulated points, from Numerical Recipes (`SPLINE`), in double precision "for opacities".
+**Purpose.** The second derivatives of a cubic spline through tabulated points, from Numerical Recipes (`SPLINE`), in double precision "for opacities."
 
 **How it fits.**
 - **Inputs:** `X(N)` (increasing), `Y(N)`, and the end slopes `YP1`, `YPN`; a slope of $10^{30}$ or more asks for a natural spline (zero second derivative) at that end.

@@ -16,11 +16,25 @@
 
 ## Bugs, by priority
 
-1. **(d)** **The flags record does not match its reader.** ([[#L65-L66]]; [[getyrec7.f#L104-L105]]) This routine writes the flags as `2(L1,1X),'F F ',2I4,F7.3`, four characters between the flags and `JCORE`; [[getyrec7.f#GETYREC7|GETYREC7]] reads them as `2(L1,1X),5X,2I4,F7.3`, skipping five, so every field it reads is shifted by one column. With Fortran's default treatment of blanks in input (ignored), the values still come back right while `JENV` < 1000 and `CMIXL` < 10; when `JENV` has four digits, its first digit is read as the last digit of `JCORE`, and `JENV` loses it. Only when a model written by PUTYREC7, which nothing in `src/` calls, is read back. Read from the code, not run. **A possible fix** (in the writer, since GETYREC7 presumably matches the files YREC7 itself wrote):
+1. **(cannot be reached)** **The flags record does not match its reader.** ([[#L65-L66]]; [[getyrec7.f#L104-L105]]) This routine writes the flags as `2(L1,1X),'F F ',2I4,F7.3`, four characters between the flags and `JCORE`; [[getyrec7.f#GETYREC7|GETYREC7]] reads them as `2(L1,1X),5X,2I4,F7.3`, skipping five, so every field it reads is shifted by one column. With Fortran's default treatment of blanks in input (ignored), the values still come back right while `JENV` < 1000 and `CMIXL` < 100; when `JENV` has four digits, its first digit is read as the last digit of `JCORE`, and `JENV` loses it. Only when a model written by PUTYREC7, which nothing in `src/` calls, is read back.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to write five characters between the flags and JCORE,
-    C as GETYREC7 reads them.
-       30 FORMAT(2(L1,1X),'F F  ',2I4,F7.3)
+    **A possible fix** (in the writer, since GETYREC7 presumably matches the files YREC7 itself wrote):
+
+    ```diff
+    --- a/src/putyrec7.f
+    +++ b/src/putyrec7.f
+    @@ -63,7 +63,10 @@
+     
+     C write PHYSICS FLAGS- ROTATION,EXTENDED COMP,CENTRAL AND SURFACE CZ'S
+           WRITE(IWRITE,30)LROT,LEXCOM,JCORE,JENV,CMIXL
+    -   30 FORMAT(2(L1,1X),'F F ',2I4,F7.3)
+    +C 11/09/26 KC via Claude
+    +C code changed to write five characters between the flags and JCORE,
+    +C as GETYREC7 reads them.
+    +   30 FORMAT(2(L1,1X),'F F  ',2I4,F7.3)
+     
+     C write LUMINOSITIES
+     C If TLUMX are in solar units, convert to ergs.  Decide by
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): not reached in any of 34 runs (26 of YREC's cases, from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning, and 8 made-up ones). Nothing in `src/` calls PUTYREC7, so it cannot be reached at 7be4133; it is fragile code. Intent: `KNOWN_ISSUES.md` keeps the routine on purpose ("it may have legacy use even though nothing in the tree calls it") but says nothing of its format. Not run: a model written by PUTYREC7 and read back by GETYREC7, which needs a caller.

@@ -29,34 +29,66 @@ abundances below $10^{-24}$ are set to 0.
 
 ## Bugs, by priority
 
-1. **(c)** **$^3$He is left out of the convergence test.** ([[#L88-L96]]; [[#L213-L220]]) $^3$He is extrapolated as $\ln X_3$ wherever $X_3 > 10^{-24}$, and $\ln X_3$ is negative, so the test `HCOMPA(J,I).GT.1.0D-12` skips it at every such shell; elsewhere $X_3 \le 10^{-24}$ fails the test too. The extrapolation can then be declared converged while $^3$He has not converged. Not reached at 7be4133, since BURSMIX is never called ([[getw.f#L140]]). Read from the code, not run. **A possible fix** (the correction of $\ln X_3$ is itself the relative correction of $X_3$):
+1. **(cannot be reached)** **$^3$He is left out of the convergence test.** ([[#L88-L96]]; [[#L213-L220]]) $^3$He is extrapolated as $\ln X_3$ wherever $X_3 > 10^{-24}$, and $\ln X_3$ is negative, so the test `HCOMPA(J,I).GT.1.0D-12` skips it at every such shell; elsewhere $X_3 \le 10^{-24}$ fails the test too. The extrapolation can then be declared converged while $^3$He has not converged.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to test HE3 by its correction in LN(X3), the relative
-    C correction of X3; LN(X3) is negative and never passed the test.
-                   IF(J.EQ.4 .AND. LHE3(I))THEN
-                      Q = HCOMPE(J,I)
-                   ELSE IF(HCOMPA(J,I).GT.1.0D-12)THEN
-                      Q = HCOMPE(J,I)/HCOMPA(J,I)
-                   ELSE
-                      Q = 0.0D0
-                   ENDIF
-                   IF(ABS(Q).GT.ERRMAX)THEN
-                      IMAX = I
-                      JMAX = J
-                      ERRMAX=ABS(Q)
-                   ENDIF
+    **A possible fix** (the correction of $\ln X_3$ is itself the relative correction of $X_3$):
+
+    ```diff
+    --- a/src/bsrotmix.f
+    +++ b/src/bsrotmix.f
+    @@ -210,13 +210,20 @@
+              DO J1 = 1,NMAX
+                 J = JJ(J1)
+                 DO I = 1,M
+    -               IF(HCOMPA(J,I).GT.1.0D-12)THEN
+    +C 11/09/26 KC via Claude
+    +C code changed to test HE3 by its correction in LN(X3), the relative
+    +C correction of X3; LN(X3) is negative and never passed the test.
+    +               IF(J.EQ.4 .AND. LHE3(I))THEN
+    +                  Q = HCOMPE(J,I)
+    +               ELSE IF(HCOMPA(J,I).GT.1.0D-12)THEN
+                       Q = HCOMPE(J,I)/HCOMPA(J,I)
+    -                  IF(ABS(Q).GT.ERRMAX)THEN
+    -                     IMAX = I
+    -                     JMAX = J
+    -                     ERRMAX=ABS(Q)
+    -                  ENDIF
+    +               ELSE
+    +                  Q = 0.0D0
+    +               ENDIF
+    +               IF(ABS(Q).GT.ERRMAX)THEN
+    +                  IMAX = I
+    +                  JMAX = J
+    +                  ERRMAX=ABS(Q)
+                    ENDIF
+                 END DO
+              END DO
     ```
 
-2. **(b)** **`STOP999` when no species is present.** ([[#L76-L77]]) If no species from `JBEG` to `NSPEC` exceeds $10^{-14}$ anywhere, the run stops, with no message. Such a composition (no $^3$He and no metals) is unusual but not invalid, and with nothing to extrapolate the routine could go on: With `NMAX` = 0, the next call finds `ERRMAX` = $10^{-30}$ and reports convergence. Not reached at 7be4133, since BURSMIX is never called. Read from the code, not run. **A possible fix:**
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Cannot be reached at 7be4133. GETW sets `LBURS = .FALSE.` on every call ([[getw.f#L140]]), and BURSMIX, the only caller of BSROTMIX, is called only when it is true ([[getw.f#L455-L461]]); no namelist can change that. No counting line fired in any case run, the five rotating test cases run (`testsuite/Test_3Msolar_GS_rot_gray_OPALSCV_SF2_GS98_OP_CF10_RGp2diffrotI3cz2`, `testsuite/Test_solarGS98_difrotmixper18p4d1p0`, `testsuite/Test_m0p8feh+0p0GS98_rotp8p0d0p1mag1e4std_TAMS`, `testsuite/Test_m2p0_feh+0p0_vzams150_IES1_TAMS`, and `testsuite/Test_m2p0_feh+0p0_vzams150_IES2_TAMS`) among them. What remains is code that no run takes; it would matter only if the extrapolation were switched on in GETW. Intent: none found; taking $^3$He in its logarithm is deliberate ([[#L88]]), but the test was not adapted to it.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to go on with nothing to extrapolate (NMAX = 0); the
-    C next call then reports convergence at once.  It stopped the run.
-    C        IF(NMAX.LT.1)STOP999
+2. **(cannot be reached)** **`STOP999` when no species is present.** ([[#L76-L77]]) If no species from `JBEG` to `NSPEC` exceeds $10^{-14}$ anywhere, the run stops, with no message. Such a composition (no $^3$He and no metals) is unusual but not invalid, and with nothing to extrapolate the routine could go on: With `NMAX` = 0, the next call finds `ERRMAX` = $10^{-30}$ and reports convergence.
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/bsrotmix.f
+    +++ b/src/bsrotmix.f
+    @@ -74,7 +74,10 @@
+                 ENDIF
+              END DO
+              NMAX = ICOUNT - 1
+    -         IF(NMAX.LT.1)STOP999
+    +C 11/09/26 KC via Claude
+    +C code changed to go on with nothing to extrapolate (NMAX = 0); the
+    +C next call then reports convergence at once.  It stopped the run.
+    +C        IF(NMAX.LT.1)STOP999
+           ENDIF
+     C STORE CURRENT RESULTS IN VECTOR OF COMPOSITION (HCOMPA) AND
+     C ERROR (DCOMPA)
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Cannot be reached at 7be4133: GETW sets `LBURS` false on every call ([[getw.f#L140]]), and BURSMIX, the only caller of BSROTMIX, is called only when it is true, so no run takes this path (as for [[#b1]]); no counting line fired in any case run. What remains is code that no run takes.
 
 ### BSROTMIX
 

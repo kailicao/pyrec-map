@@ -20,7 +20,7 @@
 $$S_J = \sum_i j_i m_i, \qquad S_{\Delta} = \sum_i y_i\, j_i m_i .$$
 If $|S_\Delta - \Delta J| > 10^{-5}|\Delta J|$, where $\Delta J$ is `SUMDJ`, every shell from `I0` to `I1` is rescaled by
 $$\frac{S_J + \Delta J}{S_J + S_\Delta},$$
-so that the region's total angular momentum changes by exactly $\Delta J$. When $\Delta J = 0$ (no surface loss), any mismatch triggers the rescaling, which then conserves the region's angular momentum exactly; this is what the comment asks for ("CARE IS USED HERE BECAUSE DUMDJ SHOULD BE ZERO IN MODELS WITHOUT LOSS", where `DUMDJ` is `SUMDJ`; [[#L120-L124]], [[#L131-L136]]; settled from the code, Nov 9, 2026).
+so that the region's total angular momentum changes by exactly $\Delta J$. When $\Delta J = 0$ (no surface loss), any mismatch triggers the rescaling, which then conserves the region's angular momentum exactly; this is what the comment asks for ("CARE IS USED HERE BECAUSE DUMDJ SHOULD BE ZERO IN MODELS WITHOUT LOSS," where `DUMDJ` is `SUMDJ`; [[#L120-L124]], [[#L131-L136]]; settled from the code, Nov 9, 2026).
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 

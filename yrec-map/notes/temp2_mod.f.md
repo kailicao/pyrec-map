@@ -5,7 +5,7 @@
 **What its variables hold, who sets them, who reads them.**
 - `VES`, `VGSF`, `VSS`, `VMU` (`JSON` each): the Eddington–Sweet circulation, the Goldreich–Schubert–Fricke, the secular-shear and the $\mu$-current velocities, set by `VCIRC` (to 0 first). Read by `CODIFF` (the coefficients `COD`, `COD2` from the sum `VES` + `VGSF` + `VSS`), [[checkj.f#CHECKJ|`CHECKJ`]] (which writes them) and, except `VMU`, by [[putstore.f#PUTSTORE|`PUTSTORE`]] and [[stitch.f#STITCH|`STITCH`]] (the stored model).
 - `VES0`, `VGSF0`, `VSS0`: the previous iteration's `VES`, `VGSF`, `VSS`, saved by `VCIRC` from the second iteration on, which then averages old and new values; `CHECKJ` writes `VES0` and `VGSF0`.
-- `HLE(JSON)`: a length scale, set to 0 at every interface by `CODIFF` (its assignments of `RMID` are commented out); `CHECKJ` writes it as "LENGTH".
+- `HLE(JSON)`: a length scale, set to 0 at every interface by `CODIFF` (its assignments of `RMID` are commented out); `CHECKJ` writes it as "LENGTH."
 
 **Design.** A blanket `USE TEMP2_MOD` in each routine.
 

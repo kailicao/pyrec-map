@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** One step of the elimination in the Henyey method: for the pair of shells $(i-1, i)$, it forms the residuals of the four difference equations of stellar structure and eliminates the unknowns of shell $i-1$, leaving relations for the corrections at shell $i$. Its name and the comments ("REDUCE MATRIX FOR PAIR OF POINTS (IM-1,IM)", in the caller) say this; that it is the forward sweep of a Henyey solver, with [[hsolve.f#HSOLVE|`HSOLVE`]] the backward one, is our reading of the algebra.
+**Purpose.** One step of the elimination in the Henyey method: for the pair of shells $(i-1, i)$, it forms the residuals of the four difference equations of stellar structure and eliminates the unknowns of shell $i-1$, leaving relations for the corrections at shell $i$. Its name and the comments ("REDUCE MATRIX FOR PAIR OF POINTS (IM-1,IM)," in the caller) say this; that it is the forward sweep of a Henyey solver, with [[hsolve.f#HSOLVE|`HSOLVE`]] the backward one, is our reading of the algebra.
 
 **How it fits.**
 - **Who calls it:** [[coefft.f#COEFFT|`COEFFT`]], once for each shell `IM` > 1, right after computing that shell's right-hand sides and their derivatives. For the first shell, `COEFFT` sets the central boundary conditions in the same arrays instead.
@@ -21,7 +21,7 @@ with $k$ over $P, T, R, L$ ($\epsilon_{yk}$ is 1 when $k = y$, else 0; the facto
 > **Question** ([[#L42-L111]]). **The meaning of the columns.** The comments name the pivots by row and column of a matrix that is written nowhere; the column map above is read from the algebra. Can it be confirmed, and documented in the code?
 
 1. **Columns 1 and 2.** The previous call left $\delta R_{i-1} = $ `HHB(3,I-1)` $- \sum_m$ `HHA(3,m,I-1)` $u_m$, and the same for $\delta L_{i-1}$ with row 4, where $u = (\delta P_{i-1}, \delta T_{i-1})$. Substituting them removes $\delta R_{i-1}$, $\delta L_{i-1}$. In the $L$ row the coefficient of $\delta L_{i-1}$ is $-1$ (no $\partial f_L/\partial L$ term), so its terms enter with a plus sign.
-2. **Columns 6, 5, 4, 3,** in turn ("PIVOT ON ROW-4 AND COLUMN-6", then row 3 and column 5, row 2 and column 4, row 1 and column 3): Gauss–Jordan steps that eliminate $\delta L_i$, $\delta R_i$, $\delta T_{i-1}$ and $\delta P_{i-1}$.
+2. **Columns 6, 5, 4, 3,** in turn ("PIVOT ON ROW-4 AND COLUMN-6," then row 3 and column 5, row 2 and column 4, row 1 and column 3): Gauss–Jordan steps that eliminate $\delta L_i$, $\delta R_i$, $\delta T_{i-1}$ and $\delta P_{i-1}$.
 
 At the end, each of the four unknowns $x_k = (\delta P_{i-1}, \delta T_{i-1}, \delta R_i, \delta L_i)$ is given in terms of the two unknowns of shell $i$:
 

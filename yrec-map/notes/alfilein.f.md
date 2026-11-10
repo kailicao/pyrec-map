@@ -18,7 +18,7 @@
 
 Gaps in the grid (combinations of $T_\mathrm{eff}$ and $\log g$ absent from the file) keep the value $-999$; ALTABINIT then finds each row's valid range.
 
-**Design.** Every error ends the run with `STOP 3`, the exit status for input errors, after a message to the screen and to `ISHORT`. Some messages name other routines ("AtTabInit Pass 1 File Error"), and the closing comment says "END OF ALINITTAB", left from earlier names.
+**Design.** Every error ends the run with `STOP 3`, the exit status for input errors, after a message to the screen and to `ISHORT`. Some messages name other routines ("AtTabInit Pass 1 File Error"), and the closing comment says "END OF ALINITTAB," left from earlier names.
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/ALATM01/`; `/ALATM03/` split between `NMLPAR_MOD` and `IOUNITS_MOD`; `/LUOUT/` to `IOUNITS_MOD`; `/ALATM04/`, which held only dummies, removed), `IMPLICIT NONE`; the `EXTERNAL sort_shell` line, which a misplaced column had made a continuation of the `/ALATM04/` declaration, is now a statement of its own. The misspelled flag of former question 1 was then declared as a local `LOGICAL`, so the question stands.
 
@@ -26,28 +26,62 @@ Gaps in the grid (combinations of $T_\mathrm{eff}$ and $\log g$ absent from the 
 
 ## Bugs, by priority
 
-1. **(c)** **Two tolerances for [Fe/H] and $\alpha$.** ([[#L209-L210]]; [[#L296-L297]]; [[#L326-L327]]) Both passes skip a record when $|\Delta[\mathrm{Fe/H}]| > 10^{-5}$ or $|\Delta\alpha| > 0$ (an exact match), measured from the requested `ALATM_FeH`, `ALATM_Alpha`; the second pass then drops the record again when $|\Delta[\mathrm{Fe/H}]| \ge 10^{-6}$ or $|\Delta\alpha| \ge 10^{-6}$. For $\alpha$ the second test changes nothing; for [Fe/H], a request between $10^{-6}$ and $10^{-5}$ from the file's value adds the records' $T_\mathrm{eff}$ and $\log g$ to the grid in the first pass, but stores none of them, so every entry stays at $-999$ and [[altabinit.f#ALTABINIT|ALTABINIT]] stops the run with "Bad input Allard Table", not with a message that names the [Fe/H]. Only with `KTTAU` = 4 and a requested [Fe/H] that is not exactly a value of the file (whose values have two decimals, format `915`). Read from the code, not run. **A possible fix:**
+1. **(never occurred)** **Two tolerances for [Fe/H] and $\alpha$.** ([[#L209-L210]]; [[#L296-L297]]; [[#L326-L327]]) Both passes skip a record when $|\Delta[\mathrm{Fe/H}]| > 10^{-5}$ or $|\Delta\alpha| > 0$ (an exact match), measured from the requested `ALATM_FeH`, `ALATM_Alpha`; the second pass then drops the record again when $|\Delta[\mathrm{Fe/H}]| \ge 10^{-6}$ or $|\Delta\alpha| \ge 10^{-6}$. For $\alpha$ the second test changes nothing; for [Fe/H], a request between $10^{-6}$ and $10^{-5}$ from the file's value adds the records' $T_\mathrm{eff}$ and $\log g$ to the grid in the first pass, but stores none of them, so every entry stays at $-999$ and [[altabinit.f#ALTABINIT|ALTABINIT]] stops the run with "Bad input Allard Table," not with a message that names the [Fe/H]. Only with `KTTAU` = 4 and a requested [Fe/H] that is not exactly a value of the file (whose values have two decimals, format `915`).
 
-    ```fortran
-     430      CONTINUE
-    C 11/09/26 KC via Claude
-    C code changed to drop the second test of FeH and Alpha, whose 1D-6
-    C dropped records that the test after label 410 (1D-5) had kept.
-    C     if (DABS(FeH -ALATM_FeH) .ge. 1D-6)  goto 440
-    C     if (DABS(Alpha -ALATM_Alpha) .ge. 1D-6)  goto 440
+    **A possible fix:**
+
+    ```diff
+    --- a/src/alfilein.f
+    +++ b/src/alfilein.f
+    @@ -323,8 +323,11 @@
+     
+     C we now verify that we have the correct FeH and Alpha
+     
+    -      if (DABS(FeH -ALATM_FeH) .ge. 1D-6)  goto 440     ! Wrong FeH, bypass item
+    -      if (DABS(Alpha -ALATM_Alpha) .ge. 1D-6)  goto 440 ! Wrong Alpha, bypass item
+    +C 11/09/26 KC via Claude
+    +C code changed to drop the second test of FeH and Alpha, whose 1D-6
+    +C dropped records that the test after label 410 (1D-5) had kept.
+    +C     if (DABS(FeH -ALATM_FeH) .ge. 1D-6)  goto 440
+    +C     if (DABS(Alpha -ALATM_Alpha) .ge. 1D-6)  goto 440
+     
+     
+     C We now have the correct indices for our tables, i1 for the Teff-direction
     ```
 
-2. **(d)** **Loop bounds for the new [Fe/H] and $\alpha$ values.** ([[#L248-L262]]) The checks for new [Fe/H] and $\alpha$ values loop `do i = 1,nGL` instead of `1,nFeH` and `1,nALPHA`, and so compare with entries of `FeHs` and `ALPHAs` that were never set. Harmless today: Only records within $10^{-5}$ of the requested [Fe/H] and with exactly the requested $\alpha$ get this far, and since the file's values have two decimals they are all equal to the first, found at `i` = 1; `nFeH` and `nALPHA` stay 1, and only [[alprint.f#ALPRINT|ALPRINT]] prints them. It would count wrong values once the filter let several [Fe/H] or $\alpha$ through. Read from the code, not run. **A possible fix:**
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Of 34 runs (26 of YREC's cases, from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning, and 8 made-up ones; one of these, with `FCORE` = 1.0, stopped in its first second), only `testsuite/Test_solarGS98_allard` uses the Allard table (`Nextgen2.all`, `KTTAU` = 4). There the second test ran 316 times, each with [Fe/H] = 0 requested and found, and it never dropped a record. No case sets `ALATM_FeH` (the default is 0), and a value written as in the file reads to the same number as the file's two-decimal field, so the condition needs a request between $10^{-6}$ and $10^{-5}$ off a value of the file, which no case or document makes; it was not run. No fix was run. Intent: none found.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to loop over the FeH and ALPHA values found so far,
-    C not over the GL values.
-          do i = 1,nFeH  ! Skip out if any old FeH is a match
-    ...
-          do i = 1,nALPHA  ! Skip out if any old ALPHA is a match
-    ...
+2. **(never occurred)** **Loop bounds for the new [Fe/H] and $\alpha$ values.** ([[#L248-L262]]) The checks for new [Fe/H] and $\alpha$ values loop `do i = 1,nGL` instead of `1,nFeH` and `1,nALPHA`, and so compare with entries of `FeHs` and `ALPHAs` that were never set. Harmless today: Only records within $10^{-5}$ of the requested [Fe/H] and with exactly the requested $\alpha$ get this far, and since the file's values have two decimals they are all equal to the first, found at `i` = 1; `nFeH` and `nALPHA` stay 1, and only [[alprint.f#ALPRINT|ALPRINT]] prints them. It would count wrong values once the filter let several [Fe/H] or $\alpha$ through.
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/alfilein.f
+    +++ b/src/alfilein.f
+    @@ -246,7 +246,10 @@
+     
+     
+     c Now check FeHs, increase counter if needed
+    -      do i = 1,nGL  ! Skip out if any old FeH is a match
+    +C 11/09/26 KC via Claude
+    +C code changed to loop over the FeH and ALPHA values found so far,
+    +C not over the GL values.
+    +      do i = 1,nFeH  ! Skip out if any old FeH is a match
+             if (DABS(FeH-FeHs(i)) .lt.1D-6) goto 314
+           enddo
+             nFeH = nFeH+1      ! count the next FeH
+    @@ -254,7 +257,7 @@
+      314  CONTINUE
+     
+     c Now check ALPHAs, increase counter if needed
+    -      do i = 1,nGL  ! Skip out if any old ALPHA is a match
+    +      do i = 1,nALPHA  ! Skip out if any old ALPHA is a match
+             if (DABS(ALPHA-ALPHAs(i)) .lt.1D-6) goto 316
+           enddo
+             nALPHA = nALPHA+1      ! count the next ALPHA
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): In `testsuite/Test_solarGS98_allard`, the only Allard run, the two loops ran for 315 records, all with [Fe/H] = 0 and $\alpha$ = 0; the first entry matched every time, so no unset entry was compared. It would need records of several [Fe/H] or $\alpha$ to pass the filter, which no case or table does. No fix was run. Intent: none found.
 
 ### ALFILEIN
 

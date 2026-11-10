@@ -25,14 +25,14 @@
 5. **Rescale** with `RSCALE` if `IRESCA(NK)` ≠ 1.
 6. **Move the envelope's fitting point** (`LSENV0`), to `SENV0`, the log of the fitting point's mass fraction, $\log_{10}(m_\mathrm{fit}/M_\star)$ (as `SENV = HS(M) - HSTOT`): a small negative number, at most $-10^{-12}$ ("τ = 2/3"; a positive value is made negative, [[#L587-L591]]), which puts the fitting point a fraction $\approx 2\times10^{-12}$ of the mass below the surface. Nothing is done when the current `SENV` matches `SENV0` to within `SENVTOL` $= 100\,\epsilon\,|\texttt{HSTOT}|$ (100 units in the last place of `HSTOT`, about $7\times10^{-13}$, below the $10^{-12}$ minimum), since `SENV`, a difference of two log masses near 33, carries roundoff of order $10^{-14}$. For a deeper point, shells beyond it are dropped and the new last shell is interpolated linearly in $\log m$; if it lies between a convective and a radiative shell, the physics routines (`EQSTAT`, `GETOPAC`, `TPGRAD`) decide whether it is convective. For a shallower point (bug 2 for the interpolated last shell), an envelope is integrated with `ENVINT` from the surface (at the model's $L$ and $T_\mathrm{eff}$, or the spotted star's ambient temperature, below), shifted to match the last interior point, and its points down to the new fitting mass become interior shells (constant $L$), each with its envelope point's convective flag. With rotation the new shells rotate at the old surface rate, with $j = \tfrac23\,\Omega r^2$.
 
-    > **Question** ([[#L587-L591]]). **The smallest envelope.** The User Guide says that `SENV0A` values above $-10^{-11}$ are set to $-10^{-11}$, which puts the fitting point at the atmosphere's boundary, and that the value must be negative; the code clamps at $-10^{-12}$ ("DBG 2/92", the comment saying $10^{-12}$ corresponds to $\tau = 2/3$), and turns a positive value into its negative, which is how the default `SENV0A` = $1.26\times10^{-4}$ in `NMLPAR_MOD` works. Which minimum is right, and should the documentation mention the sign change?
+    > **Question** ([[#L587-L591]]). **The smallest envelope.** The User Guide says that `SENV0A` values above $-10^{-11}$ are set to $-10^{-11}$, which puts the fitting point at the atmosphere's boundary, and that the value must be negative; the code clamps at $-10^{-12}$ ("DBG 2/92," the comment saying $10^{-12}$ corresponds to $\tau = 2/3$), and turns a positive value into its negative, which is how the default `SENV0A` = $1.26\times10^{-4}$ in `NMLPAR_MOD` works. Which minimum is right, and should the documentation mention the sign change?
 
 7. **Shell masses.** With $m_i = 10^{\texttt{HS}(i)}$ (`HS1`), each shell's mass `HS2` is
    $$\Delta m_i = \tfrac12\,(m_{i+1} - m_{i-1}),\quad \Delta m_1 = \tfrac12\,(m_2 + m_1),\quad \Delta m_M = M_\star - \tfrac12\,(m_{M-1} + m_M).$$
 8. **Rotation.** `FPFT` and `MOMI` give the distortion and moments of inertia $I_i$; then $J_i = \Omega_i I_i$, $j_i = J_i/\Delta m_i$ (`HJM`), $K_i = \tfrac12 \Omega_i J_i$ (`HKEROT`), and the totals `SJTOT`, `SKEROT`, printed beside the previous ones.
 9. **Surface composition** (first run only, `NK = 1`): from the relative mass fractions `V` of 12 elements (`VNEW` from the parameters unless the old `LLAOL` opacities are used), with H and He set from $X$ and $Y$, the number fractions $f_k = (V_k/A_k)/\sum_l (V_l/A_l)$ (`FXENV`, atomic weights `ATOMWT`), and $Z$ without C, N and O (`ZENVM`). With the mass fractions $X_k$ of all 12 elements, H and He included,
    $$\texttt{AMUENV} = \sum_{k=1}^{12} \frac{X_k}{A_k},$$
-   the inverse mean atomic weight per ion (as [[checkc.f#CHECKC|CHECKC]]'s comment says; STARIN's own comment, [[#L920]], calls it the "MEAN ATOMIC WEIGHT OF SURFACE Z", which the code does not compute, [[#L932-L937]]). Then the surface opacity tables (`SURFOPAC`) and, with `LSCV`, the SCV equation of state (`SETSCV`).
+   the inverse mean atomic weight per ion (as [[checkc.f#CHECKC|CHECKC]]'s comment says; STARIN's own comment, [[#L920]], calls it the "MEAN ATOMIC WEIGHT OF SURFACE Z," which the code does not compute, [[#L932-L937]]). Then the surface opacity tables (`SURFOPAC`) and, with `LSCV`, the SCV equation of state (`SETSCV`).
 
     > **Question** ([[#L904]]). **The surface composition only for the first run.** This step, up to `SURFOPAC`, is skipped when `NK > 1` (`GOTO 630`), so a later run that reads a new model from file (or changes the mixture) keeps the first run's `XENV`, `ZENV`, `FXENV`. Intended?
 
@@ -55,60 +55,156 @@ $$\log T_\mathrm{amb} = \log T_\mathrm{eff} - \tfrac14 \log_{10}\!\left(f\,x^4 +
 
 ## Bugs, by priority
 
-1. **(a)** **The densities are not shifted in the core extension.** ([[#L499-L510]], [[#L518]]) The loop that shifts the old points outward by `MCORE` moves `HS`, `HR`, `HL`, `HP`, `HT`, `LC`, `HCOMP` and `OMEGA`, but not `HD`. After it, `HD(MP1)`…`HD(M)` hold the densities of the old points of the same index, not of the points now stored there, and `HD(M+1)`…`HD(MN)` are never set. `FACD = HP(MP1)-HD(MP1)-HT(MP1)` then mixes the pressure and temperature of the old first point with the density of old point `MP1`, and every new core density ([[#L561]]) inherits the error; `HD(M)`, now unset, is read again when the fitting point is moved ([[#L625]], [[#L741]], [[#L785]]), and `PHYSIC` passes each `HD` on to `EQSTAT` ([[physic.f#L94]]). Taken whenever `LCORE` is true for a model read from file (default false; set in 110 of the repository's namelists, such as `testsuite/Test_solarGS98_base.nml2`). Read from the code, not run; how far the wrong densities reach the converged model is not traced. **A possible fix:**
+1. **(harmless in the runs)** **The densities are not shifted in the core extension.** ([[#L499-L510]], [[#L518]]) The loop that shifts the old points outward by `MCORE` moves `HS`, `HR`, `HL`, `HP`, `HT`, `LC`, `HCOMP` and `OMEGA`, but not `HD`. After it, `HD(MP1)`…`HD(M)` hold the densities of the old points of the same index, not of the points now stored there, and `HD(M+1)`…`HD(MN)` are never set. `FACD = HP(MP1)-HD(MP1)-HT(MP1)` then mixes the pressure and temperature of the old first point with the density of old point `MP1`, and every new core density ([[#L561]]) inherits the error; `HD(M)`, now unset, is read again when the fitting point is moved ([[#L625]], [[#L741]], [[#L785]]), and `PHYSIC` passes each `HD` on to `EQSTAT` ([[physic.f#L94]]). Taken whenever `LCORE` is true for a model read from file (default false; set in 110 of the repository's namelists, such as `testsuite/Test_solarGS98_base.nml2`).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to shift the densities with the other quantities.
-              DO I=M,1, -1
-                 HS(I+MCORE) = HS(I)
-                 HR(I+MCORE) = HR(I)
-                 HL(I+MCORE) = HL(I)
-                 HP(I+MCORE) = HP(I)
-                 HT(I+MCORE) = HT(I)
-                 HD(I+MCORE) = HD(I)
-    ...
+    **A possible fix:**
+
+    ```diff
+    --- a/src/starin.f
+    +++ b/src/starin.f
+    @@ -496,12 +496,15 @@
+               ENDIF
+               DS = HPTTOL(2)
+     c shift data for remaining points by the required number
+    +C 11/09/26 KC via Claude
+    +C code changed to shift the densities with the other quantities.
+               DO I=M,1, -1
+                  HS(I+MCORE) = HS(I)
+                  HR(I+MCORE) = HR(I)
+                  HL(I+MCORE) = HL(I)
+                  HP(I+MCORE) = HP(I)
+                  HT(I+MCORE) = HT(I)
+    +             HD(I+MCORE) = HD(I)
+                  LC(I+MCORE) = LC(I)
+                  DO J=1, 15
+                     HCOMP(J,I+MCORE) = HCOMP(J,I)
     ```
 
-2. **(a)** **A reversed sign in the envelope interpolation.** ([[#L790-L791]]) When a shallower fitting point falls between the last interior point and the first envelope point (`JM` = 1), the new shell gets `HCOMP(1,J) = HCOMP(1,M)+FX*(HCOMP(1,M)-ENVX(JM))`, and likewise for `HCOMP(3,J)`, while every other quantity on the neighboring lines, and the same interpolation between two envelope points ([[#L813-L814]]), uses `(new - old)`. $X$ and $Z$ of the new shell are then extrapolated away from the envelope's value instead of toward it. The error is zero when the envelope's $X$, $Z$ equal the last shell's, as they do when the envelope is integrated with the model's surface composition; it is not traced for a model whose last shell differs (after settling, for example). Taken with `LSENV0` and a shallower `SENV0` (default off). Read from the code, not run. **A possible fix:**
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The core was extended in 12 runs, 10 of YREC's cases (such as `testsuite/Test_solarGS98_SF3` and `examples/run_from_seed_to_start/m10000gs98z001000_prems`) and two made-up variants, by 26 to 101 points on models of 802 to 969 shells; in all 12, `HD(MP1)` differed from the density it should hold, `HD(1)` (the two from −3.191 to −1.566 and −3.190 to −1.565). With `HD` shifted, `testsuite/Test_solarAAG21_dif` and `testsuite/Test_solarGS98_allard` change about as much as with a null change (nearly every opacity, all with 3 <= log T <= 9 and -6 <= log rho <= 9.75, times 1 + 1e-10): $\log L$ by up to $8.2\times10^{-5}$ and $1.1\times10^{-4}$ dex, against $7.6\times10^{-5}$ and $1.4\times10^{-4}$; $\log T_c$ by up to $3.5\times10^{-5}$ and $4.0\times10^{-5}$, against $1.2\times10^{-5}$ and $3.7\times10^{-5}$; central $X$ by up to $8.7\times10^{-5}$ and $6.2\times10^{-5}$, against $4.0\times10^{-5}$ and $9.0\times10^{-5}$; the same numbers of models and end ages. Within the noise: The converging model does not keep the wrong starting densities in these runs, so what remains is fragile code. No comment explains why `HD` is left out of the shift.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to interpolate X and Z toward the envelope point, as
-    C the other quantities are.
-                         HCOMP(1,J) = HCOMP(1,M)+FX*(ENVX(JM)-HCOMP(1,M))
-                         HCOMP(3,J) = HCOMP(3,M)+FX*(ENVZ(JM)-HCOMP(3,M))
+2. **(not reached)** **A reversed sign in the envelope interpolation.** ([[#L790-L791]]) When a shallower fitting point falls between the last interior point and the first envelope point (`JM` = 1), the new shell gets `HCOMP(1,J) = HCOMP(1,M)+FX*(HCOMP(1,M)-ENVX(JM))`, and likewise for `HCOMP(3,J)`, while every other quantity on the neighboring lines, and the same interpolation between two envelope points ([[#L813-L814]]), uses `(new - old)`. $X$ and $Z$ of the new shell are then extrapolated away from the envelope's value instead of toward it. The error is zero when the envelope's $X$, $Z$ equal the last shell's, as they do when the envelope is integrated with the model's surface composition; it is not traced for a model whose last shell differs (after settling, for example). Taken with `LSENV0` and a shallower `SENV0` (default off).
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/starin.f
+    +++ b/src/starin.f
+    @@ -787,8 +787,11 @@
+                          HR(J) = HR(M)+FX*(ENVR(JM)-HR(M))
+                          HS(J) = X1
+                          HT(J) = HT(M)+FX*(ENVT(JM)-HT(M))
+    -                     HCOMP(1,J) = HCOMP(1,M)+FX*(HCOMP(1,M)-ENVX(JM))
+    -                     HCOMP(3,J) = HCOMP(3,M)+FX*(HCOMP(3,M)-ENVZ(JM))
+    +C 11/09/26 KC via Claude
+    +C code changed to interpolate X and Z toward the envelope point, as
+    +C the other quantities are.
+    +                     HCOMP(1,J) = HCOMP(1,M)+FX*(ENVX(JM)-HCOMP(1,M))
+    +                     HCOMP(3,J) = HCOMP(3,M)+FX*(ENVZ(JM)-HCOMP(3,M))
+                          DO K = 4,JEND
+                             HCOMP(K,J) = HCOMP(K,M)
+                          END DO
     ```
 
-3. **(a)** **The defaults of `R16_18` and `R16_17` look swapped.** ([[#L448-L449]]; [[nmlpar_mod.f#L232]], [[nmlbypass_mod.f#L105]]) STARIN splits oxygen with `R16_18` as $^{16}$O/$^{18}$O. Its default is 2693.0, close to the solar $^{16}$O/$^{17}$O ratio (the documentation, `namelist_control.md` lines 201–202, gives 2644 for Lodders 2025), while `R16_17`, which nothing reads, defaults to 471.4, close to $^{16}$O/$^{18}$O (the documentation: 468.2). With `ISETISO` = 1 and the preset `AISO = 'L21'` (the default, [[parmin.f#L509]]), which applies the defaults, the starting model gets about 5.7 times too little $^{18}$O (`SUM_O`/2694 instead of `SUM_O`/472.4). Off by default (`ISETISO` = 0), but taken by the 95 namelists in the repository that set `ISETISO = 1` (none sets `R16_18`), such as `testsuite/Test_solarAAG21_dif.nml1`. Read from the code and the documentation, not run; the effect on a run is not traced. **A possible fix,** if the defaults are meant as Lodders (2021)'s values:
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached: The runs that ask for a small envelope mass, such as `examples/run_from_dbl_to_zams/Test_m0040_feh0_noGS_ZAMS` (`SENV0A` = −1.0D-7) and `Test_m0300_feh0_noGS_ZAMS` (−1.0D-5), never placed the new point between the last interior point and the first envelope point, so the fix was not run. What would reach it: a shallower fitting point that falls in that first interval (`JM` = 1), with a last shell whose $X$ or $Z$ differs from the envelope's. No comment explains the sign; the interpolation between envelope points ([[#L813-L814]]) has the other one.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to give R16_18 the O16/O18 default (it held O16/O17's).
-          REAL*8    :: R16_18 = 471.4D0
+3. **(harmless in the runs)** **The defaults of `R16_18` and `R16_17` look swapped.** ([[#L448-L449]]; [[nmlpar_mod.f#L232]], [[nmlbypass_mod.f#L105]]) STARIN splits oxygen with `R16_18` as $^{16}$O/$^{18}$O. Its default is 2693.0, close to the solar $^{16}$O/$^{17}$O ratio (the documentation, `namelist_control.md` lines 201–202, gives 2644 for Lodders 2025), while `R16_17`, which nothing reads, defaults to 471.4, close to $^{16}$O/$^{18}$O (the documentation: 468.2). With `ISETISO` = 1 and the preset `AISO = 'L21'` (the default, [[parmin.f#L509]]), which applies the defaults, the starting model gets about 5.7 times too little $^{18}$O (`SUM_O`/2694 instead of `SUM_O`/472.4). Off by default (`ISETISO` = 0), but taken by the 95 namelists in the repository that set `ISETISO = 1` (none sets `R16_18`), such as `testsuite/Test_solarAAG21_dif.nml1`.
+
+    **A possible fix,** if the defaults are meant as Lodders (2021)'s values:
+
+    ```diff
+    --- a/src/nmlpar_mod.f
+    +++ b/src/nmlpar_mod.f
+    @@ -229,7 +229,9 @@
+           REAL*8    :: FRAC_N = 0.050426D0
+           REAL*8    :: FRAC_O = 0.468195D0
+           REAL*8    :: R12_13 = 88.27D0
+    -      REAL*8    :: R16_18 = 2693.0D0
+    +C 11/09/26 KC via Claude
+    +C code changed to give R16_18 the O16/O18 default (it held O16/O17's).
+    +      REAL*8    :: R16_18 = 471.4D0
+           REAL*8    :: XH2_INI = 2.781D-5
+           REAL*8    :: XHE3_INI = 3.461D-5
+           REAL*8    :: XLI6_INI = 7.187D-10
+    --- a/src/nmlbypass_mod.f
+    +++ b/src/nmlbypass_mod.f
+    @@ -102,7 +102,7 @@
+           INTEGER*4 :: ISETMIX = 0
+           INTEGER*4 :: ISETISO = 0
+           REAL*8    :: R14_15 = 411.9D0
+    -      REAL*8    :: R16_17 = 471.4D0
+    +      REAL*8    :: R16_17 = 2693.0D0
+           REAL*8    :: ZXMIX = 0.02292D0
+           REAL*8    :: XB10_INI = 1.002D-9
+           REAL*8    :: XB11_INI = 4.405D-9
     ```
 
     in `NMLPAR_MOD`, and `R16_17 = 2693.0D0` in `NMLBYPASS_MOD`.
 
-4. **(b)** **0/0 with one core point.** ([[#L480]], [[#L515]], [[#L534]]) With `MCORE` = 1 (the default `FCORE` = 1.0 gives `INT(0)+1` = 1, as does any `FCORE` below $10^{\texttt{HPTTOL(2)}}$), the shift sets `HT(2) = HT(1)` and `HP(2) = HP(1)`, so `DEL = (HT(2)-HT(1))/(HP(2)-HP(1))` is 0/0: The new central temperature is NaN (or, in the `devel` build, which traps invalid operations, the run stops). With `MCORE` ≥ 2, points 1 and 2 are still the old first two points, and `DEL` is their gradient. Taken with `LCORE` and the default `FCORE`; every namelist in the repository that sets `LCORE` also sets `FCORE` = 10, which gives `MCORE` ≥ 26. Read from the code, not run. **A possible fix,** which gives the same `DEL` whenever `MCORE` ≥ 2:
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The split ran in `testsuite/Test_solarAAG21_dif` and `testsuite/Test_solarM22M_difkur`, both with `R16_18` = 2693 (the default) and `SUM_O` = 0.0088, so both start with the too-small $^{18}$O above. With 471.4 in its place (measurement only: a local copy in STARIN, not the module defaults the fix changes), both tracks change no more than with a null change (nearly every opacity, all with 3 <= log T <= 9 and -6 <= log rho <= 9.75, times 1 + 1e-10): $\log L$ by up to $2.2\times10^{-5}$ and $1.1\times10^{-5}$ dex, against $7.6\times10^{-5}$ and $1.7\times10^{-4}$; central $X$ by up to $9.1\times10^{-6}$ and $1.8\times10^{-5}$, against $4.0\times10^{-5}$ and $8.7\times10^{-6}$. Within the noise. The track does not carry $^{18}$O, so the harm the item names, the starting $^{18}$O itself, is not measured here. Intent: `namelist_control.md` (lines 201–202) gives 468.2 for $^{16}$O/$^{18}$O, which agrees with a swap.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to take DEL from the first two shifted points, so that
-    C it is not 0/0 when MCORE = 1.
-              DEL = (HT(MP1+1)-HT(MP1))/(HP(MP1+1)-HP(MP1))
+4. **(stops the run)** **Checked by KC** (Nov 10, 2026). **0/0 with one core point.** ([[#L480]], [[#L515]], [[#L534]]) With `MCORE` = 1 (the default `FCORE` = 1.0 gives `INT(0)+1` = 1, as does any `FCORE` below $10^{\texttt{HPTTOL(2)}}$), the shift sets `HT(2) = HT(1)` and `HP(2) = HP(1)`, so `DEL = (HT(2)-HT(1))/(HP(2)-HP(1))` is 0/0: The new central temperature is NaN (or, in the `devel` build, which traps invalid operations, the run stops). With `MCORE` ≥ 2, points 1 and 2 are still the old first two points, and `DEL` is their gradient. Taken with `LCORE` and the default `FCORE`; every namelist in the repository that sets `LCORE` also sets `FCORE` = 10, which gives `MCORE` ≥ 26.
+
+    **A possible fix,** which gives the same `DEL` whenever `MCORE` ≥ 2:
+
+    ```diff
+    --- a/src/starin.f
+    +++ b/src/starin.f
+    @@ -512,7 +512,10 @@
+     C MARCH INWARD IN MASS FROM THE INNERMOST MODEL POINT.
+     C ASSUME EPSILON=CONSTANT AND DEL=CONSTANT
+               RHOC = HD(1)
+    -          DEL = (HT(2)-HT(1))/(HP(2)-HP(1))
+    +C 11/09/26 KC via Claude
+    +C code changed to take DEL from the first two shifted points, so that
+    +C it is not 0/0 when MCORE = 1.
+    +          DEL = (HT(MP1+1)-HT(MP1))/(HP(MP1+1)-HP(MP1))
+               HLC = HL(1)
+     C MHP 4/12 FACTOR FOR ESTIMATING RHO FROM P AND T
+               FACD = HP(MP1)-HD(MP1)-HT(MP1)
     ```
 
-5. **(c)** **The warning prints an unset variable.** ([[#L328-L333]]; [[#L86]]) Format 1040 prints `LEXCP0` as the model's extended-composition switch, but `LEXCP0` is declared and never set; the model's value is `LEXCOM0`, which the test on the line above uses ("MHP 9/03 FIXED TYPO" fixed the test, not the `WRITE`). The message then shows whatever `LEXCP0` holds. Taken whenever an evolved model's mixing length or switch differs from the run's. Read from the code, not run. **A possible fix:**
+    **How the code itself shows it.** The comments state what `DEL` is: "`MARCH INWARD IN MASS FROM THE INNERMOST MODEL POINT.`", "`ASSUME EPSILON=CONSTANT AND DEL=CONSTANT`" ([[#L512-L513]]), and "`ASSUME DEL= CONSTANT IN THE CORE`" ([[#L533-L534]]), so `DEL` is the gradient at the old innermost point. After the shift that point sits at `MP1` ([[#L511]]), and most lines of the block read it there: `FACD` from `HP(MP1)` and `HT(MP1)` ([[#L518]]), `HS(MP1)` for the luminosity ([[#L524]]), and `LC(MP1)`, `OMEGA(MP1)`, and `HCOMP(J,MP1)` ([[#L532]], [[#L536]], [[#L539]]). `RHOC` and `HLC` still read index 1 (`HD(1)` and `HL(1)`, [[#L514]], [[#L516]]); `HD` is not shifted, and `HL(1)`, `HT(1)`, and `HP(1)` still hold the old innermost point only because the shift loop never writes index 1 ([[#L499-L510]]), while it writes index 2 from index 1 whenever `MCORE` = 1. The fix reads `DEL` at `MP1` and `MP1+1`, where its neighbors read their quantities.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to print the model's switch LEXCOM0, not the unset LEXCP0.
-              WRITE(ISHORT,1040) CMIXL,CMIXL0,LEXCOM,LEXCOM0
-              WRITE(IOWR,1040) CMIXL,CMIXL0,LEXCOM,LEXCOM0
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): YREC's cases all set `FCORE` = 10 (26 to 101 core points in the 12 runs that extend the core), so `testsuite/Test_solarGS98_kurucz` was run with `FCORE` = 1.0, the code's default: The core grew by one point, `DEL` became 0/0, and the run stopped in its first second in TPGRAD ("TRIED TO TAKE SQUARE ROOT OF NEGATIVE NUMBER," with NaNs; `STOP 912`, exit status 144, that is 912 mod 256). The line counting the condition fired before the run stopped (its first hit, with `MCORE` = 1, is in the run's `probe.log`; its count was lost, since `STOP 912` ends the run before the counts are written). With `DEL` taken from the shifted points (the fix), the same case runs to its end (exit status 0, after 185 s). No comment says `MCORE` = 1 is excluded.
+
+5. **(wrong output)** **Checked by KC** (Nov 10, 2026). **The warning prints an unset variable.** ([[#L328-L333]]; [[#L86]]) Format 1040 prints `LEXCP0` as the model's extended-composition switch, but `LEXCP0` is declared and never set; the model's value is `LEXCOM0`, which the test on the line above uses ("MHP 9/03 FIXED TYPO" fixed the test, not the `WRITE`). The message then shows whatever `LEXCP0` holds. Meant to be taken whenever an evolved model's mixing length or switch differs from the run's; with `LEXCOM` true, only when the switch differs (below).
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/starin.f
+    +++ b/src/starin.f
+    @@ -83,7 +83,7 @@
+           INTEGER I,IDUM,IKUT,IREAD,ISTORE,IXX,J,JCORE0,JEND,JENV,JENV0,JM,
+          *       K,M,MM,MN,MODEL,MP1,MRZONE,MXZONE,NK,NRZONE,NZONE
+           LOGICAL*4 LARGE,LATMO,LC,LCONV,LCZ,LDERIV,LDIFY0,LDIFZ0,LDISK0,
+    -     *       LEXCOM0,LEXCP0,LINSTB0,LJDOT00,LMIXL,LNEW,LOCOND,LOVSTC0,
+    +     *       LEXCOM0,LINSTB0,LJDOT00,LMIXL,LNEW,LOCOND,LOVSTC0,
+          *       LOVSTE0,LOVSTM0,LPRT,LPULPT,LPUREZ0,LROT0,LSBC0,LSEMIC0
+     
+     C DBGLAOL
+    @@ -324,9 +324,13 @@
+     C mixing length to four sig digits.
+            IF(CMIXL0.GT.0.0D0) LMIXL = (DABS(CMIXL-CMIXL0).LT.2.0D-3)
+     C MHP 9/03 FIXED TYPO
+    -       IF(.NOT.LMIXL .OR. LEXCOM0.NEQV.LEXCOM) THEN
+    -          WRITE(ISHORT,1040) CMIXL,CMIXL0,LEXCOM,LEXCP0
+    -          WRITE(IOWR,1040) CMIXL,CMIXL0,LEXCOM,LEXCP0
+    +C 11/10/26 KC via Claude
+    +C code changed to group the switch test, which .NEQV. otherwise
+    +C applies to the whole .OR., and to print the model's switch LEXCOM0,
+    +C not the unset LEXCP0.
+    +       IF(.NOT.LMIXL .OR. (LEXCOM0.NEQV.LEXCOM)) THEN
+    +          WRITE(ISHORT,1040) CMIXL,CMIXL0,LEXCOM,LEXCOM0
+    +          WRITE(IOWR,1040) CMIXL,CMIXL0,LEXCOM,LEXCOM0
+      1040       FORMAT(1X,'ERROR IN SUBROUTINE STARIN'/1X,'USER PARAMETERS',
+          *      ' OF WRONG TYPE FOR INITIAL MODEL'/1X,'MIXING LENGTH - USER'
+          *      ,' DESIRES',F7.3,' MODEL MIX LENGTH',F7.3/1X,
     ```
 
     and `LEXCP0` dropped from the declaration.
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached: The warning was printed in none of the 33 runs, and the line counting it never fired. The cause, found on Nov 10, 2026: The test itself ([[#L327]]). In Fortran `.NEQV.` binds more loosely than `.OR.`, so `.NOT.LMIXL .OR. LEXCOM0.NEQV.LEXCOM` reads as `(.NOT.LMIXL .OR. LEXCOM0) .NEQV. LEXCOM`; with `LEXCOM` true, as all 965 `.nml2` files in the repository set it, a wrong mixing length makes the left side true and the test false, so the warning is never printed for it (every other combination gives the intended answer). Lines counting the test in `examples/class_exercises/exercise_4/Grid_m4p0feh+0p0GS98_std25_TAMS` show it reached once, for model 32 of `startmodels/dbl_grid/m4000gs98z016492_Dbl.first`, with the model's mixing length 1.853 against the run's 1.708, and no warning. With the test written `.NOT.LMIXL .OR. (LEXCOM0.NEQV.LEXCOM)` and `LEXCOM0` printed, the same case prints the warning ("MIXING LENGTH - USER DESIRES  1.708 MODEL MIX LENGTH  1.853," "EXTENDED COMP-USER DESIRES T MODEL USED T"); its track and stored models are identical, and only the `.short` file differs, by the warning's lines. Only a message is wrong.
 
 ### STARIN
 

@@ -20,7 +20,7 @@ $$y_k(i) = b_k(i) - a_{k1}(i)\,\delta p(i) - a_{k2}(i)\,\delta t(i)\quad (k = 3,
 
 and the centre point is finished the same way. On return `HHB(1..4, i)` holds the four corrections at each point, $\delta\log P$, $\delta\log T$, $\delta\log r$ and $\delta L$ ($L_\odot$), in the order of [[reduce.f#REDUCE|REDUCE]]'s rows. The six `HSRF` entries are the two surface conditions set by CRRECT: `HSRF(1..3)` the linearized $\log r$ relation of the envelope fit, `HSRF(4..6)` its $\log L$ relation, multiplied by $\ln 10\,L$ since $L$ is the unknown ([[crrect.f#CRRECT|CRRECT]], step 4).
 
-> **Question** ([[#L21-L42]]). **A comment on the variables.** `HHB(1..4)` holds the corrections to $\log P$, $\log T$, $\log r$ and $L$ on return (from CRRECT and REDUCE, above), but the code does not say so, nor which equations the six `HSRF` entries are. Is this reading right, and could a comment saying so be added for readers of `CRRECT`?
+**The code does not say what `HHB` and `HSRF` hold.** The reading above is right: CRRECT adds `HHB(1..4, i)` after the call to `HP`, `HT`, `HR`, and `HL` as the corrections ([[crrect.f#L283-L291]]), after finding their largest values ([[crrect.f#L212-L236]]), the fourth tested also relative to `HL`, the luminosity ([[crrect.f#L234]]); a comment in the code ([[#L21-L42]]) saying so, and which equations the six `HSRF` entries are, would help readers of `CRRECT`.
 
 **Changed since `rp_1`.** Declarations only: `IMPLICIT NONE`, and the array size `JSON` from `DIMENSIONS_MOD`.
 

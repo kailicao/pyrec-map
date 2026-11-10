@@ -37,27 +37,62 @@ with $K$ = `CONSTFACTOR`, $a_\Omega$ = `EXW`. If the first guess of the change e
 
 ## Bugs, by priority
 
-1. **(a)** **`WNEW` overwrites the namelist's solid-body rate.** ([[#L186]]; [[#L199]]; [[#L208]]) As in [[wind.f#b1]]: The iterated new rate is assigned to `WNEW`, which `USE NMLPAR_MOD` makes the namelist variable `WNEW` ([[nmlpar_mod.f#L129]]), the rate at which [[starin.f#STARIN|STARIN]] starts a model in solid-body rotation when `LWNEW` is set ([[starin.f#L365-L371]]). Every call of MWIND replaces it with the latest surface rate. STARIN is called again for each run in the main program's `DO 200 NK = 1, NUMRUN` loop ([[main.f#L397]]), so a later run with `LWNEW` would start from the wind's last value, not from the input. Only with `LROT`, `LWNEW` (off by default), `LJDOT`, and more than one run (`NUMRUN` > 1). Read from the code, not run. **A possible fix:**
+1. **(never occurred)** **`WNEW` overwrites the namelist's solid-body rate.** ([[#L186]]; [[#L199]]; [[#L208]]) As in [[wind.f#b1]]: The iterated new rate is assigned to `WNEW`, which `USE NMLPAR_MOD` makes the namelist variable `WNEW` ([[nmlpar_mod.f#L129]]), the rate at which [[starin.f#STARIN|STARIN]] starts a model in solid-body rotation when `LWNEW` is set ([[starin.f#L365-L371]]). Every call of MWIND replaces it with the latest surface rate. STARIN is called again for each run in the main program's `DO 200 NK = 1, NUMRUN` loop ([[main.f#L397]]), and applies `WNEW` to a model it reads from file (`LFIRST`, [[starin.f#L255-L263]]), so a later run that reads its model from file with `LWNEW` would start from the wind's last value, not from the input. Only with `LROT`, `LWNEW` (off by default), `LJDOT`, and more than one run (`NUMRUN` > 1).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to iterate on the local WNEWL instead of WNEW, which
-    C is the namelist's solid-body rate in NMLPAR_MOD.
-          REAL*8 BL,DELTS,DM,DT,DW,DWTEST,FCEN,FCORR,FJDOM,FSUN,HICZ,HJM,
-         *       HSBOT,HSTOP,OMEGAS,RL,SMASS,STRUCTFACTOR,TCZ,TEFFL,W,WNEW0,
-         *       WNEWL,WNOW,WS,WSAT
-    ...
-             WNEWL = WS - (DT/HICZ)*CONSTFACTOR*STRUCTFACTOR*W
-         *          *MIN(WNOW,WSAT)**(EXW-1.0D0)*FCEN
-    ...
-             DW = 2.0D0*ABS((WNEW0-WNEWL)/(WNEW0+WNEWL))
-    ...
-             IF(DW.GT.1.0D-6)THEN
-                W = 0.5D0*(WS+WNEWL)
-                WNEW0 = WNEWL
-                IF(K.LE.20)GOTO 5
-             ENDIF
-             WS = WNEWL
-    ...
-          FJDOM = (OMEGAS-WNEWL)*HICZ/DM
+    **A possible fix:**
+
+    ```diff
+    --- a/src/mwind.f
+    +++ b/src/mwind.f
+    @@ -20,9 +20,12 @@
+     C code changed to replace implicit typing with IMPLICIT NONE and
+     C explicit declarations.
+           IMPLICIT NONE
+    +C 11/09/26 KC via Claude
+    +C code changed to iterate on the local WNEWL instead of WNEW, which
+    +C is the namelist's solid-body rate in NMLPAR_MOD.
+           REAL*8 BL,DELTS,DM,DT,DW,DWTEST,FCEN,FCORR,FJDOM,FSUN,HICZ,HJM,
+          *       HSBOT,HSTOP,OMEGAS,RL,SMASS,STRUCTFACTOR,TCZ,TEFFL,W,WNEW0,
+    -     *       WNOW,WS,WSAT
+    +     *       WNEWL,WNOW,WS,WSAT
+           INTEGER II,JEND,JSTART,K,N,NSTEP
+           LOGICAL*4 LJDOT
+     
+    @@ -183,20 +186,20 @@
+     C NOTE THAT THIS IS IMPLEMENTED HERE RELATIVE TO THE SUN
+              FCORR = 0.5*W**2*EXP(CLN*(3.0*RL-CGL))/SMASS/CMSUN
+              FCEN = ((C_2**2+FSUN)/(C_2**2+FCORR))**EXCEN
+    -         WNEW = WS - (DT/HICZ)*CONSTFACTOR*STRUCTFACTOR*W
+    +         WNEWL = WS - (DT/HICZ)*CONSTFACTOR*STRUCTFACTOR*W
+          *          *MIN(WNOW,WSAT)**(EXW-1.0D0)*FCEN
+     C         WNEW = WS - (DT/HICZ)*CONSTFACTOR*STRUCTFACTOR*W
+     C     *          *MIN(W,WSAT)**(EXW-1.0D0)
+     C G Somers END
+    -         DW = 2.0D0*ABS((WNEW0-WNEW)/(WNEW0+WNEW))
+    +         DW = 2.0D0*ABS((WNEW0-WNEWL)/(WNEW0+WNEWL))
+     C       WRITE(*,4)WS,W,WNEW,DW,HICZ
+     C    4 FORMAT(1X,1P5E14.6)
+              IF(DW.GT.1.0D-6)THEN
+    -            W = 0.5D0*(WS+WNEW)
+    -            WNEW0 = WNEW
+    +            W = 0.5D0*(WS+WNEWL)
+    +            WNEW0 = WNEWL
+                 IF(K.LE.20)GOTO 5
+              ENDIF
+    -         WS = WNEW
+    +         WS = WNEWL
+       100 CONTINUE
+     C     CON = DELTS*FACTOR*(DMDOT/1.0D-14)**EXMD*OMEGAS**(EXW-1.0D0)
+     C    *        *(RTOT/CRSUN)**EXR*SMASS**EXM
+    @@ -205,7 +208,7 @@
+           DM = HSTOP - HSBOT
+     C FIND CHANGE IN ANGULAR MOMENTUM PER UNIT MASS AND SUBTRACT THIS
+     C NUMBER FROM THE J/M OF EACH SHELL IN THE SURFACE CONVECTION ZONE.
+    -      FJDOM = (OMEGAS-WNEW)*HICZ/DM
+    +      FJDOM = (OMEGAS-WNEWL)*HICZ/DM
+     C      WRITE(*,11)FJDOM,HJM(JSTART),HJM(JEND)
+     C   11 FORMAT(5X,1P3E14.6)
+     C     FJDOM=FJDOT/DM
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The overwrite happens at every step with the new law: 360 times in `testsuite/Test_m0p8feh+0p0GS98_rotp8p0d0p1mag1e4std_TAMS` and 80 times in `testsuite/Test_solarGS98_difrotmixper18p4d1p0` (`WNEW` from $3.9\times10^{-6}$ to $4.9\times10^{-5}$). No later run used it: The line added where STARIN applies `LWNEW` never saw a changed `WNEW`, since every multi-run case of YREC with `LWNEW` sets `LFIRST` false for its later runs, which then start from the model in memory. The fix was not run. What would reach it: a later run (`LFIRST(k)` true, k > 1) with `LROT`, `LWNEW`, and `LMWIND`. No comment says the shared name is meant.

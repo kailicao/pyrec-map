@@ -2,7 +2,7 @@
 
 **Purpose.** This file sets up the tridiagonal system for one implicit time step of composition transport by rotationally induced mixing, on an evenly spaced grid in the coordinate $\chi$ built by [[getgrid.f#GETGRID|GETGRID]] and [[mixgrid.f#MIXGRID|MIXGRID]] (the comments' "radius" and "cm" are older than that grid).
 
-> **Question** ([[#L25-L36]]; [[#L61-L63]]). **Outdated comments.** The comments speak of an even grid in radius, a spacing in cm, coefficients "computed in SR COEFFT" and "angular momentum" at the boundary, while the routine works on the grid in $\chi$ with coefficients from CODIFF and MIXGRID, for composition. Should the comments be updated?
+**The comments describe an older use.** They speak of an even grid in radius, a spacing in cm, coefficients "COMPUTED IN SR COEFFT" ([[#L25-L36]]) and "ANGULAR MOMENTUM" at the boundary ([[#L61-L63]]), but MIXCOM calls the routine with `DCHI`, the spacing of the grid in $\chi$, for the composition ([[mixcom.f#L84-L89]]), with coefficients from CODIFF and MIXGRID, so only the comments are out of date.
 
 **How it fits.**
 - **Inputs:** the arguments `COD` (diffusion coefficients, "computed in SR COEFFT" per the comment), `DR` (grid spacing: [[mixcom.f#MIXCOM|MIXCOM]] passes `DCHI`, the spacing in $\chi$), `DT` (time step, s), `ECOMP` (mass fractions at the start of the step on the even grid), `EM` (the masses of the grid's shells, g), `NTOT` (number of points).

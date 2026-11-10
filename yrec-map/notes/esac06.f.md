@@ -27,49 +27,102 @@ Then `T6RINTEOS06` interpolates in $T_6$ and $\rho$.
 
 ## Bugs, by priority
 
-1. **(b)** **`EOS(2)` and `EOS(5)` rescaled again on every call with `IORDER` < 5.** ([[#L408]]; [[#L477-L485]]) The loop over the quantities sets `EOS(1..IORDER)` only, but the scaling after it multiplies `EOS(IRI(2))` by $T_6$ and, without radiation, `EOS(IRI(5))` by `MOLES*APROP/TMASS` (about 140 for an ionized mixture with $X = 0.7$) whatever `IORDER` is. [[rhoofp06.f#RHOOFP06|RHOOFP06]] calls ESAC06 with `IORDER` = 1 and `IRAD` = 0, up to 13 times per density ([[rhoofp06.f#L91-L115]]), so each of these calls multiplies the value of `EOS(5)` left by an earlier call by that factor again. Only a call with `IORDER` = 9 resets it (OEQOS06 after a density is found, [[oeqos06.f#L102]], and CALCAD); when RHOOFP06 fails, OEQOS06 returns at once ([[oeqos06.f#L95-L97]]), so the growth carries on across calls, and after about 140 such calls `EOS(5)` overflows. With the developers' build options (`-ffpe-trap=invalid,zero,overflow`, `src/Makefile`, line 61) the run stops; in a release build the value becomes infinite and is overwritten by the next call with `IORDER` = 9, so the results are not changed. This matches the comment in RHOOFP06 that its tolerance was loosened "to prevent array value eos(5) from growing without bound and crashing the program" ([[rhoofp06.f#L117-L119]]). Only with `LOPALE06` (off by default, [[nmlpar_mod.f#L122]]; on in most of the test suite). Read from the code, not run. **A possible fix:**
+1. **(harmless in the runs)** **`EOS(2)` and `EOS(5)` rescaled again on every call with `IORDER` < 5.** ([[#L408]]; [[#L477-L485]]) The loop over the quantities sets `EOS(1..IORDER)` only, but the scaling after it multiplies `EOS(IRI(2))` by $T_6$ and, without radiation, `EOS(IRI(5))` by `MOLES*APROP/TMASS` (about 140 for an ionized mixture with $X = 0.7$) whatever `IORDER` is. [[rhoofp06.f#RHOOFP06|RHOOFP06]] calls ESAC06 with `IORDER` = 1 and `IRAD` = 0, up to 13 times per density ([[rhoofp06.f#L91-L115]]), so each of these calls multiplies the value of `EOS(5)` left by an earlier call by that factor again. Only a call with `IORDER` = 9 resets it (OEQOS06 after a density is found, [[oeqos06.f#L102]], and CALCAD); when RHOOFP06 fails, OEQOS06 returns at once ([[oeqos06.f#L95-L97]]), so the growth carries on across calls, and after about 140 such calls `EOS(5)` overflows. With the developers' build options (`-ffpe-trap=invalid,zero,overflow`, `src/Makefile`, line 61) the run stops; in a release build the value becomes infinite and is overwritten by the next call with `IORDER` = 9, so the results are not changed. This matches the comment in RHOOFP06 that its tolerance was loosened "to prevent array value eos(5) from growing without bound and crashing the program" ([[rhoofp06.f#L117-L119]]). Only with `LOPALE06` (off by default, [[nmlpar_mod.f#L122]]; on in most of the test suite).
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to scale only the quantities interpolated in this call.
-          p0=t6*r
-          eos(iri(1))=eos(iri(1))*p0   ! interpolated in p/po
-          if (iri(2) .le. iorder) eos(iri(2))=eos(iri(2))*t6
-          tmass=gmass06(xh,z,moles,eground,fracz,frac)
-          if (irad .eq. 1) then
-          call radsub06(irad,t6,r,moles,tmass)
-          else if (iri(5) .le. iorder) then
-          eos(iri(5))=eos(iri(5))*moles*aprop/tmass
-          endif
+    **A possible fix:**
+
+    ```diff
+    --- a/src/esac06.f
+    +++ b/src/esac06.f
+    @@ -474,13 +474,15 @@
+           call t6rinteos06(slr,slt)
+           eos(iv)=esact
+       124 continue
+    +C 11/09/26 KC via Claude
+    +C code changed to scale only the quantities interpolated in this call.
+           p0=t6*r
+           eos(iri(1))=eos(iri(1))*p0   ! interpolated in p/po
+    -      eos(iri(2))=eos(iri(2))*t6   ! interpolated in E/T6
+    +      if (iri(2) .le. iorder) eos(iri(2))=eos(iri(2))*t6
+           tmass=gmass06(xh,z,moles,eground,fracz,frac)
+           if (irad .eq. 1) then
+           call radsub06(irad,t6,r,moles,tmass)
+    -      else
+    +      else if (iri(5) .le. iorder) then
+           eos(iri(5))=eos(iri(5))*moles*aprop/tmass
+           endif
+           return
     ```
 
-2. **(c)** **The second $X$ quadratic's warning tests the wrong array.** ([[#L452-L458]]) In loop 47 the value just computed is `ESK2(IT,IR)`, but the warning tests `ESK(IT,IR)`, the first quadratic's value, already tested in loop 45. A value of `ESK2` above $10^{20}$ (a stencil reaching the empty region) passes without a message, and a large `ESK` is reported twice. Read from the code, not run. **A possible fix:**
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged). The path was taken in all 31 of the 34 cases run that use the OPAL 2006 tables, from 531,263 to 510,367,635 times, and the condition (EOS(5) scaled though not interpolated) in most of those calls: in `testsuite/Test_m1p0feh+0p0GS98_base_TAMS`, for example, 10,067,407 of 12,400,539. `EOS(5)` reached $6.30\times10^{42}$ before a scaling, far below the overflow (about $10^{308}$), so no run stopped on it. With the page's fix, `testsuite/Test_3Msolar_GS_rot_gray_OPALSCV_SF2_GS98_OP_CF10_RGp2diffrotI3cz2` and `testsuite/Test_m1p0feh+0p0GS98_base_TAMS` give identical `.track` and `.store` files. Intent: RHOOFP06's comment ([[rhoofp06.f#L117-L119]]) treats the growth as a known symptom, not as intended. The growth is real in every run, and the comment records crashes from it before the tolerance was loosened; a run with more failed density searches could still overflow.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to test the second quadratic's value.
-              if(esk2(it,ir) .gt. 1.D+20) then
+2. **(never occurred)** **The second $X$ quadratic's warning tests the wrong array.** ([[#L452-L458]]) In loop 47 the value just computed is `ESK2(IT,IR)`, but the warning tests `ESK(IT,IR)`, the first quadratic's value, already tested in loop 45. A value of `ESK2` above $10^{20}$ (a stencil reaching the empty region) passes without a message, and a large `ESK` is reported twice.
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/esac06.f
+    +++ b/src/esac06.f
+    @@ -451,7 +451,9 @@
+             do it=k1,k1+ip
+               esk2(it,ir)=quadeos06(is,iw,xh,epl(mg,it,ir),epl(mh,it,ir)
+          x    ,epl(mi,it,ir),xx(mg),xx(mh),xx(mi))
+    -          if(esk(it,ir) .gt. 1.D+20) then
+    +C 11/09/26 KC via Claude
+    +C code changed to test the second quadratic's value.
+    +          if(esk2(it,ir) .gt. 1.D+20) then
+               write(ISHORT,'(A," problem it,ir,l3,k3,iq,ip=", 6i5)') ID,
+          x    it,ir,l3,k3,iq,ip
+               write(ISHORT,'(3e12.4)')  (epl(ms,it,ir),ms=mg,mg+2)
     ```
 
-3. **(c)** **The message at label 66 swaps `IP` and `IQ`.** ([[#L498-L499]]) The heading reads `iq,ip,k3,l3,…`, but the values are written as `ip,iq,k3,l3,…`. Read from the code, not run. **A possible fix:**
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged). Loop 47 ran in 26 cases, up to 84,320,569 times, at $T_6$ from 0.95 to 50.7 and $X$ from 0.2 to 0.4, but the second quadratic's value never exceeded $10^{20}$, so the missed warning never mattered. No fix was run, since it changes only a warning. What would reach it: an $X$ stencil of four tables whose second quadratic reaches the empty region of the table. Intent: none found.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to print IQ and IP in the order of the heading.
-          write(ISHORT,'("  iq,ip,k3,l3,xh,t6,r,z= ",4i5,4e12.4)')
-         x iq,ip,k3,l3,xh,t6,r,z
+3. **(not reached)** **The message at label 66 swaps `IP` and `IQ`.** ([[#L498-L499]]) The heading reads `iq,ip,k3,l3,…`, but the values are written as `ip,iq,k3,l3,…`.
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/esac06.f
+    +++ b/src/esac06.f
+    @@ -495,8 +495,10 @@
+        66 write(ISHORT,*)ID," Z does not match Z in EOSdata* files you ",
+          . "are using (66)"
+           write(ISHORT,'("mf,zz(mf)=",i5,e12.4)') mf,zz(mf)
+    +C 11/09/26 KC via Claude
+    +C code changed to print IQ and IP in the order of the heading.
+           write(ISHORT,'("  iq,ip,k3,l3,xh,t6,r,z= ",4i5,4e12.4)')
+    -     x ip,iq,k3,l3,xh,t6,r,z
+    +     x iq,ip,k3,l3,xh,t6,r,z
+           stop
+     
+           end
     ```
 
-4. **(d)** **The check on `IORDER` warns and goes on.** ([[#L230-L232]]) The check copied from `ESAC01` writes "iorder cannot exceed 9" and continues. The file holds nine quantities, so with `IORDER` = 10 the loop would read `XZ(·,10,·,·)`, which READCOEOS06 leaves at $10^{35}$ ([[readcoeos06.f#L79-L88]]), and T6RINTEOS06 would stop the run with "Interpolation indices out of range" ([[t6rinteos06.f#L97-L101]]). No caller passes more than 9 today. Read from the code, not run. **A possible fix:**
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged). The message at label 66 was never reached in the 31 runs with the OPAL 2006 tables: `z` is taken from `zz(1)` ([[#L258]]), and every table of the shipped file has the same $Z$, so only a file whose tables differ in $Z$ reaches it, and the run then stops. No fix was run, since it changes only a message. Intent: none found.
 
-    ```fortran
-    C 11/09/26 KC via Claude
-    C code changed to stop on an IORDER above 9, as on a wrong IRAD.
-          if (iorder .gt. 9 ) then
-             write (ISHORT,'(A, " iorder cannot exceed 9")') ID
-             stop
-          endif
+4. **(cannot be reached)** **The check on `IORDER` warns and goes on.** ([[#L230-L232]]) The check copied from `ESAC01` writes "iorder cannot exceed 9" and continues. The file holds nine quantities, so with `IORDER` = 10 the loop would read `XZ(·,10,·,·)`, which READCOEOS06 leaves at $10^{35}$ ([[readcoeos06.f#L79-L88]]), and T6RINTEOS06 would stop the run with "Interpolation indices out of range" ([[t6rinteos06.f#L97-L101]]). No caller passes more than 9 today.
+
+    **A possible fix:**
+
+    ```diff
+    --- a/src/esac06.f
+    +++ b/src/esac06.f
+    @@ -227,8 +227,11 @@
+           save
+     
+           blank=' '
+    +C 11/09/26 KC via Claude
+    +C code changed to stop on an IORDER above 9, as on a wrong IRAD.
+           if (iorder .gt. 9 ) then
+              write (ISHORT,'(A, " iorder cannot exceed 9")') ID
+    +         stop
+           endif
+           if ((irad .ne. 0) .and. (irad .ne. 1)) then
+              write (ISHORT,'(A, " Irad must be 0 or 1")') ID
     ```
+
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged). The warning never fired, and cannot at 7be4133: Every call passes `IORDER` = 1 ([[rhoofp06.f#L91-L115]]) or 9 ([[oeqos06.f#L80]], [[calcad.f#L262]]). No fix was run, since it is a stop. Intent: none found.
 
 ### ESAC06
 

@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `PUALPHA_MOD` holds three mixing-length quantities at the current point, for the pulsation output. Shared by 2 routines. It replaces `COMMON/PUALPHA/` ("DBG 7/95", MHP via Claude, 10/14/26); `JSON` comes from `DIMENSIONS_MOD`.
+**Purpose.** `PUALPHA_MOD` holds three mixing-length quantities at the current point, for the pulsation output. Shared by 2 routines. It replaces `COMMON/PUALPHA/` ("DBG 7/95," MHP via Claude, 10/14/26); `JSON` comes from `DIMENSIONS_MOD`.
 
 **What its variables hold, who sets them, who reads them.**
 - `ALFMLT`, `PHMLT`, `CMXMLT`: set to 0 on every entry to [[tpgrad.f#TPGRAD|`TPGRAD`]] and computed nowhere; [[envint.f#ENVINT|`ENVINT`]] writes them in the envelope's pulsation output (`IPVER` = 3).

@@ -16,6 +16,6 @@
 $$\frac{d\chi}{dr} = \frac{4\pi\rho r^2}{\ln 10\,\Delta_m\, m} + \frac{4\pi\rho r^2\,\epsilon}{\Delta_L} + \frac{G m \rho}{\ln 10\,\Delta_P\, P\, r^2},$$
 interpolated in $\log$ to the grid with `OSPLIN`. Here $\Delta_m$ = `HPTTOL(2)`, $\Delta_L$ = `HPTTOL(9)`$\times L_\ast$ (`HL(M)*CLSUN`, in erg s⁻¹; GETGRID uses the same scale, `HPTTOL(9)*HL(M)`, in the solar units of `HL`), $\Delta_P$ = `HPTTOL(11)`, and $\epsilon$ = `EPSM`. The coefficient `ECOD2(I)` lies at the edge between grid points `I-1` and `I` (`XVAL(I) = ECHI(I) - DCHI/2`), where [[ccoeft.f#CCOEFT|CCOEFT]] uses it.
 
-    > **Question** ([[#L153]], [[#L156-L157]]). **A comment that omits $P$.** The comment writes the last term as `RHO*GM/(LN10*DP*R**2)`; the code divides by $P$ as well (`-HP(II)` in the exponent), which is the correct $-d\log P/dr$. Should the comment read `RHO*GM/(LN10*DP*P*R**2)`?
+    **The comment's last term omits $P$.** The comment writes it as `RHO*GM/(LN10*DP*R**2)` ([[#L153]]); the code divides by $P$ as well, with `-HP(II)` in the exponent ([[#L156-L157]]), which is the correct $-d\log P/dr$, so the comment should read `RHO*GM/(LN10*DP*P*R**2)`.
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
