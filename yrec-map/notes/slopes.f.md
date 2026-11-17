@@ -2,20 +2,21 @@
 
 **Purpose.** Computes the derivative at each node for the shape-preserving quadratic splines of McAllister and Roulier (coded by S. L. Dodd and M. Roulier, N.C. State University). Its comment: "the slopes provided will insure that an osculatory quadratic spline will have one additional knot between two adjacent points of interpolation. Convexity and monotonicity are preserved wherever these conditions are compatible with the data."
 
-**How it fits.** Called by [[osplin.f#OSPLIN|`OSPLIN`]] before [[meval.f#MEVAL|`MEVAL`]] evaluates the spline (with [[search.f#SEARCH|`SEARCH`]]). It contains a second routine, [[#SAFEDIVIDE|`SAFEDIVIDE`]], added by KC. No COMMON blocks.
+**How it fits.** Called by [`OSPLIN`](osplin.f.md#osplin) before [`MEVAL`](meval.f.md#meval) evaluates the spline (with [`SEARCH`](search.f.md#search)). It contains a second routine, [`SAFEDIVIDE`](#safedivide), added by KC. No COMMON blocks.
 
-**The method.** At each interior node $i$, with the slopes $m_1$, $m_2$ of the chords to its two neighbors:
-- if $m_1 m_2 \le 0$ (a local extremum or a flat chord), the derivative is 0;
-- otherwise the chord with the larger slope is extended until it reaches the level of the far neighbor, at $\bar x$, and the derivative is the slope of the line from the node to the far neighbor's level at $\hat x$, the midpoint between $\bar x$ and the far node. For $|m_1| > |m_2|$:
-  $$\bar x = x_i + \frac{y_{i+1} - y_i}{m_1},\qquad \hat x = \tfrac12(\bar x + x_{i+1}),\qquad y'_i = \frac{y_{i+1} - y_i}{\hat x - x_i}.$$
+**The method.** At each interior node $`i`$, with the slopes $`m_1`$, $`m_2`$ of the chords to its two neighbors:
+- if $`m_1 m_2 \le 0`$ (a local extremum or a flat chord), the derivative is 0;
+- otherwise the chord with the larger slope is extended until it reaches the level of the far neighbor, at $`\bar x`$, and the derivative is the slope of the line from the node to the far neighbor's level at $`\hat x`$, the midpoint between $`\bar x`$ and the far node. For $`|m_1| \gt{} |m_2|`$:
+  
+  $$\displaystyle \bar x = x\_i + \frac{y\_{i+1} - y\_i}{m\_1},\qquad \hat x = \tfrac12(\bar x + x\_{i+1}),\qquad y'\_i = \frac{y\_{i+1} - y\_i}{\hat x - x\_i}.$$
 
-At each end node, the derivative is the slope from the midpoint of the end interval, where it takes the value of the line through the neighbor node with that node's derivative, to the end node. It is set to 0 if that would reverse the sign of the end chord, or to $2m$, twice the end chord's slope $m$, if the two chords nearest that end have opposite signs.
+At each end node, the derivative is the slope from the midpoint of the end interval, where it takes the value of the line through the neighbor node with that node's derivative, to the end node. It is set to 0 if that would reverse the sign of the end chord, or to $`2m`$, twice the end chord's slope $`m`$, if the two chords nearest that end have opposite signs.
 
-Two divisions go through `SAFEDIVIDE`, which returns 0 instead of dividing by zero: the slope $m_2$ in the loop ([[#L96]]) and the derivative at the last node ([[#L105]]). A zero denominator means two equal abscissae, which would make the spline ill-defined anyway, so the 0 hides the problem, and a check in `OSPLIN` might be clearer; which caller can pass a table with two equal abscissae is [[choose.f#q1|CHOOSE's question 1]].
+Two divisions go through `SAFEDIVIDE`, which returns 0 instead of dividing by zero: the slope $`m_2`$ in the loop ([line 96](https://github.com/yreclab/yrec/blob/7be4133/src/slopes.f#L96)) and the derivative at the last node ([line 105](https://github.com/yreclab/yrec/blob/7be4133/src/slopes.f#L105)). A zero denominator means two equal abscissae, which would make the spline ill-defined anyway, so the 0 hides the problem, and a check in `OSPLIN` might be clearer; which caller can pass a table with two equal abscissae is [CHOOSE's question 1](choose.f.md#q1).
 
-> **Question** ([[#L59-L61]]; [[#L93]]; [[#L116]]). **Unprotected divisions remain.** The first two chord slopes, $m_1$ in the loop, and the derivative at the first node are still plain divisions. Each difference of abscissas that the loop's $m_2$ protects is divided again, unprotected, as the next pass's $m_1$ ([[#L93]]), so a repeated abscissa still raises the exception unless it is the last pair, where [[choose.f#CHOOSE|CHOOSE]] may then divide by it ([[choose.f#L52]]). Should they be treated the same way, or should the check move to `OSPLIN`?
+> **Question** ([lines 59–61](https://github.com/yreclab/yrec/blob/7be4133/src/slopes.f#L59-L61); [line 93](https://github.com/yreclab/yrec/blob/7be4133/src/slopes.f#L93); [line 116](https://github.com/yreclab/yrec/blob/7be4133/src/slopes.f#L116)). **Unprotected divisions remain.** The first two chord slopes, $`m_1`$ in the loop, and the derivative at the first node are still plain divisions. Each difference of abscissas that the loop's $`m_2`$ protects is divided again, unprotected, as the next pass's $`m_1`$ ([line 93](https://github.com/yreclab/yrec/blob/7be4133/src/slopes.f#L93)), so a repeated abscissa still raises the exception unless it is the last pair, where [CHOOSE](choose.f.md#choose) may then divide by it ([choose.f, line 52](https://github.com/yreclab/yrec/blob/7be4133/src/choose.f#L52)). Should they be treated the same way, or should the check move to `OSPLIN`?
 
-> **Question** ([[#L57-L61]]). **At least three points.** The routine reads `YTAB(3)` without checking `NUM` ≥ 3. Do all callers guarantee this?
+> **Question** ([lines 57–61](https://github.com/yreclab/yrec/blob/7be4133/src/slopes.f#L57-L61)). **At least three points.** The routine reads `YTAB(3)` without checking `NUM` $`\ge 3`$. Do all callers guarantee this?
 
 **Changed since `rp_1`.** Declarations only: the array size `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE` in both routines.
 

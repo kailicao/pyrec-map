@@ -1,37 +1,39 @@
 ## Explanation
 
-**Purpose.** `WIND` removes angular momentum from the surface convection zone by a magnetized wind, "a Weber–Davis magnetic wind model" (its comment), over one time step. It is the older loss law; [[mwind.f#MWIND|MWIND]] calls it when `LMWIND` is off, and otherwise uses its own law.
+**Purpose.** `WIND` removes angular momentum from the surface convection zone by a magnetized wind, "a Weber–Davis magnetic wind model" (its comment), over one time step. It is the older loss law; [MWIND](mwind.f.md#mwind) calls it when `LMWIND` is off, and otherwise uses its own law.
 
 **How it fits.**
-- **Inputs:** $\log L$ (`BL`), the time step `DELTS` (s), the convection zone's mass range (`HSBOT`, `HSTOP`) and shells (`JSTART`, `JEND`), the switch `LJDOT`, the surface rate `OMEGAS`, the mass `SMASS` (in solar masses, probably), $\log T_\mathrm{eff}$, the zone's moment of inertia `HICZ`. Through modules: the law's constant and exponents (`NMLPAR_MOD`, formerly `COMMON/CWIND/`: `CONSTFACTOR`, `EXMD`, `EXW`, `EXR`, `EXM`, the saturation `WMAX`, set by [[parmin.f#PARMIN|PARMIN]]); the overturn time `TAUCZ` (`OVRTRN_MOD`, from [[gettau.f#GETTAU|GETTAU]]); `LINSTB` (`NMLPAR_MOD`, formerly `COMMON/ROT/`).
-- **Who calls it:** only [[mwind.f#MWIND|MWIND]].
+- **Inputs:** $`\log L`$ (`BL`), the time step `DELTS` (s), the convection zone's mass range (`HSBOT`, `HSTOP`) and shells (`JSTART`, `JEND`), the switch `LJDOT`, the surface rate `OMEGAS`, the mass `SMASS` (in solar masses, probably), $`\log T_\mathrm{eff}`$, the zone's moment of inertia `HICZ`. Through modules: the law's constant and exponents (`NMLPAR_MOD`, formerly `COMMON/CWIND/`: `CONSTFACTOR`, `EXMD`, `EXW`, `EXR`, `EXM`, the saturation `WMAX`, set by [PARMIN](parmin.f.md#parmin)); the overturn time `TAUCZ` (`OVRTRN_MOD`, from [GETTAU](gettau.f.md#gettau)); `LINSTB` (`NMLPAR_MOD`, formerly `COMMON/ROT/`).
+- **Who calls it:** only [MWIND](mwind.f.md#mwind).
 - **Output:** `HJM`, each shell's specific angular momentum in the zone, reduced.
 - **Modules:** `NMLPAR_MOD`, `OVRTRN_MOD`, `CONSTANTS_MOD`, `DIMENSIONS_MOD`, `IOUNITS_MOD` (for `ISHORT`).
 
 **The method.**
-1. **Saturation.** $\Omega_\mathrm{sat}$ = `WMAX`; but with angular momentum transport (`LINSTB`) and `WMAX` > 1, `WMAX` is read as $\Omega_\mathrm{sat}\tau_\mathrm{cz}$ for the Sun, and $\Omega_\mathrm{sat} = $ `WMAX`$/\tau_\mathrm{cz}$ (MHP 3/09); the run stops if $\tau_\mathrm{cz} \le 1$, with exit code 1 and the message also in the `.short` file.
+1. **Saturation.** $`\Omega_\mathrm{sat}`$ = `WMAX`; but with angular momentum transport (`LINSTB`) and `WMAX` > 1, `WMAX` is read as $`\Omega_\mathrm{sat}\tau_\mathrm{cz}`$ for the Sun, and $\Omega_\mathrm{sat} = $ `WMAX`$`/\tau_\mathrm{cz}`$ (MHP 3/09); the run stops if $`\tau_\mathrm{cz} \le 1`$, with exit code 1 and the message also in the `.short` file.
 
-    > **Question** ([[#L64-L80]]). **The saturation's units.** `WMAX > 1` switches the meaning of `WMAX` (rad/s, or rad/s × s). A rate above 1 rad/s is unphysical, so the test works as a switch, but the Physics namelist page describes `WMAX` only in rad/s. Would a separate switch, or a sentence in the documentation, be clearer?
+    > **Question** ([lines 64–80](https://github.com/yreclab/yrec/blob/7be4133/src/wind.f#L64-L80)). **The saturation's units.** `WMAX > 1` switches the meaning of `WMAX` ($`\mathrm{rad/s}`$, or $`\mathrm{rad/s} \times \mathrm{s}`$). A rate above $`1\,\mathrm{rad/s}`$ is unphysical, so the test works as a switch, but the Physics namelist page describes `WMAX` only in $`\mathrm{rad/s}`$. Would a separate switch, or a sentence in the documentation, be clearer?
 
-2. **The loss law.** With $R = \sqrt{L/(4\pi\sigma T_\mathrm{eff}^4)}$ and the fixed mass-loss rate $\dot M = 2\times10^{-14}\,M_\odot$/yr,
-   $$I\,\frac{d\Omega}{dt} = -K\left(\frac{\dot M}{10^{-14}}\right)^{a}\left(\frac{R}{R_\odot}\right)^{c} M^{d}\;\Omega\,\min(\Omega, \Omega_\mathrm{sat})^{\,b-1},$$
-   with $K$ = `CONSTFACTOR`, $a$ = `EXMD`, $b$ = `EXW`, $c$ = `EXR`, $d$ = `EXM`.
+2. **The loss law.** With $`R = \sqrt{L/(4\pi\sigma T_\mathrm{eff}^4)}`$ and the fixed mass-loss rate $`\dot M = 2\times10^{-14}\,M_\odot`$/yr,
+   
+   $$\displaystyle I\\,\frac{d\Omega}{dt} = -K\left(\frac{\dot M}{10^{-14}}\right)^{a}\left(\frac{R}{R\_\odot}\right)^{c} M^{d}\\;\Omega\\,\min(\Omega, \Omega\_\mathrm{sat})^{\\,b-1},$$
+   
+   with $`K`$ = `CONSTFACTOR`, $`a`$ = `EXMD`, $`b`$ = `EXW`, $`c`$ = `EXR`, $`d`$ = `EXM`.
 
-    > **Question** ([[#L87]]; [[#L97-L99]]). **A fixed mass-loss rate.** `DMDOT = 2.0D-14` is hard-coded, so the factor $(\dot M/10^{-14})^{a}$ is the constant $2^{a}$, whatever the model's own rate (`DMDT0`). Is this meant, as a part of the calibration through `CONSTFACTOR`?
+    > **Question** ([line 87](https://github.com/yreclab/yrec/blob/7be4133/src/wind.f#L87); [lines 97–99](https://github.com/yreclab/yrec/blob/7be4133/src/wind.f#L97-L99)). **A fixed mass-loss rate.** `DMDOT = 2.0D-14` is hard-coded, so the factor $`(\dot M/10^{-14})^{a}`$ is the constant $`2^{a}`$, whatever the model's own rate (`DMDT0`). Is this meant, as a part of the calibration through `CONSTFACTOR`?
 
-3. **Integration.** If one explicit step would remove more than $\Omega$, the step is split into `NSTEP` substeps. In each, $\Omega_\mathrm{new}$ is found by iteration: the loss is evaluated at the mean of the start and the previous estimate, until the relative change is below $10^{-6}$ (at most 21 evaluations). The new rate is stored in `WNEW`, which is also a namelist variable (bug 1).
+3. **Integration.** If one explicit step would remove more than $`\Omega`$, the step is split into `NSTEP` substeps. In each, $`\Omega_\mathrm{new}`$ is found by iteration: the loss is evaluated at the mean of the start and the previous estimate, until the relative change is below $`10^{-6}`$ (at most 21 evaluations). The new rate is stored in `WNEW`, which is also a namelist variable (bug 1).
 
-    > **Question** ([[#L117-L134]]). **No convergence check.** After 21 evaluations without convergence, the last estimate is used without a message. Should the routine warn, or cut the substep?
+    > **Question** ([lines 117–134](https://github.com/yreclab/yrec/blob/7be4133/src/wind.f#L117-L134)). **No convergence check.** After 21 evaluations without convergence, the last estimate is used without a message. Should the routine warn, or cut the substep?
 
-4. **Removal.** $\Delta j = (\Omega_\mathrm{s} - \Omega_\mathrm{new})\,I_\mathrm{cz}/\Delta M_\mathrm{cz}$, with $\Delta M_\mathrm{cz}$ = `HSTOP - HSBOT`, is subtracted from every shell of the zone.
+4. **Removal.** $`\Delta j = (\Omega_\mathrm{s} - \Omega_\mathrm{new})\,I_\mathrm{cz}/\Delta M_\mathrm{cz}`$, with $`\Delta M_\mathrm{cz}`$ = `HSTOP - HSBOT`, is subtracted from every shell of the zone.
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/CWIND/` and `/ROT/` to `NMLPAR_MOD`, `/OVRTRN/` to `OVRTRN_MOD`, the constants to `CONSTANTS_MOD`; the unused `/DEUTER/` dropped), `IMPLICIT NONE`; former question 1 (now bug 1) stands, `WNEW` now being `NMLPAR_MOD`'s.
 
-**Changed since `a8a5950`.** The error stop when $\tau_\mathrm{cz}$ is not defined now also writes its message to the `.short` file (`ISHORT`, through `IOUNITS_MOD`), and ends with `STOP 1` instead of a bare `STOP`, so that a failed run no longer exits with status 0 (`KNOWN_ISSUES.md`, issue 38).
+**Changed since `a8a5950`.** The error stop when $`\tau_\mathrm{cz}`$ is not defined now also writes its message to the `.short` file (`ISHORT`, through `IOUNITS_MOD`), and ends with `STOP 1` instead of a bare `STOP`, so that a failed run no longer exits with status 0 (`KNOWN_ISSUES.md`, issue 38).
 
 ## Bugs, by priority
 
-1. **(not reached)** **`WNEW` overwrites the namelist's solid-body rate.** ([[#L122]]; [[#L133]]; [[#L142]]) The iterated new rate is assigned to `WNEW`, which `USE NMLPAR_MOD` makes the namelist variable `WNEW` ([[nmlpar_mod.f#L129]]): the rate at which [[starin.f#STARIN|STARIN]] starts a model in solid-body rotation when `LWNEW` is set ([[starin.f#L365-L371]]). Each call of WIND therefore replaces the input with the last wind rate. The main program calls STARIN again for each run of its `DO 200 NK = 1, NUMRUN` loop ([[main.f#L397]]), and STARIN applies `WNEW` to a model it reads from file (`LFIRST`, [[starin.f#L255-L263]]), so a later run of the same job that reads its model from file with `LWNEW` would start from the previous run's last surface rate, not from the input. Only with `LROT`, `LWNEW` (off by default), the old wind law (`LMWIND` off, the default), and more than one run (`NUMRUN` > 1); [[mwind.f#b1]] is the same for the new law.
+1. **(not reached)** **`WNEW` overwrites the namelist's solid-body rate.** ([line 122](https://github.com/yreclab/yrec/blob/7be4133/src/wind.f#L122); [line 133](https://github.com/yreclab/yrec/blob/7be4133/src/wind.f#L133); [line 142](https://github.com/yreclab/yrec/blob/7be4133/src/wind.f#L142)) The iterated new rate is assigned to `WNEW`, which `USE NMLPAR_MOD` makes the namelist variable `WNEW` ([nmlpar_mod.f, line 129](https://github.com/yreclab/yrec/blob/7be4133/src/nmlpar_mod.f#L129)): the rate at which [STARIN](starin.f.md#starin) starts a model in solid-body rotation when `LWNEW` is set ([starin.f, lines 365–371](https://github.com/yreclab/yrec/blob/7be4133/src/starin.f#L365-L371)). Each call of WIND therefore replaces the input with the last wind rate. The main program calls STARIN again for each run of its `DO 200 NK = 1, NUMRUN` loop ([main.f, line 397](https://github.com/yreclab/yrec/blob/7be4133/src/main.f#L397)), and STARIN applies `WNEW` to a model it reads from file (`LFIRST`, [starin.f, lines 255–263](https://github.com/yreclab/yrec/blob/7be4133/src/starin.f#L255-L263)), so a later run of the same job that reads its model from file with `LWNEW` would start from the previous run's last surface rate, not from the input. Only with `LROT`, `LWNEW` (off by default), the old wind law (`LMWIND` off, the default), and more than one run (`NUMRUN` > 1); [mwind.f, suspected bug 1](mwind.f.md#b1) is the same for the new law.
 
     **A possible fix:** a local name for the iterate, here and in MWIND:
 
@@ -90,4 +92,4 @@
 
 ### WIND
 
-The older wind braking law: $I\,d\Omega/dt \propto \Omega\,\min(\Omega,\Omega_\mathrm{sat})^{b-1}$ with fixed exponents, integrated over the step and taken from the surface convection zone's specific angular momentum.
+The older wind braking law: $`I\,d\Omega/dt \propto \Omega\,\min(\Omega,\Omega_\mathrm{sat})^{b-1}`$ with fixed exponents, integrated over the step and taken from the surface convection zone's specific angular momentum.

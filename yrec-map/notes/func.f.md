@@ -1,27 +1,33 @@
 ## Explanation
 
-**Purpose.** `FUNC` evaluates, at one colatitude $\theta$ on an equipotential surface of a rotating star, the effective gravity $g = |\nabla\Phi|$ and the surface element. It is the integrand for the angular averages $\langle g\rangle$ and $\langle g^{-1}\rangle$ that the rotation form factors need.
+**Purpose.** `FUNC` evaluates, at one colatitude $`\theta`$ on an equipotential surface of a rotating star, the effective gravity $`g = |\nabla\Phi|`$ and the surface element. It is the integrand for the angular averages $`\langle g\rangle`$ and $`\langle g^{-1}\rangle`$ that the rotation form factors need.
 
 **How it fits.**
-- **Who calls it:** only [[qgauss.f#QGAUSS|QGAUSS]], a ten-point Gauss–Legendre quadrature over $0 \le \theta \le \pi/2$, called by [[fpft.f#FPFT|FPFT]].
-- **Inputs:** `X` ($\theta$), `R0` (mean radii of the equipotentials), `HS` ($\log m$), `AINT` and `Q` (the distortion integral and its integrand, from [[trapzd.f#TRAPZD|TRAPZD]]), `W2` ($\Omega^2$), `A` (the distortion amplitude), `I` (the shell).
-- **Outputs:** `G` ($g$) and `S` (the surface element per unit $\theta$).
-- **Modules:** constants only ([[constants_mod.f#CONSTANTS_MOD|`CONSTANTS_MOD`]]: $4\pi$, $1/3$, $\ln 10$, $\log G$).
+- **Who calls it:** only [QGAUSS](qgauss.f.md#qgauss), a ten-point Gauss–Legendre quadrature over $`0 \le \theta \le \pi/2`$, called by [FPFT](fpft.f.md#fpft).
+- **Inputs:** `X` ($`\theta`$), `R0` (mean radii of the equipotentials), `HS` ($`\log m`$), `AINT` and `Q` (the distortion integral and its integrand, from [TRAPZD](trapzd.f.md#trapzd)), `W2` ($`\Omega^2`$), `A` (the distortion amplitude), `I` (the shell).
+- **Outputs:** `G` ($`g`$) and `S` (the surface element per unit $`\theta`$).
+- **Modules:** constants only ([`CONSTANTS_MOD`](constants_mod.f.md#constants_mod): $`4\pi`$, $`1/3`$, $`\ln 10`$, $`\log G`$).
 
-**The method.** With $P_2 = 1 - \tfrac32\sin^2\theta$, the equipotential is $r = r_0(1 - aP_2)$. Then
-$$\frac{\partial\Phi}{\partial r} = \frac{Gm}{r^2} - \frac{4\pi}{3r^4}P_2\left(3I - rQ\,\frac{\partial r_0}{\partial r}\right) - \Omega^2 r\sin^2\theta,$$
-$$\frac{\partial\Phi}{\partial\theta} = \frac{4\pi}{3r^4}\left(P_2\,Q\,\frac{\partial r_0}{\partial\theta} - 3I\cos\theta\sin\theta\right) - \Omega^2 r\cos\theta\sin\theta,$$
-with $I$ = `AINT`, $\partial r_0/\partial r = 1/(1-4aP_2)$ and $\partial r_0/\partial\theta = 3a\cos\theta\sin\theta\,(\partial r_0/\partial r)/(1-aP_2)$, and
-$$g = \sqrt{(\partial_r\Phi)^2 + (\partial_\theta\Phi)^2},\qquad S = 4\pi r\sin\theta\, r_0\sqrt{(1-aP_2)^2 + (3a\cos\theta\sin\theta)^2}.$$
+**The method.** With $`P_2 = 1 - \tfrac32\sin^2\theta`$, the equipotential is $`r = r_0(1 - aP_2)`$. Then
+```math
+\frac{\partial\Phi}{\partial r} = \frac{Gm}{r^2} - \frac{4\pi}{3r^4}P_2\left(3I - rQ\,\frac{\partial r_0}{\partial r}\right) - \Omega^2 r\sin^2\theta,
+```
+```math
+\frac{\partial\Phi}{\partial\theta} = \frac{4\pi}{3r^4}\left(P_2\,Q\,\frac{\partial r_0}{\partial\theta} - 3I\cos\theta\sin\theta\right) - \Omega^2 r\cos\theta\sin\theta,
+```
+with $`I`$ = `AINT`, $`\partial r_0/\partial r = 1/(1-4aP_2)`$ and $`\partial r_0/\partial\theta = 3a\cos\theta\sin\theta\,(\partial r_0/\partial r)/(1-aP_2)`$, and
+```math
+g = \sqrt{(\partial_r\Phi)^2 + (\partial_\theta\Phi)^2},\qquad S = 4\pi r\sin\theta\, r_0\sqrt{(1-aP_2)^2 + (3a\cos\theta\sin\theta)^2}.
+```
 
-`S` carries $4\pi$ rather than the $2\pi$ of a ring, which counts both hemispheres: [[fpft.f#FPFT|FPFT]] calls QGAUSS with the upper limit $\pi/2$ (`B = 0.125D0*C4PI`, [[fpft.f#L39]]), so that the integral of `S` is the whole area of the equipotential (for a sphere, $\int_0^{\pi/2} 4\pi r^2\sin\theta\,d\theta = 4\pi r^2$) (settled from the code, Nov 9, 2026: [[#L46-L47]]).
+`S` carries $`4\pi`$ rather than the $`2\pi`$ of a ring, which counts both hemispheres: [FPFT](fpft.f.md#fpft) calls QGAUSS with the upper limit $`\pi/2`$ (`B = 0.125D0*C4PI`, [fpft.f, line 39](https://github.com/yreclab/yrec/blob/7be4133/src/fpft.f#L39)), so that the integral of `S` is the whole area of the equipotential (for a sphere, $`\int_0^{\pi/2} 4\pi r^2\sin\theta\,d\theta = 4\pi r^2`$) (settled from the code, Nov 9, 2026: [lines 46–47](https://github.com/yreclab/yrec/blob/7be4133/src/func.f#L46-L47)).
 
-> **Question** ([[#L38-L41]]). **Comment vs code.** The comment says "ASSUME DR0/DR = 1," but the code multiplies by `QR0R` $= 1/(1-4aP_2)$ ([[#L31]]), which is $dr_0/dr$ at fixed $\theta$ for $r = r_0(1-aP_2)$ with $a \propto r_0^3$. Which is intended?
+> **Question** ([lines 38–41](https://github.com/yreclab/yrec/blob/7be4133/src/func.f#L38-L41)). **Comment vs code.** The comment says "ASSUME DR0/DR = 1," but the code multiplies by `QR0R` $`= 1/(1-4aP_2)`$ ([line 31](https://github.com/yreclab/yrec/blob/7be4133/src/func.f#L31)), which is $`dr_0/dr`$ at fixed $`\theta`$ for $`r = r_0(1-aP_2)`$ with $`a \propto r_0^3`$. Which is intended?
 
-> **Question** ([[#L36]]; [[#L38-L44]]). **Constants.** The comment writes the distortion terms as $12\pi G P_2 I/(5r^4)$ and $4\pi G P_2 Q/(5r^3)$; the code uses $4\pi/(3r^4)$ (`CONST`) with no $G$ or 1/5. The two agree exactly if the comment's $I$ and $Q$ are $5/(3G)$ times `AINT` and `Q` as [[trapzd.f#TRAPZD|TRAPZD]] computes them. Is that the convention, and could the comment be brought in line?
+> **Question** ([line 36](https://github.com/yreclab/yrec/blob/7be4133/src/func.f#L36); [lines 38–44](https://github.com/yreclab/yrec/blob/7be4133/src/func.f#L38-L44)). **Constants.** The comment writes the distortion terms as $`12\pi G P_2 I/(5r^4)`$ and $`4\pi G P_2 Q/(5r^3)`$; the code uses $`4\pi/(3r^4)`$ (`CONST`) with no $`G`$ or 1/5. The two agree exactly if the comment's $`I`$ and $`Q`$ are $`5/(3G)`$ times `AINT` and `Q` as [TRAPZD](trapzd.f.md#trapzd) computes them. Is that the convention, and could the comment be brought in line?
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 
 ### FUNC
 
-Effective gravity $g = |\nabla\Phi|$ and surface element on a distorted equipotential at colatitude $\theta$ (equations above).
+Effective gravity $`g = |\nabla\Phi|`$ and surface element on a distorted equipotential at colatitude $`\theta`$ (equations above).

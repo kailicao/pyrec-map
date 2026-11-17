@@ -1,16 +1,18 @@
 ## Explanation
 
-**Purpose.** A thin wrapper, "modified by G. Newsham from codes of N. Itoh & F. Timmes (9/06)": it computes the composition's mean nucleon number $\bar A$ and charge $\bar Z$, and passes them to [[sneut.f#SNEUT|SNEUT]], which computes the neutrino losses. The header notes that only the carbon coefficients are used for bremsstrahlung losses ("the differences for other elements is slight"), and that the cutoff at $0.01\,T_\mathrm{Fermi}$ "is applicable for helium but will need to be amended for carbon and oxygen white dwarfs and cores of AGB stars." In [[sneut.f#SNEUT|SNEUT]] this cutoff chooses between the two forms of the bremsstrahlung losses, the weakly degenerate one above $0.01\,T_\mathrm{Fermi}$ and the liquid-metal one with the ¹²C parameters below it; it does not limit the routine, and the parameters are the same for every composition (settled from the code, Nov 9, 2026: [[sneut.f#L882-L889]]).
+**Purpose.** A thin wrapper, "modified by G. Newsham from codes of N. Itoh & F. Timmes (9/06)": it computes the composition's mean nucleon number $`\bar A`$ and charge $`\bar Z`$, and passes them to [SNEUT](sneut.f.md#sneut), which computes the neutrino losses. The header notes that only the carbon coefficients are used for bremsstrahlung losses ("the differences for other elements is slight"), and that the cutoff at $`0.01\,T_\mathrm{Fermi}`$ "is applicable for helium but will need to be amended for carbon and oxygen white dwarfs and cores of AGB stars." In [SNEUT](sneut.f.md#sneut) this cutoff chooses between the two forms of the bremsstrahlung losses, the weakly degenerate one above $`0.01\,T_\mathrm{Fermi}`$ and the liquid-metal one with the $`^{12}\mathrm{C}`$ parameters below it; it does not limit the routine, and the parameters are the same for every composition (settled from the code, Nov 9, 2026: [sneut.f, lines 882–889](https://github.com/yreclab/yrec/blob/7be4133/src/sneut.f#L882-L889)).
 
-> **Question** ([[#L8-L12]]; [[sneut.f#L882-L889]]). **The Fermi-temperature cutoff.** The header says the cutoff at $0.01\,T_\mathrm{Fermi}$ suits helium but "will need to be amended" for C/O white dwarfs and AGB cores, and it has not been changed. Does it matter for the cores YREC follows (degenerate helium cores of red giants, and C/O cores if a run reaches them), and what cutoff would the C/O case need?
+> **Question** ([lines 8–12](https://github.com/yreclab/yrec/blob/7be4133/src/nulosses.f#L8-L12); [sneut.f, lines 882–889](https://github.com/yreclab/yrec/blob/7be4133/src/sneut.f#L882-L889)). **The Fermi-temperature cutoff.** The header says the cutoff at $`0.01\,T_\mathrm{Fermi}`$ suits helium but "will need to be amended" for C/O white dwarfs and AGB cores, and it has not been changed. Does it matter for the cores YREC follows (degenerate helium cores of red giants, and C/O cores if a run reaches them), and what cutoff would the C/O case need?
 
 **How it fits.**
-- **Who calls it:** [[neutrino.f#NEUTRINO|NEUTRINO]].
-- **What it calls:** [[#AZBAR|AZBAR]] and [[sneut.f#SNEUT|SNEUT]].
-- **Outputs:** `SNU`, `DSNUDT`, `DSNUDD`. `SNEUT` also returns the derivatives with respect to $\bar A$ and $\bar Z$ (`DSNUDA`, `DSNUDZ`), which are dropped here.
+- **Who calls it:** [NEUTRINO](neutrino.f.md#neutrino).
+- **What it calls:** [AZBAR](#azbar) and [SNEUT](sneut.f.md#sneut).
+- **Outputs:** `SNU`, `DSNUDT`, `DSNUDD`. `SNEUT` also returns the derivatives with respect to $`\bar A`$ and $`\bar Z`$ (`DSNUDA`, `DSNUDZ`), which are dropped here.
 
-**The method.** With mass fractions $X_i$, nucleon numbers $A_i$ and charges $Z_i$, the molar abundances $Y_i = X_i/A_i$ give
-$$\bar A = \frac{1}{\sum_i Y_i},\qquad \bar Z = \bar A \sum_i Z_i\,Y_i .$$
+**The method.** With mass fractions $`X_i`$, nucleon numbers $`A_i`$ and charges $`Z_i`$, the molar abundances $`Y_i = X_i/A_i`$ give
+```math
+\bar A = \frac{1}{\sum_i Y_i},\qquad \bar Z = \bar A \sum_i Z_i\,Y_i .
+```
 
 **Changed since `rp_1`.** None: the file is the same as at `rp_1`.
 

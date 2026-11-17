@@ -1,11 +1,11 @@
 ## Explanation
 
-**Purpose.** `CROSS_MOD` holds the factors by which the nuclear reaction rates are adjusted for user-changed cross sections: the S-factor derivative factors and the N15+p branching factors, shared by 3 routines. It replaces `COMMON/CROSS/` (MHP via Claude, 10/14/26), less `SSTANDARD` (now in [[nmlpar_mod.f#NMLPAR_MOD|`NMLPAR_MOD`]]) and `LNEWNUC` (now in [[nmlbypass_mod.f#NMLBYPASS_MOD|`NMLBYPASS_MOD`]]).
+**Purpose.** `CROSS_MOD` holds the factors by which the nuclear reaction rates are adjusted for user-changed cross sections: the S-factor derivative factors and the N15+p branching factors, shared by 3 routines. It replaces `COMMON/CROSS/` (MHP via Claude, 10/14/26), less `SSTANDARD` (now in [`NMLPAR_MOD`](nmlpar_mod.f.md#nmlpar_mod)) and `LNEWNUC` (now in [`NMLBYPASS_MOD`](nmlbypass_mod.f.md#nmlbypass_mod)).
 
 **What its variables hold, who sets them, who reads them.**
-- `QS0E(8)`, `QQS0EE(8)`: factors on the first-derivative ($Q_2$, $Q_3$) and second-derivative ($Q_4$, $Q_5$) terms of the eight pp and CNO rates, proportional to $S'/S$ and $S''/S$ relative to the reference values (REMAP's comments). [[remap.f#REMAP|`REMAP`]] sets them to 1, or, with `LNEWNUC`, from the user's S-factors and their derivatives.
-- `FC12`, `FO16`: the factors on the N15+p → C12+α and → O16+γ branches, 1 or, with `LNEWNUC`, the ratio of the user's S-factor to the reference; set in `REMAP`.
-- All four are read by [[engeb.f#ENGEB|`ENGEB`]] and [[rates.f#RATES|`RATES`]], which multiply the rate brackets and the branching ratio by them.
+- `QS0E(8)`, `QQS0EE(8)`: factors on the first-derivative ($`Q_2`$, $`Q_3`$) and second-derivative ($`Q_4`$, $`Q_5`$) terms of the eight pp and CNO rates, proportional to $`S'/S`$ and $`S''/S`$ relative to the reference values (REMAP's comments). [`REMAP`](remap.f.md#remap) sets them to 1, or, with `LNEWNUC`, from the user's S-factors and their derivatives.
+- `FC12`, `FO16`: the factors on the $`^{15}\mathrm{N}+p \to {}^{12}\mathrm{C}+\alpha`$ and $`\to {}^{16}\mathrm{O}+\gamma`$ branches, 1 or, with `LNEWNUC`, the ratio of the user's S-factor to the reference; set in `REMAP`.
+- All four are read by [`ENGEB`](engeb.f.md#engeb) and [`RATES`](rates.f.md#rates), which multiply the rate brackets and the branching ratio by them.
 
 **Design.** A blanket `USE CROSS_MOD` in each of the three routines.
 

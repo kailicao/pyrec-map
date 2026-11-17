@@ -3,16 +3,18 @@
 **Purpose.** The second derivatives of a cubic spline through tabulated points, from Numerical Recipes (`SPLINE`), in double precision "for opacities."
 
 **How it fits.**
-- **Inputs:** `X(N)` (increasing), `Y(N)`, and the end slopes `YP1`, `YPN`; a slope of $10^{30}$ or more asks for a natural spline (zero second derivative) at that end.
-- **Who calls it:** the opacity routines [[gtpurz.f#GTPURZ|GTPURZ]] and [[zsulaol.f#ZSULAOL|ZSULAOL]]; at `rp_1` also GTLAOL, GTLAOL2 and SULAOL (removed since `rp_1`).
+- **Inputs:** `X(N)` (increasing), `Y(N)`, and the end slopes `YP1`, `YPN`; a slope of $`10^{30}`$ or more asks for a natural spline (zero second derivative) at that end.
+- **Who calls it:** the opacity routines [GTPURZ](gtpurz.f.md#gtpurz) and [ZSULAOL](zsulaol.f.md#zsulaol); at `rp_1` also GTLAOL, GTLAOL2 and SULAOL (removed since `rp_1`).
 - **Output:** `Y2(N)`, the second derivatives, for a spline evaluation routine.
-- **Limits:** the work array `U` has the fixed size `JSON` (5000, from [[dimensions_mod.f#DIMENSIONS_MOD|`DIMENSIONS_MOD`]]; [[#L27]]), and `N` is not checked against it; the callers pass at most 104 points (the pure-Z table's densities and temperatures, `ZLAOL_MOD`).
+- **Limits:** the work array `U` has the fixed size `JSON` (5000, from [`DIMENSIONS_MOD`](dimensions_mod.f.md#dimensions_mod); [line 27](https://github.com/yreclab/yrec/blob/7be4133/src/cspline.f#L27)), and `N` is not checked against it; the callers pass at most 104 points (the pure-Z table's densities and temperatures, `ZLAOL_MOD`).
 
 **The method.** Continuity of the first derivative at interior points gives the tridiagonal system
-$$\frac{h_{i-1}}{6}y''_{i-1} + \frac{h_{i-1} + h_i}{3}y''_i + \frac{h_i}{6}y''_{i+1} = \frac{y_{i+1} - y_i}{h_i} - \frac{y_i - y_{i-1}}{h_{i-1}},$$
-with $h_i = x_{i+1} - x_i$, solved by forward elimination and back substitution.
+```math
+\frac{h_{i-1}}{6}y''_{i-1} + \frac{h_{i-1} + h_i}{3}y''_i + \frac{h_i}{6}y''_{i+1} = \frac{y_{i+1} - y_i}{h_i} - \frac{y_i - y_{i-1}}{h_{i-1}},
+```
+with $`h_i = x_{i+1} - x_i`$, solved by forward elimination and back substitution.
 
-> **Question** ([[#L16]]). **Duplicates.** The code base has several spline routines ([[spline.f|spline.f]], [[splinj.f|splinj.f]], splinnr.f (removed since `rp_1`), …). Could one serve all callers in the overhaul?
+> **Question** ([line 16](https://github.com/yreclab/yrec/blob/7be4133/src/cspline.f#L16)). **Duplicates.** The code base has several spline routines ([spline.f](spline.f.md), [splinj.f](splinj.f.md), splinnr.f (removed since `rp_1`), …). Could one serve all callers in the overhaul?
 
 **Changed since `rp_1`.** Declarations only: `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`; three of its callers removed with their files.
 

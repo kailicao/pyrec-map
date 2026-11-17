@@ -3,19 +3,19 @@
 **Purpose.** `GETYREC7` reads a stellar model stored in the older YREC7 text format ("llp 4/16/03"; its header calls it `GETY7`) into memory. Since the YREC7 format lacks the physics flags of the newer Model2 format, it sets those to defaults ("?" strings, false flags).
 
 **How it fits.**
-- **Who calls it:** only [[starin.f#STARIN|STARIN]], when the input model's first record starts with `NMOD`; Model2 files (`MOD2`) go to [[getmodel2.f#GETMODEL2|GETMODEL2]], which returns the same arguments.
-- **Who writes the format:** [[putyrec7.f#PUTYREC7|PUTYREC7]] (its formats match these), which nothing calls; so YREC7 files now come only from older codes.
-- **Input:** the file on unit `IREAD`, rewound before and after; `ISHORT`, the unit of its error messages ([[#L140-L141]], [[#L249]]), so that, unlike in `GETMODEL2`, this argument is used.
-- **Outputs (arguments):** the header (`MODEL`, `M`, `SMASS`, `TEFFL`, `BL`, `HSTOT`, `DAGE`, `DDAGE`), `LROT`, `LEXCOM`, `JCORE`, `JENV`, `CMIXL`, the luminosities `TLUMX` (converted to solar units if above $10^{20}$), the envelope triangle (`TRIT`, `TRIL`, `PS`, `TS`, `RS`, `CFENV`, `FTRI`), the shells (`HS`, `HR`, `HL`, `HP`, `HT`, `HD`, `LC`), `HCOMP` and `OMEGA`; plus the Model2-only items, set to defaults: the strings `ATM`, `EOS`, `HIK`, `ALOK` = "?," `COMPMIX` = "AG93," all flags false, `PDISK` = 7.2722×10$^{-6}$ rad s$^{-1}$ (a 10-day period), `TDISK` = 0, `WMAX` = 3×10$^{-4}$ ([[#L86-L89]]). These three do not change the run's physics: STARIN receives them in its locals `PDISK0`, `TDISK0`, `WMAX0` ([[starin.f#L280-L285]]), which it never reads (unused?), and the namelist's `PDISK`, `TDISK`, `WMAX` are untouched (settled from the code, Nov 9, 2026).
-- **Modules:** [[constants_mod.f#CONSTANTS_MOD|`CONSTANTS_MOD`]] (formerly `/CONST/`), for $L_\odot$.
+- **Who calls it:** only [STARIN](starin.f.md#starin), when the input model's first record starts with `NMOD`; Model2 files (`MOD2`) go to [GETMODEL2](getmodel2.f.md#getmodel2), which returns the same arguments.
+- **Who writes the format:** [PUTYREC7](putyrec7.f.md#putyrec7) (its formats match these), which nothing calls; so YREC7 files now come only from older codes.
+- **Input:** the file on unit `IREAD`, rewound before and after; `ISHORT`, the unit of its error messages ([lines 140–141](https://github.com/yreclab/yrec/blob/7be4133/src/getyrec7.f#L140-L141), [line 249](https://github.com/yreclab/yrec/blob/7be4133/src/getyrec7.f#L249)), so that, unlike in `GETMODEL2`, this argument is used.
+- **Outputs (arguments):** the header (`MODEL`, `M`, `SMASS`, `TEFFL`, `BL`, `HSTOT`, `DAGE`, `DDAGE`), `LROT`, `LEXCOM`, `JCORE`, `JENV`, `CMIXL`, the luminosities `TLUMX` (converted to solar units if above $`10^{20}`$), the envelope triangle (`TRIT`, `TRIL`, `PS`, `TS`, `RS`, `CFENV`, `FTRI`), the shells (`HS`, `HR`, `HL`, `HP`, `HT`, `HD`, `LC`), `HCOMP` and `OMEGA`; plus the Model2-only items, set to defaults: the strings `ATM`, `EOS`, `HIK`, `ALOK` = "?," `COMPMIX` = "AG93," all flags false, `PDISK` = $`7.2722\times10^{-6}\,\mathrm{rad\,s^{-1}}`$ (a 10-day period), `TDISK` = 0, `WMAX` = $`3\times10^{-4}`$ ([lines 86–89](https://github.com/yreclab/yrec/blob/7be4133/src/getyrec7.f#L86-L89)). These three do not change the run's physics: STARIN receives them in its locals `PDISK0`, `TDISK0`, `WMAX0` ([starin.f, lines 280–285](https://github.com/yreclab/yrec/blob/7be4133/src/starin.f#L280-L285)), which it never reads (unused?), and the namelist's `PDISK`, `TDISK`, `WMAX` are untouched (settled from the code, Nov 9, 2026).
+- **Modules:** [`CONSTANTS_MOD`](constants_mod.f.md#constants_mod) (formerly `/CONST/`), for $`L_\odot`$.
 
 **The format, as read.**
-1. Each shell stores $X$ and $Z$ as integers in units of $10^{-6}$; $Y = 1 - X - Z - X(^3\mathrm{He})$ is recomputed. The run stops (exit status 3, an input error) if a shell's $\log m$ is negative or above the total.
+1. Each shell stores $`X`$ and $`Z`$ as integers in units of $`10^{-6}`$; $`Y = 1 - X - Z - X(^3\mathrm{He})`$ is recomputed. The run stops (exit status 3, an input error) if a shell's $`\log m`$ is negative or above the total.
 
-    > **Question** ([[#L148-L149]]). **Precision of $X$ and $Z$.** The format keeps $X$ and $Z$ to $10^{-6}$. Is that enough when models with diffusion are restarted from this format?
+    > **Question** ([lines 148–149](https://github.com/yreclab/yrec/blob/7be4133/src/getyrec7.f#L148-L149)). **Precision of $`X`$ and $`Z`$.** The format keeps $`X`$ and $`Z`$ to $`10^{-6}`$. Is that enough when models with diffusion are restarted from this format?
 
 2. The other species (rows 4–11) are stored only from `JCORE` to `JENV`, the region between the convective core and envelope, and copied into the homogeneous core and envelope. With `LEXCOM`, the light elements (rows 12–15) follow the same pattern, two shells per record.
-3. With `LROT`, $\Omega$ is stored as $-\log_{10}\Omega$; values of 58.9 or more mean $\Omega = 0$. If those records are missing, $\Omega$ is set to zero with a message.
+3. With `LROT`, $`\Omega`$ is stored as $`-\log_{10}\Omega`$; values of 58.9 or more mean $`\Omega = 0`$. If those records are missing, $`\Omega`$ is set to zero with a message.
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 
@@ -23,7 +23,7 @@
 
 ## Bugs, by priority
 
-1. **(not reached)** **The flags record is read one column late.** ([[#L104-L105]]; [[putyrec7.f#L65-L66]]) PUTYREC7 writes the record as `2(L1,1X),'F F ',2I4,F7.3`, four characters between the flags and `JCORE`, and the YREC7 starting models in `startmodels/seed/` have the same layout (`F T F F    1   1  1.735`); GETYREC7 reads it as `2(L1,1X),5X,2I4,F7.3`, skipping five. Each field is then read one column late: `JCORE` from columns 10–13, which hold its last three digits and the first column of `JENV`; `JENV` from columns 14–17, its last three digits and the first column of `CMIXL`. With blanks ignored, the values come out right while `JCORE` and `JENV` are below 1000 (all 41 YREC7 files in the repository have at most 391 shells); with a four-digit `JENV` (`M` may reach `JSON` = 5000) its first digit is appended to `JCORE` and lost from `JENV`.
+1. **(not reached)** **The flags record is read one column late.** ([lines 104–105](https://github.com/yreclab/yrec/blob/7be4133/src/getyrec7.f#L104-L105); [putyrec7.f, lines 65–66](https://github.com/yreclab/yrec/blob/7be4133/src/putyrec7.f#L65-L66)) PUTYREC7 writes the record as `2(L1,1X),'F F ',2I4,F7.3`, four characters between the flags and `JCORE`, and the YREC7 starting models in `startmodels/seed/` have the same layout (`F T F F    1   1  1.735`); GETYREC7 reads it as `2(L1,1X),5X,2I4,F7.3`, skipping five. Each field is then read one column late: `JCORE` from columns 10–13, which hold its last three digits and the first column of `JENV`; `JENV` from columns 14–17, its last three digits and the first column of `CMIXL`. With blanks ignored, the values come out right while `JCORE` and `JENV` are below 1000 (all 41 YREC7 files in the repository have at most 391 shells); with a four-digit `JENV` (`M` may reach `JSON` = 5000) its first digit is appended to `JCORE` and lost from `JENV`.
 
     **A possible fix:**
 

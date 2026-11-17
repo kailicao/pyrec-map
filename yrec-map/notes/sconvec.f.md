@@ -1,41 +1,45 @@
 ## Explanation
 
-**Purpose.** Tests the edges of the first convection zone (every zone at `rp_1`) for semiconvection and, where the region next to it is unstable, extends the zone, following Castellani et al. (1971, Ap&SS 10, 340), as the header comment says. It then merges zones that have come to overlap.
+**Purpose.** Tests the edges of the first convection zone (every zone at `rp_1`) for semiconvection and, where the region next to it is unstable, extends the zone, following Castellani et al. ([1971](https://ui.adsabs.harvard.edu/abs/1971Ap%26SS..10..340C), Ap&SS 10, 340), as the header comment says. It then merges zones that have come to overlap.
 
 **How it fits.**
-- **Who calls it:** [[mix.f#MIX|`MIX`]], before the composition is mixed in the convection zones, when semiconvection is on (`LSEMIC`) and from the second iteration (`ITLVL` > 1).
-- **Inputs:** the step `DELTS` (s), the model's $\log\rho$ (`HD`), $L$ (`HL`, in solar units, by the factor `CLSUN`), $\log P$, $\log r$, $\log m$, $\log T$ (`HP`, `HR`, `HS`, `HT`), the composition `HCOMP`, `TEFFL`, the mixing length `CMIXL` (passed on to `TPGRAD`), and the zones `MXZONE(12,2)` (bottom and top shell of each), `NZONE`.
-- **What it calls:** for each test point, [[eqstat.f#EQSTAT|`EQSTAT`]] (equation of state: $\nabla_\mathrm{ad}$, the mean molecular weights), [[getopac.f#GETOPAC|`GETOPAC`]] (opacity) and [[tpgrad.f#TPGRAD|`TPGRAD`]] (the radiative gradient $\nabla_\mathrm{rad}$).
+- **Who calls it:** [`MIX`](mix.f.md#mix), before the composition is mixed in the convection zones, when semiconvection is on (`LSEMIC`) and from the second iteration (`ITLVL` > 1).
+- **Inputs:** the step `DELTS` (s), the model's $`\log\rho`$ (`HD`), $`L`$ (`HL`, in solar units, by the factor `CLSUN`), $`\log P`$, $`\log r`$, $`\log m`$, $`\log T`$ (`HP`, `HR`, `HS`, `HT`), the composition `HCOMP`, `TEFFL`, the mixing length `CMIXL` (passed on to `TPGRAD`), and the zones `MXZONE(12,2)` (bottom and top shell of each), `NZONE`.
+- **What it calls:** for each test point, [`EQSTAT`](eqstat.f.md#eqstat) (equation of state: $`\nabla_\mathrm{ad}`$, the mean molecular weights), [`GETOPAC`](getopac.f.md#getopac) (opacity) and [`TPGRAD`](tpgrad.f.md#tpgrad) (the radiative gradient $`\nabla_\mathrm{rad}`$).
 - **Outputs:** `MXZONE` and `NZONE`, changed; a line in the short output (`ISHORT`) for each edge it moves and each merger. Also, `HD` at the shells it tests is overwritten with the density returned by `EQSTAT`.
 - **Modules:** `DEBHU_MOD` (it loads `XXDH`, `YYDH`, `ZZDH`, `ZDH(1..3)` with each test point's composition for the Debye–Hückel correction in `EQSTAT`, when `LDH` is set), `CONSTANTS_MOD`, `NMLPAR_MOD`, `IOUNITS_MOD` (`ISHORT`), `DIMENSIONS_MOD`.
 
-> **Question** ([[#L186-L194]]; [[#L243-L252]]). **Overwriting the model's density.** `EQSTAT` lists `DL` among its outputs (the density for the given $P$, $T$ and composition), and `HD(JMR) = DL` and `HD(II) = DL` write it back into the model. At `JMR`, the value kept is the one from the second call, with the shell's own composition; but in the walk it is computed for the shell as it is, before any mixing. Is this write-back needed, and is it safe for the next steps of `MIX`?
+> **Question** ([lines 186–194](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L186-L194); [lines 243–252](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L243-L252)). **Overwriting the model's density.** `EQSTAT` lists `DL` among its outputs (the density for the given $`P`$, $`T`$ and composition), and `HD(JMR) = DL` and `HD(II) = DL` write it back into the model. At `JMR`, the value kept is the one from the second call, with the shell's own composition; but in the walk it is computed for the shell as it is, before any mixing. Is this write-back needed, and is it safe for the next steps of `MIX`?
 
 **The method.** For the first zone only (a local switch, `L_ONLY_CORE`, set to true; with it false, every zone) and each edge that is not the center or the surface (`LFLAGD`, `LFLAGU`); a fully convective star is skipped:
 
-> **Question** ([[#L63]]; [[#L90-L98]]). **Only the first zone.** A local switch, `L_ONLY_CORE = .TRUE.`, set just before the loop over zones (no dated comment), limits the test to `MXZONE(1,·)`, the innermost zone, whether it is a convective core or, in a star without one, an intermediate or the surface zone (whose bottom edge is then still tested). The name suggests that only a convective core was meant, and the header comment still says all convective regions are tested. Is this restriction meant to stay, and should it test `MXZONE(1,1) = 1` (a core) rather than the first zone, or be a namelist parameter?
+> **Question** ([line 63](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L63); [lines 90–98](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L90-L98)). **Only the first zone.** A local switch, `L_ONLY_CORE = .TRUE.`, set just before the loop over zones (no dated comment), limits the test to `MXZONE(1,·)`, the innermost zone, whether it is a convective core or, in a star without one, an intermediate or the surface zone (whose bottom edge is then still tested). The name suggests that only a convective core was meant, and the header comment still says all convective regions are tested. Is this restriction meant to stay, and should it test `MXZONE(1,1) = 1` (a core) rather than the first zone, or be a namelist parameter?
 
-1. At the first radiative shell outside the edge (`JMR`), compute $\nabla_\mathrm{rad}$ with the zone's composition. If $\nabla_\mathrm{rad} < \nabla_\mathrm{ad}$, the edge is stable. Otherwise keep $\nabla_\mathrm{rad,1}$, the mean molecular weight $\mu_\mathrm{CZ}$ (`XINTMU = AMU + EMU`), and $1 - \nabla_\mathrm{ad}/\nabla_\mathrm{rad}$.
-2. Recompute at the same shell with its own composition: $\nabla_\mathrm{rad,0}$, and the ratio $f = \nabla_\mathrm{rad,1}/\nabla_\mathrm{rad,0}$ (`FDEL`).
+1. At the first radiative shell outside the edge (`JMR`), compute $`\nabla_\mathrm{rad}`$ with the zone's composition. If $`\nabla_\mathrm{rad} \lt{} \nabla_\mathrm{ad}`$, the edge is stable. Otherwise keep $`\nabla_\mathrm{rad,1}`$, the mean molecular weight $`\mu_\mathrm{CZ}`$ (`XINTMU = AMU + EMU`), and $`1 - \nabla_\mathrm{ad}/\nabla_\mathrm{rad}`$.
+2. Recompute at the same shell with its own composition: $`\nabla_\mathrm{rad,0}`$, and the ratio $`f = \nabla_\mathrm{rad,1}/\nabla_\mathrm{rad,0}`$ (`FDEL`).
 3. The farthest the instability can reach in one step is the propagation speed (eq. 5′, p. 347 of the paper) times the step:
-   $$R_\mathrm{max} = \Bigl(1 - \frac{\nabla_\mathrm{ad}}{\nabla_\mathrm{rad,1}}\Bigr)\,\frac{L}{10\cdot4\pi P\,r^2}\,\Delta t,$$
-   with $L$, $P$, $r$ at the zone's edge shell.
+   
+   $$\displaystyle R\_\mathrm{max} = \Bigl(1 - \frac{\nabla\_\mathrm{ad}}{\nabla\_\mathrm{rad,1}}\Bigr)\\,\frac{L}{10\cdot4\pi P\\,r^2}\\,\Delta t,$$
+   
+   with $`L`$, $`P`$, $`r`$ at the zone's edge shell.
 
-    > **Question** ([[#L198-L202]]). **The factor 10.** $R_\mathrm{max}$ has $L/(10\cdot4\pi P r^2)$. Is the 10 from the paper's equation 5′, or a tuning factor?
+    > **Question** ([lines 198–202](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L198-L202)). **The factor 10.** $`R_\mathrm{max}`$ has $`L/(10\cdot4\pi P r^2)`$. Is the 10 from the paper's equation 5′, or a tuning factor?
 4. Walk outward from the edge (down for the bottom edge, up for the top), shell by shell, accumulating
-   $$R_\Sigma = \sum \Bigl(1 - \frac{\mu_\mathrm{CZ}}{\mu}\Bigr)\,\Delta r .$$
-   Stop when $R_\Sigma > R_\mathrm{max}$ (the limit, `LMAX` true) or when the shell is stable against the rescaled gradient, $f\,\nabla_\mathrm{rad} < \nabla_\mathrm{ad}$. The edge moves to the last unstable shell. In the walk, every quantity passed to `TPGRAD` is reset for the shell except `RL` (but see bug 2).
+   
+   $$\displaystyle R\_\Sigma = \sum \Bigl(1 - \frac{\mu\_\mathrm{CZ}}{\mu}\Bigr)\\,\Delta r .$$
+   
+   Stop when $`R_\Sigma \gt{} R_\mathrm{max}`$ (the limit, `LMAX` true) or when the shell is stable against the rescaled gradient, $`f\,\nabla_\mathrm{rad} \lt{} \nabla_\mathrm{ad}`$. The edge moves to the last unstable shell. In the walk, every quantity passed to `TPGRAD` is reset for the shell except `RL` (but see bug 2).
 
-    **"Overshoot" in the comments means semiconvection.** The comments at [[#L198]], [[#L205]], and [[#L219]] speak of "OVERSHOOT," but the routine is the semiconvection of Castellani et al. (1971) ([[#L63-L65]]), and its own merger message says "MERGED DUE TO SEMICONVECTION" ([[#L282]]), so the word is a leftover.
-5. **Mergers.** If the top of zone $j$ is now above the bottom of zone $j+1$, they become one zone, and the list is shifted down (but see bug 1).
+    **"Overshoot" in the comments means semiconvection.** The comments at [line 198](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L198), [line 205](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L205), and [line 219](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L219) speak of "OVERSHOOT," but the routine is the semiconvection of Castellani et al. (1971) ([lines 63–65](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L63-L65)), and its own merger message says "MERGED DUE TO SEMICONVECTION" ([line 282](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L282)), so the word is a leftover.
+5. **Mergers.** If the top of zone $`j`$ is now above the bottom of zone $`j+1`$, they become one zone, and the list is shifted down (but see bug 1).
 
-    > **Question** ([[#L278]]). **Touching zones.** Zones are merged only when they overlap (`MXZONE(J,2) .GT. MXZONE(J+1,1)`), not when they become adjacent (top of one = bottom of the next − 1), which leaves no radiative shell between them. Should adjacency also merge?
+    > **Question** ([line 278](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L278)). **Touching zones.** Zones are merged only when they overlap (`MXZONE(J,2) .GT. MXZONE(J+1,1)`), not when they become adjacent (top of one = bottom of the next − 1), which leaves no radiative shell between them. Should adjacency also merge?
 
 **Changed since `rp_1`.** Only the first zone in `MXZONE` is tested (`L_ONLY_CORE`; see the question under the method); the mixing length `CMIXL` is a new argument, passed to `TPGRAD`; the unused `/NWLAOL/` and `/NEWOPAC/` are dropped; COMMON blocks to modules, `IMPLICIT NONE`.
 
 ## Bugs, by priority
 
-1. **(not reached)** **A merger keeps the upper zone's top.** ([[#L278-L291]]) When zones $j$ and $j+1$ overlap, the merged zone takes the bottom of zone $j$ and the top of zone $j+1$ (`MXZONE(J+1,1) = MXZONE(J,1)`, then the list is shifted). The walk upward from zone 1's top (step 4) passes through any zone above it and can end beyond that zone's top; the merged zone then ends at the upper zone's top, below the edge just found, and the semiconvective region above it is not mixed. Only with `LSEMIC` (off by default) and a second zone within $R_\mathrm{max}$ of the first.
+1. **(not reached)** **A merger keeps the upper zone's top.** ([lines 278–291](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L278-L291)) When zones $`j`$ and $`j+1`$ overlap, the merged zone takes the bottom of zone $`j`$ and the top of zone $`j+1`$ (`MXZONE(J+1,1) = MXZONE(J,1)`, then the list is shifted). The walk upward from zone 1's top (step 4) passes through any zone above it and can end beyond that zone's top; the merged zone then ends at the upper zone's top, below the edge just found, and the semiconvective region above it is not mixed. Only with `LSEMIC` (off by default) and a second zone within $`R_\mathrm{max}`$ of the first.
 
     **A possible fix:**
 
@@ -55,9 +59,9 @@
                     MXZONE(K,J2) = MXZONE(K+1,J2)
     ```
 
-    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached in any of 34 runs (26 of YREC's cases, from a 0.04 $M_\odot$ brown dwarf and the solar models to 9 $M_\odot$, rotation, and helium burning, and 8 made-up ones): In the one run with semiconvection, `sample_cases/UpperMS/Sample_m9p0feh+0p0GS98_yaleeos_sc_TAMS`, no two zones merged. It needs `LSEMIC` (which `parmin.f` refuses with any overshoot) and a second zone within the walk's reach; YREC's other semiconvective case, `sample_cases/UpperMS/Sample_m9p0feh+0p0GS98_yaleeos_sc_TAHB` (core helium burning), was not run.
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached in any of 34 runs (26 of YREC's cases, from a $`0.04\,M_\odot`$ brown dwarf and the solar models to $`9\,M_\odot`$, rotation, and helium burning, and 8 made-up ones): In the one run with semiconvection, `sample_cases/UpperMS/Sample_m9p0feh+0p0GS98_yaleeos_sc_TAMS`, no two zones merged. It needs `LSEMIC` (which `parmin.f` refuses with any overshoot) and a second zone within the walk's reach; YREC's other semiconvective case, `sample_cases/UpperMS/Sample_m9p0feh+0p0GS98_yaleeos_sc_TAHB` (core helium burning), was not run.
 
-2. **(harmless in the runs)** **The radius is not updated in the walk.** ([[#L144]]; [[#L227-L251]]) In the loop over shells `II`, every quantity passed to `TPGRAD` is reset for the shell, except `RL`, which stays at `HR(JMR)`. `TPGRAD`'s $\nabla_\mathrm{rad}$ does not use the radius ([[tpgrad.f#L80-L81]]), so the stability test is not affected today; only the gravity $G m/r^2$ that `TPGRAD` computes for the convective case is, and its results are not used here. A change that made $\nabla_\mathrm{rad}$ depend on $r$ would break the test.
+2. **(harmless in the runs)** **The radius is not updated in the walk.** ([line 144](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L144); [lines 227–251](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L227-L251)) In the loop over shells `II`, every quantity passed to `TPGRAD` is reset for the shell, except `RL`, which stays at `HR(JMR)`. `TPGRAD`'s $`\nabla_\mathrm{rad}`$ does not use the radius ([tpgrad.f, lines 80–81](https://github.com/yreclab/yrec/blob/7be4133/src/tpgrad.f#L80-L81)), so the stability test is not affected today; only the gravity $`G m/r^2`$ that `TPGRAD` computes for the convective case is, and its results are not used here. A change that made $`\nabla_\mathrm{rad}`$ depend on $`r`$ would break the test.
 
     **A possible fix:**
 
@@ -78,4 +82,4 @@
                     DL = HD(II)
     ```
 
-    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The walk ran once in the 34 runs, at shell 380 of `sample_cases/UpperMS/Sample_m9p0feh+0p0GS98_yaleeos_sc_TAMS`, the only run with semiconvection, and there `RL` was not that shell's radius. With the fix, the track and `.store` file are identical (706 models, 0.0253726 Gyr), where a null change (nearly every opacity, all with $3 \le \log T \le 9$ and $-6 \le \log\rho \le 9.75$, times $1 + 10^{-10}$) moves $\log L$ by up to $7.56\times10^{-6}$ dex, as expected, since $\nabla_\mathrm{rad}$ does not use the radius. Fragile code.
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The walk ran once in the 34 runs, at shell 380 of `sample_cases/UpperMS/Sample_m9p0feh+0p0GS98_yaleeos_sc_TAMS`, the only run with semiconvection, and there `RL` was not that shell's radius. With the fix, the track and `.store` file are identical (706 models, $`0.0253726\,\mathrm{Gyr}`$), where a null change (nearly every opacity, all with $`3 \le \log T \le 9`$ and $`-6 \le \log\rho \le 9.75`$, times $`1 + 10^{-10}`$) moves $`\log L`$ by up to $`7.56\times10^{-6}`$ $`\mathrm{dex}`$, as expected, since $`\nabla_\mathrm{rad}`$ does not use the radius. Fragile code.

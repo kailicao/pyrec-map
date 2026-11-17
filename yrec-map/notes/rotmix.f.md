@@ -1,26 +1,30 @@
 ## Explanation
 
-**Purpose.** Nuclear burning and gravitational settling for one step of the rotational-mixing loop. Its header comment lists the steps: (1) use [[kemcom.f#KEMCOM|`KEMCOM`]] to solve implicitly for the abundances in radiative regions, shell by shell; (2) solve for the burning in each convection zone as a whole. It then applies the settling of helium and renormalizes the composition.
+**Purpose.** Nuclear burning and gravitational settling for one step of the rotational-mixing loop. Its header comment lists the steps: (1) use [`KEMCOM`](kemcom.f.md#kemcom) to solve implicitly for the abundances in radiative regions, shell by shell; (2) solve for the burning in each convection zone as a whole. It then applies the settling of helium and renormalizes the composition.
 
 **How it fits.**
-- **Who calls it:** [[midmod.f#MIDMOD|`MIDMOD`]] (with the temperatures at the current time, `HTM`, "for thermodynamic consistency," MHP 6/00) and [[bursmix.f#BURSMIX|`BURSMIX`]], in their loops of substeps.
-- **Inputs:** the step `DELTS` (s), the composition `HCOMP(15, ·)`, shell masses `HS2`, temperatures `HT` ($\log T$), densities `HD` (also used for the rates), and the zone lists `MRZONE` (radiative) and `MXZONE` (convective); for the settling, `HS`, `HR`, `HP`, `HS1`, `HSTOT` and the convection flags `LC`. The zone lists come from [[convec.f#CONVEC|CONVEC]], whose end of the surface radiative zone is misplaced ([[convec.f#b1]]).
-- **The rates:** computed here by [[rates.f#RATES|`RATES`]] on the model passed in (`HD`, `HT`, and the substep's own composition), as [[mix.f#MIX|`MIX`]] does: the rates `HR1`…`HR13` and the branchings `HF1`, `HF2`, set to zero in shells with $\log T \le$ `TCUT(1)`.
-- **What it calls:** `RATES`, `KEMCOM`, then either [[microdiff.f#MICRODIFF|`MICRODIFF`]] (when `LNEWDIF` is true) or [[grsett.f#GRSETT|`GRSETT`]] (the older Bahcall–Loeb settling).
+- **Who calls it:** [`MIDMOD`](midmod.f.md#midmod) (with the temperatures at the current time, `HTM`, "for thermodynamic consistency," MHP 6/00) and [`BURSMIX`](bursmix.f.md#bursmix), in their loops of substeps.
+- **Inputs:** the step `DELTS` ($`\mathrm{s}`$), the composition `HCOMP(15, ·)`, shell masses `HS2`, temperatures `HT` ($`\log T`$), densities `HD` (also used for the rates), and the zone lists `MRZONE` (radiative) and `MXZONE` (convective); for the settling, `HS`, `HR`, `HP`, `HS1`, `HSTOT` and the convection flags `LC`. The zone lists come from [CONVEC](convec.f.md#convec), whose end of the surface radiative zone is misplaced ([convec.f, suspected bug 1](convec.f.md#b1)).
+- **The rates:** computed here by [`RATES`](rates.f.md#rates) on the model passed in (`HD`, `HT`, and the substep's own composition), as [`MIX`](mix.f.md#mix) does: the rates `HR1`…`HR13` and the branchings `HF1`, `HF2`, set to zero in shells with $`\log T \le`$ `TCUT(1)`.
+- **What it calls:** `RATES`, `KEMCOM`, then either [`MICRODIFF`](microdiff.f.md#microdiff) (when `LNEWDIF` is true) or [`GRSETT`](grsett.f.md#grsett) (the older Bahcall–Loeb settling).
 - **Output:** `HCOMP`, updated in place.
 - **Modules, other:** `NMLPAR_MOD` (the namelist parameters `LDIFY`, which this routine may switch off, `DT_GS`, `XMIN`, `YMIN`, `LNEWDIF`, `TCUT(1)` and `LEXCOM`: 15 species or 11), `MDPHY_MOD` (`DELM`), `SCRTCH_MOD` (`SDEL`, temporarily overwritten), `CONSTANTS_MOD`, `IOUNITS_MOD` (`ISHORT`), `DIMENSIONS_MOD` (`JSON`).
 
 **The method.**
-1. **Burning.** For each radiative shell above the cut $\log T >$ `TCUT(1)` (the loop stops at the first shell below it, assuming $T$ falls outward), `KEMCOM` is called for the shell alone; for each convection zone, for the whole zone at once, which also homogenizes it. The step is passed in years, `DDAGE = DELTS/CSECYR`.
+1. **Burning.** For each radiative shell above the cut $`\log T \gt{}`$ `TCUT(1)` (the loop stops at the first shell below it, assuming $`T`$ falls outward), `KEMCOM` is called for the shell alone; for each convection zone, for the whole zone at once, which also homogenizes it. The step is passed in years, `DDAGE = DELTS/CSECYR`.
 
-    **The burning loop's early exit skips nothing hot.** `GOTO 45` leaves both the shell loop and the zone loop at the first shell cooler than `TCUT(1)` ([[#L118-L130]]), so a radiative zone listed after it is skipped; but CONVEC lists the radiative zones from the center out ([[convec.f#L185-L205]], with the slip of [[convec.f#b1|CONVEC's suspected bug 1]] in the last zone's upper edge), and the temperature falls outward, so every later zone is cooler too. [[mix.f#MIX|MIX]] exits its loop in the same way ([[mix.f#L252]]).
+    **The burning loop's early exit skips nothing hot.** `GOTO 45` leaves both the shell loop and the zone loop at the first shell cooler than `TCUT(1)` ([lines 118–130](https://github.com/yreclab/yrec/blob/7be4133/src/rotmix.f#L118-L130)), so a radiative zone listed after it is skipped; but CONVEC lists the radiative zones from the center out ([convec.f, lines 185–205](https://github.com/yreclab/yrec/blob/7be4133/src/convec.f#L185-L205), with the slip of [CONVEC's suspected bug 1](convec.f.md#b1) in the last zone's upper edge), and the temperature falls outward, so every later zone is cooler too. [MIX](mix.f.md#mix) exits its loop in the same way ([mix.f, line 252](https://github.com/yreclab/yrec/blob/7be4133/src/mix.f#L252)).
 
-2. **Settling** (if `LDIFY`). It is skipped once the central hydrogen is below `XMIN` (and `LDIFY` is then switched off for good), if the star is fully convective, or if $Y <$ `YMIN` everywhere. It stops the run (exit status 1) if there is no surface convection zone. The outer point `JMAX` is the top of the last radiative zone; the comment says it is moved down to the first shell with $Y >$ `YMIN`, but the search moves only `J`, so `JMAX` stays the top of the last radiative zone (suspected bug 1). The settling time there is taken from Michaud et al. (1984):
-   $$t_\mathrm{settle} = 4.348\times10^{21}\;\frac{f_M}{T^{3/2}}\ \text{yr},\qquad f_M = \frac{M_* - m(\texttt{JMAX})}{M_*},$$
-   with $T$ in K at `JMAX` (the code multiplies by `CSECYR` to get `TSCALE` in seconds, the unit of `DELTS`), and the step is divided into `NSTEP` substeps of at most `DT_GS` $\times\,t_\mathrm{settle}$ (one more than `INT(DELTS/DTMAX)` unless `DELTS` is an exact multiple of `DTMAX`). The pressure gradient passed to the settling routine is
-   $$\frac{d\ln P}{dr} = -\frac{G m \rho}{P r^2}\quad(\texttt{HQPR}).$$
+2. **Settling** (if `LDIFY`). It is skipped once the central hydrogen is below `XMIN` (and `LDIFY` is then switched off for good), if the star is fully convective, or if $`Y \lt{}`$ `YMIN` everywhere. It stops the run (exit status 1) if there is no surface convection zone. The outer point `JMAX` is the top of the last radiative zone; the comment says it is moved down to the first shell with $`Y \gt{}`$ `YMIN`, but the search moves only `J`, so `JMAX` stays the top of the last radiative zone (suspected bug 1). The settling time there is taken from Michaud et al. ([1984](https://ui.adsabs.harvard.edu/abs/1984ApJ...282..206M)):
+   
+   $$\displaystyle t\_\mathrm{settle} = 4.348\times10^{21}\\;\frac{f\_M}{T^{3/2}}\ \text{yr},\qquad f\_M = \frac{M\_\* - m(\texttt{JMAX})}{M\_\*},$$
+   
+   with $`T`$ in $`\mathrm{K}`$ at `JMAX` (the code multiplies by `CSECYR` to get `TSCALE` in seconds, the unit of `DELTS`), and the step is divided into `NSTEP` substeps of at most `DT_GS` $`\times\,t_\mathrm{settle}`$ (one more than `INT(DELTS/DTMAX)` unless `DELTS` is an exact multiple of `DTMAX`). The pressure gradient passed to the settling routine is
+   
+   $$\displaystyle \frac{d\ln P}{dr} = -\frac{G m \rho}{P r^2}\quad(\texttt{HQPR}).$$
+   
    During the settling, `SDEL(2,·)` holds `DELM` and is restored afterwards.
-3. **Renormalization.** Every abundance is clipped to $[0, 1]$; $Z$ (`HCOMP(3)`) is capped at $1 - X - X_3$, and $Y$ is set to $1 - X - Z - X_3$, where $X_3$ is ³He, the fourth species `HCOMP(4,·)` (as [[starin.f#STARIN|`STARIN`]] fills it).
+3. **Renormalization.** Every abundance is clipped to $`[0, 1]`$; $`Z`$ (`HCOMP(3)`) is capped at $`1 - X - X_3`$, and $`Y`$ is set to $`1 - X - Z - X_3`$, where $`X_3`$ is $`^3\mathrm{He}`$, the fourth species `HCOMP(4,·)` (as [`STARIN`](starin.f.md#starin) fills it).
 
 **Changed since `rp_1`.** The two debug writes to unit 69 are commented out (settles former question 1); COMMON blocks to modules (the unused `/CTLIM/` dropped), `IMPLICIT NONE`.
 
@@ -28,7 +32,7 @@
 
 ## Bugs, by priority
 
-1. **(never occurred)** **The outer point for the settling step is not moved down.** ([[#L156-L160]]; [[#L174-L180]]; [[#L191-L194]]) The comment says the outer boundary is the surface convection zone or "the first point where the helium abundance rises above" `YMIN`. Loop 140 finds that point as `J`, but `JMAX` is never set to it, so `FM` and `TSCALE`, and with them the number of settling substeps, are always taken at the top of the last radiative zone. Where $Y \le$ `YMIN` there, the step limit is set at a point the comment means to skip. Only with `LDIFY` (off by default); the settling itself does not use `JMAX`.
+1. **(never occurred)** **The outer point for the settling step is not moved down.** ([lines 156–160](https://github.com/yreclab/yrec/blob/7be4133/src/rotmix.f#L156-L160); [lines 174–180](https://github.com/yreclab/yrec/blob/7be4133/src/rotmix.f#L174-L180); [lines 191–194](https://github.com/yreclab/yrec/blob/7be4133/src/rotmix.f#L191-L194)) The comment says the outer boundary is the surface convection zone or "the first point where the helium abundance rises above" `YMIN`. Loop 140 finds that point as `J`, but `JMAX` is never set to it, so `FM` and `TSCALE`, and with them the number of settling substeps, are always taken at the top of the last radiative zone. Where $`Y \le`$ `YMIN` there, the step limit is set at a point the comment means to skip. Only with `LDIFY` (off by default); the settling itself does not use `JMAX`.
 
     **A possible fix:**
 
@@ -48,9 +52,9 @@
                  TEMP(I) = SDEL(2,I)
     ```
 
-    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The outer point was searched in the two rotating test cases with settling, 2,217 times in `testsuite/Test_m0p8feh+0p0GS98_rotp8p0d0p1mag1e4std_TAMS` and 1,658 in `testsuite/Test_solarGS98_difrotmixper18p4d1p0`, at shells 8 to 527, and the first shell with $Y >$ `YMIN` was always the top of the last radiative zone itself, so `J` equaled `JMAX` and the missing assignment changed nothing. It matters only where the helium abundance there has fallen to `YMIN` ($10^{-3}$ in every namelist), which no case reaches. Intent: MIX, the same code for runs without rotation, uses `J` ([[mix.f#L441]], [[mix.f#L444]]), so this looks like a slip.
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The outer point was searched in the two rotating test cases with settling, 2,217 times in `testsuite/Test_m0p8feh+0p0GS98_rotp8p0d0p1mag1e4std_TAMS` and 1,658 in `testsuite/Test_solarGS98_difrotmixper18p4d1p0`, at shells 8 to 527, and the first shell with $`Y \gt{}`$ `YMIN` was always the top of the last radiative zone itself, so `J` equaled `JMAX` and the missing assignment changed nothing. It matters only where the helium abundance there has fallen to `YMIN` ($`10^{-3}`$ in every namelist), which no case reaches. Intent: MIX, the same code for runs without rotation, uses `J` ([mix.f, line 441](https://github.com/yreclab/yrec/blob/7be4133/src/mix.f#L441), [mix.f, line 444](https://github.com/yreclab/yrec/blob/7be4133/src/mix.f#L444)), so this looks like a slip.
 
-2. **(not reached)** **The stop message names the wrong routine.** ([[#L163-L169]]) The stop for no surface convection zone prints "STOPPED IN SUBROUTINE MIX" (copied from `MIX`), though it stops in ROTMIX. Only with `LDIFY` (off by default).
+2. **(not reached)** **The stop message names the wrong routine.** ([lines 163–169](https://github.com/yreclab/yrec/blob/7be4133/src/rotmix.f#L163-L169)) The stop for no surface convection zone prints "STOPPED IN SUBROUTINE MIX" (copied from `MIX`), though it stops in ROTMIX. Only with `LDIFY` (off by default).
 
     **A possible fix:**
 
@@ -71,4 +75,4 @@
               ENDIF
     ```
 
-    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached. No case run stopped here: The rotating cases with settling (`testsuite/Test_m0p8feh+0p0GS98_rotp8p0d0p1mag1e4std_TAMS`, `testsuite/Test_solarGS98_difrotmixper18p4d1p0`) have a surface convection zone, and the 2 and 3 $M_\odot$ rotating cases have `LDIFY` off. A rotating run with `LDIFY` for a star without a surface convection zone would reach it, and stop. Intent: The text was copied from MIX, which since 1992 only warns and goes on ([[mix.f#L428-L433]]: "DBG 2/92 CHANGED STOP TO JUST A WARNING MESSAGE, EXECUTION CONTINUES").
+    **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): Not reached. No case run stopped here: The rotating cases with settling (`testsuite/Test_m0p8feh+0p0GS98_rotp8p0d0p1mag1e4std_TAMS`, `testsuite/Test_solarGS98_difrotmixper18p4d1p0`) have a surface convection zone, and the 2 and 3 $`M_\odot`$ rotating cases have `LDIFY` off. A rotating run with `LDIFY` for a star without a surface convection zone would reach it, and stop. Intent: The text was copied from MIX, which since 1992 only warns and goes on ([mix.f, lines 428–433](https://github.com/yreclab/yrec/blob/7be4133/src/mix.f#L428-L433): "DBG 2/92 CHANGED STOP TO JUST A WARNING MESSAGE, EXECUTION CONTINUES").

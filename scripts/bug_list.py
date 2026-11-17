@@ -14,11 +14,27 @@ NOTES, PAGE, JS = Path("yrec-map/notes"), Path("bugs/notes/index.md"), Path("bug
 SITE, GH = "https://kailicao.github.io/pyrec-map/yrec-map/", "https://github.com/yreclab/yrec/blob/7be4133/src/"
 ON_PAGE = {"changes results, large", "changes results, small", "stops the run", "wrong output"}
 ITEM = re.compile(r"(?ms)^(\d+)\. \*\*\(([a-z][a-z ,]+[a-z])\)\*\*\s+(.*?)(?=^\d+\. \*\*\(|\Z)")
+GH_LINES = re.compile(r"\[([^\[\]\n]*)\]\(https://github\.com/yreclab/yrec/blob/[^/]+/src/([\w.]+)#(L(\d+)(?:-L(\d+))?)\)")
+
+
+def as_written(s, stem):
+    """The notes as the generator reads them: their links to lines on GitHub as [[file#L12]] (the notes are
+    written so that they read on GitHub), and math $`…`$ as $…$."""
+    def one(m):
+        a, b = m.group(4), m.group(5)
+        shown = f"line {a}" if not b else f"lines {a}–{b}"
+        own = m.group(2) == stem
+        if m.group(1) == (shown if own else f"{m.group(2)}, {shown}"):
+            return f"[[{'' if own else m.group(2)}#{m.group(3)}]]"
+        return f"[[{m.group(2)}#{m.group(3)}|{m.group(1)}]]"
+    s = GH_LINES.sub(one, s)
+    s = re.sub(r"\$`\\displaystyle ([^`\n]+)`\$", r"$$\1$$", s)
+    return re.sub(r"\$`([^`\n]+)`\$", r"$\1$", s)
 
 
 def bugs():
     for p in sorted(NOTES.glob("*.md")):
-        s = p.read_text(encoding="utf-8")
+        s = as_written(p.read_text(encoding="utf-8"), p.stem)
         if "## Bugs, by priority" not in s:
             continue
         sec = s.split("## Bugs, by priority", 1)[1]
@@ -39,7 +55,8 @@ def bugs():
                 c = re.match(r"([\w.]*)#(L\d+(?:-L\d+)?)", l)
                 if c:
                     code.append(GH + (c.group(1) or p.stem) + "#" + c.group(2))
-            title = re.sub(r"\[\[(?:[^\]|#]*#)?([^\]|]*)\]\]", r"\1", t.group(1) if t else "").replace("`", "").rstrip(".")
+            title = re.sub(r"(?<!!)\[([^\[\]\n]*)\]\([^()\s]+\)", r"\1", t.group(1) if t else "")  # [text](link) -> text
+            title = re.sub(r"\[\[(?:[^\]|#]*#)?([^\]|]*)\]\]", r"\1", title).replace("`", "").rstrip(".")
             yield {"file": p.stem, "number": int(m.group(1)), "result": m.group(2), "title": title,
                    "status": f"checked by KC ({kc.group(1)})" if kc else "unconfirmed",
                    "write_up": f"{SITE}{p.stem}.html#b{m.group(1)}", "code": code}

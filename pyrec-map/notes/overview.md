@@ -44,19 +44,19 @@ Model                       # one star; model() advances it one step
 - **Data and behavior apart.** `State` is plain data, arrays and scalars, so that copying it, saving it, and comparing it with the Fortran's are each one line. `Physics` and `Numerics` hold no state of the star; they are given it.
 - **Physics and numerics apart,** because they change for different reasons: an astronomer swaps an opacity table, a numerical analyst the solver.
 - **Each family is a base class** with one `__call__` and a fixed set of inputs and outputs, for example `Opacity.__call__(rho, T, X, Z) -> (kappa, dlnkappa_dlnrho, dlnkappa_dlnT)`. A new piece of physics is a subclass, or any callable with the same signature (a `typing.Protocol`), so a plain function will do; it is installed with one assignment, `model.physics.opacity = MyOpacity(...)`. The base classes replace the hooks a Fortran code would need.
-- **The start of the step** is kept as a state of its own: YREC's operator split redoes the burning and mixing from the start-of-step composition once the structure is solved (levels 3 and 4 of [[crrect.f#CRRECT|`CRRECT`]]), and a step that fails could be retried from it with a shorter step (today a divergence ends the run; an open question below).
+- **The start of the step** is kept as a state of its own: YREC's operator split redoes the burning and mixing from the start-of-step composition once the structure is solved (levels 3 and 4 of [`CRRECT`](../../yrec-map/notes/crrect.f.md#crrect)), and a step that fails could be retried from it with a shorter step (today a divergence ends the run; an open question below).
 - **The default of every family reproduces YREC,** each linked below to the routines it replaces.
 
 ## One step
 
-`model()` does what one pass of [[main.f]]'s model loop does today, in the same order, each stage through a family:
+`model()` does what one pass of [main.f](../../yrec-map/notes/main.f.md)'s model loop does today, in the same order, each stage through a family:
 
 1. the controls, in order (below);
 2. `start = state.copy()`;
 3. mass loss or accretion (`mass_loss`);
 4. burning, mixing, and settling of the composition over the step, with the current structure (`network`, `convection`, `diffusion`);
 5. the shells placed (`rezoner`);
-6. the structure solved for $P$, $T$, $r$, and $L$ at fixed composition, the burning and mixing redone with the new structure (`solver`, which calls `eos`, `opacity`, `atmosphere`, and `network`);
+6. the structure solved for $`P`$, $`T`$, $`r`$, and $`L`$ at fixed composition, the burning and mixing redone with the new structure (`solver`, which calls `eos`, `opacity`, `atmosphere`, and `network`);
 7. rotation (`rotation`);
 8. the next step's length (`timestep`), a summary row added to `history`, and the stopping conditions checked.
 
@@ -66,17 +66,17 @@ Each family against the home page's topics and the routines whose behavior its d
 
 | Family | Topic on the home page | Today's routines |
 | --- | --- | --- |
-| `eos` | The equation of state | [[eqstat.f]], [[eqstat2.f]], [[oeqos06.f]], [[eqscve.f]], [[eqsaha.f]] |
-| `opacity` | Opacities | [[getopac.f]], [[getopal95.f]], [[getalex06.f]], [[gtpurz.f]], [[condopacpint.f]] |
-| `atmosphere` | Atmospheres, the envelope, and the boundary conditions | [[surfbc.f]], [[envint.f]], [[qatm.f]], [[qenv.f]], [[surfp.f]], [[alsurfp.f]] |
-| `network` | Nuclear reactions, energy generation, and neutrinos | [[engeb.f]], [[rates.f]], [[kemcom.f]], [[liburn.f]], [[sneut.f]] |
-| `convection` | Convection, overshoot, and the mixing of composition | [[tpgrad.f]], [[convec.f]], [[oversh.f]], [[sconvec.f]], [[mix.f]], [[mixcz.f]] |
-| `diffusion` | Microscopic diffusion and settling | [[microdiff.f]], [[grsett.f]] |
-| `rotation` | Rotation (both topics) | [[getrot.f]], [[getw.f]], [[seculr.f]], [[rotmix.f]], [[vcirc.f]] |
-| `mass_loss` | Angular-momentum loss and mass loss | [[massloss.f]], [[mdot.f]], [[wind.f]], [[mwind.f]] |
-| `solver` | The structure equations and the Henyey solver | [[crrect.f]], [[coefft.f]], [[hsolve.f]], [[reduce.f]] |
-| `timestep`, `rezoner` | The time step and rezoning | [[htimer.f]], [[ytime.f]], [[xtime.f]], [[hpoint.f]], [[getnewenv.f]] |
-| `history`, input and output | Output; Input | [[wrtout.f]], [[wrthead.f]], [[putstore.f]], [[starin.f]], [[rscale.f]], [[getyrec7.f]], [[getmodel2.f]], [[parmin.f]] |
+| `eos` | The equation of state | [eqstat.f](../../yrec-map/notes/eqstat.f.md), [eqstat2.f](../../yrec-map/notes/eqstat2.f.md), [oeqos06.f](../../yrec-map/notes/oeqos06.f.md), [eqscve.f](../../yrec-map/notes/eqscve.f.md), [eqsaha.f](../../yrec-map/notes/eqsaha.f.md) |
+| `opacity` | Opacities | [getopac.f](../../yrec-map/notes/getopac.f.md), [getopal95.f](../../yrec-map/notes/getopal95.f.md), [getalex06.f](../../yrec-map/notes/getalex06.f.md), [gtpurz.f](../../yrec-map/notes/gtpurz.f.md), [condopacpint.f](../../yrec-map/notes/condopacpint.f.md) |
+| `atmosphere` | Atmospheres, the envelope, and the boundary conditions | [surfbc.f](../../yrec-map/notes/surfbc.f.md), [envint.f](../../yrec-map/notes/envint.f.md), [qatm.f](../../yrec-map/notes/qatm.f.md), [qenv.f](../../yrec-map/notes/qenv.f.md), [surfp.f](../../yrec-map/notes/surfp.f.md), [alsurfp.f](../../yrec-map/notes/alsurfp.f.md) |
+| `network` | Nuclear reactions, energy generation, and neutrinos | [engeb.f](../../yrec-map/notes/engeb.f.md), [rates.f](../../yrec-map/notes/rates.f.md), [kemcom.f](../../yrec-map/notes/kemcom.f.md), [liburn.f](../../yrec-map/notes/liburn.f.md), [sneut.f](../../yrec-map/notes/sneut.f.md) |
+| `convection` | Convection, overshoot, and the mixing of composition | [tpgrad.f](../../yrec-map/notes/tpgrad.f.md), [convec.f](../../yrec-map/notes/convec.f.md), [oversh.f](../../yrec-map/notes/oversh.f.md), [sconvec.f](../../yrec-map/notes/sconvec.f.md), [mix.f](../../yrec-map/notes/mix.f.md), [mixcz.f](../../yrec-map/notes/mixcz.f.md) |
+| `diffusion` | Microscopic diffusion and settling | [microdiff.f](../../yrec-map/notes/microdiff.f.md), [grsett.f](../../yrec-map/notes/grsett.f.md) |
+| `rotation` | Rotation (both topics) | [getrot.f](../../yrec-map/notes/getrot.f.md), [getw.f](../../yrec-map/notes/getw.f.md), [seculr.f](../../yrec-map/notes/seculr.f.md), [rotmix.f](../../yrec-map/notes/rotmix.f.md), [vcirc.f](../../yrec-map/notes/vcirc.f.md) |
+| `mass_loss` | Angular-momentum loss and mass loss | [massloss.f](../../yrec-map/notes/massloss.f.md), [mdot.f](../../yrec-map/notes/mdot.f.md), [wind.f](../../yrec-map/notes/wind.f.md), [mwind.f](../../yrec-map/notes/mwind.f.md) |
+| `solver` | The structure equations and the Henyey solver | [crrect.f](../../yrec-map/notes/crrect.f.md), [coefft.f](../../yrec-map/notes/coefft.f.md), [hsolve.f](../../yrec-map/notes/hsolve.f.md), [reduce.f](../../yrec-map/notes/reduce.f.md) |
+| `timestep`, `rezoner` | The time step and rezoning | [htimer.f](../../yrec-map/notes/htimer.f.md), [ytime.f](../../yrec-map/notes/ytime.f.md), [xtime.f](../../yrec-map/notes/xtime.f.md), [hpoint.f](../../yrec-map/notes/hpoint.f.md), [getnewenv.f](../../yrec-map/notes/getnewenv.f.md) |
+| `history`, input and output | Output; Input | [wrtout.f](../../yrec-map/notes/wrtout.f.md), [wrthead.f](../../yrec-map/notes/wrthead.f.md), [putstore.f](../../yrec-map/notes/putstore.f.md), [starin.f](../../yrec-map/notes/starin.f.md), [rscale.f](../../yrec-map/notes/rscale.f.md), [getyrec7.f](../../yrec-map/notes/getyrec7.f.md), [getmodel2.f](../../yrec-map/notes/getmodel2.f.md), [parmin.f](../../yrec-map/notes/parmin.f.md) |
 
 The numerical utilities (splines, interpolation, quadrature, linear solvers) become a small library the families share, one routine where YREC has several.
 
@@ -92,7 +92,7 @@ Calibration          # adjusts one model's parameters until it matches the Sun o
 ```
 
 - **A `Grid`** comes from a configuration in which some settings are lists (below). Its results are one table, one row per model and step, keyed by the grid's parameters. YREC's "kind cards", several runs in one job, are a small grid.
-- **A `Calibration`** runs a model, compares it with its target, and adjusts the mixing length and helium until they match: the Sun, or a star of given $L$ and $T_\mathrm{eff}$, as [[setcal.f]], [[chkcal.f]], [[setscal.f]], and [[chkscal.f]] do today.
+- **A `Calibration`** runs a model, compares it with its target, and adjusts the mixing length and helium until they match: the Sun, or a star of given $`L`$ and $`T_\mathrm{eff}`$, as [setcal.f](../../yrec-map/notes/setcal.f.md), [chkcal.f](../../yrec-map/notes/chkcal.f.md), [setscal.f](../../yrec-map/notes/setscal.f.md), and [chkscal.f](../../yrec-map/notes/chkscal.f.md) do today.
 
 ## Controls: settings that change along a track
 
@@ -114,12 +114,12 @@ A mixing length that evolves, an accretion rate that follows a disk (`model.phys
 ## Configuration and files
 
 - **Configuration in YAML,** one file per run: the settings of YREC's two namelists, grouped by family, with a converter from the namelists. **Any setting may be a single value or a list.** If every setting is a single value, the configuration describes one model (`Model`); each setting given as a list is an axis of a grid (`Grid`), its models every combination of the axes' values (or, if asked, the axes taken together, element by element). A setting that is itself a list (YREC's tolerances `HTOLER`, the time-step limits `ATIME`) is an axis only when given as a list of lists. One entry point, `pyrec.run(config)`, returns the model or the grid. The numbers YREC writes into its code today (limits, tolerances, switches; the earlier design's list is in this repository's history) become named settings with YREC's values as defaults.
-- **Models in NPZ,** a dump of `State`, with converters both ways for YREC's model files (those [[getyrec7.f]] and [[getmodel2.f]] read, and the stored models of [[putstore.f]]). The converters are also what lets each new piece be compared with the Fortran on the same model.
+- **Models in NPZ,** a dump of `State`, with converters both ways for YREC's model files (those [getyrec7.f](../../yrec-map/notes/getyrec7.f.md) and [getmodel2.f](../../yrec-map/notes/getmodel2.f.md) read, and the stored models of [putstore.f](../../yrec-map/notes/putstore.f.md)). The converters are also what lets each new piece be compared with the Fortran on the same model.
 - **History** as a table (one row per step) written as YREC's track output is, plus NPZ snapshots at the steps the configuration asks for.
 
 ## Performance
 
-The driver, `Model` and its loop, is plain Python. Each family is free to use whatever makes it fast; the default is **Numba**, in kernels that take and return arrays and change nothing else, which is also what lets a family be tested on its own. JAX is an option for a family that would gain from it: it could differentiate the physics for the Henyey solver's Jacobian, where YREC's hand-written derivatives hold several of today's suspected bugs ([[condopacpint.f]], [[engeb.f]]; `KNOWN_ISSUES.md`, issue 40).
+The driver, `Model` and its loop, is plain Python. Each family is free to use whatever makes it fast; the default is **Numba**, in kernels that take and return arrays and change nothing else, which is also what lets a family be tested on its own. JAX is an option for a family that would gain from it: it could differentiate the physics for the Henyey solver's Jacobian, where YREC's hand-written derivatives hold several of today's suspected bugs ([condopacpint.f](../../yrec-map/notes/condopacpint.f.md), [engeb.f](../../yrec-map/notes/engeb.f.md); `KNOWN_ISSUES.md`, issue 40).
 
 **Modern Fortran** stays possible: the same families as derived types with type-bound procedures, called from Python, for the families that need the speed once the Python is right.
 
@@ -131,10 +131,10 @@ The driver, `Model` and its loop, is plain Python. Each family is free to use wh
 
 ## Open questions
 
-1. *[Team]* **Retrying a failed step.** Today a model that fails to converge ends the run (`STARIN` stops; [[main.f]]'s comment speaks of cutting the step). Should `model()` retry from `start` with a shorter step?
+1. *[Team]* **Retrying a failed step.** Today a model that fails to converge ends the run (`STARIN` stops; [main.f](../../yrec-map/notes/main.f.md)'s comment speaks of cutting the step). Should `model()` retry from `start` with a shorter step?
 2. *[Team]* **What to drop:** code that never runs or is never called (marked "unused?" on the pages), unless an expert wants it back.
-3. *[Team]* **Two settling solvers:** keep [[grsett.f]] ("retained for backwards compatability") beside [[microdiff.f]], or keep one?
-4. *[Team]* **Names:** keep YREC's names (`HCOMP`, `HTOLER`, `ATIME`) in `State` and the configuration, as this site does with its glossary, or move to the "more intuitively named" ones that [[remap.f]] already accepts?
+3. *[Team]* **Two settling solvers:** keep [grsett.f](../../yrec-map/notes/grsett.f.md) ("retained for backwards compatability") beside [microdiff.f](../../yrec-map/notes/microdiff.f.md), or keep one?
+4. *[Team]* **Names:** keep YREC's names (`HCOMP`, `HTOLER`, `ATIME`) in `State` and the configuration, as this site does with its glossary, or move to the "more intuitively named" ones that [remap.f](../../yrec-map/notes/remap.f.md) already accepts?
 5. *[Team]* **Values kept between calls:** which of YREC's saved values (`SAVE`d locals, `DATA`-initialized state, cached tables) carry information from one step to the next, and so belong to the `State`, and which are caches a family can rebuild?
 6. *[KC]* **Speed:** how slow may the Python be while it is developed (a model a minute? a track an hour?), and which families get Numba kernels first?
 7. *[KC]* **Working with YREC's developers:** when to tell them of the plan, and whether this design is proposed to them as the code's next stage.

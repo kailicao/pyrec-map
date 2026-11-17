@@ -1,28 +1,30 @@
 ## Explanation
 
-**Purpose.** `TAUINT` computes the convective overturn time scale $\tau_\mathrm{cz}$ (`TAUCZ`) at the base of the surface convection zone, on the whole star's profile, interior and envelope joined (JVS 02/12, "snagged from MIDMOD"). It is the older method; [[tauintnew.f|tauintnew.f]] is the newer one (G. Somers 3/17).
+**Purpose.** `TAUINT` computes the convective overturn time scale $`\tau_\mathrm{cz}`$ (`TAUCZ`) at the base of the surface convection zone, on the whole star's profile, interior and envelope joined (JVS 02/12, "snagged from MIDMOD"). It is the older method; [tauintnew.f](tauintnew.f.md) is the newer one (G. Somers 3/17).
 
 **How it fits.**
-- **Inputs:** the profile built by [[gettau.f#GETTAU|GETTAU]]: the interior shells only, since GETTAU stitches the envelope onto the profile only when `LCALCENV` and `LNEWTCZ` are both set, and calls TAUINT only when `LNEWTCZ` is false. `HS1` (mass), `LCZ`, `HR`, `HP`, `HD`, `HG`, `SVEL`, and `DEL1`, `DEL2`, which GETTAU takes from `SDEL(1,·)` and `SDEL(3,·)`, the radiative and adiabatic gradients; and, through `ENVSTRUCT_MOD`, the envelope from the last [[envint.f#ENVINT|ENVINT]] call.
-- **Who calls it:** only [[gettau.f#GETTAU|GETTAU]], when `LNEWTCZ` is false and `TAUCZ` is still 0 after its ENVINT call (which sets it through TAUCAL when the top of the interior model is radiative).
+- **Inputs:** the profile built by [GETTAU](gettau.f.md#gettau): the interior shells only, since GETTAU stitches the envelope onto the profile only when `LCALCENV` and `LNEWTCZ` are both set, and calls TAUINT only when `LNEWTCZ` is false. `HS1` (mass), `LCZ`, `HR`, `HP`, `HD`, `HG`, `SVEL`, and `DEL1`, `DEL2`, which GETTAU takes from `SDEL(1,·)` and `SDEL(3,·)`, the radiative and adiabatic gradients; and, through `ENVSTRUCT_MOD`, the envelope from the last [ENVINT](envint.f.md#envint) call.
+- **Who calls it:** only [GETTAU](gettau.f.md#gettau), when `LNEWTCZ` is false and `TAUCZ` is still 0 after its ENVINT call (which sets it through TAUCAL when the top of the interior model is radiative).
 - **Output:** `TAUCZ` in `OVRTRN_MOD`.
 - **Modules:** `OVRTRN_MOD`, `ENVSTRUCT_MOD`, `NMLPAR_MOD` (`LROT`) and `CONSTANTS_MOD`.
 
 **The method.** If the top shell or the one below it is convective, the zone's base `IMAX` is the lowest shell of the convective run from the surface. The overturn time is computed only if `LCZSUR` is set, which the test `(HSTOP-HSBOT)/CMSUN .GT. 0` makes true for any such zone.
 
-> **Question** ([[#L87-L99]]). **The `LCZSUR` test.** `(HSTOP-HSBOT)/CMSUN .GT. 0` is true for any zone; is a minimum depth intended (the comment: "DEEP ENOUGH FOR ANGULAR MOMENTUM LOSS")?
+> **Question** ([lines 87–99](https://github.com/yreclab/yrec/blob/7be4133/src/tauint.f#L87-L99)). **The `LCZSUR` test.** `(HSTOP-HSBOT)/CMSUN .GT. 0` is true for any zone; is a minimum depth intended (the comment: "DEEP ENOUGH FOR ANGULAR MOMENTUM LOSS")?
 
-- **Partly convective star:** as in [[taucal.f|taucal.f]], step 2 and 4: the base $r_b$ where $\nabla_1 - \nabla_2$ changes sign, $H_p = P/(\rho g)$ there, and
-  $$\tau_\mathrm{cz} = \frac{H_p}{v(r_b + H_p)} ,$$
-  with $v$ interpolated linearly in $\log r$. If $r_b + H_p$ lies beyond the profile, the envelope in `ENVSTRUCT_MOD` is searched for the first convective point above it ("stitch on the envelope for more room"; the profile holds the interior only, so TAUINT searches the envelope itself), and $v$ is interpolated between the last shell and that point.
+- **Partly convective star:** as in [taucal.f](taucal.f.md), step 2 and 4: the base $`r_b`$ where $`\nabla_1 - \nabla_2`$ changes sign, $`H_p = P/(\rho g)`$ there, and
+  
+  $$\displaystyle \tau\_\mathrm{cz} = \frac{H\_p}{v(r\_b + H\_p)} ,$$
+  
+  with $`v`$ interpolated linearly in $`\log r`$. If $`r_b + H_p`$ lies beyond the profile, the envelope in `ENVSTRUCT_MOD` is searched for the first convective point above it ("stitch on the envelope for more room"; the profile holds the interior only, so TAUINT searches the envelope itself), and $`v`$ is interpolated between the last shell and that point.
 
-    > **Question** ([[#L126-L132]]). **The envelope interpolation.** Beyond the profile, $v$ is interpolated between the last shell `M` and envelope point `K`, with `FX = (RTESTL-HR(M))/(ENVR(K)-HR(M))`, skipping envelope points `2..K-1`, so a velocity profile with structure between the fitting point and point `K` is replaced by a straight line. Should the interpolation use the two envelope points that bracket $r_b + H_p$?
+    > **Question** ([lines 126–132](https://github.com/yreclab/yrec/blob/7be4133/src/tauint.f#L126-L132)). **The envelope interpolation.** Beyond the profile, $`v`$ is interpolated between the last shell `M` and envelope point `K`, with `FX = (RTESTL-HR(M))/(ENVR(K)-HR(M))`, skipping envelope points `2..K-1`, so a velocity profile with structure between the fitting point and point `K` is replaced by a straight line. Should the interpolation use the two envelope points that bracket $`r_b + H_p`$?
 
-- **Fully convective star:** the point where $H_p = r$, by linear interpolation of $H_p - r$; then $\tau_\mathrm{cz} = H_p/v$ there. If already $H_p \le r$ at the first shell, it takes $H_p \approx \sqrt{H_{p,1}\,r_1}$ and $v_1$ (the comment: "assume v constant inside and $H_p = k/r$" near the centre).
-- **No surface zone:** $\tau_\mathrm{cz} = 0$.
+- **Fully convective star:** the point where $`H_p = r`$, by linear interpolation of $`H_p - r`$; then $`\tau_\mathrm{cz} = H_p/v`$ there. If already $`H_p \le r`$ at the first shell, it takes $`H_p \approx \sqrt{H_{p,1}\,r_1}`$ and $`v_1`$ (the comment: "assume v constant inside and $`H_p = k/r`$" near the centre).
+- **No surface zone:** $`\tau_\mathrm{cz} = 0`$.
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/OVRTRN/` to `OVRTRN_MOD`, `/ENVSTRUCT/` to `ENVSTRUCT_MOD`, `/ROT/` to `NMLPAR_MOD`, the constants to `CONSTANTS_MOD`; the unused `/COMP/`, `/DEUTER/` and `/JTEST/` dropped, which settles the former question 3), the array size `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`.
 
 ### TAUINT
 
-The older overturn time: $H_p/v$ one pressure scale height above the base of the surface convection zone, or at $H_p = r$ for a fully convective star.
+The older overturn time: $`H_p/v`$ one pressure scale height above the base of the surface convection zone, or at $`H_p = r`$ for a fully convective star.
