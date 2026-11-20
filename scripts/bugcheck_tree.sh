@@ -5,7 +5,7 @@
 # #ifdef FIX_<stem>_<n> fixes to the copy, never to the clone; build one executable per set of macros with
 #   make clean; make -j4 REPO_HASH=check GNU_BASE_FFLAGS="-ffixed-line-length-132 -Wall -cpp -J. -DGIT_HASH=\"'check'\" [-D...]"
 # (an empty REPO_HASH stops the run at its first write), and run each with bugcheck_run.sh.
-Y=${YREC:-$(cd "$(dirname "$0")/../../yrec" && pwd)}
+Y=${YREC:-$(cd "$(dirname "$0")/../yrec" && pwd)}
 S=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$1" && rm -rf "$1/src" && cp -r "$Y/src" "$1/src" && cp "$S/bugcheck_probe.f" "$1/src/" || exit 9
 python3 - "$1/src" <<'EOF'

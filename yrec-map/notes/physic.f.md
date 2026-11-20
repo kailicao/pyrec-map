@@ -14,7 +14,7 @@
   - `TEMP_MOD`: `CP`, `HAMU` (the mean molecular weight), `SQDT` ($`(\partial\ln\rho/\partial\ln T)_P`$), and through `VISCOS` `THDIF` and `VISC`;
   - `DWMAX_MOD`: `QWRMAX`, the critical $`d\Omega/d\ln r`$, which only HPOINT reads, to copy it into `QWRMX0`, which nothing reads ([hpoint.f, line 855](https://github.com/yreclab/yrec/blob/7be4133/src/hpoint.f#L855); unused?);
   - `DPMIX_MOD`: `IOVIM`, the current shell, for `TPGRAD`.
-  These feed the rotational mixing and transport routines ([MIDMOD](midmod.f.md#midmod) interpolates them in time), and [MICRODIFF_MTE](microdiff_mte.f.md#microdiff_mte) (for microscopic diffusion) reads `SDEL(2,·)`.
+  These feed the rotational mixing and transport routines ([MIDMOD](https://github.com/yreclab/yrec/blob/7be4133/src/midmod.f#L2-L523) interpolates them in time), and [MICRODIFF_MTE](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_mte.f#L4-L294) (for microscopic diffusion) reads `SDEL(2,·)`.
 
 **The method.**
 1. **Per shell:** the equation of state, always `EQSTAT` (with Debye–Hückel abundances set first when `LDH`), the opacity, and `TPGRAD`, without derivatives (`LDERIV = .FALSE.`). The flag `LOCOND` is set to false and never read (unused?, [line 84](https://github.com/yreclab/yrec/blob/7be4133/src/physic.f#L84)); the counter of Saha-equation calls `KSAHA`, which EQSTAT updates, is never initialized or read here (unused?, [lines 108–110](https://github.com/yreclab/yrec/blob/7be4133/src/physic.f#L108-L110)).

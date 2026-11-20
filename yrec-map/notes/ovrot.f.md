@@ -4,7 +4,7 @@
 
 **How it fits.**
 - **Inputs:** the model (`HCOMP`, `HD`, `HP`, `HR`, `HS`, `HT`), the Schwarzschild flags `LC` and `M`.
-- **Who calls it:** [GETW](getw.f.md#getw), [HPOINT](hpoint.f.md#hpoint), [MIDMOD](midmod.f.md#midmod) and [STARIN](starin.f.md#starin).
+- **Who calls it:** [GETW](getw.f.md#getw), [HPOINT](hpoint.f.md#hpoint), [MIDMOD](https://github.com/yreclab/yrec/blob/7be4133/src/midmod.f#L2-L523) and [STARIN](starin.f.md#starin).
 - **What it calls:** [CONVEC](convec.f.md#convec) (which in turn calls [OVERSH](oversh.f.md#oversh)).
 - **Outputs:** `LCZ`, and the zone lists `MRZONE`, `MXZONE`, `NRZONE`, `NZONE`. The edges `JCORE`, `JENV` and the zones without overshoot `MXZON0` are local and dropped.
 

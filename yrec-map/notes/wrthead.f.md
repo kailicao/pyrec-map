@@ -3,7 +3,7 @@
 **Purpose.** `WRTHEAD` writes the header lines of the output files at the start of each run of a job: a line describing the run in the main output, and the track file's column header.
 
 **How it fits.**
-- **Inputs:** the arguments, the stellar mass `SMASS` (solar masses), the mixing length `CMIXL` and the run index `NK`; and through modules: the run's kind `IRESCA(NK)` (`RUNLOOP_MOD`, formerly `CKIND`), its number of models `NMODLS(NK)` and `LFIRST(NK)` (`NMLPAR_MOD`, namelist settings), the initial $`X`$ and $`Z`$ (`XENV0`, `ZENV0` in `LABEL_MOD`), the namelist switch `LTRACK` and the track format's version `ITRVER` (`NMLPAR_MOD`, `ITRVER` 1 by default; read by [PARMIN](parmin.f.md#parmin)), and the units `IOWR`, `ITRACK` (`IOUNITS_MOD`).
+- **Inputs:** the arguments, the stellar mass `SMASS` (solar masses), the mixing length `CMIXL` and the run index `NK`; and through modules: the run's kind `IRESCA(NK)` (`RUNLOOP_MOD`, formerly `CKIND`), its number of models `NMODLS(NK)` and `LFIRST(NK)` (`NMLPAR_MOD`, namelist settings), the initial $`X`$ and $`Z`$ (`XENV0`, `ZENV0` in `LABEL_MOD`), the namelist switch `LTRACK` and the track format's version `ITRVER` (`NMLPAR_MOD`, `ITRVER` 1 by default; read by [PARMIN](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489)), and the units `IOWR`, `ITRACK` (`IOUNITS_MOD`).
 - **Who calls it:** the main program, [main.f](main.f.md#file-level), once per run.
 - **Outputs:** a line on `IOWR` ("RUN= … EVOLVE," "RESCALE" or "RESCALE&EVOLVE"); with `LTRACK`, for a run that reads its starting model (`LFIRST(NK)`), a version line and the column names on `ITRACK`. The data lines under these headers are written by [WRTOUT](wrtout.f.md#wrtout), which must match them.
 
@@ -13,7 +13,7 @@
 
 > **Question** ([lines 131–148](https://github.com/yreclab/yrec/blob/7be4133/src/wrthead.f#L131-L148)). **The column line is not a comment.** In format 1504, the line of column names does not start with `#`, unlike the lines around it, so a reader that skips `#` lines reads it as data. Is it intended, as a header row for readers that take the column names from the file?
 
-**For users** (from YREC's [User Guide](https://yrec.readthedocs.io/en/latest/userguide.html)). The track file is the run's history, one line per model with `ITRVER` = 0, the format recommended. The two lines of `DESCRIP` in the control namelist, the run's description, head the track file too, but [`PARMIN`](parmin.f.md#parmin) writes them, before this header.
+**For users** (from YREC's [User Guide](https://yrec.readthedocs.io/en/latest/userguide.html)). The track file is the run's history, one line per model with `ITRVER` = 0, the format recommended. The two lines of `DESCRIP` in the control namelist, the run's description, head the track file too, but [`PARMIN`](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489) writes them, before this header.
 
 **From YREC's documentation.** [Control Options](https://yrec.readthedocs.io/en/latest/namelist_control.html): `ITRVER` chooses the format of the `.track` file; 0 (one line per model) is strongly recommended, though the default is 1.
 

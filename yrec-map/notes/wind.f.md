@@ -1,10 +1,10 @@
 ## Explanation
 
-**Purpose.** `WIND` removes angular momentum from the surface convection zone by a magnetized wind, "a Weber–Davis magnetic wind model" (its comment), over one time step. It is the older loss law; [MWIND](mwind.f.md#mwind) calls it when `LMWIND` is off, and otherwise uses its own law.
+**Purpose.** `WIND` removes angular momentum from the surface convection zone by a magnetized wind, "a Weber–Davis magnetic wind model" (its comment), over one time step. It is the older loss law; [MWIND](https://github.com/yreclab/yrec/blob/7be4133/src/mwind.f#L3-L218) calls it when `LMWIND` is off, and otherwise uses its own law.
 
 **How it fits.**
-- **Inputs:** $`\log L`$ (`BL`), the time step `DELTS` (s), the convection zone's mass range (`HSBOT`, `HSTOP`) and shells (`JSTART`, `JEND`), the switch `LJDOT`, the surface rate `OMEGAS`, the mass `SMASS` (in solar masses, probably), $`\log T_\mathrm{eff}`$, the zone's moment of inertia `HICZ`. Through modules: the law's constant and exponents (`NMLPAR_MOD`, formerly `COMMON/CWIND/`: `CONSTFACTOR`, `EXMD`, `EXW`, `EXR`, `EXM`, the saturation `WMAX`, set by [PARMIN](parmin.f.md#parmin)); the overturn time `TAUCZ` (`OVRTRN_MOD`, from [GETTAU](gettau.f.md#gettau)); `LINSTB` (`NMLPAR_MOD`, formerly `COMMON/ROT/`).
-- **Who calls it:** only [MWIND](mwind.f.md#mwind).
+- **Inputs:** $`\log L`$ (`BL`), the time step `DELTS` (s), the convection zone's mass range (`HSBOT`, `HSTOP`) and shells (`JSTART`, `JEND`), the switch `LJDOT`, the surface rate `OMEGAS`, the mass `SMASS` (in solar masses, probably), $`\log T_\mathrm{eff}`$, the zone's moment of inertia `HICZ`. Through modules: the law's constant and exponents (`NMLPAR_MOD`, formerly `COMMON/CWIND/`: `CONSTFACTOR`, `EXMD`, `EXW`, `EXR`, `EXM`, the saturation `WMAX`, set by [PARMIN](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489)); the overturn time `TAUCZ` (`OVRTRN_MOD`, from [GETTAU](gettau.f.md#gettau)); `LINSTB` (`NMLPAR_MOD`, formerly `COMMON/ROT/`).
+- **Who calls it:** only [MWIND](https://github.com/yreclab/yrec/blob/7be4133/src/mwind.f#L3-L218).
 - **Output:** `HJM`, each shell's specific angular momentum in the zone, reduced.
 - **Modules:** `NMLPAR_MOD`, `OVRTRN_MOD`, `CONSTANTS_MOD`, `DIMENSIONS_MOD`, `IOUNITS_MOD` (for `ISHORT`).
 

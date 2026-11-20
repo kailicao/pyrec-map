@@ -19,6 +19,7 @@ The site follows the four stages in which Kaili Cao overhauls a code: a document
 
 Kaili Cao's choices, which may change in light of feedback.
 
+- **Decisions.** pyrec's design decisions so far have been made by Kaili Cao and are to be discussed with YREC's development team.
 - **Where the site's history lives.** This repository (first commit Oct 25, 2026), public since Oct 27, under Kaili Cao's account so that it does not look signed off by YREC's developers, with a notice on every page; the Python translation is a repository of its own, [kailicao/pyrec](https://github.com/kailicao/pyrec). Served by GitHub Pages, at kailicao.github.io/pyrec-map.
 - **What it tracks.** The sources (each part's `notes/` and `reviews/`) and the built pages, so that a clone opens in a browser without the generator, which is not public. The notes also read on GitHub: The build writes their links as relative links, their links to lines as URLs to YREC's code at the pinned commit, and their math as `` $`…`$ `` (Nov 17, 2026). Might change: if the generator is published, the pages could be left to a build step.
 - **Variable names.** YREC's names are kept, in lower case, and explained in the glossary rather than renamed (Oct 31, 2026); the glossary is also the inventory for designing new data structures.

@@ -2,7 +2,7 @@
 <header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ bsstep.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#documentation'>From YREC&#x27;s documentation</a></li><li><a href='#bugs'>Suspected bugs, checked by running the code</a><ol><li><a href='#b1'>1. The step-size underflow test uses the hydrogen abundance</a></li><li><a href='#b2'>2. No check of IMAX and NUSE against the sizes of the arrays</a></li></ol></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-BSSTEP'>BSSTEP</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>bsstep.f</h1>
 <p class='muted'>74 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/bsstep.f'>on GitHub (7be4133)</a></p>
-<p><strong>Python version</strong>: <code>bsstep.py</code>, 93 lines, on the right (switch to Python above the code).</p>
+<p><strong>Python version</strong>: <code>bsstep.py</code>, 407 lines, on the right (switch to Python above the code).</p>
 <details class='vars' id='terms'><summary>Variables on this page (3)</summary><p><a href='../glossary.html#var-imax' data-def='the largest number of step subdivisions &lt;a href=&quot;#def-BSSTEP&quot;&gt;&lt;code&gt;BSSTEP&lt;/code&gt;&lt;/a&gt; tries (&lt;code&gt;INTEGER*4&lt;/code&gt;, default 11).'><code>imax</code></a>, <a href='../glossary.html#var-ishort' data-def='unit 20, all diagnostic information, the &lt;code&gt;.short&lt;/code&gt; file.'><code>ishort</code></a>, <a href='../glossary.html#var-nuse' data-def='the number of points in &lt;code&gt;BSSTEP&lt;/code&gt;&#x27;s extrapolation to zero step, passed to &lt;a href=&quot;../yrec-map/ratext.f.html#def-RATEXT&quot;&gt;&lt;code&gt;RATEXT&lt;/code&gt;&lt;/a&gt; (&lt;code&gt;INTEGER*4&lt;/code&gt;, default 7).'><code>nuse</code></a></p></details><h2 id='purpose'>Purpose</h2>
 <div class='notes'><p>This file takes one adaptive step of the Bulirsch–Stoer method for the envelope and atmosphere integration: the modified midpoint method for an increasing number of substeps, extrapolated to zero substep size. It is the Numerical Recipes routine <code>BSSTEP</code> (first edition, with rational extrapolation), extended with the physical arguments that the derivative routine needs.</p></div>
 <h2 id='how-it-fits'>How it fits</h2>
@@ -147,99 +147,413 @@ If the new step no longer changes <code>X</code> (the hydrogen abundance, not th
 <span class="line" id="L71"><span class="ln">71</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span> <span class='hk'>IF</span></span>
 <span class="line" id="L72"><span class="ln">72</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>GO</span><span class='hk'>TO</span> <span class='hn'>20</span></span>
 <span class="line" id="L73"><span class="ln">73</span></span>
-<span class="line" id="L74"><span class="ln">74</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of bsstep.f (YREC 7be4133): one Bulirsch-Stoer step.&quot;&quot;&quot;</span></span>
-<span class="line" id="P2"><span class="ln">2</span></span>
-<span class="line" id="P3"><span class="ln">3</span><span class='hk'>from</span> collections.abc <span class='hk'>import</span> Callable</span>
-<span class="line" id="P4"><span class="ln">4</span></span>
-<span class="line" id="P5"><span class="ln">5</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
-<span class="line" id="P6"><span class="ln">6</span></span>
-<span class="line" id="P7"><span class="ln">7</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> intpar_mod</span>
-<span class="line" id="P8"><span class="ln">8</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> iounits_mod</span>
-<span class="line" id="P9"><span class="ln">9</span><span class='hk'>from</span> pyrec.mmid <span class='hk'>import</span> mmid</span>
-<span class="line" id="P10"><span class="ln">10</span><span class='hk'>from</span> pyrec.ratext <span class='hk'>import</span> ratext</span>
+<span class="line" id="L74"><span class="ln">74</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of bsstep.f (YREC 7be4133): one Bulirsch-Stoer step, and</span></span>
+<span class="line" id="P2"><span class="ln">2</span><span class='hs'>the driver of the envelope&#x27;s compiled chain.</span></span>
+<span class="line" id="P3"><span class="ln">3</span></span>
+<span class="line" id="P4"><span class="ln">4</span><span class='hs'>Classes</span></span>
+<span class="line" id="P5"><span class="ln">5</span><span class='hs'>-------</span></span>
+<span class="line" id="P6"><span class="ln">6</span><span class='hs'>Chain : The envelope chain&#x27;s driver: its context, one derivative call, and one step of envint&#x27;s integration.</span></span>
+<span class="line" id="P7"><span class="ln">7</span></span>
+<span class="line" id="P8"><span class="ln">8</span><span class='hs'>Functions</span></span>
+<span class="line" id="P9"><span class="ln">9</span><span class='hs'>---------</span></span>
+<span class="line" id="P10"><span class="ln">10</span><span class='hs'>bsstep : The routine, plain (the derivative routine passed as a function).</span></span>
 <span class="line" id="P11"><span class="ln">11</span></span>
-<span class="line" id="P12"><span class="ln">12</span><span class='hc'># <a class='fl' href='#L26'>Fortran line 26</a>.</span></span>
-<span class="line" id="P13"><span class="ln">13</span>ONE = <span class='hn'>1.0</span></span>
-<span class="line" id="P14"><span class="ln">14</span>SHRINK = <span class='hn'>0.95</span></span>
-<span class="line" id="P15"><span class="ln">15</span>GROW = <span class='hn'>1.2</span></span>
+<span class="line" id="P12"><span class="ln">12</span><span class='hs'>The kernels: `_bsstep_k` (the routine, resumable after a stopped derivative call) and `_step_k` (bsstep and the</span></span>
+<span class="line" id="P13"><span class="ln">13</span><span class='hs'>derivative at the step&#x27;s end, as envint calls them).</span></span>
+<span class="line" id="P14"><span class="ln">14</span></span>
+<span class="line" id="P15"><span class="ln">15</span><span class='hs'>&quot;&quot;&quot;</span></span>
 <span class="line" id="P16"><span class="ln">16</span></span>
-<span class="line" id="P17"><span class="ln">17</span><span class='hc'># DATA NSEQ: the number of midpoint substeps of each sequence, index 0</span></span>
-<span class="line" id="P18"><span class="ln">18</span><span class='hc'># unused (<a class='fl' href='#L30'>Fortran line 30</a>).</span></span>
-<span class="line" id="P19"><span class="ln">19</span>NSEQ = np.array([<span class='hn'>0</span>, <span class='hn'>2</span>, <span class='hn'>4</span>, <span class='hn'>6</span>, <span class='hn'>8</span>, <span class='hn'>12</span>, <span class='hn'>16</span>, <span class='hn'>24</span>, <span class='hn'>32</span>, <span class='hn'>48</span>, <span class='hn'>64</span>, <span class='hn'>96</span>])</span>
+<span class="line" id="P17"><span class="ln">17</span><span class='hk'>from</span> collections.abc <span class='hk'>import</span> Callable</span>
+<span class="line" id="P18"><span class="ln">18</span></span>
+<span class="line" id="P19"><span class="ln">19</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
 <span class="line" id="P20"><span class="ln">20</span></span>
-<span class="line" id="P21"><span class="ln">21</span></span>
-<span class="line" id="P22"><span class="ln">22</span><span class='hk'>def</span> bsstep(y: np.ndarray, dydx: np.ndarray, nv: <span class='hb'>int</span>, x0: <span class='hb'>float</span>, htry: <span class='hb'>float</span>, eps: <span class='hb'>float</span>, yscal: np.ndarray, hdid: <span class='hb'>float</span>,</span>
-<span class="line" id="P23"><span class="ln">23</span>           hnext: <span class='hb'>float</span>, deriv: Callable, b: <span class='hb'>float</span>, fpl: <span class='hb'>float</span>, ftl: <span class='hb'>float</span>, gl: <span class='hb'>float</span>, latmo: <span class='hb'>bool</span>, lderiv: <span class='hb'>bool</span>,</span>
-<span class="line" id="P24"><span class="ln">24</span>           locond: <span class='hb'>bool</span>, lsave: <span class='hb'>bool</span>, rl: <span class='hb'>float</span>, teffl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, kount: <span class='hb'>int</span>, ksaha: <span class='hb'>int</span>,</span>
-<span class="line" id="P25"><span class="ln">25</span>           err: np.ndarray) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>int</span>, <span class='hb'>int</span>]:</span>
-<span class="line" id="P26"><span class="ln">26</span>    <span class='hs'>&quot;&quot;&quot;One Bulirsch-Stoer step (modified midpoint plus rational</span></span>
-<span class="line" id="P27"><span class="ln">27</span><span class='hs'>    extrapolation) of the 3 envelope variables, with step-size control.</span></span>
-<span class="line" id="P28"><span class="ln">28</span></span>
-<span class="line" id="P29"><span class="ln">29</span><span class='hs'>    Translates: bsstep.f#BSSTEP (7be4133)</span></span>
-<span class="line" id="P30"><span class="ln">30</span></span>
-<span class="line" id="P31"><span class="ln">31</span><span class='hs'>    Arguments: y, dydx (arrays of 3, index 0 unused) at x0; the trial step</span></span>
-<span class="line" id="P32"><span class="ln">32</span><span class='hs'>    htry; the tolerance eps; the scales yscal; the derivative routine deriv</span></span>
-<span class="line" id="P33"><span class="ln">33</span><span class='hs'>    (qatm or qenv); the stellar quantities b ... ksaha passed on to deriv.</span></span>
-<span class="line" id="P34"><span class="ln">34</span><span class='hs'>    Arrays changed in place: y (advanced), err (the scaled error of each</span></span>
-<span class="line" id="P35"><span class="ln">35</span><span class='hs'>    variable).</span></span>
-<span class="line" id="P36"><span class="ln">36</span></span>
-<span class="line" id="P37"><span class="ln">37</span><span class='hs'>    Returns (x0, hdid, hnext, rl, kount, ksaha): the advanced independent</span></span>
-<span class="line" id="P38"><span class="ln">38</span><span class='hs'>    variable, the step taken and the suggested next step, then rl and the</span></span>
-<span class="line" id="P39"><span class="ln">39</span><span class='hs'>    counters as deriv (through mmid) leaves them. The hdid and hnext passed</span></span>
-<span class="line" id="P40"><span class="ln">40</span><span class='hs'>    in are not used.</span></span>
-<span class="line" id="P41"><span class="ln">41</span></span>
-<span class="line" id="P42"><span class="ln">42</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P21"><span class="ln">21</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> accel</span>
+<span class="line" id="P22"><span class="ln">22</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> families</span>
+<span class="line" id="P23"><span class="ln">23</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> eqstat <span class='hk'>as</span> eqstat_mod</span>
+<span class="line" id="P24"><span class="ln">24</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> intpar_mod</span>
+<span class="line" id="P25"><span class="ln">25</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> iounits_mod</span>
+<span class="line" id="P26"><span class="ln">26</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> mmid <span class='hk'>as</span> mmid_mod</span>
+<span class="line" id="P27"><span class="ln">27</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> pulse1_mod</span>
+<span class="line" id="P28"><span class="ln">28</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> qatm <span class='hk'>as</span> qatm_mod</span>
+<span class="line" id="P29"><span class="ln">29</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> qenv <span class='hk'>as</span> qenv_mod</span>
+<span class="line" id="P30"><span class="ln">30</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> ratext <span class='hk'>as</span> ratext_mod</span>
+<span class="line" id="P31"><span class="ln">31</span><span class='hk'>from</span> pyrec.mmid <span class='hk'>import</span> _deriv_k, _mmid_k, mmid</span>
+<span class="line" id="P32"><span class="ln">32</span><span class='hk'>from</span> pyrec.qenv <span class='hk'>import</span> STAGE_DONE</span>
+<span class="line" id="P33"><span class="ln">33</span><span class='hk'>from</span> pyrec.ratext <span class='hk'>import</span> _ratext_nb, ratext</span>
+<span class="line" id="P34"><span class="ln">34</span></span>
+<span class="line" id="P35"><span class="ln">35</span><span class='hc'># <a class='fl' href='#L26'>Fortran line 26</a>.</span></span>
+<span class="line" id="P36"><span class="ln">36</span>ONE = <span class='hn'>1.0</span></span>
+<span class="line" id="P37"><span class="ln">37</span>SHRINK = <span class='hn'>0.95</span></span>
+<span class="line" id="P38"><span class="ln">38</span>GROW = <span class='hn'>1.2</span></span>
+<span class="line" id="P39"><span class="ln">39</span></span>
+<span class="line" id="P40"><span class="ln">40</span><span class='hc'># DATA NSEQ: the number of midpoint substeps of each sequence, index 0</span></span>
+<span class="line" id="P41"><span class="ln">41</span><span class='hc'># unused (<a class='fl' href='#L30'>Fortran line 30</a>).</span></span>
+<span class="line" id="P42"><span class="ln">42</span>NSEQ = np.array([<span class='hn'>0</span>, <span class='hn'>2</span>, <span class='hn'>4</span>, <span class='hn'>6</span>, <span class='hn'>8</span>, <span class='hn'>12</span>, <span class='hn'>16</span>, <span class='hn'>24</span>, <span class='hn'>32</span>, <span class='hn'>48</span>, <span class='hn'>64</span>, <span class='hn'>96</span>])</span>
 <span class="line" id="P43"><span class="ln">43</span></span>
-<span class="line" id="P44"><span class="ln">44</span>    <span class='hc'># The local arrays (<a class='fl' href='#L27-L28'>Fortran lines 27–28</a>).</span></span>
-<span class="line" id="P45"><span class="ln">45</span>    yerr = np.zeros(<span class='hn'>4</span>)</span>
-<span class="line" id="P46"><span class="ln">46</span>    ysav = np.zeros(<span class='hn'>4</span>)</span>
-<span class="line" id="P47"><span class="ln">47</span>    dysav = np.zeros(<span class='hn'>4</span>)</span>
-<span class="line" id="P48"><span class="ln">48</span>    yseq = np.zeros(<span class='hn'>4</span>)</span>
-<span class="line" id="P49"><span class="ln">49</span></span>
-<span class="line" id="P50"><span class="ln">50</span>    <span class='hc'># Save the starting values (<a class='fl' href='#L32-L37'>Fortran lines 32–37</a>).</span></span>
-<span class="line" id="P51"><span class="ln">51</span>    h = htry</span>
-<span class="line" id="P52"><span class="ln">52</span>    xsav = x0</span>
-<span class="line" id="P53"><span class="ln">53</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nv + <span class='hn'>1</span>):</span>
-<span class="line" id="P54"><span class="ln">54</span>        ysav[i] = y[i]</span>
-<span class="line" id="P55"><span class="ln">55</span>        dysav[i] = dydx[i]</span>
-<span class="line" id="P56"><span class="ln">56</span></span>
-<span class="line" id="P57"><span class="ln">57</span>    <span class='hc'># Up to IMAX sequences of midpoint steps, extrapolated to zero step;</span></span>
-<span class="line" id="P58"><span class="ln">58</span>    <span class='hc'># accept the step once the error is below eps (<a class='fl' href='#L38-L61'>Fortran lines 38–61</a>).</span></span>
-<span class="line" id="P59"><span class="ln">59</span>    <span class='hk'>while</span> <span class='hk'>True</span>:  <span class='hc'># label 20</span></span>
-<span class="line" id="P60"><span class="ln">60</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, intpar_mod.imax + <span class='hn'>1</span>):</span>
-<span class="line" id="P61"><span class="ln">61</span>            rl, kount, ksaha = mmid(ysav, dysav, nv, xsav, h, NSEQ[i], yseq,</span>
-<span class="line" id="P62"><span class="ln">62</span>                                    deriv, b, fpl, ftl, gl, latmo, lderiv,</span>
-<span class="line" id="P63"><span class="ln">63</span>                                    locond, lsave, rl, teffl, x, z, kount,</span>
-<span class="line" id="P64"><span class="ln">64</span>                                    ksaha)</span>
-<span class="line" id="P65"><span class="ln">65</span>            xest = (h / NSEQ[i])**<span class='hn'>2</span></span>
-<span class="line" id="P66"><span class="ln">66</span>            ratext(i, xest, yseq, y, yerr, nv, intpar_mod.nuse)</span>
-<span class="line" id="P67"><span class="ln">67</span>            errmax = <span class='hn'>0.0</span></span>
-<span class="line" id="P68"><span class="ln">68</span>            <span class='hk'>for</span> j <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nv + <span class='hn'>1</span>):</span>
-<span class="line" id="P69"><span class="ln">69</span>                errmax = <span class='hb'>max</span>(errmax, <span class='hb'>abs</span>(yerr[j] / yscal[j]))</span>
-<span class="line" id="P70"><span class="ln">70</span>                err[j] = <span class='hb'>abs</span>(yerr[j] / yscal[j])</span>
-<span class="line" id="P71"><span class="ln">71</span>            errmax = errmax / eps</span>
-<span class="line" id="P72"><span class="ln">72</span>            <span class='hk'>if</span> errmax &lt; ONE:</span>
-<span class="line" id="P73"><span class="ln">73</span>                x0 = x0 + h</span>
-<span class="line" id="P74"><span class="ln">74</span>                hdid = h</span>
-<span class="line" id="P75"><span class="ln">75</span>                <span class='hk'>if</span> i == intpar_mod.nuse:</span>
-<span class="line" id="P76"><span class="ln">76</span>                    hnext = h * SHRINK</span>
-<span class="line" id="P77"><span class="ln">77</span>                <span class='hk'>elif</span> i == intpar_mod.nuse - <span class='hn'>1</span>:</span>
-<span class="line" id="P78"><span class="ln">78</span>                    hnext = h * GROW</span>
-<span class="line" id="P79"><span class="ln">79</span>                <span class='hk'>else</span>:</span>
-<span class="line" id="P80"><span class="ln">80</span>                    hnext = h * <span class='hb'>float</span>(NSEQ[intpar_mod.nuse - <span class='hn'>1</span>]) / <span class='hb'>float</span>(NSEQ[i])</span>
-<span class="line" id="P81"><span class="ln">81</span>                <span class='hk'>return</span> x0, hdid, hnext, rl, kount, ksaha</span>
-<span class="line" id="P82"><span class="ln">82</span></span>
-<span class="line" id="P83"><span class="ln">83</span>        <span class='hc'># All IMAX sequences failed: shrink the step and retry (Fortran</span></span>
-<span class="line" id="P84"><span class="ln">84</span>        <span class='hc'># <a class='fl' href='#L62-L72'>lines 62–72</a>).</span></span>
-<span class="line" id="P85"><span class="ln">85</span>        h = <span class='hn'>0.25</span> * h / <span class='hn'>2.0</span>**<span class='hb'>int</span>((intpar_mod.imax - intpar_mod.nuse) // <span class='hn'>2</span>)</span>
-<span class="line" id="P86"><span class="ln">86</span>        <span class='hc'># Suspected bug (see the page): this tests x (the hydrogen</span></span>
-<span class="line" id="P87"><span class="ln">87</span>        <span class='hc'># abundance), not the independent variable x0.</span></span>
-<span class="line" id="P88"><span class="ln">88</span>        <span class='hk'>if</span> x + h == x:</span>
-<span class="line" id="P89"><span class="ln">89</span>            text = (<span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'> ERROR IN BSSTEP: STEP SIZE UNDERFLOW AT X</span><span class='hs'>{</span>x<span class='hs'>:</span><span class='hs'>14.6E</span><span class='hs'>}</span><span class='hs'>&quot;</span></span>
-<span class="line" id="P90"><span class="ln">90</span>                    <span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'> H</span><span class='hs'>{</span>h<span class='hs'>:</span><span class='hs'>12.3E</span><span class='hs'>}</span><span class='hs'>\n</span><span class='hs'> RUN STOPPED</span><span class='hs'>&quot;</span>)  <span class='hc'># format 900</span></span>
-<span class="line" id="P91"><span class="ln">91</span>            <span class='hb'>print</span>(text)</span>
-<span class="line" id="P92"><span class="ln">92</span>            iounits_mod.write(iounits_mod.ishort, text)</span>
-<span class="line" id="P93"><span class="ln">93</span>            <span class='hk'>raise</span> SystemExit(<span class='hn'>1</span>)    <span class='hc'># STOP 1, the run-time error code</span></span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
+<span class="line" id="P44"><span class="ln">44</span></span>
+<span class="line" id="P45"><span class="ln">45</span><span class='hk'>def</span> bsstep(y: np.ndarray, dydx: np.ndarray, nv: <span class='hb'>int</span>, x0: <span class='hb'>float</span>, htry: <span class='hb'>float</span>, eps: <span class='hb'>float</span>, yscal: np.ndarray, hdid: <span class='hb'>float</span>,</span>
+<span class="line" id="P46"><span class="ln">46</span>           hnext: <span class='hb'>float</span>, deriv: Callable, b: <span class='hb'>float</span>, fpl: <span class='hb'>float</span>, ftl: <span class='hb'>float</span>, gl: <span class='hb'>float</span>, latmo: <span class='hb'>bool</span>, lderiv: <span class='hb'>bool</span>,</span>
+<span class="line" id="P47"><span class="ln">47</span>           locond: <span class='hb'>bool</span>, lsave: <span class='hb'>bool</span>, rl: <span class='hb'>float</span>, teffl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, kount: <span class='hb'>int</span>, ksaha: <span class='hb'>int</span>,</span>
+<span class="line" id="P48"><span class="ln">48</span>           err: np.ndarray) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>int</span>, <span class='hb'>int</span>]:</span>
+<span class="line" id="P49"><span class="ln">49</span>    <span class='hs'>&quot;&quot;&quot;One Bulirsch-Stoer step (modified midpoint plus rational</span></span>
+<span class="line" id="P50"><span class="ln">50</span><span class='hs'>    extrapolation) of the 3 envelope variables, with step-size control.</span></span>
+<span class="line" id="P51"><span class="ln">51</span></span>
+<span class="line" id="P52"><span class="ln">52</span><span class='hs'>    Translates: bsstep.f#BSSTEP (7be4133)</span></span>
+<span class="line" id="P53"><span class="ln">53</span></span>
+<span class="line" id="P54"><span class="ln">54</span><span class='hs'>    Arguments: y, dydx (arrays of 3, index 0 unused) at x0; the trial step</span></span>
+<span class="line" id="P55"><span class="ln">55</span><span class='hs'>    htry; the tolerance eps; the scales yscal; the derivative routine deriv</span></span>
+<span class="line" id="P56"><span class="ln">56</span><span class='hs'>    (qatm or qenv); the stellar quantities b ... ksaha passed on to deriv.</span></span>
+<span class="line" id="P57"><span class="ln">57</span><span class='hs'>    Arrays changed in place: y (advanced), err (the scaled error of each</span></span>
+<span class="line" id="P58"><span class="ln">58</span><span class='hs'>    variable).</span></span>
+<span class="line" id="P59"><span class="ln">59</span></span>
+<span class="line" id="P60"><span class="ln">60</span><span class='hs'>    Returns (x0, hdid, hnext, rl, kount, ksaha): the advanced independent</span></span>
+<span class="line" id="P61"><span class="ln">61</span><span class='hs'>    variable, the step taken and the suggested next step, then rl and the</span></span>
+<span class="line" id="P62"><span class="ln">62</span><span class='hs'>    counters as deriv (through mmid) leaves them. The hdid and hnext passed</span></span>
+<span class="line" id="P63"><span class="ln">63</span><span class='hs'>    in are not used.</span></span>
+<span class="line" id="P64"><span class="ln">64</span></span>
+<span class="line" id="P65"><span class="ln">65</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P66"><span class="ln">66</span></span>
+<span class="line" id="P67"><span class="ln">67</span>    <span class='hc'># The local arrays (<a class='fl' href='#L27-L28'>Fortran lines 27–28</a>).</span></span>
+<span class="line" id="P68"><span class="ln">68</span>    yerr = np.zeros(<span class='hn'>4</span>)</span>
+<span class="line" id="P69"><span class="ln">69</span>    ysav = np.zeros(<span class='hn'>4</span>)</span>
+<span class="line" id="P70"><span class="ln">70</span>    dysav = np.zeros(<span class='hn'>4</span>)</span>
+<span class="line" id="P71"><span class="ln">71</span>    yseq = np.zeros(<span class='hn'>4</span>)</span>
+<span class="line" id="P72"><span class="ln">72</span></span>
+<span class="line" id="P73"><span class="ln">73</span>    <span class='hc'># Save the starting values (<a class='fl' href='#L32-L37'>Fortran lines 32–37</a>).</span></span>
+<span class="line" id="P74"><span class="ln">74</span>    h = htry</span>
+<span class="line" id="P75"><span class="ln">75</span>    xsav = x0</span>
+<span class="line" id="P76"><span class="ln">76</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nv + <span class='hn'>1</span>):</span>
+<span class="line" id="P77"><span class="ln">77</span>        ysav[i] = y[i]</span>
+<span class="line" id="P78"><span class="ln">78</span>        dysav[i] = dydx[i]</span>
+<span class="line" id="P79"><span class="ln">79</span></span>
+<span class="line" id="P80"><span class="ln">80</span>    <span class='hc'># Up to IMAX sequences of midpoint steps, extrapolated to zero step;</span></span>
+<span class="line" id="P81"><span class="ln">81</span>    <span class='hc'># accept the step once the error is below eps (<a class='fl' href='#L38-L61'>Fortran lines 38–61</a>).</span></span>
+<span class="line" id="P82"><span class="ln">82</span>    <span class='hk'>while</span> <span class='hk'>True</span>:  <span class='hc'># label 20</span></span>
+<span class="line" id="P83"><span class="ln">83</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, intpar_mod.imax + <span class='hn'>1</span>):</span>
+<span class="line" id="P84"><span class="ln">84</span>            rl, kount, ksaha = mmid(ysav, dysav, nv, xsav, h, NSEQ[i], yseq,</span>
+<span class="line" id="P85"><span class="ln">85</span>                                    deriv, b, fpl, ftl, gl, latmo, lderiv,</span>
+<span class="line" id="P86"><span class="ln">86</span>                                    locond, lsave, rl, teffl, x, z, kount,</span>
+<span class="line" id="P87"><span class="ln">87</span>                                    ksaha)</span>
+<span class="line" id="P88"><span class="ln">88</span>            xest = (h / NSEQ[i]) * (h / NSEQ[i])   <span class='hc'># (H/NSEQ(I))**2, squared as gfortran does</span></span>
+<span class="line" id="P89"><span class="ln">89</span>            ratext(i, xest, yseq, y, yerr, nv, intpar_mod.nuse)</span>
+<span class="line" id="P90"><span class="ln">90</span>            errmax = <span class='hn'>0.0</span></span>
+<span class="line" id="P91"><span class="ln">91</span>            <span class='hk'>for</span> j <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nv + <span class='hn'>1</span>):</span>
+<span class="line" id="P92"><span class="ln">92</span>                errmax = <span class='hb'>max</span>(errmax, <span class='hb'>abs</span>(yerr[j] / yscal[j]))</span>
+<span class="line" id="P93"><span class="ln">93</span>                err[j] = <span class='hb'>abs</span>(yerr[j] / yscal[j])</span>
+<span class="line" id="P94"><span class="ln">94</span>            errmax = errmax / eps</span>
+<span class="line" id="P95"><span class="ln">95</span>            <span class='hk'>if</span> errmax &lt; ONE:</span>
+<span class="line" id="P96"><span class="ln">96</span>                x0 = x0 + h</span>
+<span class="line" id="P97"><span class="ln">97</span>                hdid = h</span>
+<span class="line" id="P98"><span class="ln">98</span>                <span class='hk'>if</span> i == intpar_mod.nuse:</span>
+<span class="line" id="P99"><span class="ln">99</span>                    hnext = h * SHRINK</span>
+<span class="line" id="P100"><span class="ln">100</span>                <span class='hk'>elif</span> i == intpar_mod.nuse - <span class='hn'>1</span>:</span>
+<span class="line" id="P101"><span class="ln">101</span>                    hnext = h * GROW</span>
+<span class="line" id="P102"><span class="ln">102</span>                <span class='hk'>else</span>:</span>
+<span class="line" id="P103"><span class="ln">103</span>                    hnext = h * <span class='hb'>float</span>(NSEQ[intpar_mod.nuse - <span class='hn'>1</span>]) / <span class='hb'>float</span>(NSEQ[i])</span>
+<span class="line" id="P104"><span class="ln">104</span>                <span class='hk'>return</span> x0, hdid, hnext, rl, kount, ksaha</span>
+<span class="line" id="P105"><span class="ln">105</span></span>
+<span class="line" id="P106"><span class="ln">106</span>        <span class='hc'># All IMAX sequences failed: shrink the step and retry (Fortran</span></span>
+<span class="line" id="P107"><span class="ln">107</span>        <span class='hc'># <a class='fl' href='#L62-L72'>lines 62–72</a>).</span></span>
+<span class="line" id="P108"><span class="ln">108</span>        h = <span class='hn'>0.25</span> * h / <span class='hn'>2.0</span>**<span class='hb'>int</span>((intpar_mod.imax - intpar_mod.nuse) // <span class='hn'>2</span>)</span>
+<span class="line" id="P109"><span class="ln">109</span>        <span class='hc'># Suspected bug (see the page): this tests x (the hydrogen</span></span>
+<span class="line" id="P110"><span class="ln">110</span>        <span class='hc'># abundance), not the independent variable x0.</span></span>
+<span class="line" id="P111"><span class="ln">111</span>        <span class='hk'>if</span> x + h == x:</span>
+<span class="line" id="P112"><span class="ln">112</span>            _underflow(x, h)</span>
+<span class="line" id="P113"><span class="ln">113</span></span>
+<span class="line" id="P114"><span class="ln">114</span></span>
+<span class="line" id="P115"><span class="ln">115</span><span class='hk'>def</span> _underflow(x: <span class='hb'>float</span>, h: <span class='hb'>float</span>) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P116"><span class="ln">116</span>    <span class='hs'>&quot;&quot;&quot;The step size underflowed: the message, and STOP 1 (Fortran lines 64–70).&quot;&quot;&quot;</span></span>
+<span class="line" id="P117"><span class="ln">117</span>    text = (<span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'> ERROR IN BSSTEP: STEP SIZE UNDERFLOW AT X</span><span class='hs'>{</span>x<span class='hs'>:</span><span class='hs'>14.6E</span><span class='hs'>}</span><span class='hs'>&quot;</span></span>
+<span class="line" id="P118"><span class="ln">118</span>            <span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'> H</span><span class='hs'>{</span>h<span class='hs'>:</span><span class='hs'>12.3E</span><span class='hs'>}</span><span class='hs'>\n</span><span class='hs'> RUN STOPPED</span><span class='hs'>&quot;</span>)  <span class='hc'># format 900</span></span>
+<span class="line" id="P119"><span class="ln">119</span>    <span class='hb'>print</span>(text)</span>
+<span class="line" id="P120"><span class="ln">120</span>    iounits_mod.write(iounits_mod.ishort, text)</span>
+<span class="line" id="P121"><span class="ln">121</span>    <span class='hk'>raise</span> SystemExit(<span class='hn'>1</span>)    <span class='hc'># STOP 1, the run-time error code</span></span>
+<span class="line" id="P122"><span class="ln">122</span></span>
+<span class="line" id="P123"><span class="ln">123</span></span>
+<span class="line" id="P124"><span class="ln">124</span><span class='hc'># --- The Numba kernels: the envelope&#x27;s integration step, compiled from bsstep down ----------------------------------</span></span>
+<span class="line" id="P125"><span class="ln">125</span><span class='hc'>#</span></span>
+<span class="line" id="P126"><span class="ln">126</span><span class='hc'># One step of envint&#x27;s integration (bsstep, then the derivative at the step&#x27;s end, which envint calls next) runs as</span></span>
+<span class="line" id="P127"><span class="ln">127</span><span class='hc'># one kernel, _step_k: bsstep&#x27;s operations (_bsstep_k) calling mmid&#x27;s (_mmid_k), ratext&#x27;s, and the derivative&#x27;s</span></span>
+<span class="line" id="P128"><span class="ln">128</span><span class='hc'># kernel (qatm&#x27;s or qenv&#x27;s, by a flag), which call the EOS (eqstat&#x27;s dispatch over eqstat2&#x27;s kernel), opacity, and</span></span>
+<span class="line" id="P129"><span class="ln">129</span><span class='hc'># gradient kernels. Python runs only at envint&#x27;s level, once a step (Chain.step). A derivative call the kernels do</span></span>
+<span class="line" id="P130"><span class="ln">130</span><span class='hc'># not cover stops the step (qenv.py: the stages): Chain writes the module state back, the plain code does that call</span></span>
+<span class="line" id="P131"><span class="ln">131</span><span class='hc'># (qatm._qatm_plain, qenv._qenv_plain, from the stage), and the step resumes after it, its state kept in Chain&#x27;s</span></span>
+<span class="line" id="P132"><span class="ln">132</span><span class='hc'># arrays (bf, bi, sx; mmid&#x27;s ym and yn; ratext&#x27;s tableau; the work arrays below), as coefft.py&#x27;s kernel resumes</span></span>
+<span class="line" id="P133"><span class="ln">133</span><span class='hc'># after a point.</span></span>
+<span class="line" id="P134"><span class="ln">134</span></span>
+<span class="line" id="P135"><span class="ln">135</span>STATUS_UNDERFLOW = <span class='hn'>9</span>    <span class='hc'># _bsstep_k&#x27;s status when the step size underflowed</span></span>
+<span class="line" id="P136"><span class="ln">136</span>WHERE_MMID = <span class='hn'>1</span>          <span class='hc'># _step_k&#x27;s stop inside mmid</span></span>
+<span class="line" id="P137"><span class="ln">137</span>WHERE_END = <span class='hn'>2</span>           <span class='hc'># _step_k&#x27;s stop at the derivative after the step</span></span>
+<span class="line" id="P138"><span class="ln">138</span>NCF, NCI = <span class='hn'>2</span>, <span class='hn'>4</span>         <span class='hc'># Chain&#x27;s cf (RL, qatm&#x27;s TL) and ci (KOUNT, KSAHA, calls since the last put, calls begun)</span></span>
+<span class="line" id="P139"><span class="ln">139</span>NBF, NBI = <span class='hn'>5</span>, <span class='hn'>2</span>         <span class='hc'># Chain&#x27;s bf (H, XSAV, the new X0, HDID, HNEXT) and bi (I, mmid&#x27;s calls done)</span></span>
+<span class="line" id="P140"><span class="ln">140</span></span>
+<span class="line" id="P141"><span class="ln">141</span><span class='hc'># bsstep&#x27;s work arrays for its kernel (index 0 unused), kept between a stop and the resumption.</span></span>
+<span class="line" id="P142"><span class="ln">142</span>_ysav = np.zeros(<span class='hn'>4</span>)</span>
+<span class="line" id="P143"><span class="ln">143</span>_dysav = np.zeros(<span class='hn'>4</span>)</span>
+<span class="line" id="P144"><span class="ln">144</span>_yseq = np.zeros(<span class='hn'>4</span>)</span>
+<span class="line" id="P145"><span class="ln">145</span>_yerr = np.zeros(<span class='hn'>4</span>)</span>
+<span class="line" id="P146"><span class="ln">146</span></span>
+<span class="line" id="P147"><span class="ln">147</span></span>
+<span class="line" id="P148"><span class="ln">148</span>@accel.njit(_nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P149"><span class="ln">149</span><span class='hk'>def</span> _bsstep_k(resume: <span class='hb'>int</span>, y: np.ndarray, dydx: np.ndarray, nv: <span class='hb'>int</span>, x0: <span class='hb'>float</span>, htry: <span class='hb'>float</span>, eps: <span class='hb'>float</span>,</span>
+<span class="line" id="P150"><span class="ln">150</span>              yscal: np.ndarray, err: np.ndarray, which: <span class='hb'>int</span>, b: <span class='hb'>float</span>, fpl: <span class='hb'>float</span>, ftl: <span class='hb'>float</span>, gl: <span class='hb'>float</span>,</span>
+<span class="line" id="P151"><span class="ln">151</span>              latmo: <span class='hb'>bool</span>, lderiv: <span class='hb'>bool</span>, lsave: <span class='hb'>bool</span>, teffl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, cf: np.ndarray,</span>
+<span class="line" id="P152"><span class="ln">152</span>              ci: np.ndarray, ctx: <span class='hb'>tuple</span>, bf: np.ndarray, bi: np.ndarray, ysav: np.ndarray, dysav: np.ndarray,</span>
+<span class="line" id="P153"><span class="ln">153</span>              yseq: np.ndarray, yerr: np.ndarray, ym: np.ndarray, yn: np.ndarray, sx: np.ndarray, rx: np.ndarray,</span>
+<span class="line" id="P154"><span class="ln">154</span>              rd: np.ndarray, rfx: np.ndarray, imax: <span class='hb'>int</span>, nuse: <span class='hb'>int</span>) -&gt; <span class='hb'>int</span>:</span>
+<span class="line" id="P155"><span class="ln">155</span>    <span class='hs'>&quot;&quot;&quot;bsstep&#x27;s operations, or their continuation after a stopped derivative call.</span></span>
+<span class="line" id="P156"><span class="ln">156</span></span>
+<span class="line" id="P157"><span class="ln">157</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P158"><span class="ln">158</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P159"><span class="ln">159</span><span class='hs'>    resume : int</span></span>
+<span class="line" id="P160"><span class="ln">160</span><span class='hs'>        0 to start; 1 to resume after the plain code did the derivative call mmid stopped at (bf[0:2] hold H and</span></span>
+<span class="line" id="P161"><span class="ln">161</span><span class='hs'>        XSAV, bi[0:2] the sequence I and the calls mmid has done).</span></span>
+<span class="line" id="P162"><span class="ln">162</span><span class='hs'>    y, dydx, nv, x0, htry, eps, yscal</span></span>
+<span class="line" id="P163"><span class="ln">163</span><span class='hs'>        As bsstep&#x27;s (arrays: shape `(4,)`, ``float``, index 0 unused; y advanced in place).</span></span>
+<span class="line" id="P164"><span class="ln">164</span><span class='hs'>    err : np.ndarray, shape: `(4,)`, dtype: ``float``</span></span>
+<span class="line" id="P165"><span class="ln">165</span><span class='hs'>        Set: the scaled error of each variable.</span></span>
+<span class="line" id="P166"><span class="ln">166</span><span class='hs'>    which, b ... ctx</span></span>
+<span class="line" id="P167"><span class="ln">167</span><span class='hs'>        The derivative&#x27;s flag and arguments (mmid._deriv_k).</span></span>
+<span class="line" id="P168"><span class="ln">168</span><span class='hs'>    bf : np.ndarray, shape: `(NBF,)`, dtype: ``float``</span></span>
+<span class="line" id="P169"><span class="ln">169</span><span class='hs'>        H, XSAV (at a stop); the new X0, HDID, HNEXT (when done); H (at an underflow).</span></span>
+<span class="line" id="P170"><span class="ln">170</span><span class='hs'>    bi : np.ndarray, shape: `(NBI,)`, dtype: ``int64``</span></span>
+<span class="line" id="P171"><span class="ln">171</span><span class='hs'>        I and mmid&#x27;s calls done, at a stop.</span></span>
+<span class="line" id="P172"><span class="ln">172</span><span class='hs'>    ysav, dysav, yseq, yerr : np.ndarray, shape: `(4,)`, dtype: ``float``</span></span>
+<span class="line" id="P173"><span class="ln">173</span><span class='hs'>        bsstep&#x27;s work arrays (_ysav ...), kept between a stop and the resumption.</span></span>
+<span class="line" id="P174"><span class="ln">174</span><span class='hs'>    ym, yn, sx</span></span>
+<span class="line" id="P175"><span class="ln">175</span><span class='hs'>        mmid&#x27;s (mmid._mmid_k).</span></span>
+<span class="line" id="P176"><span class="ln">176</span><span class='hs'>    rx, rd, rfx</span></span>
+<span class="line" id="P177"><span class="ln">177</span><span class='hs'>        ratext&#x27;s SAVE&#x27;d tableau (ratext._ratext_nb).</span></span>
+<span class="line" id="P178"><span class="ln">178</span><span class='hs'>    imax, nuse : int</span></span>
+<span class="line" id="P179"><span class="ln">179</span><span class='hs'>        intpar_mod&#x27;s IMAX and NUSE.</span></span>
+<span class="line" id="P180"><span class="ln">180</span></span>
+<span class="line" id="P181"><span class="ln">181</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P182"><span class="ln">182</span><span class='hs'>    -------</span></span>
+<span class="line" id="P183"><span class="ln">183</span><span class='hs'>    int</span></span>
+<span class="line" id="P184"><span class="ln">184</span><span class='hs'>        STAGE_DONE when the step is done, STATUS_UNDERFLOW when the step size underflowed, else the stage of the</span></span>
+<span class="line" id="P185"><span class="ln">185</span><span class='hs'>        derivative call mmid stopped at.</span></span>
+<span class="line" id="P186"><span class="ln">186</span></span>
+<span class="line" id="P187"><span class="ln">187</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P188"><span class="ln">188</span>    <span class='hc'># Save the starting values, or take up the stopped sequence (<a class='fl' href='#L32-L37'>Fortran lines 32–37</a>).</span></span>
+<span class="line" id="P189"><span class="ln">189</span>    <span class='hk'>if</span> resume == <span class='hn'>0</span>:</span>
+<span class="line" id="P190"><span class="ln">190</span>        h = htry</span>
+<span class="line" id="P191"><span class="ln">191</span>        xsav = x0</span>
+<span class="line" id="P192"><span class="ln">192</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nv + <span class='hn'>1</span>):</span>
+<span class="line" id="P193"><span class="ln">193</span>            ysav[i] = y[i]</span>
+<span class="line" id="P194"><span class="ln">194</span>            dysav[i] = dydx[i]</span>
+<span class="line" id="P195"><span class="ln">195</span>        i = <span class='hn'>1</span></span>
+<span class="line" id="P196"><span class="ln">196</span>        after = <span class='hn'>0</span></span>
+<span class="line" id="P197"><span class="ln">197</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P198"><span class="ln">198</span>        h = bf[<span class='hn'>0</span>]</span>
+<span class="line" id="P199"><span class="ln">199</span>        xsav = bf[<span class='hn'>1</span>]</span>
+<span class="line" id="P200"><span class="ln">200</span>        i = bi[<span class='hn'>0</span>]</span>
+<span class="line" id="P201"><span class="ln">201</span>        after = bi[<span class='hn'>1</span>]</span>
+<span class="line" id="P202"><span class="ln">202</span>    <span class='hc'># Up to IMAX sequences of midpoint steps, extrapolated to zero step (<a class='fl' href='#L38-L61'>Fortran lines 38–61</a>).</span></span>
+<span class="line" id="P203"><span class="ln">203</span>    <span class='hk'>while</span> <span class='hk'>True</span>:</span>
+<span class="line" id="P204"><span class="ln">204</span>        <span class='hk'>while</span> i &lt;= imax:</span>
+<span class="line" id="P205"><span class="ln">205</span>            stage = _mmid_k(after, ysav, dysav, nv, xsav, h, NSEQ[i], yseq, ym, yn, sx, which, b, fpl, ftl, gl,</span>
+<span class="line" id="P206"><span class="ln">206</span>                            latmo, lderiv, lsave, teffl, x, z, cf, ci, ctx)</span>
+<span class="line" id="P207"><span class="ln">207</span>            <span class='hk'>if</span> stage != STAGE_DONE:</span>
+<span class="line" id="P208"><span class="ln">208</span>                bf[<span class='hn'>0</span>] = h</span>
+<span class="line" id="P209"><span class="ln">209</span>                bf[<span class='hn'>1</span>] = xsav</span>
+<span class="line" id="P210"><span class="ln">210</span>                bi[<span class='hn'>0</span>] = i</span>
+<span class="line" id="P211"><span class="ln">211</span>                bi[<span class='hn'>1</span>] = <span class='hb'>int</span>(sx[<span class='hn'>1</span>])</span>
+<span class="line" id="P212"><span class="ln">212</span>                <span class='hk'>return</span> stage</span>
+<span class="line" id="P213"><span class="ln">213</span>            after = <span class='hn'>0</span></span>
+<span class="line" id="P214"><span class="ln">214</span>            xest = (h / NSEQ[i]) * (h / NSEQ[i])</span>
+<span class="line" id="P215"><span class="ln">215</span>            _ratext_nb(i, xest, yseq, y, yerr, nv, nuse, rx, rd, rfx)</span>
+<span class="line" id="P216"><span class="ln">216</span>            errmax = <span class='hn'>0.0</span></span>
+<span class="line" id="P217"><span class="ln">217</span>            <span class='hk'>for</span> j <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nv + <span class='hn'>1</span>):</span>
+<span class="line" id="P218"><span class="ln">218</span>                errmax = <span class='hb'>max</span>(errmax, <span class='hb'>abs</span>(yerr[j] / yscal[j]))</span>
+<span class="line" id="P219"><span class="ln">219</span>                err[j] = <span class='hb'>abs</span>(yerr[j] / yscal[j])</span>
+<span class="line" id="P220"><span class="ln">220</span>            errmax = errmax / eps</span>
+<span class="line" id="P221"><span class="ln">221</span>            <span class='hk'>if</span> errmax &lt; ONE:</span>
+<span class="line" id="P222"><span class="ln">222</span>                bf[<span class='hn'>2</span>] = x0 + h</span>
+<span class="line" id="P223"><span class="ln">223</span>                bf[<span class='hn'>3</span>] = h</span>
+<span class="line" id="P224"><span class="ln">224</span>                <span class='hk'>if</span> i == nuse:</span>
+<span class="line" id="P225"><span class="ln">225</span>                    bf[<span class='hn'>4</span>] = h * SHRINK</span>
+<span class="line" id="P226"><span class="ln">226</span>                <span class='hk'>elif</span> i == nuse - <span class='hn'>1</span>:</span>
+<span class="line" id="P227"><span class="ln">227</span>                    bf[<span class='hn'>4</span>] = h * GROW</span>
+<span class="line" id="P228"><span class="ln">228</span>                <span class='hk'>else</span>:</span>
+<span class="line" id="P229"><span class="ln">229</span>                    bf[<span class='hn'>4</span>] = h * <span class='hb'>float</span>(NSEQ[nuse - <span class='hn'>1</span>]) / <span class='hb'>float</span>(NSEQ[i])</span>
+<span class="line" id="P230"><span class="ln">230</span>                <span class='hk'>return</span> STAGE_DONE</span>
+<span class="line" id="P231"><span class="ln">231</span>            i += <span class='hn'>1</span></span>
+<span class="line" id="P232"><span class="ln">232</span>        <span class='hc'># All IMAX sequences failed: shrink the step and retry (<a class='fl' href='#L62-L72'>Fortran lines 62–72</a>).</span></span>
+<span class="line" id="P233"><span class="ln">233</span>        h = <span class='hn'>0.25</span> * h / <span class='hn'>2.0</span>**((imax - nuse) // <span class='hn'>2</span>)</span>
+<span class="line" id="P234"><span class="ln">234</span>        <span class='hk'>if</span> x + h == x:</span>
+<span class="line" id="P235"><span class="ln">235</span>            bf[<span class='hn'>0</span>] = h</span>
+<span class="line" id="P236"><span class="ln">236</span>            <span class='hk'>return</span> STATUS_UNDERFLOW</span>
+<span class="line" id="P237"><span class="ln">237</span>        i = <span class='hn'>1</span></span>
+<span class="line" id="P238"><span class="ln">238</span></span>
+<span class="line" id="P239"><span class="ln">239</span></span>
+<span class="line" id="P240"><span class="ln">240</span>@accel.njit(_nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P241"><span class="ln">241</span><span class='hk'>def</span> _step_k(resume: <span class='hb'>int</span>, y: np.ndarray, dydx: np.ndarray, nv: <span class='hb'>int</span>, x0: <span class='hb'>float</span>, htry: <span class='hb'>float</span>, eps: <span class='hb'>float</span>,</span>
+<span class="line" id="P242"><span class="ln">242</span>            yscal: np.ndarray, err: np.ndarray, which: <span class='hb'>int</span>, b: <span class='hb'>float</span>, fpl: <span class='hb'>float</span>, ftl: <span class='hb'>float</span>, gl: <span class='hb'>float</span>, latmo: <span class='hb'>bool</span>,</span>
+<span class="line" id="P243"><span class="ln">243</span>            lderiv: <span class='hb'>bool</span>, lsave: <span class='hb'>bool</span>, teffl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, cf: np.ndarray, ci: np.ndarray, ctx: <span class='hb'>tuple</span>,</span>
+<span class="line" id="P244"><span class="ln">244</span>            bf: np.ndarray, bi: np.ndarray, ysav: np.ndarray, dysav: np.ndarray, yseq: np.ndarray, yerr: np.ndarray,</span>
+<span class="line" id="P245"><span class="ln">245</span>            ym: np.ndarray, yn: np.ndarray, sx: np.ndarray, rx: np.ndarray, rd: np.ndarray, rfx: np.ndarray,</span>
+<span class="line" id="P246"><span class="ln">246</span>            imax: <span class='hb'>int</span>, nuse: <span class='hb'>int</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>int</span>, <span class='hb'>int</span>]:</span>
+<span class="line" id="P247"><span class="ln">247</span>    <span class='hs'>&quot;&quot;&quot;One step of envint&#x27;s integration: bsstep (resume 0 or 1, as _bsstep_k), then the derivative at the new X0,</span></span>
+<span class="line" id="P248"><span class="ln">248</span><span class='hs'>    into dydx (envint&#x27;s next call).</span></span>
+<span class="line" id="P249"><span class="ln">249</span></span>
+<span class="line" id="P250"><span class="ln">250</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P251"><span class="ln">251</span><span class='hs'>    -------</span></span>
+<span class="line" id="P252"><span class="ln">252</span><span class='hs'>    stage, where : int, int</span></span>
+<span class="line" id="P253"><span class="ln">253</span><span class='hs'>        (STAGE_DONE, 0) when done; (STATUS_UNDERFLOW, 0) at an underflow; (stage, WHERE_MMID) when mmid&#x27;s</span></span>
+<span class="line" id="P254"><span class="ln">254</span><span class='hs'>        derivative call stopped, (stage, WHERE_END) when the one at the step&#x27;s end did.</span></span>
+<span class="line" id="P255"><span class="ln">255</span></span>
+<span class="line" id="P256"><span class="ln">256</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P257"><span class="ln">257</span>    stage = _bsstep_k(resume, y, dydx, nv, x0, htry, eps, yscal, err, which, b, fpl, ftl, gl, latmo, lderiv, lsave,</span>
+<span class="line" id="P258"><span class="ln">258</span>                      teffl, x, z, cf, ci, ctx, bf, bi, ysav, dysav, yseq, yerr, ym, yn, sx, rx, rd, rfx, imax, nuse)</span>
+<span class="line" id="P259"><span class="ln">259</span>    <span class='hk'>if</span> stage == STATUS_UNDERFLOW:</span>
+<span class="line" id="P260"><span class="ln">260</span>        <span class='hk'>return</span> STATUS_UNDERFLOW, <span class='hn'>0</span></span>
+<span class="line" id="P261"><span class="ln">261</span>    <span class='hk'>if</span> stage != STAGE_DONE:</span>
+<span class="line" id="P262"><span class="ln">262</span>        <span class='hk'>return</span> stage, WHERE_MMID</span>
+<span class="line" id="P263"><span class="ln">263</span>    stage = _deriv_k(which, bf[<span class='hn'>2</span>], y, dydx, b, fpl, ftl, gl, latmo, lderiv, lsave, teffl, x, z, cf, ci, ctx)</span>
+<span class="line" id="P264"><span class="ln">264</span>    <span class='hk'>if</span> stage != STAGE_DONE:</span>
+<span class="line" id="P265"><span class="ln">265</span>        <span class='hk'>return</span> stage, WHERE_END</span>
+<span class="line" id="P266"><span class="ln">266</span>    <span class='hk'>return</span> STAGE_DONE, <span class='hn'>0</span></span>
+<span class="line" id="P267"><span class="ln">267</span></span>
+<span class="line" id="P268"><span class="ln">268</span></span>
+<span class="line" id="P269"><span class="ln">269</span><span class='hk'>class</span> Chain:</span>
+<span class="line" id="P270"><span class="ln">270</span>    <span class='hs'>&quot;&quot;&quot;The envelope chain&#x27;s driver, for qatm&#x27;s (which = 0) or qenv&#x27;s (1) integration.</span></span>
+<span class="line" id="P271"><span class="ln">271</span></span>
+<span class="line" id="P272"><span class="ln">272</span><span class='hs'>    Between open() and close(), the module state of the EOS and the opacity is in the chain&#x27;s arrays: nothing else</span></span>
+<span class="line" id="P273"><span class="ln">273</span><span class='hs'>    may call them. A derivative call the kernels stop at is done by the plain code between close() and open().</span></span>
+<span class="line" id="P274"><span class="ln">274</span><span class='hs'>    Run-time settings (the namelist&#x27;s, the modules&#x27;) are read by open() and passed to the kernels as arguments.</span></span>
+<span class="line" id="P275"><span class="ln">275</span></span>
+<span class="line" id="P276"><span class="ln">276</span><span class='hs'>    Attributes</span></span>
+<span class="line" id="P277"><span class="ln">277</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P278"><span class="ln">278</span><span class='hs'>    which : int</span></span>
+<span class="line" id="P279"><span class="ln">279</span><span class='hs'>        0 for qatm, 1 for qenv.</span></span>
+<span class="line" id="P280"><span class="ln">280</span><span class='hs'>    cf : np.ndarray, shape: `(NCF,)`, dtype: ``float``</span></span>
+<span class="line" id="P281"><span class="ln">281</span><span class='hs'>        RL; qatm&#x27;s SAVE&#x27;d TL.</span></span>
+<span class="line" id="P282"><span class="ln">282</span><span class='hs'>    ci : np.ndarray, shape: `(NCI,)`, dtype: ``int64``</span></span>
+<span class="line" id="P283"><span class="ln">283</span><span class='hs'>        KOUNT (KATM or KENV), KSAHA, the calls done since the last put, the calls begun (qenv.test_stop).</span></span>
+<span class="line" id="P284"><span class="ln">284</span><span class='hs'>    bf, bi : np.ndarray, shapes: `(NBF,)`, `(NBI,)`, dtypes: ``float``, ``int64``</span></span>
+<span class="line" id="P285"><span class="ln">285</span><span class='hs'>        bsstep&#x27;s kernel&#x27;s state (_bsstep_k).</span></span>
+<span class="line" id="P286"><span class="ln">286</span><span class='hs'>    sx : np.ndarray, shape: `(2,)`, dtype: ``float``</span></span>
+<span class="line" id="P287"><span class="ln">287</span><span class='hs'>        mmid&#x27;s kernel&#x27;s state (_mmid_k).</span></span>
+<span class="line" id="P288"><span class="ln">288</span><span class='hs'>    r, out, fxion : np.ndarray, shapes: `(qenv.NR,)`, `(qenv.NOUT,)`, `(4,)`, dtype: ``float``</span></span>
+<span class="line" id="P289"><span class="ln">289</span><span class='hs'>        The EOS&#x27;s values, the slots of module scalars, the ionization fractions.</span></span>
+<span class="line" id="P290"><span class="ln">290</span><span class='hs'>    eist : np.ndarray, shape: `(eqstat.EIST,)`, dtype: ``int64``</span></span>
+<span class="line" id="P291"><span class="ln">291</span><span class='hs'>        The chain&#x27;s EOS state.</span></span>
+<span class="line" id="P292"><span class="ln">292</span><span class='hs'>    gop, ctx : tuple</span></span>
+<span class="line" id="P293"><span class="ln">293</span><span class='hs'>        getopac&#x27;s kernel&#x27;s arguments (qenv.gop_in), and the context the kernels take.</span></span>
+<span class="line" id="P294"><span class="ln">294</span></span>
+<span class="line" id="P295"><span class="ln">295</span><span class='hs'>    Methods</span></span>
+<span class="line" id="P296"><span class="ln">296</span><span class='hs'>    -------</span></span>
+<span class="line" id="P297"><span class="ln">297</span><span class='hs'>    open : Read the modules into the context.</span></span>
+<span class="line" id="P298"><span class="ln">298</span><span class='hs'>    close : Write the chain&#x27;s EOS and opacity state back to the modules.</span></span>
+<span class="line" id="P299"><span class="ln">299</span><span class='hs'>    deriv : One derivative call (for qatm and qenv).</span></span>
+<span class="line" id="P300"><span class="ln">300</span><span class='hs'>    step : One step of envint&#x27;s integration (bsstep and the derivative after it).</span></span>
+<span class="line" id="P301"><span class="ln">301</span></span>
+<span class="line" id="P302"><span class="ln">302</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P303"><span class="ln">303</span></span>
+<span class="line" id="P304"><span class="ln">304</span>    <span class='hk'>def</span> __init__(<span class='hb'>self</span>, which: <span class='hb'>int</span>):</span>
+<span class="line" id="P305"><span class="ln">305</span>        <span class='hb'>self</span>.which = which</span>
+<span class="line" id="P306"><span class="ln">306</span>        <span class='hb'>self</span>.cf = np.zeros(NCF)</span>
+<span class="line" id="P307"><span class="ln">307</span>        <span class='hb'>self</span>.ci = np.zeros(NCI, dtype=np.int64)</span>
+<span class="line" id="P308"><span class="ln">308</span>        <span class='hb'>self</span>.bf = np.zeros(NBF)</span>
+<span class="line" id="P309"><span class="ln">309</span>        <span class='hb'>self</span>.bi = np.zeros(NBI, dtype=np.int64)</span>
+<span class="line" id="P310"><span class="ln">310</span>        <span class='hb'>self</span>.sx = np.zeros(<span class='hn'>2</span>)                          <span class='hc'># mmid&#x27;s X0; the call stopped at</span></span>
+<span class="line" id="P311"><span class="ln">311</span>        <span class='hb'>self</span>.r = np.zeros(qenv_mod.NR)</span>
+<span class="line" id="P312"><span class="ln">312</span>        <span class='hb'>self</span>.out = np.zeros(qenv_mod.NOUT)</span>
+<span class="line" id="P313"><span class="ln">313</span>        <span class='hb'>self</span>.fxion = np.zeros(<span class='hn'>4</span>)</span>
+<span class="line" id="P314"><span class="ln">314</span>        <span class='hb'>self</span>.eist = np.zeros(eqstat_mod.EIST, dtype=np.int64)</span>
+<span class="line" id="P315"><span class="ln">315</span>        <span class='hb'>self</span>.open()</span>
+<span class="line" id="P316"><span class="ln">316</span></span>
+<span class="line" id="P317"><span class="ln">317</span>    <span class='hk'>def</span> open(<span class='hb'>self</span>) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P318"><span class="ln">318</span>        <span class='hs'>&quot;&quot;&quot;Read the modules into the context (the EOS state, getopac&#x27;s state, the constants and settings, the</span></span>
+<span class="line" id="P319"><span class="ln">319</span><span class='hs'>        slots).&quot;&quot;&quot;</span></span>
+<span class="line" id="P320"><span class="ln">320</span>        eqstat_mod.eos_in(<span class='hb'>self</span>.eist)</span>
+<span class="line" id="P321"><span class="ln">321</span>        <span class='hb'>self</span>.gop = qenv_mod.gop_in()</span>
+<span class="line" id="P322"><span class="ln">322</span>        cons = families.atmosphere().kernel_args()    <span class='hc'># OOP atmosphere: the integrands&#x27; settings (qatm.cons_in)</span></span>
+<span class="line" id="P323"><span class="ln">323</span>        tpg = families.convection().kernel_args()     <span class='hc'># OOP convection: the installed convection family&#x27;s data</span></span>
+<span class="line" id="P324"><span class="ln">324</span>        <span class='hc'># OOP eos: the EOS context is (eqstat.eos_args(), the EOS family&#x27;s data, eqsaha&#x27;s guess) (families.py).</span></span>
+<span class="line" id="P325"><span class="ln">325</span>        <span class='hb'>self</span>.ctx = (families.eos_chain_args(), <span class='hb'>self</span>.eist, qenv_mod.opac_args(), <span class='hb'>self</span>.gop, tpg, cons, <span class='hb'>self</span>.fxion,</span>
+<span class="line" id="P326"><span class="ln">326</span>                    <span class='hb'>self</span>.r, <span class='hb'>self</span>.out, qenv_mod.test_stop)</span>
+<span class="line" id="P327"><span class="ln">327</span>        <span class='hb'>self</span>.cf[<span class='hn'>1</span>] = qatm_mod.tl</span>
+<span class="line" id="P328"><span class="ln">328</span>        <span class='hb'>self</span>.ci[<span class='hn'>2</span>] = <span class='hn'>0</span></span>
+<span class="line" id="P329"><span class="ln">329</span>        (qatm_mod <span class='hk'>if</span> <span class='hb'>self</span>.which == <span class='hn'>0</span> <span class='hk'>else</span> qenv_mod).get(<span class='hb'>self</span>.out)</span>
+<span class="line" id="P330"><span class="ln">330</span></span>
+<span class="line" id="P331"><span class="ln">331</span>    <span class='hk'>def</span> close(<span class='hb'>self</span>) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P332"><span class="ln">332</span>        <span class='hs'>&quot;&quot;&quot;Write the chain&#x27;s EOS and opacity state back to the modules.&quot;&quot;&quot;</span></span>
+<span class="line" id="P333"><span class="ln">333</span>        eqstat_mod.eos_out(<span class='hb'>self</span>.eist)</span>
+<span class="line" id="P334"><span class="ln">334</span>        qenv_mod.gop_out(<span class='hb'>self</span>.gop)</span>
+<span class="line" id="P335"><span class="ln">335</span></span>
+<span class="line" id="P336"><span class="ln">336</span>    <span class='hk'>def</span> _put(<span class='hb'>self</span>, lsave: <span class='hb'>bool</span>) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P337"><span class="ln">337</span>        <span class='hs'>&quot;&quot;&quot;Write the slots of the kernels&#x27; last derivative call to the modules, if a call was done since the</span></span>
+<span class="line" id="P338"><span class="ln">338</span><span class='hs'>        last put.&quot;&quot;&quot;</span></span>
+<span class="line" id="P339"><span class="ln">339</span>        <span class='hk'>if</span> <span class='hb'>self</span>.ci[<span class='hn'>2</span>] &gt; <span class='hn'>0</span>:</span>
+<span class="line" id="P340"><span class="ln">340</span>            <span class='hk'>if</span> <span class='hb'>self</span>.which == <span class='hn'>0</span>:</span>
+<span class="line" id="P341"><span class="ln">341</span>                qatm_mod.put(<span class='hb'>self</span>.out, lsave, <span class='hb'>float</span>(<span class='hb'>self</span>.cf[<span class='hn'>1</span>]))</span>
+<span class="line" id="P342"><span class="ln">342</span>            <span class='hk'>else</span>:</span>
+<span class="line" id="P343"><span class="ln">343</span>                qenv_mod.put(<span class='hb'>self</span>.out, lsave)</span>
+<span class="line" id="P344"><span class="ln">344</span>            <span class='hb'>self</span>.ci[<span class='hn'>2</span>] = <span class='hn'>0</span></span>
+<span class="line" id="P345"><span class="ln">345</span></span>
+<span class="line" id="P346"><span class="ln">346</span>    <span class='hk'>def</span> _finish(<span class='hb'>self</span>, stage: <span class='hb'>int</span>, x0: <span class='hb'>float</span>, y: np.ndarray, dydx: np.ndarray, b: <span class='hb'>float</span>, fpl: <span class='hb'>float</span>, ftl: <span class='hb'>float</span>,</span>
+<span class="line" id="P347"><span class="ln">347</span>                gl: <span class='hb'>float</span>, latmo: <span class='hb'>bool</span>, lderiv: <span class='hb'>bool</span>, lsave: <span class='hb'>bool</span>, teffl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P348"><span class="ln">348</span>        <span class='hs'>&quot;&quot;&quot;The derivative call the kernel stopped at, by the plain code from its stage.&quot;&quot;&quot;</span></span>
+<span class="line" id="P349"><span class="ln">349</span>        <span class='hb'>self</span>._put(lsave <span class='hk'>or</span> pulse1_mod.lpumod)</span>
+<span class="line" id="P350"><span class="ln">350</span>        <span class='hb'>self</span>.close()</span>
+<span class="line" id="P351"><span class="ln">351</span>        args = (x0, y, dydx, b, fpl, ftl, gl, latmo, lderiv, <span class='hk'>False</span>, lsave, <span class='hb'>float</span>(<span class='hb'>self</span>.cf[<span class='hn'>0</span>]), teffl, x, z,</span>
+<span class="line" id="P352"><span class="ln">352</span>                <span class='hb'>int</span>(<span class='hb'>self</span>.ci[<span class='hn'>0</span>]), <span class='hb'>int</span>(<span class='hb'>self</span>.ci[<span class='hn'>1</span>]), stage, <span class='hb'>self</span>.r.copy(), <span class='hb'>self</span>.fxion.copy())</span>
+<span class="line" id="P353"><span class="ln">353</span>        <span class='hk'>if</span> <span class='hb'>self</span>.which == <span class='hn'>0</span>:</span>
+<span class="line" id="P354"><span class="ln">354</span>            <span class='hb'>self</span>.ci[<span class='hn'>0</span>], <span class='hb'>self</span>.ci[<span class='hn'>1</span>] = qatm_mod._qatm_plain(*args)</span>
+<span class="line" id="P355"><span class="ln">355</span>        <span class='hk'>else</span>:</span>
+<span class="line" id="P356"><span class="ln">356</span>            <span class='hb'>self</span>.cf[<span class='hn'>0</span>], <span class='hb'>self</span>.ci[<span class='hn'>0</span>], <span class='hb'>self</span>.ci[<span class='hn'>1</span>] = qenv_mod._qenv_plain(*args)</span>
+<span class="line" id="P357"><span class="ln">357</span>        <span class='hb'>self</span>.open()</span>
+<span class="line" id="P358"><span class="ln">358</span></span>
+<span class="line" id="P359"><span class="ln">359</span>    <span class='hk'>def</span> deriv(<span class='hb'>self</span>, x0: <span class='hb'>float</span>, y: np.ndarray, dydx: np.ndarray, b: <span class='hb'>float</span>, fpl: <span class='hb'>float</span>, ftl: <span class='hb'>float</span>, gl: <span class='hb'>float</span>,</span>
+<span class="line" id="P360"><span class="ln">360</span>              latmo: <span class='hb'>bool</span>, lderiv: <span class='hb'>bool</span>, lsave: <span class='hb'>bool</span>, rl: <span class='hb'>float</span>, teffl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, kount: <span class='hb'>int</span>,</span>
+<span class="line" id="P361"><span class="ln">361</span>              ksaha: <span class='hb'>int</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>int</span>, <span class='hb'>int</span>]:</span>
+<span class="line" id="P362"><span class="ln">362</span>        <span class='hs'>&quot;&quot;&quot;DERIV(X0, Y, DYDX, ...) through the kernel: (rl, kount, ksaha).&quot;&quot;&quot;</span></span>
+<span class="line" id="P363"><span class="ln">363</span>        lsv = <span class='hb'>bool</span>(lsave <span class='hk'>or</span> pulse1_mod.lpumod)</span>
+<span class="line" id="P364"><span class="ln">364</span>        cf, ci = <span class='hb'>self</span>.cf, <span class='hb'>self</span>.ci</span>
+<span class="line" id="P365"><span class="ln">365</span>        cf[<span class='hn'>0</span>] = rl</span>
+<span class="line" id="P366"><span class="ln">366</span>        ci[<span class='hn'>0</span>] = kount</span>
+<span class="line" id="P367"><span class="ln">367</span>        ci[<span class='hn'>1</span>] = ksaha</span>
+<span class="line" id="P368"><span class="ln">368</span>        <span class='hc'># OOP pilot: the chain for the installed families (families.py).</span></span>
+<span class="line" id="P369"><span class="ln">369</span>        stage = families.chains()._deriv_k(<span class='hb'>self</span>.which, x0, y, dydx, b, fpl, ftl, gl, latmo, lderiv, lsv, teffl, x, z,</span>
+<span class="line" id="P370"><span class="ln">370</span>                                           cf, ci, <span class='hb'>self</span>.ctx)</span>
+<span class="line" id="P371"><span class="ln">371</span>        <span class='hk'>if</span> stage != STAGE_DONE:</span>
+<span class="line" id="P372"><span class="ln">372</span>            <span class='hb'>self</span>._finish(stage, x0, y, dydx, b, fpl, ftl, gl, latmo, lderiv, lsave, teffl, x, z)</span>
+<span class="line" id="P373"><span class="ln">373</span>        <span class='hb'>self</span>._put(lsv)</span>
+<span class="line" id="P374"><span class="ln">374</span>        <span class='hk'>return</span> <span class='hb'>float</span>(cf[<span class='hn'>0</span>]), <span class='hb'>int</span>(ci[<span class='hn'>0</span>]), <span class='hb'>int</span>(ci[<span class='hn'>1</span>])</span>
+<span class="line" id="P375"><span class="ln">375</span></span>
+<span class="line" id="P376"><span class="ln">376</span>    <span class='hk'>def</span> step(<span class='hb'>self</span>, y: np.ndarray, dydx: np.ndarray, nv: <span class='hb'>int</span>, x0: <span class='hb'>float</span>, htry: <span class='hb'>float</span>, eps: <span class='hb'>float</span>, yscal: np.ndarray,</span>
+<span class="line" id="P377"><span class="ln">377</span>             err: np.ndarray, b: <span class='hb'>float</span>, fpl: <span class='hb'>float</span>, ftl: <span class='hb'>float</span>, gl: <span class='hb'>float</span>, latmo: <span class='hb'>bool</span>, lderiv: <span class='hb'>bool</span>, lsave: <span class='hb'>bool</span>,</span>
+<span class="line" id="P378"><span class="ln">378</span>             rl: <span class='hb'>float</span>, teffl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, kount: <span class='hb'>int</span>, ksaha: <span class='hb'>int</span>) -&gt; <span class='hb'>tuple</span>:</span>
+<span class="line" id="P379"><span class="ln">379</span>        <span class='hs'>&quot;&quot;&quot;BSSTEP&#x27;s call and the derivative at the step&#x27;s end, as envint makes them: (x0, hdid, hnext, rl, kount,</span></span>
+<span class="line" id="P380"><span class="ln">380</span><span class='hs'>        ksaha), y advanced and dydx its derivative.&quot;&quot;&quot;</span></span>
+<span class="line" id="P381"><span class="ln">381</span>        lsv = <span class='hb'>bool</span>(lsave <span class='hk'>or</span> pulse1_mod.lpumod)</span>
+<span class="line" id="P382"><span class="ln">382</span>        cf, ci, bf = <span class='hb'>self</span>.cf, <span class='hb'>self</span>.ci, <span class='hb'>self</span>.bf</span>
+<span class="line" id="P383"><span class="ln">383</span>        cf[<span class='hn'>0</span>] = rl</span>
+<span class="line" id="P384"><span class="ln">384</span>        ci[<span class='hn'>0</span>] = kount</span>
+<span class="line" id="P385"><span class="ln">385</span>        ci[<span class='hn'>1</span>] = ksaha</span>
+<span class="line" id="P386"><span class="ln">386</span>        resume = <span class='hn'>0</span></span>
+<span class="line" id="P387"><span class="ln">387</span>        step_k = families.chains()._step_k     <span class='hc'># OOP pilot: the chain for the installed families (families.py)</span></span>
+<span class="line" id="P388"><span class="ln">388</span>        <span class='hk'>while</span> <span class='hk'>True</span>:</span>
+<span class="line" id="P389"><span class="ln">389</span>            stage, where = step_k(resume, y, dydx, nv, x0, htry, eps, yscal, err, <span class='hb'>self</span>.which, b, fpl, ftl, gl, latmo,</span>
+<span class="line" id="P390"><span class="ln">390</span>                                   lderiv, lsv, teffl, x, z, cf, ci, <span class='hb'>self</span>.ctx, bf, <span class='hb'>self</span>.bi, _ysav, _dysav, _yseq,</span>
+<span class="line" id="P391"><span class="ln">391</span>                                   _yerr, mmid_mod.ym, mmid_mod.yn, <span class='hb'>self</span>.sx, ratext_mod.x, ratext_mod.d,</span>
+<span class="line" id="P392"><span class="ln">392</span>                                   ratext_mod.fx, intpar_mod.imax, intpar_mod.nuse)</span>
+<span class="line" id="P393"><span class="ln">393</span>            <span class='hk'>if</span> stage == STAGE_DONE:</span>
+<span class="line" id="P394"><span class="ln">394</span>                <span class='hk'>break</span></span>
+<span class="line" id="P395"><span class="ln">395</span>            <span class='hk'>if</span> stage == STATUS_UNDERFLOW:</span>
+<span class="line" id="P396"><span class="ln">396</span>                <span class='hb'>self</span>._put(lsv)</span>
+<span class="line" id="P397"><span class="ln">397</span>                <span class='hb'>self</span>.close()</span>
+<span class="line" id="P398"><span class="ln">398</span>                _underflow(x, <span class='hb'>float</span>(bf[<span class='hn'>0</span>]))</span>
+<span class="line" id="P399"><span class="ln">399</span>            <span class='hk'>if</span> where == WHERE_MMID:</span>
+<span class="line" id="P400"><span class="ln">400</span>                <span class='hb'>self</span>._finish(stage, <span class='hb'>float</span>(<span class='hb'>self</span>.sx[<span class='hn'>0</span>]), mmid_mod.yn, _yseq, b, fpl, ftl, gl, latmo, lderiv, lsave,</span>
+<span class="line" id="P401"><span class="ln">401</span>                             teffl, x, z)</span>
+<span class="line" id="P402"><span class="ln">402</span>                resume = <span class='hn'>1</span></span>
+<span class="line" id="P403"><span class="ln">403</span>            <span class='hk'>else</span>:</span>
+<span class="line" id="P404"><span class="ln">404</span>                <span class='hb'>self</span>._finish(stage, <span class='hb'>float</span>(bf[<span class='hn'>2</span>]), y, dydx, b, fpl, ftl, gl, latmo, lderiv, lsave, teffl, x, z)</span>
+<span class="line" id="P405"><span class="ln">405</span>                <span class='hk'>break</span></span>
+<span class="line" id="P406"><span class="ln">406</span>        <span class='hb'>self</span>._put(lsv)</span>
+<span class="line" id="P407"><span class="ln">407</span>        <span class='hk'>return</span> <span class='hb'>float</span>(bf[<span class='hn'>2</span>]), <span class='hb'>float</span>(bf[<span class='hn'>3</span>]), <span class='hb'>float</span>(bf[<span class='hn'>4</span>]), <span class='hb'>float</span>(cf[<span class='hn'>0</span>]), <span class='hb'>int</span>(ci[<span class='hn'>0</span>]), <span class='hb'>int</span>(ci[<span class='hn'>1</span>])</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
 function st(){try{return localStorage.getItem('pm-toc')}catch(e){return null}}function sv(v){try{localStorage.setItem('pm-toc',v)}catch(e){}}
 var b=nav.querySelector('.toc-toggle');function set(h){page.classList.toggle('toc-hidden',h);b.textContent=h?'show':'hide';}
 set(st()==='hidden');b.addEventListener('click',function(){var h=!page.classList.contains('toc-hidden');set(h);sv(h?'hidden':'shown');});

@@ -3,10 +3,10 @@
 **Purpose.** Translates newer, "more intuitively named" namelist parameters (MHP 6/2014) into the arrays the rest of the code uses: the nuclear cross sections and their energy derivatives, and the tolerances for the mesh and the time step.
 
 **How it fits.**
-- **Who calls it:** [`PARMIN`](parmin.f.md#parmin), after reading the namelists.
-- **Inputs, through modules:** [`NMLBYPASS_MOD`](nmlbypass_mod.f.md#nmlbypass_mod) (formerly `/NEWPARAM/`, `/NEWCROSS/` and `/XSECT/`: the new cross-section parameters, such as `S0_1_1` for p+p and `S0P_1_12` for the first derivative of p+C12, the switch `LNEWNUC`, the new tolerance names, such as `TOL_DM_MAX` and `TIME_DX_SHELL`, and the switches `LNEWVARS`, `LSTRUCT_TIME`); shared only with `PARMIN`, which reads them, and [`STARIN`](starin.f.md#starin), which uses none of them yet.
+- **Who calls it:** [`PARMIN`](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489), after reading the namelists.
+- **Inputs, through modules:** [`NMLBYPASS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/nmlbypass_mod.f#L29-L118) (formerly `/NEWPARAM/`, `/NEWCROSS/` and `/XSECT/`: the new cross-section parameters, such as `S0_1_1` for p+p and `S0P_1_12` for the first derivative of p+C12, the switch `LNEWNUC`, the new tolerance names, such as `TOL_DM_MAX` and `TIME_DX_SHELL`, and the switches `LNEWVARS`, `LSTRUCT_TIME`); shared only with `PARMIN`, which reads them, and [`STARIN`](starin.f.md#starin), which uses none of them yet.
 - **Outputs, through modules:**
-  - [`CROSS_MOD`](cross_mod.f.md#cross_mod): `QS0E(8)`, `QQS0EE(8)`, `FC12`, `FO16`, and [`NMLPAR_MOD`](nmlpar_mod.f.md#nmlpar_mod): `SSTANDARD(17)`, all read by [`RATES`](rates.f.md#rates) and [`ENGEB`](engeb.f.md#engeb);
+  - [`CROSS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/cross_mod.f#L19-L29): `QS0E(8)`, `QQS0EE(8)`, `FC12`, `FO16`, and [`NMLPAR_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/nmlpar_mod.f#L32-L279): `SSTANDARD(17)`, all read by [`RATES`](https://github.com/yreclab/yrec/blob/7be4133/src/rates.f#L6-L677) and [`ENGEB`](engeb.f.md#engeb);
   - `NMLPAR_MOD`: `HPTTOL(12)`, the mesh tolerances, used by [`HPOINT`](hpoint.f.md#hpoint) and others;
   - `NMLPAR_MOD`: `ATIME(14)`, the time-step limits, used by [`HTIMER`](htimer.f.md#htimer) and others;
   - `NMLPAR_MOD`: `DTWIND`, `DTDIF`, `LPTIME`.
@@ -30,7 +30,7 @@
     > **Question** ([lines 128–131](https://github.com/yreclab/yrec/blob/7be4133/src/remap.f#L128-L131), [lines 233–235](https://github.com/yreclab/yrec/blob/7be4133/src/remap.f#L233-L235)). **Both switches change other inputs silently.** With `LNEWNUC`, any `SSTANDARD` given in the namelist is overwritten; with `LNEWVARS`, `HPTTOL` and `ATIME` are (the code's comments say so, but nothing is printed). Should a message warn a user who sets both?
 
 
-**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) lists the parameters that `REMAP` copies, with these meanings (defaults from [`NMLBYPASS_MOD`](nmlbypass_mod.f.md#nmlbypass_mod)); `REMAP` copies them only when `LNEWVARS` is true, and `LNEWNUC` likewise gates the S-factors.
+**From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html) lists the parameters that `REMAP` copies, with these meanings (defaults from [`NMLBYPASS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/nmlbypass_mod.f#L29-L118)); `REMAP` copies them only when `LNEWVARS` is true, and `LNEWNUC` likewise gates the S-factors.
 
 | variable | default | goes to | meaning (documentation) |
 | --- | --- | --- | --- |

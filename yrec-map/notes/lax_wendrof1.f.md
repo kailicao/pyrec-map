@@ -4,8 +4,8 @@
 
 **How it fits.**
 - **Who calls it:** [`GRSETT`](grsett.f.md#grsett) (helium settling) and [`MICRODIFF_RUN`](microdiff_run.f.md#microdiff_run) (the microscopic-diffusion driver), each followed by [`LAX_WENDROF2`](lax_wendrof2.f.md#lax_wendrof2).
-- **Arguments:** `DT` (time step, s), `ECOD1` (on the equal grid: the first term's coefficient, which [`SETUP_GRSETT`](setup_grsett.f.md#setup_grsett) builds as $`d\ln P/dr`$ times a function of $`X`$, so it acts as a flux), `EM` (the mass at each grid point), `NPT`, `STOT` (total mass), `LDOLI`; output `EX_H`.
-- **Modules:** `CONSTANTS_MOD` ($`4\pi`$); `NMLPAR_MOD` (the switch `LDIFZ` for metal diffusion); `GRAVEZ_MOD`, the metals' arrays on the equal grid (`ECOD1Z` in, `EZ_H` out), shared with `GRSETT`, `LAX_WENDROF2`, [`MODEL_TO_EQUAL`](model_to_equal.f.md#model_to_equal) and [`EQUAL_TO_MODEL`](equal_to_model.f.md#equal_to_model).
+- **Arguments:** `DT` (time step, s), `ECOD1` (on the equal grid: the first term's coefficient, which [`SETUP_GRSETT`](https://github.com/yreclab/yrec/blob/7be4133/src/setup_grsett.f#L2-L330) builds as $`d\ln P/dr`$ times a function of $`X`$, so it acts as a flux), `EM` (the mass at each grid point), `NPT`, `STOT` (total mass), `LDOLI`; output `EX_H`.
+- **Modules:** `CONSTANTS_MOD` ($`4\pi`$); `NMLPAR_MOD` (the switch `LDIFZ` for metal diffusion); `GRAVEZ_MOD`, the metals' arrays on the equal grid (`ECOD1Z` in, `EZ_H` out), shared with `GRSETT`, `LAX_WENDROF2`, [`MODEL_TO_EQUAL`](https://github.com/yreclab/yrec/blob/7be4133/src/model_to_equal.f#L3-L275) and [`EQUAL_TO_MODEL`](equal_to_model.f.md#equal_to_model).
 
 **The method.** With $`F_i`$ = `ECOD1(I)`, $`m_i`$ = `EM(I)`, $`M`$ = `STOT`:
 

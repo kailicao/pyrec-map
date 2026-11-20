@@ -3,14 +3,14 @@
 **Purpose.** `GETOPAC` is YREC's opacity routine: for a given $`\rho`$, $`T`$, $`X`$, $`Z`$ it combines the low-temperature (molecular) table and the interior table, ramps between them, handles metal-rich helium-burning cores, and adds conductive opacity. It returns $`\kappa`$ and its logarithmic derivatives.
 
 **How it fits.**
-- **Who calls it:** seven routines: [COEFFT](coefft.f.md#coefft), [ENVINT](envint.f.md#envint), [PHYSIC](physic.f.md#physic), [QATM](qatm.f.md#qatm), [QENV](qenv.f.md#qenv), [SCONVEC](sconvec.f.md#sconvec) and [STARIN](starin.f.md#starin).
+- **Who calls it:** seven routines: [COEFFT](coefft.f.md#coefft), [ENVINT](envint.f.md#envint), [PHYSIC](https://github.com/yreclab/yrec/blob/7be4133/src/physic.f#L3-L191), [QATM](https://github.com/yreclab/yrec/blob/7be4133/src/qatm.f#L6-L125), [QENV](https://github.com/yreclab/yrec/blob/7be4133/src/qenv.f#L6-L136), [SCONVEC](https://github.com/yreclab/yrec/blob/7be4133/src/sconvec.f#L4-L302) and [STARIN](starin.f.md#starin).
 - **Inputs:** `DL`, `TL` ($`\log\rho`$, $`\log T`$), `X`, `Z`, and `FXION` (ionization fractions, passed on to the conductive opacity).
 
     > **Question** ([line 192](https://github.com/yreclab/yrec/blob/7be4133/src/getopac.f#L192); [condopacpint.f, lines 32–40](https://github.com/yreclab/yrec/blob/7be4133/src/condopacpint.f#L32-L40)). **`FXION` used only by conduction.** Fine, but its meaning differs by equation of state (`EQSAHA` versus SCV); does `CONDOPACPINT` depend on which one supplied it?
 
 - **What it calls:** the low-temperature table [GETALEX06](getalex06.f.md#getalex06) (the low-temperature tables of Ferguson et al. [2005](https://ui.adsabs.harvard.edu/abs/2005ApJ...623..585F), the code's `ALEX06`); the interior table [GETOPAL95](getopal95.f.md#getopal95) (OPAL 1995); [GTPURZ](gtpurz.f.md#gtpurz) (pure-metal table); and [CONDOPACPINT](condopacpint.f.md#condopacpint) (Potekhin conductive opacity).
 - **Outputs:** `O` ($`\kappa`$), `OL` ($`\log\kappa`$), `QOD` $`=\partial\log\kappa/\partial\log\rho`$, `QOT` $`=\partial\log\kappa/\partial\log T`$.
-- **Modules:** [NMLPAR_MOD](nmlpar_mod.f.md) (the namelist switches `LALEX06`, `LOPAL95`, `LPUREZ`, `LcondOpacP`, the ramp limits `TMOLMIN`, `TMOLMAX`, and the tolerance `OPTOL`, read by [PARMIN](parmin.f.md#parmin)); [NEWOPAC_MOD](newopac_mod.f.md) (`L2Z`, set by [SETUPOPAC](setupopac.f.md#setupopac) from `LZRAMP` or `LDIFZ`); [COMP_MOD](comp_mod.f.md) (`ZENV`); [IOUNITS_MOD](iounits_mod.f.md) (`ISHORT`, for the error messages).
+- **Modules:** [NMLPAR_MOD](nmlpar_mod.f.md) (the namelist switches `LALEX06`, `LOPAL95`, `LPUREZ`, `LcondOpacP`, the ramp limits `TMOLMIN`, `TMOLMAX`, and the tolerance `OPTOL`, read by [PARMIN](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489)); [NEWOPAC_MOD](newopac_mod.f.md) (`L2Z`, set by [SETUPOPAC](https://github.com/yreclab/yrec/blob/7be4133/src/setupopac.f#L14-L95) from `LZRAMP` or `LDIFZ`); [COMP_MOD](comp_mod.f.md) (`ZENV`); [IOUNITS_MOD](iounits_mod.f.md) (`ISHORT`, for the error messages).
 
 **The method.**
 1. **Molecular opacity** for $`\log T \le`$ `TMOLMAX`, from the Ferguson et al. (2005) tables (`LALEX06`); if they are not switched on, the run stops ("NO MOLECULAR OPACITY TABLE CHOSEN").

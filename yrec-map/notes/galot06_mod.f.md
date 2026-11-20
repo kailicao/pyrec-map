@@ -1,12 +1,12 @@
 ## Explanation
 
-**Purpose.** `GALOT06_MOD` holds the grids of the low-temperature opacities of Ferguson et al. ([2005](https://ui.adsabs.harvard.edu/abs/2005ApJ...623..585F)), called ALEX06 in the code: $`\log T`$, $`\log R`$, $`X`$ and $`Z`$, shared by [`READALEX06`](readalex06.f.md#readalex06), [`GETALEX06`](getalex06.f.md#getalex06) and [`ALEX06TAB`](alex06tab.f.md#alex06tab). It replaces `COMMON/GALOT06/` (MHP via Claude, 10/14/26). The table dimensions `NUMD` = 19, `NUMT` = 85, `NUMX` = 9, `NUMZ` = 16 are `PRIVATE`, since other tables use the same names with other values.
+**Purpose.** `GALOT06_MOD` holds the grids of the low-temperature opacities of Ferguson et al. ([2005](https://ui.adsabs.harvard.edu/abs/2005ApJ...623..585F)), called ALEX06 in the code: $`\log T`$, $`\log R`$, $`X`$, and $`Z`$, shared by [`READALEX06`](https://github.com/yreclab/yrec/blob/7be4133/src/readalex06.f#L18-L141), [`GETALEX06`](getalex06.f.md#getalex06), and [`ALEX06TAB`](alex06tab.f.md#alex06tab). It replaces `COMMON/GALOT06/` (MHP via Claude, 10/14/26). The table dimensions `NUMD` = 19, `NUMT` = 85, `NUMX` = 9, `NUMZ` = 16 are `PRIVATE`, since other tables use the same names with other values.
 
 **What its variables hold, who sets them, who reads them.** All four carry initial values, moved from the `DATA` statements of `READALEX06`; nothing changes them at run time.
 - `TGR06(NUMT)`: $`\log T`$ from 2.70 to 4.50 (steps of 0.05, 0.01 between 2.90 and 3.50, then 0.05).
 - `R0GR06(NUMD)`: $`\log R`$ from −8 to 1 in steps of 0.5.
 - `XXG06(NUMX)`: the nine $`X`$ values, 0 to 1; `ZZG06(NUMZ)`: the sixteen $`Z`$ values, 0 to 0.10.
-- `READALEX06` checks the headers of the tables it reads against them (on a mismatch it stops the run, except for the $`X`$, $`Z`$ check of its first loop, which prints "run stopped" but whose `STOP` is commented out: [readalex06.f, suspected bug 1](readalex06.f.md#b1)); `GETALEX06` locates $`\log T`$ and $`\log R`$ in them for the interpolation; `ALEX06TAB` locates $`X`$ and $`Z`$.
+- `READALEX06` checks the headers of the tables it reads against them (on a mismatch it stops the run, except for the $`X`$, $`Z`$ check of its first loop, which prints "RUN STOPPED" but whose `STOP` is commented out: [readalex06.f, suspected bug 1](readalex06.f.md#b1)); `GETALEX06` locates $`\log T`$ and $`\log R`$ in them for the interpolation; `ALEX06TAB` locates $`X`$ and $`Z`$.
 
 **Design.** A blanket `USE GALOT06_MOD`. The literals are copied verbatim, so their stored values are those of the `DATA` statements. The module's header says they came from PARMIN's `DATA` statements and are namelist variables; at `rp_1` they were in READALEX06, and they are in no namelist (a comment copied from the other conversions).
 

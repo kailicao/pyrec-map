@@ -5,7 +5,7 @@
 **How it fits.**
 - **Inputs:** the model (arguments: $`\rho`$, `HCOMP`, $`L`$, $`m`$, shell masses, $`T`$), the hydrogen-burning luminosity `HYDLUM`, the convective core's edge `JCORE`, the shell's midpoint `JXMID`; through modules the limits `ATIME` (`NMLPAR_MOD`), the constants (`CONSTANTS_MOD`).
 - **Who calls it:** only [HTIMER](htimer.f.md#htimer).
-- **What it calls:** [RATES](rates.f.md#rates) and [EQBURN](eqburn.f.md#eqburn), for $`dX/dt`$ at the shell's midpoint.
+- **What it calls:** [RATES](https://github.com/yreclab/yrec/blob/7be4133/src/rates.f#L6-L677) and [EQBURN](eqburn.f.md#eqburn), for $`dX/dt`$ at the shell's midpoint.
 - **Output:** `DELTSH`, in seconds (by its use in `HTIMER`).
 - **Modules:** `NMLPAR_MOD` (formerly `COMMON/CTLIM/`), `CONSTANTS_MOD`, `DIMENSIONS_MOD`.
 
@@ -19,7 +19,7 @@
   
   $$\displaystyle \Delta t = \min\\!\left(\Delta t,\ \left\|\frac{\texttt{ATIME(7)}}{dX/dt}\right\|\\,\mathrm{CSECYR}\times10^9\right).$$
   
-  `ATIME(6)` is a mass in solar masses, whatever the star's mass: REMAP's comment calls it the "max permitted solar masses of X burned in timestep" (`TIME_DX_TOTAL`, "max absolute H burned per timestep (post-MS)" in the documentation); the code burns the hydrogen of `ATIME(6)` $`M_\odot`$ of matter at the surface $`X`$, and the header's "the mass fraction ATIME(6) of X in the entire star" is older wording (settled from the code and the documentation, Nov 9, 2026: [lines 56–60](https://github.com/yreclab/yrec/blob/7be4133/src/xtime.f#L56-L60); [lines 73–74](https://github.com/yreclab/yrec/blob/7be4133/src/xtime.f#L73-L74); [remap.f, lines 266–267](https://github.com/yreclab/yrec/blob/7be4133/src/remap.f#L266-L267)). The factor $`\mathrm{CSECYR}\times10^9`$ is there because `EQBURN` returns $`dX/dt`$ per $`\mathrm{Gyr}`$: The rates of [RATES](rates.f.md#rates) are per $`10^9\,\mathrm{yr}`$ per $`\mathrm{amu}`$ (settled from the code, Nov 9, 2026: [lines 105–106](https://github.com/yreclab/yrec/blob/7be4133/src/xtime.f#L105-L106); [rates.f, lines 656–658](https://github.com/yreclab/yrec/blob/7be4133/src/rates.f#L656-L658)).
+  `ATIME(6)` is a mass in solar masses, whatever the star's mass: REMAP's comment calls it the "max permitted solar masses of X burned in timestep" (`TIME_DX_TOTAL`, "max absolute H burned per timestep (post-MS)" in the documentation); the code burns the hydrogen of `ATIME(6)` $`M_\odot`$ of matter at the surface $`X`$, and the header's "the mass fraction ATIME(6) of X in the entire star" is older wording (settled from the code and the documentation, Nov 9, 2026: [lines 56–60](https://github.com/yreclab/yrec/blob/7be4133/src/xtime.f#L56-L60); [lines 73–74](https://github.com/yreclab/yrec/blob/7be4133/src/xtime.f#L73-L74); [remap.f, lines 266–267](https://github.com/yreclab/yrec/blob/7be4133/src/remap.f#L266-L267)). The factor $`\mathrm{CSECYR}\times10^9`$ is there because `EQBURN` returns $`dX/dt`$ per $`\mathrm{Gyr}`$: The rates of [RATES](https://github.com/yreclab/yrec/blob/7be4133/src/rates.f#L6-L677) are per $`10^9\,\mathrm{yr}`$ per $`\mathrm{amu}`$ (settled from the code, Nov 9, 2026: [lines 105–106](https://github.com/yreclab/yrec/blob/7be4133/src/xtime.f#L105-L106); [rates.f, lines 656–658](https://github.com/yreclab/yrec/blob/7be4133/src/rates.f#L656-L658)).
 
 **Changed since `rp_1`.** Declarations only: `/CTLIM/` to `NMLPAR_MOD`, the constants to `CONSTANTS_MOD`; the unused `/CT3/` and `/FLAG/` dropped; `IMPLICIT NONE`.
 

@@ -4,10 +4,10 @@
 
 **How it fits.**
 - **Inputs:** arguments only: the shells' masses (`HS2`, probably in grams, since the angular momentum is the sum of `HS2*HJM`), specific angular momenta `HJM`, the previous rates `OMEGA`, and the structure (`HD`, `HR`, `HS`), passed on to the shape routines.
-- **Who calls it:** the rotation routines that impose solid-body rotation on a zone: [CHECKJ](checkj.f.md#checkj), [GETROT](getrot.f.md#getrot), [MIDMOD](midmod.f.md#midmod), [SECULR](seculr.f.md#seculr) and [WCZIMP](wczimp.f.md#wczimp) (for convection zones, by its name; WCZ, removed since `rp_1`, was another).
-- **What it calls:** [SHAPE](shape.f.md#shape) (the distortion of the shells, `ETA2` and `R0`) and [MOMI](momi.f.md#momi) (each shell's moment of inertia `HI` and `QIW`, which the comments call $`dI/d\Omega`$ but which is $`\tfrac12\,\Omega\,dI/d\Omega`$: [suspected bug 2](#b2)).
+- **Who calls it:** the rotation routines that impose solid-body rotation on a zone: [CHECKJ](checkj.f.md#checkj), [GETROT](getrot.f.md#getrot), [MIDMOD](https://github.com/yreclab/yrec/blob/7be4133/src/midmod.f#L2-L523), [SECULR](https://github.com/yreclab/yrec/blob/7be4133/src/seculr.f#L6-L532) and [WCZIMP](wczimp.f.md#wczimp) (for convection zones, by its name; WCZ, removed since `rp_1`, was another).
+- **What it calls:** [SHAPE](https://github.com/yreclab/yrec/blob/7be4133/src/shape.f#L2-L170) (the distortion of the shells, `ETA2` and `R0`) and [MOMI](https://github.com/yreclab/yrec/blob/7be4133/src/momi.f#L3-L92) (each shell's moment of inertia `HI` and `QIW`, which the comments call $`dI/d\Omega`$ but which is $`\tfrac12\,\Omega\,dI/d\Omega`$: [suspected bug 2](#b2)).
 - **Outputs:** `OMEGA`, `HI`, `QIW`, `ETA2`, `R0` and an updated `HJM`, all through the arguments.
-- **Modules:** `ERRMOM_MOD` (the tolerance `TOLERI`, $`10^{-12}`$, used only here and in [CHECKJ](checkj.f.md#checkj): CHECKJ saves it (`TOLER0 = TOLERI`), relaxes it to `MAX(DJOK*1.0D-2,TOLER0)` around its call to GETROT, and restores it); `DISK_MOD` (the age `SAGE`, shared with [GETW](getw.f.md#getw), [SECULR](seculr.f.md#seculr), [MDOT](mdot.f.md#mdot) and others); `NMLPAR_MOD` (the disk-locking parameters: the locking time `TDISK`, the locked rate `PDISK` and the switch `LDISK`, namelist parameters read by [PARMIN](parmin.f.md#parmin)); `DIMENSIONS_MOD` (`JSON`).
+- **Modules:** `ERRMOM_MOD` (the tolerance `TOLERI`, $`10^{-12}`$, used only here and in [CHECKJ](checkj.f.md#checkj): CHECKJ saves it (`TOLER0 = TOLERI`), relaxes it to `MAX(DJOK*1.0D-2,TOLER0)` around its call to GETROT, and restores it); `DISK_MOD` (the age `SAGE`, shared with [GETW](getw.f.md#getw), [SECULR](https://github.com/yreclab/yrec/blob/7be4133/src/seculr.f#L6-L532), [MDOT](mdot.f.md#mdot) and others); `NMLPAR_MOD` (the disk-locking parameters: the locking time `TDISK`, the locked rate `PDISK` and the switch `LDISK`, namelist parameters read by [PARMIN](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489)); `DIMENSIONS_MOD` (`JSON`).
 
 **The method.** Let $`m_j`$ be `HS2(J)` and $`j_j`$ be `HJM(J)`. The target is the zone's total angular momentum,
 
@@ -33,7 +33,7 @@ repeated until $`|J - \Omega I|/J \le`$ `TOLERI`, or 20 times ([lines 68–95](h
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules (`/ERRMOM/` to `ERRMOM_MOD`; `/DISK/` split between `DISK_MOD` (`SAGE`) and `NMLPAR_MOD` (`TDISK`, `PDISK`, `LDISK`); the unused `/LUOUT/` dropped), the array size `JSON` from `DIMENSIONS_MOD`, `IMPLICIT NONE`. One caller, WCZ, was removed with its file.
 
-**Changed since `a8a5950`.** The file is unchanged, but [`ERRMOM_MOD`](errmom_mod.f.md#errmom_mod) now gives `TOLERI` the value $`10^{-12}`$, so the Newton loop stops once $`|J - \Omega I|/J \le 10^{-12}`$; this settles former question 1, and former questions 2–5 are now 1–4.
+**Changed since `a8a5950`.** The file is unchanged, but [`ERRMOM_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/errmom_mod.f#L19-L30) now gives `TOLERI` the value $`10^{-12}`$, so the Newton loop stops once $`|J - \Omega I|/J \le 10^{-12}`$; this settles former question 1, and former questions 2–5 are now 1–4.
 
 ## Bugs, by priority
 

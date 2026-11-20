@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** Builds the OPAL95 opacity tables at the model's fixed $`Z`$ (one table for each of the ten $`X`$ values) from the full set of tables (MHP 7/98). The result is what [OP953D](op953d.f.md#op953d) interpolates, and what [OP95XTAB](op95xtab.f.md#op95xtab) reduces further to the surface $`X`$.
+**Purpose.** Builds the OPAL95 opacity tables at the model's fixed $`Z`$ (one table for each of the ten $`X`$ values) from the full set of tables (MHP 7/98). The result is what [OP953D](https://github.com/yreclab/yrec/blob/7be4133/src/op953d.f#L6-L89) interpolates, and what [OP95XTAB](https://github.com/yreclab/yrec/blob/7be4133/src/op95xtab.f#L6-L104) reduces further to the surface $`X`$.
 
 **How it fits.**
 - **Inputs:** the desired $`Z`$; the full set in `LLOT95A_MOD` (`ZZG`, `NZ`, `CAPPA2`).
@@ -10,7 +10,7 @@
 
 **The method.** It finds the four $`Z`$ values around the desired $`Z`$ and interpolates each $`(T, R)`$ entry with Lagrange weights $`b_k`$, $`\log\kappa(X_j, T, R) = \sum_k b_k\,\log\kappa(Z_k, X_j, T, R)`$:
 - tables 1–8 (present at every $`Z`$): directly;
-- table 9 ($`X = 0.95`$): only if $`Z \lt{} 0.04`$, from four $`Z`$ values no larger than 0.04 (shifted to 0.01–0.04 if needed); for $`Z \ge 0.04`$, `CAPPA(9,…)` keeps old values (zeros at first), which [OP95XTAB](op95xtab.f.md#op95xtab) reads at exactly $`Z = 0.04`$ (a bug on that page);
+- table 9 ($`X = 0.95`$): only if $`Z \lt{} 0.04`$, from four $`Z`$ values no larger than 0.04 (shifted to 0.01–0.04 if needed); for $`Z \ge 0.04`$, `CAPPA(9,…)` keeps old values (zeros at first), which [OP95XTAB](https://github.com/yreclab/yrec/blob/7be4133/src/op95xtab.f#L6-L104) reads at exactly $`Z = 0.04`$ (a bug on that page);
 - table 10 ($`X = 1 - Z`$): only if $`Z \lt{} 0.1`$, from four $`Z`$ values below 0.1 (shifted to 0.03–0.08 if needed).
 
 > **Question** ([lines 73–74](https://github.com/yreclab/yrec/blob/7be4133/src/op95ztab.f#L73-L74), [lines 101–102](https://github.com/yreclab/yrec/blob/7be4133/src/op95ztab.f#L101-L102)). **Fixed positions in the $`Z`$ grid.** The shifts for tables 9 and 10 use `NUMZ - 6` and `NUMZ - 4`, which assume where 0.04 and 0.1 sit in the 13-value $`Z`$ grid. Worth a comment, or a search.

@@ -9,4 +9,4 @@
 
 **Changed since `rp_1`.** New file: `COMMON/ERRMOM/` as a module.
 
-**Changed since `a8a5950`.** `TOLERI` is given a value, $`10^{-12}`$: Nothing set it before, so SOLID's tolerance was 0 and every call ran all 20 Newton passes. This settles former question 1.
+**Changed since `a8a5950`.** `TOLERI` is given a value, $`10^{-12}`$: Nothing set it before, so SOLID's tolerance was 0 and every call ran all 20 Newton passes. This answers the question of where `TOLERI`'s value should come from, which this page asked before the change.

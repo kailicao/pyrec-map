@@ -2,7 +2,7 @@
 <header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ ksplint.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-KSPLINT'>KSPLINT</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>ksplint.f</h1>
 <p class='muted'>43 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/ksplint.f'>on GitHub (7be4133)</a></p>
-<p><strong>Python version</strong>: <code>ksplint.py</code>, 58 lines, on the right (switch to Python above the code).</p>
+<p><strong>Python version</strong>: <code>ksplint.py</code>, 94 lines, on the right (switch to Python above the code).</p>
 <details class='vars' id='terms'><summary>Variables on this page (1)</summary><p><a href='../glossary.html#var-ishort' data-def='unit 20, all diagnostic information, the &lt;code&gt;.short&lt;/code&gt; file.'><code>ishort</code></a></p></details><h2 id='purpose'>Purpose</h2>
 <div class='notes'><p><code>KSPLINT</code> evaluates at $x$ the 4-point cubic spline whose second derivatives <a href="../yrec-map/kspline.f.html#def-KSPLINE"><code>KSPLINE</code></a> computed (<em>Numerical Recipes</em>' <code>SPLINT</code>, with <code>NM</code> = 4 fixed).</p></div>
 <h2 id='how-it-fits'>How it fits</h2>
@@ -65,64 +65,100 @@
 <span class="line" id="L40"><span class="ln">40</span><span class='lt'>      </span><span class='lr'>      </span>Y = A*YA(KLO)+B*YA(KHI)+</span>
 <span class="line" id="L41"><span class="ln">41</span><span class='lt'>     *   </span><span class='lr'>     *    </span>((A**<span class='hn'>3</span>-A)*Y2A(KLO)+(B**<span class='hn'>3</span>-B)*Y2A(KHI))*(H**<span class='hn'>2</span>)/<span class='hn'>6.0D0</span></span>
 <span class="line" id="L42"><span class="ln">42</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>RETURN</span></span>
-<span class="line" id="L43"><span class="ln">43</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of ksplint.f (YREC development, 7be4133).&quot;&quot;&quot;</span></span>
+<span class="line" id="L43"><span class="ln">43</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of ksplint.f (YREC development, 7be4133): the 4-point cubic spline of KSPLINE evaluated.</span></span>
 <span class="line" id="P2"><span class="ln">2</span></span>
-<span class="line" id="P3"><span class="ln">3</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> iounits_mod</span>
-<span class="line" id="P4"><span class="ln">4</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
-<span class="line" id="P5"><span class="ln">5</span></span>
-<span class="line" id="P6"><span class="ln">6</span>NM = <span class='hn'>4</span></span>
+<span class="line" id="P3"><span class="ln">3</span><span class='hs'>Functions</span></span>
+<span class="line" id="P4"><span class="ln">4</span><span class='hs'>---------</span></span>
+<span class="line" id="P5"><span class="ln">5</span><span class='hs'>ksplint : The spline&#x27;s value at x (the routine; its Numba kernel when accel.USE_NUMBA).</span></span>
+<span class="line" id="P6"><span class="ln">6</span><span class='hs'>_ksplint_nb : The kernel, with a stop status; eqscve&#x27;s kernels call it directly.</span></span>
 <span class="line" id="P7"><span class="ln">7</span></span>
-<span class="line" id="P8"><span class="ln">8</span></span>
-<span class="line" id="P9"><span class="ln">9</span><span class='hk'>def</span> ksplint(xa: np.ndarray, ya: np.ndarray, y2a: np.ndarray, x: <span class='hb'>float</span>, y: <span class='hb'>float</span>) -&gt; <span class='hb'>float</span>:</span>
-<span class="line" id="P10"><span class="ln">10</span>    <span class='hs'>&quot;&quot;&quot;Evaluate at ``x`` the 4-point cubic spline from KSPLINE.</span></span>
+<span class="line" id="P8"><span class="ln">8</span><span class='hs'>&quot;&quot;&quot;</span></span>
+<span class="line" id="P9"><span class="ln">9</span></span>
+<span class="line" id="P10"><span class="ln">10</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
 <span class="line" id="P11"><span class="ln">11</span></span>
-<span class="line" id="P12"><span class="ln">12</span><span class='hs'>    *Numerical Recipes*&#x27; SPLINT with ``NM`` = 4: bisection for the</span></span>
-<span class="line" id="P13"><span class="ln">13</span><span class='hs'>    interval, then the cubic-spline formula. Outside the nodes it</span></span>
-<span class="line" id="P14"><span class="ln">14</span><span class='hs'>    extrapolates with the end interval&#x27;s cubic.</span></span>
-<span class="line" id="P15"><span class="ln">15</span></span>
-<span class="line" id="P16"><span class="ln">16</span><span class='hs'>    Translates: ksplint.f#KSPLINT (7be4133)</span></span>
+<span class="line" id="P12"><span class="ln">12</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> accel</span>
+<span class="line" id="P13"><span class="ln">13</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> iounits_mod</span>
+<span class="line" id="P14"><span class="ln">14</span></span>
+<span class="line" id="P15"><span class="ln">15</span>NM = <span class='hn'>4</span>  <span class='hc'># The spline&#x27;s number of points (PARAMETER).</span></span>
+<span class="line" id="P16"><span class="ln">16</span></span>
 <span class="line" id="P17"><span class="ln">17</span></span>
-<span class="line" id="P18"><span class="ln">18</span><span class='hs'>    Parameters</span></span>
-<span class="line" id="P19"><span class="ln">19</span><span class='hs'>    ----------</span></span>
-<span class="line" id="P20"><span class="ln">20</span><span class='hs'>    xa, ya, y2a : ndarray, shape (NM + 1,)</span></span>
-<span class="line" id="P21"><span class="ln">21</span><span class='hs'>        Nodes, values and second derivatives, indices 1..4.</span></span>
-<span class="line" id="P22"><span class="ln">22</span><span class='hs'>    x : float</span></span>
-<span class="line" id="P23"><span class="ln">23</span><span class='hs'>        The point of evaluation.</span></span>
-<span class="line" id="P24"><span class="ln">24</span><span class='hs'>    y : float</span></span>
-<span class="line" id="P25"><span class="ln">25</span><span class='hs'>        Output only (passed in with any value).</span></span>
+<span class="line" id="P18"><span class="ln">18</span><span class='hk'>def</span> ksplint(xa: np.ndarray, ya: np.ndarray, y2a: np.ndarray, x: <span class='hb'>float</span>, y: <span class='hb'>float</span>) -&gt; <span class='hb'>float</span>:</span>
+<span class="line" id="P19"><span class="ln">19</span>    <span class='hs'>&quot;&quot;&quot;Evaluate at ``x`` the 4-point cubic spline from KSPLINE.</span></span>
+<span class="line" id="P20"><span class="ln">20</span></span>
+<span class="line" id="P21"><span class="ln">21</span><span class='hs'>    *Numerical Recipes*&#x27; SPLINT with ``NM`` = 4: bisection for the</span></span>
+<span class="line" id="P22"><span class="ln">22</span><span class='hs'>    interval, then the cubic-spline formula. Outside the nodes it</span></span>
+<span class="line" id="P23"><span class="ln">23</span><span class='hs'>    extrapolates with the end interval&#x27;s cubic.</span></span>
+<span class="line" id="P24"><span class="ln">24</span></span>
+<span class="line" id="P25"><span class="ln">25</span><span class='hs'>    Translates: ksplint.f#KSPLINT (7be4133)</span></span>
 <span class="line" id="P26"><span class="ln">26</span></span>
-<span class="line" id="P27"><span class="ln">27</span><span class='hs'>    Returns</span></span>
-<span class="line" id="P28"><span class="ln">28</span><span class='hs'>    -------</span></span>
-<span class="line" id="P29"><span class="ln">29</span><span class='hs'>    y : float</span></span>
-<span class="line" id="P30"><span class="ln">30</span><span class='hs'>        The spline&#x27;s value at ``x``.</span></span>
-<span class="line" id="P31"><span class="ln">31</span></span>
-<span class="line" id="P32"><span class="ln">32</span><span class='hs'>    &quot;&quot;&quot;</span></span>
-<span class="line" id="P33"><span class="ln">33</span></span>
-<span class="line" id="P34"><span class="ln">34</span>    <span class='hc'># Bisection for the bracketing interval (<a class='fl' href='#L15-L26'>Fortran lines 15–26</a>).</span></span>
-<span class="line" id="P35"><span class="ln">35</span>    klo = <span class='hn'>1</span></span>
-<span class="line" id="P36"><span class="ln">36</span>    khi = NM</span>
-<span class="line" id="P37"><span class="ln">37</span>    <span class='hk'>while</span> khi - klo &gt; <span class='hn'>1</span>:  <span class='hc'># label 1</span></span>
-<span class="line" id="P38"><span class="ln">38</span>        k = (khi + klo) // <span class='hn'>2</span></span>
-<span class="line" id="P39"><span class="ln">39</span>        <span class='hk'>if</span> xa[k] &gt; x:</span>
-<span class="line" id="P40"><span class="ln">40</span>            khi = k</span>
-<span class="line" id="P41"><span class="ln">41</span>        <span class='hk'>else</span>:</span>
-<span class="line" id="P42"><span class="ln">42</span>            klo = k</span>
-<span class="line" id="P43"><span class="ln">43</span></span>
-<span class="line" id="P44"><span class="ln">44</span>    <span class='hc'># Stop if two nodes coincide (<a class='fl' href='#L28-L36'>Fortran lines 28–36</a>).</span></span>
-<span class="line" id="P45"><span class="ln">45</span>    h = xa[khi] - xa[klo]</span>
-<span class="line" id="P46"><span class="ln">46</span>    <span class='hk'>if</span> h == <span class='hn'>0.0</span>:</span>
-<span class="line" id="P47"><span class="ln">47</span>        text = (<span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'> KSPLINT: TWO ABSCISSAE COINCIDE AT</span><span class='hs'>{</span>xa[klo]<span class='hs'>:</span><span class='hs'>14.6E</span><span class='hs'>}</span><span class='hs'>&quot;</span></span>
-<span class="line" id="P48"><span class="ln">48</span>                <span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'> X</span><span class='hs'>{</span>x<span class='hs'>:</span><span class='hs'>14.6E</span><span class='hs'>}</span><span class='hs'>\n</span><span class='hs'> RUN STOPPED</span><span class='hs'>&quot;</span>)                  <span class='hc'># format 900</span></span>
-<span class="line" id="P49"><span class="ln">49</span>        <span class='hb'>print</span>(text)</span>
-<span class="line" id="P50"><span class="ln">50</span>        iounits_mod.write(iounits_mod.ishort, text)</span>
-<span class="line" id="P51"><span class="ln">51</span>        <span class='hk'>raise</span> SystemExit(<span class='hn'>1</span>)    <span class='hc'># STOP 1, the run-time error code</span></span>
-<span class="line" id="P52"><span class="ln">52</span></span>
-<span class="line" id="P53"><span class="ln">53</span>    <span class='hc'># The cubic spline&#x27;s value (<a class='fl' href='#L38-L41'>Fortran lines 38–41</a>).</span></span>
-<span class="line" id="P54"><span class="ln">54</span>    a = (xa[khi] - x) / h</span>
-<span class="line" id="P55"><span class="ln">55</span>    b = (x - xa[klo]) / h</span>
-<span class="line" id="P56"><span class="ln">56</span>    y = (a * ya[klo] + b * ya[khi]</span>
-<span class="line" id="P57"><span class="ln">57</span>         + ((a ** <span class='hn'>3</span> - a) * y2a[klo] + (b ** <span class='hn'>3</span> - b) * y2a[khi]) * (h ** <span class='hn'>2</span>) / <span class='hn'>6.0</span>)</span>
-<span class="line" id="P58"><span class="ln">58</span>    <span class='hk'>return</span> y</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
+<span class="line" id="P27"><span class="ln">27</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P28"><span class="ln">28</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P29"><span class="ln">29</span><span class='hs'>    xa, ya, y2a : np.ndarray, shape: `(NM + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P30"><span class="ln">30</span><span class='hs'>        Nodes, values and second derivatives, indices 1..4 (index 0 unused).</span></span>
+<span class="line" id="P31"><span class="ln">31</span><span class='hs'>    x : float</span></span>
+<span class="line" id="P32"><span class="ln">32</span><span class='hs'>        The point of evaluation.</span></span>
+<span class="line" id="P33"><span class="ln">33</span><span class='hs'>    y : float</span></span>
+<span class="line" id="P34"><span class="ln">34</span><span class='hs'>        Output only (passed in with any value).</span></span>
+<span class="line" id="P35"><span class="ln">35</span></span>
+<span class="line" id="P36"><span class="ln">36</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P37"><span class="ln">37</span><span class='hs'>    -------</span></span>
+<span class="line" id="P38"><span class="ln">38</span><span class='hs'>    y : float</span></span>
+<span class="line" id="P39"><span class="ln">39</span><span class='hs'>        The spline&#x27;s value at ``x``.</span></span>
+<span class="line" id="P40"><span class="ln">40</span></span>
+<span class="line" id="P41"><span class="ln">41</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P42"><span class="ln">42</span></span>
+<span class="line" id="P43"><span class="ln">43</span>    <span class='hk'>if</span> accel.USE_NUMBA:</span>
+<span class="line" id="P44"><span class="ln">44</span>        yk, stop = _ksplint_nb(xa, ya, y2a, x)</span>
+<span class="line" id="P45"><span class="ln">45</span>        <span class='hk'>if</span> <span class='hk'>not</span> stop:</span>
+<span class="line" id="P46"><span class="ln">46</span>            <span class='hk'>return</span> yk</span>
+<span class="line" id="P47"><span class="ln">47</span></span>
+<span class="line" id="P48"><span class="ln">48</span>    <span class='hc'># Bisection for the bracketing interval (<a class='fl' href='#L15-L26'>Fortran lines 15–26</a>).</span></span>
+<span class="line" id="P49"><span class="ln">49</span>    klo = <span class='hn'>1</span></span>
+<span class="line" id="P50"><span class="ln">50</span>    khi = NM</span>
+<span class="line" id="P51"><span class="ln">51</span>    <span class='hk'>while</span> khi - klo &gt; <span class='hn'>1</span>:  <span class='hc'># label 1</span></span>
+<span class="line" id="P52"><span class="ln">52</span>        k = (khi + klo) // <span class='hn'>2</span></span>
+<span class="line" id="P53"><span class="ln">53</span>        <span class='hk'>if</span> xa[k] &gt; x:</span>
+<span class="line" id="P54"><span class="ln">54</span>            khi = k</span>
+<span class="line" id="P55"><span class="ln">55</span>        <span class='hk'>else</span>:</span>
+<span class="line" id="P56"><span class="ln">56</span>            klo = k</span>
+<span class="line" id="P57"><span class="ln">57</span></span>
+<span class="line" id="P58"><span class="ln">58</span>    <span class='hc'># Stop if two nodes coincide (<a class='fl' href='#L28-L36'>Fortran lines 28–36</a>).</span></span>
+<span class="line" id="P59"><span class="ln">59</span>    h = xa[khi] - xa[klo]</span>
+<span class="line" id="P60"><span class="ln">60</span>    <span class='hk'>if</span> h == <span class='hn'>0.0</span>:</span>
+<span class="line" id="P61"><span class="ln">61</span>        text = (<span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'> KSPLINT: TWO ABSCISSAE COINCIDE AT</span><span class='hs'>{</span>xa[klo]<span class='hs'>:</span><span class='hs'>14.6E</span><span class='hs'>}</span><span class='hs'>&quot;</span></span>
+<span class="line" id="P62"><span class="ln">62</span>                <span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'> X</span><span class='hs'>{</span>x<span class='hs'>:</span><span class='hs'>14.6E</span><span class='hs'>}</span><span class='hs'>\n</span><span class='hs'> RUN STOPPED</span><span class='hs'>&quot;</span>)                  <span class='hc'># format 900</span></span>
+<span class="line" id="P63"><span class="ln">63</span>        <span class='hb'>print</span>(text)</span>
+<span class="line" id="P64"><span class="ln">64</span>        iounits_mod.write(iounits_mod.ishort, text)</span>
+<span class="line" id="P65"><span class="ln">65</span>        <span class='hk'>raise</span> SystemExit(<span class='hn'>1</span>)    <span class='hc'># STOP 1, the run-time error code</span></span>
+<span class="line" id="P66"><span class="ln">66</span></span>
+<span class="line" id="P67"><span class="ln">67</span>    <span class='hc'># The cubic spline&#x27;s value; the integer powers by squaring, as gfortran computes them (<a class='fl' href='#L38-L41'>Fortran lines 38–41</a>).</span></span>
+<span class="line" id="P68"><span class="ln">68</span>    a = (xa[khi] - x) / h</span>
+<span class="line" id="P69"><span class="ln">69</span>    b = (x - xa[klo]) / h</span>
+<span class="line" id="P70"><span class="ln">70</span>    y = (a * ya[klo] + b * ya[khi]</span>
+<span class="line" id="P71"><span class="ln">71</span>         + (((a * a) * a - a) * y2a[klo] + ((b * b) * b - b) * y2a[khi]) * (h * h) / <span class='hn'>6.0</span>)</span>
+<span class="line" id="P72"><span class="ln">72</span>    <span class='hk'>return</span> y</span>
+<span class="line" id="P73"><span class="ln">73</span></span>
+<span class="line" id="P74"><span class="ln">74</span></span>
+<span class="line" id="P75"><span class="ln">75</span>@accel.njit(inline=<span class='hs'>&#x27;</span><span class='hs'>always</span><span class='hs'>&#x27;</span>)</span>
+<span class="line" id="P76"><span class="ln">76</span><span class='hk'>def</span> _ksplint_nb(xa: np.ndarray, ya: np.ndarray, y2a: np.ndarray, x: <span class='hb'>float</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>int</span>]:</span>
+<span class="line" id="P77"><span class="ln">77</span>    <span class='hs'>&quot;&quot;&quot;ksplint&#x27;s kernel (Fortran lines 15–41), callable from other kernels: returns (y, stop), stop 1 where two</span></span>
+<span class="line" id="P78"><span class="ln">78</span><span class='hs'>    abscissae coincide (the plain ksplint then writes its message and stops).&quot;&quot;&quot;</span></span>
+<span class="line" id="P79"><span class="ln">79</span>    klo = <span class='hn'>1</span></span>
+<span class="line" id="P80"><span class="ln">80</span>    khi = NM</span>
+<span class="line" id="P81"><span class="ln">81</span>    <span class='hk'>while</span> khi - klo &gt; <span class='hn'>1</span>:</span>
+<span class="line" id="P82"><span class="ln">82</span>        k = (khi + klo) // <span class='hn'>2</span></span>
+<span class="line" id="P83"><span class="ln">83</span>        <span class='hk'>if</span> xa[k] &gt; x:</span>
+<span class="line" id="P84"><span class="ln">84</span>            khi = k</span>
+<span class="line" id="P85"><span class="ln">85</span>        <span class='hk'>else</span>:</span>
+<span class="line" id="P86"><span class="ln">86</span>            klo = k</span>
+<span class="line" id="P87"><span class="ln">87</span>    h = xa[khi] - xa[klo]</span>
+<span class="line" id="P88"><span class="ln">88</span>    <span class='hk'>if</span> h == <span class='hn'>0.0</span>:</span>
+<span class="line" id="P89"><span class="ln">89</span>        <span class='hk'>return</span> <span class='hn'>0.0</span>, <span class='hn'>1</span></span>
+<span class="line" id="P90"><span class="ln">90</span>    a = (xa[khi] - x) / h</span>
+<span class="line" id="P91"><span class="ln">91</span>    b = (x - xa[klo]) / h</span>
+<span class="line" id="P92"><span class="ln">92</span>    y = (a * ya[klo] + b * ya[khi]</span>
+<span class="line" id="P93"><span class="ln">93</span>         + (((a * a) * a - a) * y2a[klo] + ((b * b) * b - b) * y2a[khi]) * (h * h) / <span class='hn'>6.0</span>)</span>
+<span class="line" id="P94"><span class="ln">94</span>    <span class='hk'>return</span> y, <span class='hn'>0</span></span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
 function st(){try{return localStorage.getItem('pm-toc')}catch(e){return null}}function sv(v){try{localStorage.setItem('pm-toc',v)}catch(e){}}
 var b=nav.querySelector('.toc-toggle');function set(h){page.classList.toggle('toc-hidden',h);b.textContent=h?'show':'hide';}
 set(st()==='hidden');b.addEventListener('click',function(){var h=!page.classList.contains('toc-hidden');set(h);sv(h?'hidden':'shown');});

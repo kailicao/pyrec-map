@@ -4,11 +4,11 @@
 
 **How it fits.**
 - **Inputs:** the model (`HCOMP`, $`\log\rho`$, $`L/L_\odot`$, $`\log P`$, $`\log r`$, $`m`$ in grams `HS1`, `M`, `MODEL`), and through modules the energy rates `SESUM` and `SEG` and the actual gradient `SDEL(2,·)` (`SCRTCH_MOD`), the surface composition and total mass (`COMP_MOD`), `NPRTPT` (`NMLPAR_MOD`), the constants (`CONSTANTS_MOD`) and the unit `IMILNE` (`IOUNITS_MOD`).
-- **Who calls it:** [PUTSTORE](putstore.f.md#putstore) and [WRTOUT](wrtout.f.md#wrtout), when `LMILNE` is set and other conditions hold: PUTSTORE only when `LSTATM` or `LSTENV` is set, and WRTOUT only in its pulsation branch (`LPULSE` on a model that is not stored). So `LMILNE` alone writes nothing.
+- **Who calls it:** [PUTSTORE](https://github.com/yreclab/yrec/blob/7be4133/src/putstore.f#L13-L360) and [WRTOUT](wrtout.f.md#wrtout), when `LMILNE` is set and other conditions hold: PUTSTORE only when `LSTATM` or `LSTENV` is set, and WRTOUT only in its pulsation branch (`LPULSE` on a model that is not stored). So `LMILNE` alone writes nothing.
 
     > **Question** ([putstore.f, lines 342–343](https://github.com/yreclab/yrec/blob/7be4133/src/putstore.f#L342-L343); [wrtout.f, lines 683–684](https://github.com/yreclab/yrec/blob/7be4133/src/wrtout.f#L683-L684)). **`LMILNE` alone writes nothing.** The calls also need `LSTATM` or `LSTENV` (PUTSTORE), or `LPULSE` on a model that is not stored (WRTOUT). Is the Milne output meant to depend on those switches?
 
-- **Output:** the unit `IMILNE` (21, fixed in PARMIN, [parmin.f, line 674](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L674)), opened by [PARMIN](parmin.f.md#parmin) in append mode ([parmin.f, lines 956–959](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L956-L959)).
+- **Output:** the unit `IMILNE` (21, fixed in PARMIN, [parmin.f, line 674](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L674)), opened by [PARMIN](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489) in append mode ([parmin.f, lines 956–959](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L956-L959)).
 
 **The method.** At each printed shell:
 ```math

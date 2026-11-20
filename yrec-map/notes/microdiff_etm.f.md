@@ -1,12 +1,12 @@
 ## Explanation
 
-**Purpose.** "Equal to model": the last step of [MICRODIFF](microdiff.f.md#microdiff). It interpolates the changes in abundance from the equally spaced grid back to the model points, applies them to `HCOMP`, recomputes helium, and converts the variables changed by [MICRODIFF_SETUP](microdiff_setup.f.md#microdiff_setup) back to cgs units.
+**Purpose.** "Equal to model": the last step of [MICRODIFF](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff.f#L4-L245). It interpolates the changes in abundance from the equally spaced grid back to the model points, applies them to `HCOMP`, recomputes helium, and converts the variables changed by [MICRODIFF_SETUP](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_setup.f#L4-L169) back to cgs units.
 
 **How it fits.**
 - **Inputs:** the equal grid radii `ER`, the changes `EDELX`, `EDELZ`, `EDELLI` from [MICRODIFF_RUN](microdiff_run.f.md#microdiff_run), `IBEGIN`, `IEND`, `NPT`, and the conversion factors in `CONFAC_MOD` (written by `MICRODIFF_SETUP`).
 - **Who calls it:** only `MICRODIFF`.
 - **What it calls:** [INTRP2](intrp2.f.md#intrp2), for four-point Lagrange weights.
-- **Outputs:** `HCOMP` updated in place; `HRU`, `HTU`, `HS1`, `HQPR`, `DT` and `STOT` converted back ([lines 165–172](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_etm.f#L165-L172)), though [MICRODIFF](microdiff.f.md#microdiff) passes its local `HRU` and `HTU` and copies of the other four, and returns right after the call ([microdiff.f, lines 112–117](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff.f#L112-L117); [microdiff.f, lines 242–244](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff.f#L242-L244)): unused?
+- **Outputs:** `HCOMP` updated in place; `HRU`, `HTU`, `HS1`, `HQPR`, `DT` and `STOT` converted back ([lines 165–172](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_etm.f#L165-L172)), though [MICRODIFF](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff.f#L4-L245) passes its local `HRU` and `HTU` and copies of the other four, and returns right after the call ([microdiff.f, lines 112–117](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff.f#L112-L117); [microdiff.f, lines 242–244](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff.f#L242-L244)): unused?
 - **Modules:** `CONFAC_MOD`, `NMLPAR_MOD` (`LDIFZ`, `LDIFLI`), `DIMENSIONS_MOD` (`JSON`).
 
 **The method.**
@@ -21,7 +21,7 @@
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 
-**Changed since `a8a5950`.** The file is unchanged, but [`MICRODIFF_MTE`](microdiff_mte.f.md#microdiff_mte) now gives the grid at least 4 points, so `K0` stays within the grid; this settles former question 5.
+**Changed since `a8a5950`.** The file is unchanged, but [`MICRODIFF_MTE`](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_mte.f#L4-L294) now gives the grid at least 4 points, so `K0` stays within the grid; this settles former question 5.
 
 ## Bugs, by priority
 

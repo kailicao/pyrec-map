@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile each of YREC's Fortran files with gfortran's warnings on, and save the warnings for the site.
 
-    python3 scripts/fortran_warnings.py ../yrec/src yrec-map/warnings.json
+    python3 scripts/fortran_warnings.py yrec/src yrec-map/warnings.json
 
 Compiling only: nothing is linked or run. The modules (*_mod.f) are compiled first, in as many passes as their
 USE statements need, into a temporary folder; then every file is compiled against them with the developers'

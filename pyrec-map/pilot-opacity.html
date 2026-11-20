@@ -1,0 +1,115 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>The pilot: opacity · PyREC scaffolding (from YREC development, 7be4133)</title><link rel='icon' type='image/svg+xml' href='../logo.svg'><script>function hlLines(){document.querySelectorAll('.line.hl').forEach(function(e){e.classList.remove('hl')});var m=location.hash.match(/^#([LP])(\d+)(?:-[LP](\d+))?$/);if(!m)return;var first=null;var col=document.querySelector('aside.codecol');if(col)col.dataset.view=m[1]==='P'?'p':'f';for(var i=+m[2];i<=+(m[3]||m[2]);i++){var e=document.getElementById(m[1]+i);if(!e)continue;e.classList.add('hl');first=first||e;for(var p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;}if(!first)return;var pane=first.closest('.panes');if(pane){pane.scrollTop=first.offsetTop-pane.clientHeight/2;}else first.scrollIntoView({block:'center'});}addEventListener('hashchange',hlLines);addEventListener('DOMContentLoaded',hlLines);document.addEventListener('click',function(ev){var a=ev.target.closest&&ev.target.closest('a[href^="#L"],a[href^="#P"]');if(!a||!document.querySelector('aside.codecol'))return;ev.preventDefault();history.pushState(null,'',a.getAttribute('href'));hlLines();});</script><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,flowchart:{wrappingWidth:400},theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ A new design / The pilot: opacity</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='state.html'>State: what a run carries</a></li><li><a href='families.html'>The families</a></li><li><a href='directions.html'>Directions from MESA</a></li><li><a href='tree.html'>The compiled tree</a></li><li><a href='numba.html'>Writing a Numba family</a></li><li><strong>The pilot: opacity</strong></li><li><a href='names.html'>The families&#x27; names</a></li></ul></nav>
+<h1>The pilot: opacity</h1>
+<p><em>Part of <a href="overview.html">A new design for YREC</a>. The opacity was the first family built: Its default wraps the Fortran-tracking pyrec's opacity routines, and the run's output stayed byte-identical with theirs. This page shows the family's code beside the code it wraps.</em></p>
+<p><strong>What it wraps:</strong> <a href="../yrec-map/getopac.f.html">getopac.f</a> and the routines it calls, <a href="../yrec-map/getopal95.f.html">getopal95.f</a>, <a href="../yrec-map/getalex06.f.html">getalex06.f</a>, <a href="../yrec-map/gtpurz.f.html">gtpurz.f</a>, and <a href="../yrec-map/condopacpint.f.html">condopacpint.f</a> (each page shows the Fortran beside the Fortran-tracking pyrec). Its interface: <a href="families.html">The families</a>.</p>
+<h2>The family's code</h2>
+<p>The base class, <code>OpacityBase</code>, fixes the interface: a static method <code>point</code> over one point, in $\log\rho$ and $\log T$ (YREC's <code>DL</code> and <code>TL</code>), returning $\kappa$, $\log\kappa$, its two logarithmic derivatives, and a status; <code>kernel_args()</code> and <code>kernel_args_out()</code> (the kernel's data read in, and the saved guesses written back); <code>serves(log_temperature, x, z)</code> (whether <code>point</code> covers the points at that $T$, X, and Z, at any density); <code>plain(...)</code> (the family's own code for the rest). <code>__call__</code> evaluates arrays without a model.</p>
+<p>The default, <code>Opacity</code>, is YREC's: the molecular tables of Ferguson et al. 2005 (YREC's ALEX06 tables) below <code>TMOLMAX</code> ($\log T$ = 4.1 by default), OPAL 1995 above <code>TMOLMIN</code> (4.0), a linear ramp in $\log T$ between, then Potekhin's conductive opacity (or the Hubbard-Lampe fit) added as $1/\kappa = 1/\kappa_\mathrm{rad} + 1/\kappa_\mathrm{cond}$.</p>
+<pre class='hlb'><code><span class='hk'>class</span> Opacity(OpacityBase):
+    <span class='hk'>def</span> __init__(<span class='hb'>self</span>):
+        <span class='hb'>self</span>._ga = np.zeros(<span class='hn'>2</span>, dtype=np.int64)       <span class='hc'># alot06_mod&#x27;s IT, ID</span>
+        <span class='hb'>self</span>._guess = np.zeros(<span class='hn'>3</span>, dtype=np.int64)    <span class='hc'># condopacp&#x27;s IZ, IT, IR</span>
+
+    @staticmethod
+    @accel.njit(inline=<span class='hs'>&quot;</span><span class='hs'>always</span><span class='hs'>&quot;</span>, _nrt=<span class='hk'>False</span>)
+    <span class='hk'>def</span> point(log_density, log_temperature, x, z, fxion, data):
+        d = data
+        <span class='hk'>return</span> _getopac_nb(log_density, log_temperature, x, z, fxion, d.tmolmin, d.tmolmax, d.lcondopacp,
+                           d.capalex06, ..., d.guess)
+
+    <span class='hk'>def</span> kernel_args(<span class='hb'>self</span>):
+        <span class='hk'>return</span> _getopac.data_in(<span class='hb'>self</span>._ga, <span class='hb'>self</span>._guess)
+
+    <span class='hk'>def</span> kernel_args_out(<span class='hb'>self</span>, data) -&gt; <span class='hk'>None</span>:
+        _getopac.data_out(data)
+
+    <span class='hk'>def</span> serves(<span class='hb'>self</span>, log_temperature, x, z) -&gt; <span class='hb'>bool</span>:
+        <span class='hk'>return</span> _getopac.fast_path(<span class='hn'>0.0</span>, log_temperature, x, z)
+
+    <span class='hk'>def</span> plain(<span class='hb'>self</span>, log_density, log_temperature, x, z, fxion):
+        <span class='hk'>return</span> _getopac.getopac(<span class='hb'>float</span>(log_density), <span class='hb'>float</span>(log_temperature), <span class='hb'>float</span>(x), <span class='hb'>float</span>(z), <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>,
+                                fxion)
+</code></pre>
+<p>Its names beside YREC's: <a href="names.html">The families' names</a>.</p>
+<h2>Beside the Fortran-tracking pyrec</h2>
+<table>
+<thead>
+<tr>
+<th>The family</th>
+<th>What it is in the Fortran-tracking pyrec</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Opacity.point</code></td>
+<td>getopac's kernel, <code>_getopac_nb</code>, unchanged, called on the family's data</td>
+</tr>
+<tr>
+<td><code>kernel_args()</code></td>
+<td><code>getopac.data_in</code>: the kernel's 33 arguments after ($\log\rho$, $\log T$, X, Z, the ionization) as one named tuple, <code>getopac.OpacityData</code>, read from pyrec's modules</td>
+</tr>
+<tr>
+<td><code>kernel_args_out()</code></td>
+<td><code>getopac.data_out</code>: the saved guesses written back to pyrec's modules</td>
+</tr>
+<tr>
+<td><code>serves</code></td>
+<td><code>getopac.fast_path</code>: the paths the kernel covers in the solar run</td>
+</tr>
+<tr>
+<td><code>plain</code></td>
+<td>pyrec's <code>getopac</code> itself: the other paths (a new X or Z for the molecular table, the helium-burning blend, condopacp's first call)</td>
+</tr>
+</tbody>
+</table>
+<p>The chains that reach the opacity (the solver's loop over the shells; the envelope's integrands) call it as <code>opacity_point(dl, tl, x, z, fxion, data)</code>, a module global. In the Fortran-tracking pyrec it is bound to <code>getopac._getopac_point</code>, a short adapter onto the same unchanged kernel; in the object-oriented version it is bound to <code>Opacity.point</code> in generated copies of the chains (<a href="numba.html">Writing a Numba family</a>). So the two versions' chains are the same source and differ only in the binding.</p>
+<h2>Evaluated without a model</h2>
+<p><code>Opacity()(log_density, log_temperature, x, z)</code> evaluates arrays of points: a compiled loop generated for the family's kernel, the points <code>serves</code> rejects or the kernel stops on handed to <code>plain</code>, and NaN where neither serves. On a grid of 91 values of $\log T$ (3.5–8.0) by 141 of $\log\rho$ (−12 to 2), 12,831 points, at the ZAMS surface's X = 0.7195962833311453 and Z = 0.01649314, fully ionized, <code>point</code> served every point and no value was NaN; $\log\kappa$ ranged from −5.59 to 5.46.</p>
+<table>
+<thead>
+<tr>
+<th>Evaluation (12,831 points)</th>
+<th>Per call</th>
+<th>Per point</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>the compiled family</td>
+<td>15.7 ms</td>
+<td>1.2 µs</td>
+</tr>
+<tr>
+<td>a plain-Python subclass (<code>point = Opacity.point.py_func</code>), with its warning</td>
+<td>59 ms</td>
+<td>4.6 µs</td>
+</tr>
+<tr>
+<td>pyrec's <code>getopac</code> called point by point</td>
+<td>100 ms</td>
+<td>7.8 µs</td>
+</tr>
+</tbody>
+</table>
+<p>The three gave the same bits on the whole grid. The plain subclass is only about 4 times slower here because its Python <code>point</code> still calls getopac's compiled kernel; an opacity written wholly in Python would be much slower.</p>
+<h2>Bit for bit</h2>
+<p>Every whole run of the 1 M☉ ZAMS case with the opacity family's kernel bound into the generated chains wrote output byte-identical to YREC's, and so did a run with pyrec's own binding. The warm runs with the family took as long as the unmodified pyrec, within the machine's noise (15.6–16.9 s against 14.4–18.2 s, the two Python versions interleaved on a shared machine; not a comparison with the Fortran). The same holds now that every family is wrapped and the <code>Model</code> drives each step (<a href="state.html">State</a>, the copy test).</p>
+<h2>The compiled chain</h2>
+<p>The opacity's static method and what it calls, from <a href="tree.html">the generated tree</a> (shortened):</p>
+<pre class='hlb'><code>[C] pyrec_oop/opacity.py:Opacity (the family's default class: its compiled static methods)
+`-- [C] pyrec_oop/opacity.Opacity.point (inline, no-NRT) &lt;opacity&gt;
+    `-- [C] getopac._getopac_nb (no-NRT) &lt;opacity&gt;
+        |-- [C] condopacpint._condopacpint_nb (no-NRT) &lt;opacity&gt;
+        |   |-- [C] condopacp._condopacp_nb (no-NRT) &lt;opacity&gt;
+        |   `-- [C] condopacpint._condopacpint_weights_nb (no-NRT) &lt;opacity&gt;
+        |-- [C] getalex06._getalex06_nb (no-NRT) &lt;opacity&gt;
+        |-- [C] getopac._getopac_add_conductive_nb (no-NRT) &lt;opacity&gt;
+        |-- [C] getopac._getopac_hubbard_lampe_nb (no-NRT) &lt;opacity&gt;
+        |-- [C] getopac._getopac_ramp_nb (no-NRT) &lt;opacity&gt;
+        `-- [C] getopal95._getopal95_nb (no-NRT) &lt;opacity&gt;
+</code></pre>
+<p>It is called by <code>qenv._getopac_c</code> (the envelope's integrands) and by <code>coefft._coefft_nb</code> (the solver's loop). Were the opacity a plain-Python family, 11 kernels would run as Python: <code>Opacity.point</code>, the solver's loop, and nine of the envelope's (its two integration loops and the kernels between them and the opacity). A plain subclass of the default would still enter getopac's compiled kernel from Python at every point (<a href="tree.html">The compiled tree</a>).</p>
+
+</main></body></html>

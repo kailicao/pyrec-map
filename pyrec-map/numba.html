@@ -1,0 +1,80 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Writing a Numba family · PyREC scaffolding (from YREC development, 7be4133)</title><link rel='icon' type='image/svg+xml' href='../logo.svg'><script>function hlLines(){document.querySelectorAll('.line.hl').forEach(function(e){e.classList.remove('hl')});var m=location.hash.match(/^#([LP])(\d+)(?:-[LP](\d+))?$/);if(!m)return;var first=null;var col=document.querySelector('aside.codecol');if(col)col.dataset.view=m[1]==='P'?'p':'f';for(var i=+m[2];i<=+(m[3]||m[2]);i++){var e=document.getElementById(m[1]+i);if(!e)continue;e.classList.add('hl');first=first||e;for(var p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;}if(!first)return;var pane=first.closest('.panes');if(pane){pane.scrollTop=first.offsetTop-pane.clientHeight/2;}else first.scrollIntoView({block:'center'});}addEventListener('hashchange',hlLines);addEventListener('DOMContentLoaded',hlLines);document.addEventListener('click',function(ev){var a=ev.target.closest&&ev.target.closest('a[href^="#L"],a[href^="#P"]');if(!a||!document.querySelector('aside.codecol'))return;ev.preventDefault();history.pushState(null,'',a.getAttribute('href'));hlLines();});</script><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,flowchart:{wrappingWidth:400},theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ A new design / Writing a Numba family</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><a href='state.html'>State: what a run carries</a></li><li><a href='families.html'>The families</a></li><li><a href='directions.html'>Directions from MESA</a></li><li><a href='tree.html'>The compiled tree</a></li><li><strong>Writing a Numba family</strong></li><li><a href='pilot-opacity.html'>The pilot: opacity</a></li><li><a href='names.html'>The families&#x27; names</a></li></ul></nav>
+<h1>Writing a Numba family</h1>
+<p><em>Part of <a href="overview.html">A new design for YREC</a>. How to write a family whose hot paths run compiled, from the lessons of the Fortran-tracking pyrec's speed work (pyrec's README, Conventions: Numba). A family in plain Python works too, but slows every compiled chain that calls it (<a href="tree.html">The compiled tree</a>).</em></p>
+<h2>How a family's kernel joins a chain</h2>
+<p>Numba compiles a chain of kernels together only if every kernel in it is compiled and known when the chain compiles: A compiled kernel cannot call a Python object chosen at run time. pyrec's chains (the solver's loop over the shells and the envelope's integration) are pyrec's own kernels, spread over several modules, and each calls a family through a <strong>module global</strong> named for the call: <code>opacity_point</code>, <code>eos_point</code>, <code>convection_point</code>, <code>network_point</code> and <code>network_serves</code>, and the atmosphere's <code>atmosphere_point</code> and <code>envelope_point</code>. In the Fortran-tracking pyrec each global is bound to pyrec's own kernel.</p>
+<p>When families are installed, the chains are <strong>generated</strong>: For each chain module, a new module is written that copies the original's namespace, binds each global to the installed family's static method, imports the chain's other generated kernels, and redefines the chain's kernels from their own source, decorators kept, so that Numba compiles them against the new bindings. The rest of the module (its constants, its other kernels) is shared, and the kernels' source, with its comments citing the Fortran's lines, stays where it was. The generated files go to Numba's cache folder; a file is rewritten only when its text changes, and its text holds a hash of every source it depends on, so that an edit anywhere in the chain's package recompiles the chain (Numba's own cache does not see a callee's change).</p>
+<p>The head of the envelope chain's generated qenv module, for YREC's default families:</p>
+<pre class='hlb'><code># Generated by pyrec_oop.gen.make_chains from pyrec.qenv (_getopac_c, _qenv_k); do not edit.
+_src = _importlib.import_module('pyrec.qenv')
+globals().update({k: v for k, v in vars(_src).items() if not (k.startswith('__') and k.endswith('__'))})
+# The families' kernels
+from pyrec_oop.opacity import Opacity as _opacity_point_Opacity
+opacity_point = _opacity_point_Opacity.point
+from pyrec_oop.eos import EOS as _eos_point_EOS
+eos_point = _eos_point_EOS.point
+from pyrec_oop.convection import Convection as _convection_point_Convection
+convection_point = _convection_point_Convection.point
+...
+# The chain's kernels from the modules before
+from _gen_eqstat__... import _eqstat_k
+
+@accel.njit(_nrt=False)
+def _getopac_c(dl, tl, x, z, fxion, op, go, cln):
+    return opacity_point(dl, tl, x, z, fxion, go)
+</code></pre>
+<p>When an installed family's kernel is plain Python, the chain is generated without its decorators and runs as Python, with a <code>PlainFamilyWarning</code>.</p>
+<h2>A worked example: the opacity</h2>
+<p>The default opacity's hot path is one static method over one point, compiled with pyrec's options, <code>inline='always'</code>, and no reference counting. It calls pyrec's getopac kernel, unchanged, on the family's data:</p>
+<pre class='hlb'><code><span class='hk'>class</span> Opacity(OpacityBase):
+    @staticmethod
+    @accel.njit(inline=<span class='hs'>&quot;</span><span class='hs'>always</span><span class='hs'>&quot;</span>, _nrt=<span class='hk'>False</span>)
+    <span class='hk'>def</span> point(log_density, log_temperature, x, z, ionization, data):
+        d = data
+        <span class='hk'>return</span> _getopac_nb(log_density, log_temperature, x, z, ionization, d.tmolmin, d.tmolmax, d.lcondopacp,
+                           d.capalex06, ..., d.guess)
+
+    <span class='hk'>def</span> kernel_args(<span class='hb'>self</span>):            <span class='hc'># the settings, tables, and saved guesses, as one named tuple</span>
+        <span class='hk'>return</span> _getopac.data_in(<span class='hb'>self</span>._ga, <span class='hb'>self</span>._guess)
+</code></pre>
+<p>The same mechanism, for one function, evaluates the family <strong>without a model</strong>: <code>OpacityBase.__call__</code> writes a loop over the points as plain Python with the kernel as a parameter, and generates from it a compiled loop with the parameter bound to <code>Opacity.point</code>:</p>
+<pre class='hlb'><code><span class='hk'>def</span> _grid_body(opk, log_density, log_temperature, x, z, fxion, data, served, out, status):
+    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(log_density.shape[<span class='hn'>0</span>]):
+        <span class='hk'>if</span> served[i]:
+            o, ol, qod, qot, st = opk(log_density[i], log_temperature[i], x[i], z[i], fxion, data)
+            out[<span class='hn'>0</span>, i] = o
+            ...
+
+f = make_chain(_grid_body, {<span class='hs'>&#x27;</span><span class='hs'>opk</span><span class='hs'>&#x27;</span>: <span class='hb'>type</span>(<span class='hb'>self</span>).point})    <span class='hc'># compiled, opk bound to Opacity.point</span>
+f(dl, tl, xx, zz, fx, data, served, out, status)
+</code></pre>
+<p>A plain family runs the same loop as Python, with the warning. On a grid of 91 × 141 points at the ZAMS surface's composition, the compiled family took 1.2 µs a point; a plain-Python subclass (<code>point = Opacity.point.py_func</code>) took 4.6 µs, since its Python <code>point</code> still calls getopac's compiled kernel, paying one call from Python per point; both gave the same bits as pyrec's getopac called point by point (<a href="pilot-opacity.html">The pilot: opacity</a>).</p>
+<h2>Kernels</h2>
+<ul>
+<li><strong>Module-level functions or static methods</strong> that fill preallocated arrays given to them; nothing is allocated inside a hot kernel, and work arrays are passed in (<a href="state.html">State</a>, The three homes).</li>
+<li><strong>No reference counting:</strong> Every kernel on a chain sets <code>_nrt=False</code> itself; such a kernel fails to compile if anything inside it allocates, which is how an allocation is caught.</li>
+<li><strong>Tiny functions called millions of times</strong> are compiled with <code>inline='always'</code> (it doubled a chain's speed in a microbenchmark).</li>
+</ul>
+<h2>Passing data</h2>
+<ul>
+<li><strong>Named tuples of arrays</strong> are read fast, without reference counting. Numba's structrefs are not used (their fields need reference counting: an EOS 2–3 times slower), nor is jitclass.</li>
+<li><strong>Run-time settings reach kernels as arguments,</strong> never as module globals: Numba bakes a global's value into the compiled code, and the disk cache keeps stale values. (The families' kernels bound as globals at generation time, above, are the exception: They are code, not settings.) A family's settings, tables, and saved state go in its <code>kernel_args()</code> tuple.</li>
+</ul>
+<h2>Compiling and the cache</h2>
+<ul>
+<li><strong>The options:</strong> <code>cache=True</code>, no fastmath, <code>error_model="numpy"</code> (pyrec's <code>accel.njit</code>); fastmath is left off since it would change the bits.</li>
+<li><strong>The disk cache:</strong> A change to a callee does not always invalidate its caller's cache, so the cache is cleared after an edit anywhere on a chain; the generated chains hash their sources for the same reason.</li>
+<li><strong>Thread ids:</strong> <code>numba.get_thread_id()</code>; the private one breaks caching.</li>
+</ul>
+<h2>Checking a family</h2>
+<p>Each default family was checked three ways, and a new family can be checked the same way against the default:</p>
+<ul>
+<li><strong>Without a model,</strong> on a grid: the family's <code>__call__</code> against pyrec's routine called point by point, byte for byte (the opacity and the EOS on 91 × 141 points of $\log T$ and $\log\rho$ (nominal for the EOS, which takes pressure), the network on 5,187 points at each of two compositions, the convection's gradient on 2,192 points, the envelope's integrand on 1,907), compiled and as a plain-Python subclass.</li>
+<li><strong>In a whole run:</strong> the 1 M☉ ZAMS case with the family's kernel bound into the generated chains, every output file byte-identical to YREC's.</li>
+<li><strong>In tests</strong> of the family alone (pytest), from recorded calls of pyrec's routines, with no whole run.</li>
+</ul>
+<p>A family that is meant to change results is compared with the default on the same grid, and its changes are a deliberate change of bits.</p>
+
+</main></body></html>

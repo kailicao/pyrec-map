@@ -5,8 +5,8 @@
 # F...= "{YREC_START}/..." other than FFIRST, such as FLAST) is a real, writable copy there, so no run writes into
 # the clone and no run reads another run's output (Nov 10, 2026: TAMS cases had overwritten the clone's start models,
 # from which other cases start). Keep OUTDIR's path short: YREC's file names hold 256 characters.
-# The clone is ../yrec beside this repository (the project folder's layout), or $YREC if set.
-Y=${YREC:-$(cd "$(dirname "$0")/../../yrec" && pwd)}
+# The clone is yrec/ inside this repository's folder (the project's layout, left out of git), or $YREC if set.
+Y=${YREC:-$(cd "$(dirname "$0")/../yrec" && pwd)}
 mkdir -p "$4" && cd "$4" || exit 9
 [ -d start ] && chmod -R u+w start; rm -rf start && cp -rs "$Y/startmodels" start && find start -type d -exec chmod u+w {} + || exit 8
 for f in $(grep -hoE '^[[:space:]]*F[A-Z0-9]*[[:space:]]*=[[:space:]]*"\{YREC_START\}/[^"]*"' "$2" "$3" | grep -v '^[[:space:]]*FFIRST' \

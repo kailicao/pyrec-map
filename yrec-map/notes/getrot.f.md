@@ -5,7 +5,7 @@
 **The comment names another routine.** It begins "GETW TAKES THE ANGULAR MOMENTUM DISTRIBUTION…" ([lines 21–23](https://github.com/yreclab/yrec/blob/7be4133/src/getrot.f#L21-L23)), but the routine is `GETROT`, and [`GETW`](getw.f.md#getw) is another routine, so the comment should name `GETROT`.
 
 **How it fits.**
-- **Who calls it:** [CHECKJ](checkj.f.md#checkj), [CRRECT](crrect.f.md#crrect), [GETNEWENV](getnewenv.f.md#getnewenv), [GETW](getw.f.md#getw), [HPOINT](hpoint.f.md#hpoint) and [MIDMOD](midmod.f.md#midmod).
+- **Who calls it:** [CHECKJ](checkj.f.md#checkj), [CRRECT](crrect.f.md#crrect), [GETNEWENV](getnewenv.f.md#getnewenv), [GETW](getw.f.md#getw), [HPOINT](hpoint.f.md#hpoint) and [MIDMOD](https://github.com/yreclab/yrec/blob/7be4133/src/midmod.f#L2-L523).
 - **Inputs:** `HJM` ($`j`$ per shell), `LCZ` (convective flags), the structure (`HD`, `HR`, `HS`, `HS2`), `M`.
 - **What it calls:** [SOLID](solid.f.md#solid) (for a single radiative shell) and [WCZIMP](wczimp.f.md#wczimp) (for a convection zone; "JNT 09/25 for 05/15 call WCZIMP instead of WCZ").
 - **Outputs:** `OMEGA`, `HI` (moments of inertia of the shells), `ETA2`, `QIW`, `R0`, filled by `SOLID` and `WCZIMP`; and `HJM`, which both rewrite as $`j = I\Omega/\Delta m`$, so that in a convection zone, where `WCZIMP` imposes the rotation law, $`j`$ is redistributed.

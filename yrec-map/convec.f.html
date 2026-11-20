@@ -2,7 +2,8 @@
 <header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ convec.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#bugs'>Suspected bugs, checked by running the code</a><ol><li><a href='#b1'>1. The upper edge of the last radiative region is written to the first</a></li><li><a href='#b2'>2. A merger keeps the upper zone&#x27;s top</a></li></ol></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-CONVEC'>CONVEC</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>convec.f</h1>
 <p class='muted'>209 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/convec.f'>on GitHub (7be4133)</a></p>
-<p><strong>Python version</strong>: <code>convec.py</code>, 149 lines, on the right (switch to Python above the code).</p>
+<p><strong>Python version</strong>: <code>convec.py</code>, 177 lines, on the right (switch to Python above the code).</p>
+<p><strong>Object-oriented version</strong>: wrapped by the <a href='../pyrec-map/families.html#convection'><code>convection</code></a> family, its default <code>Convection</code>: <code>Convection.zones</code> (<a href='#def-CONVEC'>CONVEC</a>).</p>
 <details class='vars' id='terms'><summary>Variables on this page (5)</summary><p><a href='../glossary.html#var-ishort' data-def='unit 20, all diagnostic information, the &lt;code&gt;.short&lt;/code&gt; file.'><code>ishort</code></a>, <a href='../glossary.html#var-json' data-def='the maximum number of shells in a model, 5000 (a &lt;code&gt;PARAMETER&lt;/code&gt;, used by 144 files).'><code>json</code></a>, <a href='../glossary.html#var-lovstc' data-def='core overshoot (mixing only, unless &lt;code&gt;LADOV&lt;/code&gt;); default &lt;code&gt;.FALSE.&lt;/code&gt;; PARMIN stops the run if it is set with &lt;code&gt;LSEMIC&lt;/code&gt;. &lt;em&gt;Name:&lt;/em&gt; OVerShooT, Core.'><code>lovstc</code></a>, <a href='../glossary.html#var-lovste' data-def='envelope overshoot; default &lt;code&gt;.FALSE.&lt;/code&gt;. &lt;em&gt;Name:&lt;/em&gt; OVerShooT, Envelope.'><code>lovste</code></a>, <a href='../glossary.html#var-lovstm' data-def='overshoot of intermediate convection zones (not recommended); default &lt;code&gt;.FALSE.&lt;/code&gt;. &lt;em&gt;Name:&lt;/em&gt; OVerShooT, Middle.'><code>lovstm</code></a></p></details><h2 id='purpose'>Purpose</h2>
 <div class='notes'><p>This file finds the convective and radiative regions of a model: the boundaries of each convection zone, without and with overshoot, the edge of the convective core (<code>JCORE</code>) and the base of the convective envelope (<code>JENV</code>), and the radiative regions between them. Its header stresses that overshoot here means "overmixing": overshoot shells are mixed with the convection zone but keep the radiative temperature gradient.</p></div>
 <h2 id='how-it-fits'>How it fits</h2>
@@ -280,154 +281,182 @@
 <span class="line" id="L207"><span class="ln">207</span></span>
 <span class="line" id="L208"><span class="ln">208</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>RETURN</span></span>
 <span class="line" id="L209"><span class="ln">209</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of convec.f (YREC 7be4133): the convection zones (without</span></span>
-<span class="line" id="P2"><span class="ln">2</span><span class='hs'>and with overshoot), the radiative regions, JCORE and JENV.&quot;&quot;&quot;</span></span>
+<span class="line" id="P2"><span class="ln">2</span><span class='hs'>and with overshoot), the radiative regions, JCORE and JENV.</span></span>
 <span class="line" id="P3"><span class="ln">3</span></span>
-<span class="line" id="P4"><span class="ln">4</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> iounits_mod</span>
-<span class="line" id="P5"><span class="ln">5</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
-<span class="line" id="P6"><span class="ln">6</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> nmlpar_mod</span>
-<span class="line" id="P7"><span class="ln">7</span><span class='hk'>from</span> pyrec.oversh <span class='hk'>import</span> oversh</span>
-<span class="line" id="P8"><span class="ln">8</span></span>
-<span class="line" id="P9"><span class="ln">9</span></span>
-<span class="line" id="P10"><span class="ln">10</span><span class='hk'>def</span> convec(hcomp: np.ndarray, hd: np.ndarray, hp: np.ndarray, hr: np.ndarray, hs: np.ndarray, ht: np.ndarray,</span>
-<span class="line" id="P11"><span class="ln">11</span>           lc: np.ndarray, m: <span class='hb'>int</span>, mrzone: np.ndarray, mxzone: np.ndarray, mxzon0: np.ndarray, jcore: <span class='hb'>int</span>, jenv: <span class='hb'>int</span>,</span>
-<span class="line" id="P12"><span class="ln">12</span>           nrzone: <span class='hb'>int</span>, nzone: <span class='hb'>int</span>, nzone0: <span class='hb'>int</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>int</span>, <span class='hb'>int</span>, <span class='hb'>int</span>, <span class='hb'>int</span>, <span class='hb'>int</span>]:</span>
-<span class="line" id="P13"><span class="ln">13</span>    <span class='hs'>&quot;&quot;&quot;Find the convection zones, without overshoot (mxzon0, nzone0) and</span></span>
-<span class="line" id="P14"><span class="ln">14</span><span class='hs'>    with it (mxzone, nzone, merging zones that overlap), the radiative</span></span>
-<span class="line" id="P15"><span class="ln">15</span><span class='hs'>    regions between them (mrzone, nrzone), the edge of the convective</span></span>
-<span class="line" id="P16"><span class="ln">16</span><span class='hs'>    core jcore and the base of the convective envelope jenv (both before</span></span>
-<span class="line" id="P17"><span class="ln">17</span><span class='hs'>    overshoot). Overshoot is overmixing: the overshoot shells are mixed</span></span>
-<span class="line" id="P18"><span class="ln">18</span><span class='hs'>    with the zone but keep the radiative gradient.</span></span>
+<span class="line" id="P4"><span class="ln">4</span><span class='hs'>Functions</span></span>
+<span class="line" id="P5"><span class="ln">5</span><span class='hs'>---------</span></span>
+<span class="line" id="P6"><span class="ln">6</span><span class='hs'>convec : The zones, JCORE, and JENV (plain Python: it writes text, and runs about once a model).</span></span>
+<span class="line" id="P7"><span class="ln">7</span></span>
+<span class="line" id="P8"><span class="ln">8</span><span class='hs'>Constants</span></span>
+<span class="line" id="P9"><span class="ln">9</span><span class='hs'>---------</span></span>
+<span class="line" id="P10"><span class="ln">10</span><span class='hs'>NZONE_MAX : The rows of MXZONE: at most NZONE_MAX - 1 zones are kept.</span></span>
+<span class="line" id="P11"><span class="ln">11</span></span>
+<span class="line" id="P12"><span class="ln">12</span><span class='hs'>&quot;&quot;&quot;</span></span>
+<span class="line" id="P13"><span class="ln">13</span></span>
+<span class="line" id="P14"><span class="ln">14</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
+<span class="line" id="P15"><span class="ln">15</span></span>
+<span class="line" id="P16"><span class="ln">16</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> iounits_mod</span>
+<span class="line" id="P17"><span class="ln">17</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> nmlpar_mod</span>
+<span class="line" id="P18"><span class="ln">18</span><span class='hk'>from</span> pyrec.oversh <span class='hk'>import</span> oversh</span>
 <span class="line" id="P19"><span class="ln">19</span></span>
-<span class="line" id="P20"><span class="ln">20</span><span class='hs'>    Translates: convec.f#CONVEC (7be4133)</span></span>
+<span class="line" id="P20"><span class="ln">20</span>NZONE_MAX = <span class='hn'>12</span>  <span class='hc'># MXZONE(12,2): zone J is kept while J &lt; 12 (<a class='fl' href='#L46'>Fortran lines 46</a> and 104).</span></span>
 <span class="line" id="P21"><span class="ln">21</span></span>
-<span class="line" id="P22"><span class="ln">22</span><span class='hs'>    Arguments: the model hcomp, hd, hp, hr, hs, ht (used only by oversh);</span></span>
-<span class="line" id="P23"><span class="ln">23</span><span class='hs'>    lc[1..m], convective or not (lc[m+1] is set to False here); m, the</span></span>
-<span class="line" id="P24"><span class="ln">24</span><span class='hs'>    number of shells; the zone arrays mrzone[k, 1..2], mxzone[k, 1..2],</span></span>
-<span class="line" id="P25"><span class="ln">25</span><span class='hs'>    mxzon0[k, 1..2] (changed in place); jcore, jenv, nrzone, nzone,</span></span>
-<span class="line" id="P26"><span class="ln">26</span><span class='hs'>    nzone0, passed in (with any value).</span></span>
-<span class="line" id="P27"><span class="ln">27</span></span>
-<span class="line" id="P28"><span class="ln">28</span><span class='hs'>    Returns (jcore, jenv, nrzone, nzone, nzone0).</span></span>
-<span class="line" id="P29"><span class="ln">29</span></span>
-<span class="line" id="P30"><span class="ln">30</span><span class='hs'>    &quot;&quot;&quot;</span></span>
-<span class="line" id="P31"><span class="ln">31</span></span>
-<span class="line" id="P32"><span class="ln">32</span>    n = nmlpar_mod</span>
-<span class="line" id="P33"><span class="ln">33</span></span>
-<span class="line" id="P34"><span class="ln">34</span>    <span class='hc'># The standard convection zones; a run of a single shell is ignored</span></span>
-<span class="line" id="P35"><span class="ln">35</span>    <span class='hc'># (<a class='fl' href='#L83-L109'>Fortran lines 83–109</a>).</span></span>
-<span class="line" id="P36"><span class="ln">36</span>    <span class='hc'># Question (see the page): one-shell zones treated as radiative.</span></span>
-<span class="line" id="P37"><span class="ln">37</span>    j = <span class='hn'>1</span></span>
-<span class="line" id="P38"><span class="ln">38</span>    lcc = <span class='hk'>False</span></span>
-<span class="line" id="P39"><span class="ln">39</span>    lc[m + <span class='hn'>1</span>] = <span class='hk'>False</span></span>
-<span class="line" id="P40"><span class="ln">40</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, m + <span class='hn'>2</span>):</span>
-<span class="line" id="P41"><span class="ln">41</span>        <span class='hk'>if</span> lc[i]:</span>
-<span class="line" id="P42"><span class="ln">42</span>            <span class='hk'>if</span> <span class='hk'>not</span> lcc:</span>
-<span class="line" id="P43"><span class="ln">43</span>                <span class='hc'># The start of a convection zone.</span></span>
-<span class="line" id="P44"><span class="ln">44</span>                lcc = <span class='hk'>True</span></span>
-<span class="line" id="P45"><span class="ln">45</span>                i1 = i</span>
-<span class="line" id="P46"><span class="ln">46</span>            <span class='hk'>continue</span></span>
-<span class="line" id="P47"><span class="ln">47</span>        <span class='hc'># label 10</span></span>
-<span class="line" id="P48"><span class="ln">48</span>        <span class='hk'>if</span> <span class='hk'>not</span> lcc:</span>
-<span class="line" id="P49"><span class="ln">49</span>            <span class='hk'>continue</span></span>
-<span class="line" id="P50"><span class="ln">50</span>        <span class='hc'># The end of a convection zone.</span></span>
-<span class="line" id="P51"><span class="ln">51</span>        lcc = <span class='hk'>False</span></span>
-<span class="line" id="P52"><span class="ln">52</span>        <span class='hk'>if</span> i1 != i - <span class='hn'>1</span>:</span>
-<span class="line" id="P53"><span class="ln">53</span>            mxzone[j, <span class='hn'>1</span>] = i1</span>
-<span class="line" id="P54"><span class="ln">54</span>            mxzone[j, <span class='hn'>2</span>] = i - <span class='hn'>1</span></span>
-<span class="line" id="P55"><span class="ln">55</span>            j = j + <span class='hn'>1</span></span>
-<span class="line" id="P56"><span class="ln">56</span>        <span class='hk'>if</span> j &lt; <span class='hn'>12</span>:</span>
-<span class="line" id="P57"><span class="ln">57</span>            <span class='hk'>continue</span></span>
-<span class="line" id="P58"><span class="ln">58</span>        iounits_mod.write(iounits_mod.ishort, <span class='hs'>&#x27;</span><span class='hs'> -----TOO MANY MIX ZONES</span><span class='hs'>&#x27;</span>)</span>
-<span class="line" id="P59"><span class="ln">59</span>        <span class='hk'>break</span>  <span class='hc'># GOTO 12</span></span>
-<span class="line" id="P60"><span class="ln">60</span>    <span class='hc'># label 12</span></span>
+<span class="line" id="P22"><span class="ln">22</span></span>
+<span class="line" id="P23"><span class="ln">23</span><span class='hk'>def</span> convec(hcomp: np.ndarray, hd: np.ndarray, hp: np.ndarray, hr: np.ndarray, hs: np.ndarray, ht: np.ndarray,</span>
+<span class="line" id="P24"><span class="ln">24</span>           lc: np.ndarray, m: <span class='hb'>int</span>, mrzone: np.ndarray, mxzone: np.ndarray, mxzon0: np.ndarray, jcore: <span class='hb'>int</span>, jenv: <span class='hb'>int</span>,</span>
+<span class="line" id="P25"><span class="ln">25</span>           nrzone: <span class='hb'>int</span>, nzone: <span class='hb'>int</span>, nzone0: <span class='hb'>int</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>int</span>, <span class='hb'>int</span>, <span class='hb'>int</span>, <span class='hb'>int</span>, <span class='hb'>int</span>]:</span>
+<span class="line" id="P26"><span class="ln">26</span>    <span class='hs'>&quot;&quot;&quot;Find the convection zones, without overshoot (mxzon0, nzone0) and</span></span>
+<span class="line" id="P27"><span class="ln">27</span><span class='hs'>    with it (mxzone, nzone, merging zones that overlap), the radiative</span></span>
+<span class="line" id="P28"><span class="ln">28</span><span class='hs'>    regions between them (mrzone, nrzone), the edge of the convective</span></span>
+<span class="line" id="P29"><span class="ln">29</span><span class='hs'>    core jcore and the base of the convective envelope jenv (both before</span></span>
+<span class="line" id="P30"><span class="ln">30</span><span class='hs'>    overshoot). Overshoot is overmixing: the overshoot shells are mixed</span></span>
+<span class="line" id="P31"><span class="ln">31</span><span class='hs'>    with the zone but keep the radiative gradient.</span></span>
+<span class="line" id="P32"><span class="ln">32</span></span>
+<span class="line" id="P33"><span class="ln">33</span><span class='hs'>    Translates: convec.f#CONVEC (7be4133)</span></span>
+<span class="line" id="P34"><span class="ln">34</span></span>
+<span class="line" id="P35"><span class="ln">35</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P36"><span class="ln">36</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P37"><span class="ln">37</span><span class='hs'>    hcomp : np.ndarray, shape: `(16, JSON + 1)`, dtype: ``float64``</span></span>
+<span class="line" id="P38"><span class="ln">38</span><span class='hs'>        The composition (used only by oversh).</span></span>
+<span class="line" id="P39"><span class="ln">39</span><span class='hs'>    hd, hp, hr, hs, ht : np.ndarray, shape: `(JSON + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P40"><span class="ln">40</span><span class='hs'>        The model: log rho, log P, log r, the mass coordinate, and log T (used only by oversh).</span></span>
+<span class="line" id="P41"><span class="ln">41</span><span class='hs'>    lc : np.ndarray, shape: `(JSON + 1,)`, dtype: ``bool``</span></span>
+<span class="line" id="P42"><span class="ln">42</span><span class='hs'>        lc[1..m], convective or not; lc[m+1] is set to False here.</span></span>
+<span class="line" id="P43"><span class="ln">43</span><span class='hs'>    m : int</span></span>
+<span class="line" id="P44"><span class="ln">44</span><span class='hs'>        The number of shells.</span></span>
+<span class="line" id="P45"><span class="ln">45</span><span class='hs'>    mrzone : np.ndarray, shape: `(14, 3)`, dtype: ``int``</span></span>
+<span class="line" id="P46"><span class="ln">46</span><span class='hs'>        Changed in place: the radiative regions&#x27; first and last shells, mrzone[k, 1..2].</span></span>
+<span class="line" id="P47"><span class="ln">47</span><span class='hs'>    mxzone, mxzon0 : np.ndarray, shape: `(13, 3)`, dtype: ``int``</span></span>
+<span class="line" id="P48"><span class="ln">48</span><span class='hs'>        Changed in place: the convection zones&#x27; edges with and without overshoot, [k, 1..2].</span></span>
+<span class="line" id="P49"><span class="ln">49</span><span class='hs'>    jcore, jenv, nrzone, nzone, nzone0 : int</span></span>
+<span class="line" id="P50"><span class="ln">50</span><span class='hs'>        Passed in with any value.</span></span>
+<span class="line" id="P51"><span class="ln">51</span></span>
+<span class="line" id="P52"><span class="ln">52</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P53"><span class="ln">53</span><span class='hs'>    -------</span></span>
+<span class="line" id="P54"><span class="ln">54</span><span class='hs'>    jcore, jenv : int</span></span>
+<span class="line" id="P55"><span class="ln">55</span><span class='hs'>        The edge of the convective core and the base of the convective envelope, before overshoot.</span></span>
+<span class="line" id="P56"><span class="ln">56</span><span class='hs'>    nrzone, nzone, nzone0 : int</span></span>
+<span class="line" id="P57"><span class="ln">57</span><span class='hs'>        The numbers of radiative regions, of convection zones with overshoot, and without.</span></span>
+<span class="line" id="P58"><span class="ln">58</span></span>
+<span class="line" id="P59"><span class="ln">59</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P60"><span class="ln">60</span>    n = nmlpar_mod</span>
 <span class="line" id="P61"><span class="ln">61</span></span>
-<span class="line" id="P62"><span class="ln">62</span>    <span class='hc'># No convection zone (MHP 5/91) (<a class='fl' href='#L111-L122'>Fortran lines 111–122</a>).</span></span>
-<span class="line" id="P63"><span class="ln">63</span>    <span class='hk'>if</span> j == <span class='hn'>1</span>:</span>
-<span class="line" id="P64"><span class="ln">64</span>        jcore = <span class='hn'>1</span></span>
-<span class="line" id="P65"><span class="ln">65</span>        jenv = m</span>
-<span class="line" id="P66"><span class="ln">66</span>        nzone0 = <span class='hn'>0</span></span>
-<span class="line" id="P67"><span class="ln">67</span>        nzone = <span class='hn'>0</span></span>
-<span class="line" id="P68"><span class="ln">68</span>        nrzone = <span class='hn'>1</span></span>
-<span class="line" id="P69"><span class="ln">69</span>        mrzone[<span class='hn'>1</span>, <span class='hn'>1</span>] = <span class='hn'>1</span></span>
-<span class="line" id="P70"><span class="ln">70</span>        mrzone[<span class='hn'>1</span>, <span class='hn'>2</span>] = m</span>
-<span class="line" id="P71"><span class="ln">71</span>        <span class='hk'>return</span> jcore, jenv, nrzone, nzone, nzone0  <span class='hc'># GOTO 9999</span></span>
-<span class="line" id="P72"><span class="ln">72</span></span>
-<span class="line" id="P73"><span class="ln">73</span>    <span class='hc'># The zones without overshoot (<a class='fl' href='#L123-L128'>Fortran lines 123–128</a>).</span></span>
-<span class="line" id="P74"><span class="ln">74</span>    nzone = j - <span class='hn'>1</span></span>
-<span class="line" id="P75"><span class="ln">75</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nzone + <span class='hn'>1</span>):</span>
-<span class="line" id="P76"><span class="ln">76</span>        mxzon0[i, <span class='hn'>1</span>] = mxzone[i, <span class='hn'>1</span>]</span>
-<span class="line" id="P77"><span class="ln">77</span>        mxzon0[i, <span class='hn'>2</span>] = mxzone[i, <span class='hn'>2</span>]</span>
-<span class="line" id="P78"><span class="ln">78</span>    nzone0 = nzone</span>
-<span class="line" id="P79"><span class="ln">79</span></span>
-<span class="line" id="P80"><span class="ln">80</span>    <span class='hc'># The outer edge of the convective core (JCORE) and the inner edge of</span></span>
-<span class="line" id="P81"><span class="ln">81</span>    <span class='hc'># the convective envelope (JENV), before overshoot (Fortran lines</span></span>
-<span class="line" id="P82"><span class="ln">82</span>    <span class='hc'># 129–150).</span></span>
-<span class="line" id="P83"><span class="ln">83</span>    <span class='hk'>if</span> mxzone[<span class='hn'>1</span>, <span class='hn'>1</span>] == <span class='hn'>1</span>:</span>
-<span class="line" id="P84"><span class="ln">84</span>        <span class='hk'>if</span> mxzone[<span class='hn'>1</span>, <span class='hn'>2</span>] == m:</span>
-<span class="line" id="P85"><span class="ln">85</span>            <span class='hc'># A fully convective star (MRZONE is left as it was).</span></span>
-<span class="line" id="P86"><span class="ln">86</span>            jcore = <span class='hn'>1</span></span>
-<span class="line" id="P87"><span class="ln">87</span>            jenv = <span class='hn'>1</span></span>
-<span class="line" id="P88"><span class="ln">88</span>            nrzone = <span class='hn'>0</span></span>
-<span class="line" id="P89"><span class="ln">89</span>            <span class='hk'>return</span> jcore, jenv, nrzone, nzone, nzone0  <span class='hc'># GOTO 9999</span></span>
-<span class="line" id="P90"><span class="ln">90</span>        <span class='hk'>else</span>:</span>
-<span class="line" id="P91"><span class="ln">91</span>            jcore = mxzone[<span class='hn'>1</span>, <span class='hn'>2</span>]</span>
-<span class="line" id="P92"><span class="ln">92</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P93"><span class="ln">93</span>        jcore = <span class='hn'>1</span></span>
-<span class="line" id="P94"><span class="ln">94</span>    <span class='hk'>if</span> mxzone[nzone, <span class='hn'>2</span>] == m:</span>
-<span class="line" id="P95"><span class="ln">95</span>        jenv = mxzone[nzone, <span class='hn'>1</span>]</span>
-<span class="line" id="P96"><span class="ln">96</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P97"><span class="ln">97</span>        jenv = m</span>
-<span class="line" id="P98"><span class="ln">98</span></span>
-<span class="line" id="P99"><span class="ln">99</span>    <span class='hc'># Overshoot, if any switch is on: oversh moves the edges in mxzone;</span></span>
-<span class="line" id="P100"><span class="ln">100</span>    <span class='hc'># then merge zones whose edges now meet (<a class='fl' href='#L151-L182'>Fortran lines 151–182</a>).</span></span>
-<span class="line" id="P101"><span class="ln">101</span>    <span class='hk'>if</span> n.lovstc <span class='hk'>or</span> n.lovste <span class='hk'>or</span> n.lovstm:</span>
-<span class="line" id="P102"><span class="ln">102</span>        oversh(hcomp, hd, hp, hr, hs, ht, m, mxzone, mxzon0, nzone)</span>
-<span class="line" id="P103"><span class="ln">103</span>        <span class='hk'>if</span> nzone != <span class='hn'>1</span>:</span>
-<span class="line" id="P104"><span class="ln">104</span>            j = <span class='hn'>1</span></span>
-<span class="line" id="P105"><span class="ln">105</span>            <span class='hk'>while</span> <span class='hk'>True</span>:  <span class='hc'># label 85</span></span>
-<span class="line" id="P106"><span class="ln">106</span>                <span class='hk'>if</span> mxzone[j, <span class='hn'>2</span>] &gt;= mxzone[j + <span class='hn'>1</span>, <span class='hn'>1</span>]:</span>
-<span class="line" id="P107"><span class="ln">107</span>                    <span class='hc'># Two convection zones have merged.</span></span>
-<span class="line" id="P108"><span class="ln">108</span>                    iounits_mod.write(</span>
-<span class="line" id="P109"><span class="ln">109</span>                        iounits_mod.ishort,</span>
-<span class="line" id="P110"><span class="ln">110</span>                        <span class='hs'>&#x27;</span><span class='hs'>  CONVECTION ZONES MERGED DUE TO OVERSHOOT</span><span class='hs'>\n</span><span class='hs'>&#x27;</span></span>
-<span class="line" id="P111"><span class="ln">111</span>                        <span class='hs'>f</span><span class='hs'>&#x27;</span><span class='hs'>  OLD[</span><span class='hs'>{</span>mxzone[j, <span class='hn'>1</span>]<span class='hs'>:</span><span class='hs'>3d</span><span class='hs'>}</span><span class='hs'>-</span><span class='hs'>{</span>mxzone[j, <span class='hn'>2</span>]<span class='hs'>:</span><span class='hs'>3d</span><span class='hs'>}</span><span class='hs'>]</span><span class='hs'>&#x27;</span></span>
-<span class="line" id="P112"><span class="ln">112</span>                        <span class='hs'>f</span><span class='hs'>&#x27;</span><span class='hs'>[</span><span class='hs'>{</span>mxzone[j + <span class='hn'>1</span>, <span class='hn'>1</span>]<span class='hs'>:</span><span class='hs'>3d</span><span class='hs'>}</span><span class='hs'>-</span><span class='hs'>{</span>mxzone[j + <span class='hn'>1</span>, <span class='hn'>2</span>]<span class='hs'>:</span><span class='hs'>3d</span><span class='hs'>}</span><span class='hs'>]</span><span class='hs'>&#x27;</span></span>
-<span class="line" id="P113"><span class="ln">113</span>                        <span class='hs'>f</span><span class='hs'>&#x27;</span><span class='hs'> NEW[</span><span class='hs'>{</span>mxzone[j, <span class='hn'>1</span>]<span class='hs'>:</span><span class='hs'>3d</span><span class='hs'>}</span><span class='hs'>-</span><span class='hs'>{</span>mxzone[j + <span class='hn'>1</span>, <span class='hn'>2</span>]<span class='hs'>:</span><span class='hs'>3d</span><span class='hs'>}</span><span class='hs'>]</span><span class='hs'>&#x27;</span>)</span>
-<span class="line" id="P114"><span class="ln">114</span>                    mxzone[j + <span class='hn'>1</span>, <span class='hn'>1</span>] = mxzone[j, <span class='hn'>1</span>]</span>
-<span class="line" id="P115"><span class="ln">115</span>                    <span class='hk'>for</span> k <span class='hk'>in</span> <span class='hb'>range</span>(j, nzone):</span>
-<span class="line" id="P116"><span class="ln">116</span>                        <span class='hk'>for</span> j2 <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, <span class='hn'>3</span>):</span>
-<span class="line" id="P117"><span class="ln">117</span>                            mxzone[k, j2] = mxzone[k + <span class='hn'>1</span>, j2]</span>
-<span class="line" id="P118"><span class="ln">118</span>                    nzone = nzone - <span class='hn'>1</span></span>
-<span class="line" id="P119"><span class="ln">119</span>                    <span class='hk'>if</span> j &lt;= nzone - <span class='hn'>1</span>:</span>
-<span class="line" id="P120"><span class="ln">120</span>                        <span class='hk'>continue</span>  <span class='hc'># GOTO 85</span></span>
-<span class="line" id="P121"><span class="ln">121</span>                    <span class='hk'>break</span>  <span class='hc'># GOTO 100</span></span>
-<span class="line" id="P122"><span class="ln">122</span>                j = j + <span class='hn'>1</span></span>
-<span class="line" id="P123"><span class="ln">123</span>                <span class='hk'>if</span> j &lt;= nzone - <span class='hn'>1</span>:</span>
-<span class="line" id="P124"><span class="ln">124</span>                    <span class='hk'>continue</span>  <span class='hc'># GOTO 85</span></span>
-<span class="line" id="P125"><span class="ln">125</span>                <span class='hk'>break</span></span>
+<span class="line" id="P62"><span class="ln">62</span>    <span class='hc'># The standard convection zones; a run of a single shell is ignored</span></span>
+<span class="line" id="P63"><span class="ln">63</span>    <span class='hc'># (<a class='fl' href='#L83-L109'>Fortran lines 83–109</a>).</span></span>
+<span class="line" id="P64"><span class="ln">64</span>    <span class='hc'># Question (see the page): one-shell zones treated as radiative.</span></span>
+<span class="line" id="P65"><span class="ln">65</span>    j = <span class='hn'>1</span></span>
+<span class="line" id="P66"><span class="ln">66</span>    lcc = <span class='hk'>False</span></span>
+<span class="line" id="P67"><span class="ln">67</span>    lc[m + <span class='hn'>1</span>] = <span class='hk'>False</span></span>
+<span class="line" id="P68"><span class="ln">68</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, m + <span class='hn'>2</span>):</span>
+<span class="line" id="P69"><span class="ln">69</span>        <span class='hk'>if</span> lc[i]:</span>
+<span class="line" id="P70"><span class="ln">70</span>            <span class='hk'>if</span> <span class='hk'>not</span> lcc:</span>
+<span class="line" id="P71"><span class="ln">71</span>                <span class='hc'># The start of a convection zone.</span></span>
+<span class="line" id="P72"><span class="ln">72</span>                lcc = <span class='hk'>True</span></span>
+<span class="line" id="P73"><span class="ln">73</span>                i1 = i</span>
+<span class="line" id="P74"><span class="ln">74</span>            <span class='hk'>continue</span></span>
+<span class="line" id="P75"><span class="ln">75</span>        <span class='hc'># label 10</span></span>
+<span class="line" id="P76"><span class="ln">76</span>        <span class='hk'>if</span> <span class='hk'>not</span> lcc:</span>
+<span class="line" id="P77"><span class="ln">77</span>            <span class='hk'>continue</span></span>
+<span class="line" id="P78"><span class="ln">78</span>        <span class='hc'># The end of a convection zone.</span></span>
+<span class="line" id="P79"><span class="ln">79</span>        lcc = <span class='hk'>False</span></span>
+<span class="line" id="P80"><span class="ln">80</span>        <span class='hk'>if</span> i1 != i - <span class='hn'>1</span>:</span>
+<span class="line" id="P81"><span class="ln">81</span>            mxzone[j, <span class='hn'>1</span>] = i1</span>
+<span class="line" id="P82"><span class="ln">82</span>            mxzone[j, <span class='hn'>2</span>] = i - <span class='hn'>1</span></span>
+<span class="line" id="P83"><span class="ln">83</span>            j = j + <span class='hn'>1</span></span>
+<span class="line" id="P84"><span class="ln">84</span>        <span class='hk'>if</span> j &lt; NZONE_MAX:</span>
+<span class="line" id="P85"><span class="ln">85</span>            <span class='hk'>continue</span></span>
+<span class="line" id="P86"><span class="ln">86</span>        iounits_mod.write(iounits_mod.ishort, <span class='hs'>&#x27;</span><span class='hs'> -----TOO MANY MIX ZONES</span><span class='hs'>&#x27;</span>)</span>
+<span class="line" id="P87"><span class="ln">87</span>        <span class='hk'>break</span>  <span class='hc'># GOTO 12</span></span>
+<span class="line" id="P88"><span class="ln">88</span>    <span class='hc'># label 12</span></span>
+<span class="line" id="P89"><span class="ln">89</span></span>
+<span class="line" id="P90"><span class="ln">90</span>    <span class='hc'># No convection zone (MHP 5/91) (<a class='fl' href='#L111-L122'>Fortran lines 111–122</a>).</span></span>
+<span class="line" id="P91"><span class="ln">91</span>    <span class='hk'>if</span> j == <span class='hn'>1</span>:</span>
+<span class="line" id="P92"><span class="ln">92</span>        jcore = <span class='hn'>1</span></span>
+<span class="line" id="P93"><span class="ln">93</span>        jenv = m</span>
+<span class="line" id="P94"><span class="ln">94</span>        nzone0 = <span class='hn'>0</span></span>
+<span class="line" id="P95"><span class="ln">95</span>        nzone = <span class='hn'>0</span></span>
+<span class="line" id="P96"><span class="ln">96</span>        nrzone = <span class='hn'>1</span></span>
+<span class="line" id="P97"><span class="ln">97</span>        mrzone[<span class='hn'>1</span>, <span class='hn'>1</span>] = <span class='hn'>1</span></span>
+<span class="line" id="P98"><span class="ln">98</span>        mrzone[<span class='hn'>1</span>, <span class='hn'>2</span>] = m</span>
+<span class="line" id="P99"><span class="ln">99</span>        <span class='hk'>return</span> jcore, jenv, nrzone, nzone, nzone0  <span class='hc'># GOTO 9999</span></span>
+<span class="line" id="P100"><span class="ln">100</span></span>
+<span class="line" id="P101"><span class="ln">101</span>    <span class='hc'># The zones without overshoot (<a class='fl' href='#L123-L128'>Fortran lines 123–128</a>).</span></span>
+<span class="line" id="P102"><span class="ln">102</span>    nzone = j - <span class='hn'>1</span></span>
+<span class="line" id="P103"><span class="ln">103</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nzone + <span class='hn'>1</span>):</span>
+<span class="line" id="P104"><span class="ln">104</span>        mxzon0[i, <span class='hn'>1</span>] = mxzone[i, <span class='hn'>1</span>]</span>
+<span class="line" id="P105"><span class="ln">105</span>        mxzon0[i, <span class='hn'>2</span>] = mxzone[i, <span class='hn'>2</span>]</span>
+<span class="line" id="P106"><span class="ln">106</span>    nzone0 = nzone</span>
+<span class="line" id="P107"><span class="ln">107</span></span>
+<span class="line" id="P108"><span class="ln">108</span>    <span class='hc'># The outer edge of the convective core (JCORE) and the inner edge of</span></span>
+<span class="line" id="P109"><span class="ln">109</span>    <span class='hc'># the convective envelope (JENV), before overshoot (Fortran lines</span></span>
+<span class="line" id="P110"><span class="ln">110</span>    <span class='hc'># 129–150).</span></span>
+<span class="line" id="P111"><span class="ln">111</span>    <span class='hk'>if</span> mxzone[<span class='hn'>1</span>, <span class='hn'>1</span>] == <span class='hn'>1</span>:</span>
+<span class="line" id="P112"><span class="ln">112</span>        <span class='hk'>if</span> mxzone[<span class='hn'>1</span>, <span class='hn'>2</span>] == m:</span>
+<span class="line" id="P113"><span class="ln">113</span>            <span class='hc'># A fully convective star (MRZONE is left as it was).</span></span>
+<span class="line" id="P114"><span class="ln">114</span>            jcore = <span class='hn'>1</span></span>
+<span class="line" id="P115"><span class="ln">115</span>            jenv = <span class='hn'>1</span></span>
+<span class="line" id="P116"><span class="ln">116</span>            nrzone = <span class='hn'>0</span></span>
+<span class="line" id="P117"><span class="ln">117</span>            <span class='hk'>return</span> jcore, jenv, nrzone, nzone, nzone0  <span class='hc'># GOTO 9999</span></span>
+<span class="line" id="P118"><span class="ln">118</span>        <span class='hk'>else</span>:</span>
+<span class="line" id="P119"><span class="ln">119</span>            jcore = mxzone[<span class='hn'>1</span>, <span class='hn'>2</span>]</span>
+<span class="line" id="P120"><span class="ln">120</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P121"><span class="ln">121</span>        jcore = <span class='hn'>1</span></span>
+<span class="line" id="P122"><span class="ln">122</span>    <span class='hk'>if</span> mxzone[nzone, <span class='hn'>2</span>] == m:</span>
+<span class="line" id="P123"><span class="ln">123</span>        jenv = mxzone[nzone, <span class='hn'>1</span>]</span>
+<span class="line" id="P124"><span class="ln">124</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P125"><span class="ln">125</span>        jenv = m</span>
 <span class="line" id="P126"><span class="ln">126</span></span>
-<span class="line" id="P127"><span class="ln">127</span>    <span class='hc'># label 100: the radiative regions (<a class='fl' href='#L183-L205'>Fortran lines 183–205</a>).</span></span>
-<span class="line" id="P128"><span class="ln">128</span>    <span class='hc'># Below the first convection zone.</span></span>
-<span class="line" id="P129"><span class="ln">129</span>    <span class='hk'>if</span> mxzone[<span class='hn'>1</span>, <span class='hn'>1</span>] &gt; <span class='hn'>1</span>:</span>
-<span class="line" id="P130"><span class="ln">130</span>        nrzone = <span class='hn'>1</span></span>
-<span class="line" id="P131"><span class="ln">131</span>        mrzone[<span class='hn'>1</span>, <span class='hn'>1</span>] = <span class='hn'>1</span></span>
-<span class="line" id="P132"><span class="ln">132</span>        mrzone[<span class='hn'>1</span>, <span class='hn'>2</span>] = mxzone[<span class='hn'>1</span>, <span class='hn'>1</span>] - <span class='hn'>1</span></span>
-<span class="line" id="P133"><span class="ln">133</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P134"><span class="ln">134</span>        nrzone = <span class='hn'>0</span></span>
-<span class="line" id="P135"><span class="ln">135</span>    <span class='hc'># Between convection zones.</span></span>
-<span class="line" id="P136"><span class="ln">136</span>    <span class='hk'>if</span> nzone &gt; <span class='hn'>1</span>:</span>
-<span class="line" id="P137"><span class="ln">137</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nzone):</span>
-<span class="line" id="P138"><span class="ln">138</span>            nrzone = nrzone + <span class='hn'>1</span></span>
-<span class="line" id="P139"><span class="ln">139</span>            mrzone[nrzone, <span class='hn'>1</span>] = mxzone[i, <span class='hn'>2</span>] + <span class='hn'>1</span></span>
-<span class="line" id="P140"><span class="ln">140</span>            mrzone[nrzone, <span class='hn'>2</span>] = mxzone[i + <span class='hn'>1</span>, <span class='hn'>1</span>] - <span class='hn'>1</span></span>
-<span class="line" id="P141"><span class="ln">141</span>    <span class='hc'># Above the last convection zone.</span></span>
-<span class="line" id="P142"><span class="ln">142</span>    <span class='hk'>if</span> mxzone[nzone, <span class='hn'>2</span>] &lt; m:</span>
-<span class="line" id="P143"><span class="ln">143</span>        nrzone = nrzone + <span class='hn'>1</span></span>
-<span class="line" id="P144"><span class="ln">144</span>        mrzone[nrzone, <span class='hn'>1</span>] = mxzone[nzone, <span class='hn'>2</span>] + <span class='hn'>1</span></span>
-<span class="line" id="P145"><span class="ln">145</span>        <span class='hc'># Suspected bug (see the page): MRZONE(1,2), not MRZONE(NRZONE,2).</span></span>
-<span class="line" id="P146"><span class="ln">146</span>        mrzone[<span class='hn'>1</span>, <span class='hn'>2</span>] = m</span>
-<span class="line" id="P147"><span class="ln">147</span></span>
-<span class="line" id="P148"><span class="ln">148</span>    <span class='hc'># label 9999</span></span>
-<span class="line" id="P149"><span class="ln">149</span>    <span class='hk'>return</span> jcore, jenv, nrzone, nzone, nzone0</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
+<span class="line" id="P127"><span class="ln">127</span>    <span class='hc'># Overshoot, if any switch is on: oversh moves the edges in mxzone;</span></span>
+<span class="line" id="P128"><span class="ln">128</span>    <span class='hc'># then merge zones whose edges now meet (<a class='fl' href='#L151-L182'>Fortran lines 151–182</a>).</span></span>
+<span class="line" id="P129"><span class="ln">129</span>    <span class='hk'>if</span> n.lovstc <span class='hk'>or</span> n.lovste <span class='hk'>or</span> n.lovstm:</span>
+<span class="line" id="P130"><span class="ln">130</span>        oversh(hcomp, hd, hp, hr, hs, ht, m, mxzone, mxzon0, nzone)</span>
+<span class="line" id="P131"><span class="ln">131</span>        <span class='hk'>if</span> nzone != <span class='hn'>1</span>:</span>
+<span class="line" id="P132"><span class="ln">132</span>            j = <span class='hn'>1</span></span>
+<span class="line" id="P133"><span class="ln">133</span>            <span class='hk'>while</span> <span class='hk'>True</span>:  <span class='hc'># label 85</span></span>
+<span class="line" id="P134"><span class="ln">134</span>                <span class='hk'>if</span> mxzone[j, <span class='hn'>2</span>] &gt;= mxzone[j + <span class='hn'>1</span>, <span class='hn'>1</span>]:</span>
+<span class="line" id="P135"><span class="ln">135</span>                    <span class='hc'># Two convection zones have merged.</span></span>
+<span class="line" id="P136"><span class="ln">136</span>                    iounits_mod.write(</span>
+<span class="line" id="P137"><span class="ln">137</span>                        iounits_mod.ishort,</span>
+<span class="line" id="P138"><span class="ln">138</span>                        <span class='hs'>&#x27;</span><span class='hs'>  CONVECTION ZONES MERGED DUE TO OVERSHOOT</span><span class='hs'>\n</span><span class='hs'>&#x27;</span></span>
+<span class="line" id="P139"><span class="ln">139</span>                        <span class='hs'>f</span><span class='hs'>&#x27;</span><span class='hs'>  OLD[</span><span class='hs'>{</span>mxzone[j, <span class='hn'>1</span>]<span class='hs'>:</span><span class='hs'>3d</span><span class='hs'>}</span><span class='hs'>-</span><span class='hs'>{</span>mxzone[j, <span class='hn'>2</span>]<span class='hs'>:</span><span class='hs'>3d</span><span class='hs'>}</span><span class='hs'>]</span><span class='hs'>&#x27;</span></span>
+<span class="line" id="P140"><span class="ln">140</span>                        <span class='hs'>f</span><span class='hs'>&#x27;</span><span class='hs'>[</span><span class='hs'>{</span>mxzone[j + <span class='hn'>1</span>, <span class='hn'>1</span>]<span class='hs'>:</span><span class='hs'>3d</span><span class='hs'>}</span><span class='hs'>-</span><span class='hs'>{</span>mxzone[j + <span class='hn'>1</span>, <span class='hn'>2</span>]<span class='hs'>:</span><span class='hs'>3d</span><span class='hs'>}</span><span class='hs'>]</span><span class='hs'>&#x27;</span></span>
+<span class="line" id="P141"><span class="ln">141</span>                        <span class='hs'>f</span><span class='hs'>&#x27;</span><span class='hs'> NEW[</span><span class='hs'>{</span>mxzone[j, <span class='hn'>1</span>]<span class='hs'>:</span><span class='hs'>3d</span><span class='hs'>}</span><span class='hs'>-</span><span class='hs'>{</span>mxzone[j + <span class='hn'>1</span>, <span class='hn'>2</span>]<span class='hs'>:</span><span class='hs'>3d</span><span class='hs'>}</span><span class='hs'>]</span><span class='hs'>&#x27;</span>)</span>
+<span class="line" id="P142"><span class="ln">142</span>                    mxzone[j + <span class='hn'>1</span>, <span class='hn'>1</span>] = mxzone[j, <span class='hn'>1</span>]</span>
+<span class="line" id="P143"><span class="ln">143</span>                    <span class='hk'>for</span> k <span class='hk'>in</span> <span class='hb'>range</span>(j, nzone):</span>
+<span class="line" id="P144"><span class="ln">144</span>                        <span class='hk'>for</span> j2 <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, <span class='hn'>3</span>):</span>
+<span class="line" id="P145"><span class="ln">145</span>                            mxzone[k, j2] = mxzone[k + <span class='hn'>1</span>, j2]</span>
+<span class="line" id="P146"><span class="ln">146</span>                    nzone = nzone - <span class='hn'>1</span></span>
+<span class="line" id="P147"><span class="ln">147</span>                    <span class='hk'>if</span> j &lt;= nzone - <span class='hn'>1</span>:</span>
+<span class="line" id="P148"><span class="ln">148</span>                        <span class='hk'>continue</span>  <span class='hc'># GOTO 85</span></span>
+<span class="line" id="P149"><span class="ln">149</span>                    <span class='hk'>break</span>  <span class='hc'># GOTO 100</span></span>
+<span class="line" id="P150"><span class="ln">150</span>                j = j + <span class='hn'>1</span></span>
+<span class="line" id="P151"><span class="ln">151</span>                <span class='hk'>if</span> j &lt;= nzone - <span class='hn'>1</span>:</span>
+<span class="line" id="P152"><span class="ln">152</span>                    <span class='hk'>continue</span>  <span class='hc'># GOTO 85</span></span>
+<span class="line" id="P153"><span class="ln">153</span>                <span class='hk'>break</span></span>
+<span class="line" id="P154"><span class="ln">154</span></span>
+<span class="line" id="P155"><span class="ln">155</span>    <span class='hc'># label 100: the radiative regions (<a class='fl' href='#L183-L205'>Fortran lines 183–205</a>).</span></span>
+<span class="line" id="P156"><span class="ln">156</span>    <span class='hc'># Below the first convection zone.</span></span>
+<span class="line" id="P157"><span class="ln">157</span>    <span class='hk'>if</span> mxzone[<span class='hn'>1</span>, <span class='hn'>1</span>] &gt; <span class='hn'>1</span>:</span>
+<span class="line" id="P158"><span class="ln">158</span>        nrzone = <span class='hn'>1</span></span>
+<span class="line" id="P159"><span class="ln">159</span>        mrzone[<span class='hn'>1</span>, <span class='hn'>1</span>] = <span class='hn'>1</span></span>
+<span class="line" id="P160"><span class="ln">160</span>        mrzone[<span class='hn'>1</span>, <span class='hn'>2</span>] = mxzone[<span class='hn'>1</span>, <span class='hn'>1</span>] - <span class='hn'>1</span></span>
+<span class="line" id="P161"><span class="ln">161</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P162"><span class="ln">162</span>        nrzone = <span class='hn'>0</span></span>
+<span class="line" id="P163"><span class="ln">163</span>    <span class='hc'># Between convection zones.</span></span>
+<span class="line" id="P164"><span class="ln">164</span>    <span class='hk'>if</span> nzone &gt; <span class='hn'>1</span>:</span>
+<span class="line" id="P165"><span class="ln">165</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nzone):</span>
+<span class="line" id="P166"><span class="ln">166</span>            nrzone = nrzone + <span class='hn'>1</span></span>
+<span class="line" id="P167"><span class="ln">167</span>            mrzone[nrzone, <span class='hn'>1</span>] = mxzone[i, <span class='hn'>2</span>] + <span class='hn'>1</span></span>
+<span class="line" id="P168"><span class="ln">168</span>            mrzone[nrzone, <span class='hn'>2</span>] = mxzone[i + <span class='hn'>1</span>, <span class='hn'>1</span>] - <span class='hn'>1</span></span>
+<span class="line" id="P169"><span class="ln">169</span>    <span class='hc'># Above the last convection zone.</span></span>
+<span class="line" id="P170"><span class="ln">170</span>    <span class='hk'>if</span> mxzone[nzone, <span class='hn'>2</span>] &lt; m:</span>
+<span class="line" id="P171"><span class="ln">171</span>        nrzone = nrzone + <span class='hn'>1</span></span>
+<span class="line" id="P172"><span class="ln">172</span>        mrzone[nrzone, <span class='hn'>1</span>] = mxzone[nzone, <span class='hn'>2</span>] + <span class='hn'>1</span></span>
+<span class="line" id="P173"><span class="ln">173</span>        <span class='hc'># Suspected bug (see the page): MRZONE(1,2), not MRZONE(NRZONE,2).</span></span>
+<span class="line" id="P174"><span class="ln">174</span>        mrzone[<span class='hn'>1</span>, <span class='hn'>2</span>] = m</span>
+<span class="line" id="P175"><span class="ln">175</span></span>
+<span class="line" id="P176"><span class="ln">176</span>    <span class='hc'># label 9999</span></span>
+<span class="line" id="P177"><span class="ln">177</span>    <span class='hk'>return</span> jcore, jenv, nrzone, nzone, nzone0</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
 function st(){try{return localStorage.getItem('pm-toc')}catch(e){return null}}function sv(v){try{localStorage.setItem('pm-toc',v)}catch(e){}}
 var b=nav.querySelector('.toc-toggle');function set(h){page.classList.toggle('toc-hidden',h);b.textContent=h?'show':'hide';}
 set(st()==='hidden');b.addEventListener('click',function(){var h=!page.classList.contains('toc-hidden');set(h);sv(h?'hidden':'shown');});

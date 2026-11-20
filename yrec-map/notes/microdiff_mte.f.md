@@ -1,9 +1,9 @@
 ## Explanation
 
-**Purpose.** "Model to equal": interpolates the model's variables onto an equally spaced grid in radius, at the grid points and at the midpoints between them, for [MICRODIFF](microdiff.f.md#microdiff).
+**Purpose.** "Model to equal": interpolates the model's variables onto an equally spaced grid in radius, at the grid points and at the midpoints between them, for [MICRODIFF](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff.f#L4-L245).
 
 **How it fits.**
-- **Inputs:** from [MICRODIFF_SETUP](microdiff_setup.f.md#microdiff_setup): the radii `HRU` (units of $`R_\odot`$), `IBEGIN`, `IEND`, and the density `ODEN` and temperature `OTEM`; and the composition `HCOMP`, `HQPR`, `HS1` and $`\nabla`$ (`SDEL(2,·)` in `SCRTCH_MOD`).
+- **Inputs:** from [MICRODIFF_SETUP](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_setup.f#L4-L169): the radii `HRU` (units of $`R_\odot`$), `IBEGIN`, `IEND`, and the density `ODEN` and temperature `OTEM`; and the composition `HCOMP`, `HQPR`, `HS1` and $`\nabla`$ (`SDEL(2,·)` in `SCRTCH_MOD`).
 - **Who calls it:** only `MICRODIFF`.
 - **What it calls:** [INTERP](interp.f.md#interp), for the four-point Lagrange weights.
 - **Outputs:** `NPT`, `DR`, and on the grid points (`E…`) and midpoints (`E…_H`): the mass $`m`$, $`\rho`$, $`T`$, $`d\ln P/dr`$, $`\nabla`$, $`X`$, $`Y`$, $`Z`$ and the light elements; these go to [MICRODIFF_RUN](microdiff_run.f.md#microdiff_run). The radius, mass and $`d\ln P/dr`$ are in the Bahcall–Loeb units of `MICRODIFF_SETUP`; $`\rho`$ and $`T`$ are in cgs units ($`\mathrm{g\,cm^{-3}}`$, K).
@@ -21,11 +21,11 @@
 2. **Midpoints.** $`r_{i+1/2} = r_\mathrm{begin} + (i - \tfrac12)\Delta r`$ for $`i = 1,\dots,N-1`$. The first is found by linear interpolation; the others by four-point Lagrange interpolation over the four model points around them, $`f(r) = \sum_{k=1}^{4} w_k(r)\, f_{k_0+k-1}`$. Two pieces of code here cannot run: the branch for `NPT = 2` ([lines 87–88](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_mte.f#L87-L88)), since `NPT` is at least 4, and the debugging line `IF(I-1 .EQ. 0) PRINT*, 'mte line 47'` ([line 91](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_mte.f#L91)) inside `DO 10 I = 2,NPT-1` (unused?).
 3. **Grid points.** $`r_i = r_\mathrm{begin} + (i-1)\Delta r`$. The first and last take the model's values at `IBEGIN` and `IEND`; the others use the same four-point interpolation.
 
-    > **Question** ([lines 164–177](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_mte.f#L164-L177); [lines 256–267](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_mte.f#L256-L267)). **Interpolated composition.** Four-point Lagrange interpolation of $`X`$, $`Y`$, $`Z`$ near steep gradients can overshoot (negative or above one). [MICRODIFF_COD](microdiff_cod.f.md#microdiff_cod) floors the mass fractions at $`10^{-24}`$ for its coefficients ([microdiff_cod.f, lines 83–85](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_cod.f#L83-L85)), and [MICRODIFF_ETM](microdiff_etm.f.md#microdiff_etm) maps back only the changes, which limits the harm. Is an overshoot guarded anywhere else, or does it need to be?
+    > **Question** ([lines 164–177](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_mte.f#L164-L177); [lines 256–267](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_mte.f#L256-L267)). **Interpolated composition.** Four-point Lagrange interpolation of $`X`$, $`Y`$, $`Z`$ near steep gradients can overshoot (negative or above one). [MICRODIFF_COD](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_cod.f#L4-L217) floors the mass fractions at $`10^{-24}`$ for its coefficients ([microdiff_cod.f, lines 83–85](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_cod.f#L83-L85)), and [MICRODIFF_ETM](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_etm.f#L2-L174) maps back only the changes, which limits the harm. Is an overshoot guarded anywhere else, or does it need to be?
 
 **Changed since `rp_1`.** The cap on `NPT` is now `JSON` itself (the same 5000) rather than a repeated literal; the authors' comment says the name `HALFJSON` is presumably left from an earlier cap of `JSON/2`, which settles the former question 3; COMMON blocks to modules (the unused `/GRAVS3/` is gone), `IMPLICIT NONE`.
 
-**Changed since `a8a5950`.** The grid has at least 4 points, not 2, since the 4-point Lagrange stencils here and in [MICRODIFF_ETM](microdiff_etm.f.md#microdiff_etm) read `ER(K0..K0+3)`, and a 2- or 3-point grid read points never set, or `ER(-1)` and `ER(0)`.
+**Changed since `a8a5950`.** The grid has at least 4 points, not 2, since the 4-point Lagrange stencils here and in [MICRODIFF_ETM](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_etm.f#L2-L174) read `ER(K0..K0+3)`, and a 2- or 3-point grid read points never set, or `ER(-1)` and `ER(0)`.
 
 ## Bugs, by priority
 

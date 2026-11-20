@@ -3,10 +3,10 @@
 **Purpose.** `GETFC` computes, shell by shell, the factor $`f_c`$ that relates the diffusion coefficient for chemical mixing to that for angular momentum transport by meridional circulation, "using the prescription of Zahn ([1992](https://ui.adsabs.harvard.edu/abs/1992A%26A...265..115Z))" (its comment).
 
 **How it fits.**
-- **Who calls it:** only [SECULR](seculr.f.md#seculr), when `LVFC` is set, for the shells `IMIN..IMAX`.
-- **Inputs:** `HD` ($`\log\rho`$ at zone centres), `HRU` (radii at zone centres), `HV` (circulation velocities $`U`$ at zone edges), `OMEGA`; and from `INTVAR_MOD`, `RM` (radii at zone edges, the means of neighbouring centre radii) and `DM` (density at zone edges, interpolated in $`\log\rho`$), both set by [SETUPV](setupv.f.md#setupv).
+- **Who calls it:** only [SECULR](https://github.com/yreclab/yrec/blob/7be4133/src/seculr.f#L6-L532), when `LVFC` is set, for the shells `IMIN..IMAX`.
+- **Inputs:** `HD` ($`\log\rho`$ at zone centres), `HRU` (radii at zone centres), `HV` (circulation velocities $`U`$ at zone edges), `OMEGA`; and from `INTVAR_MOD`, `RM` (radii at zone edges, the means of neighbouring centre radii) and `DM` (density at zone edges, interpolated in $`\log\rho`$), both set by [SETUPV](https://github.com/yreclab/yrec/blob/7be4133/src/setupv.f#L3-L467).
 - **Output:** the argument `VFC`, an array that `SECULR` owns (it clears it, and passes it on to [CODIFF](codiff.f.md#codiff), which reads it).
-- **Modules:** `NMLPAR_MOD` gives `FC` and `LVFC` (namelist parameters, read in [PARMIN](parmin.f.md#parmin)); `INTVAR_MOD` (the edge quantities), shared with `CODIFF`, `SECULR`, `SETUPV`, `VCIRC`; `CONSTANTS_MOD` (`CLN`, `CC13`); `DIMENSIONS_MOD` (`JSON`).
+- **Modules:** `NMLPAR_MOD` gives `FC` and `LVFC` (namelist parameters, read in [PARMIN](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489)); `INTVAR_MOD` (the edge quantities), shared with `CODIFF`, `SECULR`, `SETUPV`, `VCIRC`; `CONSTANTS_MOD` (`CLN`, `CC13`); `DIMENSIONS_MOD` (`JSON`).
 
 **The method.** The comment gives
 ```math

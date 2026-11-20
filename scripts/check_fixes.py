@@ -3,7 +3,7 @@
 For each ```diff block in a bug item ("## Bugs, by priority" of yrec-map/notes/*.md): `patch --dry-run` on a scratch
 copy of yrec/src must succeed with no fuzz or offset, and each file it changes, patched, must pass
 `gfortran -fsyntax-only` (modules compiled first, so that USE finds them). Run from the repository:
-    python3 scripts/check_fixes.py ../yrec [scratch folder]"""
+    python3 scripts/check_fixes.py yrec [scratch folder]"""
 import re, shutil, subprocess, sys, tempfile
 from pathlib import Path
 

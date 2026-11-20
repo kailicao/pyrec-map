@@ -3,7 +3,7 @@
 **Purpose.** Tests the edges of the first convection zone (every zone at `rp_1`) for semiconvection and, where the region next to it is unstable, extends the zone, following Castellani et al. ([1971](https://ui.adsabs.harvard.edu/abs/1971Ap%26SS..10..340C), Ap&SS 10, 340), as the header comment says. It then merges zones that have come to overlap.
 
 **How it fits.**
-- **Who calls it:** [`MIX`](mix.f.md#mix), before the composition is mixed in the convection zones, when semiconvection is on (`LSEMIC`) and from the second iteration (`ITLVL` > 1).
+- **Who calls it:** [`MIX`](https://github.com/yreclab/yrec/blob/7be4133/src/mix.f#L26-L507), before the composition is mixed in the convection zones, when semiconvection is on (`LSEMIC`) and from the second iteration (`ITLVL` > 1).
 - **Inputs:** the step `DELTS` (s), the model's $`\log\rho`$ (`HD`), $`L`$ (`HL`, in solar units, by the factor `CLSUN`), $`\log P`$, $`\log r`$, $`\log m`$, $`\log T`$ (`HP`, `HR`, `HS`, `HT`), the composition `HCOMP`, `TEFFL`, the mixing length `CMIXL` (passed on to `TPGRAD`), and the zones `MXZONE(12,2)` (bottom and top shell of each), `NZONE`.
 - **What it calls:** for each test point, [`EQSTAT`](eqstat.f.md#eqstat) (equation of state: $`\nabla_\mathrm{ad}`$, the mean molecular weights), [`GETOPAC`](getopac.f.md#getopac) (opacity) and [`TPGRAD`](tpgrad.f.md#tpgrad) (the radiative gradient $`\nabla_\mathrm{rad}`$).
 - **Outputs:** `MXZONE` and `NZONE`, changed; a line in the short output (`ISHORT`) for each edge it moves and each merger. Also, `HD` at the shells it tests is overwritten with the density returned by `EQSTAT`.

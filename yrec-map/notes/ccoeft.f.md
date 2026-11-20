@@ -1,13 +1,13 @@
 ## Explanation
 
-**Purpose.** This file sets up the tridiagonal system for one implicit time step of composition transport by rotationally induced mixing, on an evenly spaced grid in the coordinate $`\chi`$ built by [GETGRID](getgrid.f.md#getgrid) and [MIXGRID](mixgrid.f.md#mixgrid) (the comments' "radius" and "cm" are older than that grid).
+**Purpose.** This file sets up the tridiagonal system for one implicit time step of composition transport by rotationally induced mixing, on an evenly spaced grid in the coordinate $`\chi`$ built by [GETGRID](getgrid.f.md#getgrid) and [MIXGRID](https://github.com/yreclab/yrec/blob/7be4133/src/mixgrid.f#L2-L167) (the comments' "radius" and "cm" are older than that grid).
 
 **The comments describe an older use.** They speak of an even grid in radius, a spacing in cm, coefficients "COMPUTED IN SR COEFFT" ([lines 25–36](https://github.com/yreclab/yrec/blob/7be4133/src/ccoeft.f#L25-L36)) and "ANGULAR MOMENTUM" at the boundary ([lines 61–63](https://github.com/yreclab/yrec/blob/7be4133/src/ccoeft.f#L61-L63)), but MIXCOM calls the routine with `DCHI`, the spacing of the grid in $`\chi`$, for the composition ([mixcom.f, lines 84–89](https://github.com/yreclab/yrec/blob/7be4133/src/mixcom.f#L84-L89)), with coefficients from CODIFF and MIXGRID, so only the comments are out of date.
 
 **How it fits.**
-- **Inputs:** the arguments `COD` (diffusion coefficients, "computed in SR COEFFT" per the comment), `DR` (grid spacing: [MIXCOM](mixcom.f.md#mixcom) passes `DCHI`, the spacing in $`\chi`$), `DT` (time step, s), `ECOMP` (mass fractions at the start of the step on the even grid), `EM` (the masses of the grid's shells, g), `NTOT` (number of points).
-- **Who calls it:** [MIXCOM](mixcom.f.md#mixcom).
-- **Outputs:** the coefficients `A`, `B`, `C` and right-hand side `D` in [`TRIDI_MOD`](tridi_mod.f.md#tridi_mod), which [CTRIDI](ctridi.f.md#ctridi) then solves (MIXCOM calls only that one); `TRIDI_MOD` is shared with these and with [DCOEFT](dcoeft.f.md#dcoeft) and [GETQUA](getqua.f.md#getqua).
+- **Inputs:** the arguments `COD` (diffusion coefficients, "computed in SR COEFFT" per the comment), `DR` (grid spacing: [MIXCOM](https://github.com/yreclab/yrec/blob/7be4133/src/mixcom.f#L2-L203) passes `DCHI`, the spacing in $`\chi`$), `DT` (time step, s), `ECOMP` (mass fractions at the start of the step on the even grid), `EM` (the masses of the grid's shells, g), `NTOT` (number of points).
+- **Who calls it:** [MIXCOM](https://github.com/yreclab/yrec/blob/7be4133/src/mixcom.f#L2-L203).
+- **Outputs:** the coefficients `A`, `B`, `C` and right-hand side `D` in [`TRIDI_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/tridi_mod.f#L19-L35), which [CTRIDI](ctridi.f.md#ctridi) then solves (MIXCOM calls only that one); `TRIDI_MOD` is shared with these and with [DCOEFT](dcoeft.f.md#dcoeft) and [GETQUA](getqua.f.md#getqua).
 
 **The method.** The comment gives the equation as
 ```math

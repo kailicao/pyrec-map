@@ -10,7 +10,7 @@
 - **Inputs:** `TL`, `T`, `P`, `BETA`, `X`, `Z`. It compares `X`, `Z` with `XENV`, `ZENV` from `/COMP/`.
 - **What it calls:** [KSPLINE](kspline.f.md#kspline) and [KSPLINT](ksplint.f.md#ksplint) (a four-point natural spline), [INTERP](interp.f.md#interp) (four-point Lagrange) and `EQSCVG`.
 - **Outputs:** `DL`, `D`, `QDT`, `QDP`, `QCP`, `DELA`, `FXION`, `LCALC`.
-- **Modules:** `SCVEOS_MOD` holds the tables (`TLOGX`, `TABLENV` for the envelope mixture, `TABLEX`, `TABLEY`, `TABLEZ`, `SMIX`, `NPTSX`) and the last indices `IDTSCV`, `IDP`; it is filled by [SETSCV](setscv.f.md#setscv) and used also by `EQSCVG` and [SETUPS](setups.f.md#setups). The flag `LSCV` is now in `NMLPAR_MOD`. `COMP_MOD` gives the envelope composition; `CONSTANTS_MOD` the constants.
+- **Modules:** `SCVEOS_MOD` holds the tables (`TLOGX`, `TABLENV` for the envelope mixture, `TABLEX`, `TABLEY`, `TABLEZ`, `SMIX`, `NPTSX`) and the last indices `IDTSCV`, `IDP`; it is filled by [SETSCV](https://github.com/yreclab/yrec/blob/7be4133/src/setscv.f#L4-L255) and used also by `EQSCVG` and [SETUPS](https://github.com/yreclab/yrec/blob/7be4133/src/setups.f#L16-L396). The flag `LSCV` is now in `NMLPAR_MOD`. `COMP_MOD` gives the envelope composition; `CONSTANTS_MOD` the constants.
 
 **The method.**
 1. The table is in $`\log T`$ and $`\log P_\mathrm{gas}`$, with $`P_\mathrm{gas} = \beta P`$. Out of table if $`\log T`$ is outside `TLOGX`, if $`\log P_\mathrm{gas} \lt{} 4`$, or if it is above the last pressure of the stencil's lowest-temperature row.

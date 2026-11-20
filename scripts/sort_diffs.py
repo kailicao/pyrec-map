@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Sort YREC's source files by how they changed between two commits, before the pages move to the later one.
 
-    python3 scripts/sort_diffs.py <old checkout>/src ../yrec/src [--csv out.csv]
-    (the old checkout: git -C ../yrec worktree add <folder> <old commit>; remove it afterwards)
+    python3 scripts/sort_diffs.py <old checkout>/src yrec/src [--csv out.csv]
+    (the old checkout: git -C yrec worktree add <folder> <old commit>; remove it afterwards)
 
 A file is "mechanical" when its executable statements are the same once comments, case, spacing, continuations
 and the statements that only declare (types, DIMENSION, COMMON, USE, IMPLICIT, SAVE, INCLUDE, MODULE wrappers)

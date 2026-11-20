@@ -1,9 +1,9 @@
 ## Explanation
 
-**Purpose.** `GRAVEZ_MOD` holds the metals ($`Z`$) on the equally spaced radial grid of the older settling routine [`GRSETT`](grsett.f.md#grsett), with their diffusion coefficients at the grid's points and midpoints, used with metal diffusion (`LDIFZ`). Shared by 5 routines. It replaces `COMMON/GRAVEZ/` (MHP via Claude, 10/14/26); `JSON` comes from [`DIMENSIONS_MOD`](dimensions_mod.f.md#dimensions_mod).
+**Purpose.** `GRAVEZ_MOD` holds the metals ($`Z`$) on the equally spaced radial grid of the older settling routine [`GRSETT`](grsett.f.md#grsett), with their diffusion coefficients at the grid's points and midpoints, used with metal diffusion (`LDIFZ`). Shared by 5 routines. It replaces `COMMON/GRAVEZ/` (MHP via Claude, 10/14/26); `JSON` comes from [`DIMENSIONS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/dimensions_mod.f#L38-L44).
 
 **What its variables hold, who sets them, who reads them.**
-- `EZ(JSON)`: $`Z`$ at the grid points, interpolated from the model by [`MODEL_TO_EQUAL`](model_to_equal.f.md#model_to_equal), advanced by [`LAX_WENDROF2`](lax_wendrof2.f.md#lax_wendrof2), and turned into the change over the step by `GRSETT` (`EZ - EZ_ORIG`), which [`EQUAL_TO_MODEL`](equal_to_model.f.md#equal_to_model) applies to the model's points.
+- `EZ(JSON)`: $`Z`$ at the grid points, interpolated from the model by [`MODEL_TO_EQUAL`](https://github.com/yreclab/yrec/blob/7be4133/src/model_to_equal.f#L3-L275) (from `HCOMP(8,·)`, not from `HCOMP(3,·)`, which does not change the result, as MODEL_TO_EQUAL's notes explain), advanced by [`LAX_WENDROF2`](lax_wendrof2.f.md#lax_wendrof2), and turned into the change over the step by `GRSETT` (`EZ - EZ_ORIG`), which [`EQUAL_TO_MODEL`](equal_to_model.f.md#equal_to_model) applies to the model's points.
 - `EZ_H(JSON)`: $`Z`$ at the midpoints, set by `MODEL_TO_EQUAL` and by [`LAX_WENDROF1`](lax_wendrof1.f.md#lax_wendrof1) (the half step); read by `GRSETT`.
 - `ECOD1Z(JSON)`: the settling coefficient at the grid points, set by `MODEL_TO_EQUAL`, read by `LAX_WENDROF1`.
 - `ECOD1Z_H(JSON)`: the settling coefficient at the midpoints, set by `MODEL_TO_EQUAL` and updated by `GRSETT` with the half-step abundances (`ECOD1Z_H + EZ_H*EQCOD1Z_H`); read by `LAX_WENDROF2`.

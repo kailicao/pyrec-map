@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** Builds the equation-of-state table for the envelope's mixture from the SCV (Saumon–Chabrier–Van Horn, by the module's name `SCVEOS_MOD`, "MHP 5/97") tables of pure hydrogen, pure helium and metals, which [`SETUPS`](setups.f.md#setups) has read. It adds the entropy of mixing, and computes by finite differences the derivatives the structure equations need. (The header comment, "evaluate the EOS with the new tables and call eqstat … and compare," describes an earlier purpose; the routine calls neither.)
+**Purpose.** Builds the equation-of-state table for the envelope's mixture from the SCV (Saumon–Chabrier–Van Horn, by the module's name `SCVEOS_MOD`, "MHP 5/97") tables of pure hydrogen, pure helium and metals, which [`SETUPS`](https://github.com/yreclab/yrec/blob/7be4133/src/setups.f#L16-L396) has read. It adds the entropy of mixing, and computes by finite differences the derivatives the structure equations need. (The header comment, "evaluate the EOS with the new tables and call eqstat … and compare," describes an earlier purpose; the routine calls neither.)
 
 **How it fits.**
 - **Who calls it:** [`STARIN`](starin.f.md#starin), once the starting model's envelope composition is known.

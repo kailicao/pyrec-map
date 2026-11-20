@@ -2,7 +2,7 @@
 <header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ osplin.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#bugs'>Suspected bugs, checked by running the code</a><ol><li><a href='#b1'>1. MEVAL&#x27;s error code is ignored</a></li></ol></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-OSPLIN'>OSPLIN</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>osplin.f</h1>
 <p class='muted'>50 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/osplin.f'>on GitHub (7be4133)</a></p>
-<p><strong>Python version</strong>: <code>osplin.py</code>, 32 lines, on the right (switch to Python above the code).</p>
+<p><strong>Python version</strong>: <code>osplin.py</code>, 72 lines, on the right (switch to Python above the code).</p>
 <details class='vars' id='terms'><summary>Variables on this page (1)</summary><p><a href='../glossary.html#var-json' data-def='the maximum number of shells in a model, 5000 (a &lt;code&gt;PARAMETER&lt;/code&gt;, used by 144 files).'><code>json</code></a></p></details><h2 id='purpose'>Purpose</h2>
 <div class='notes'><p>Interpolation by a shape-preserving osculatory quadratic spline, from ACM Algorithm 574 (D. F. McAllister and J. A. Roulier, ACM Transactions on Mathematical Software, September 1981), as the header says. It interpolates the table <code>(XTAB, YTAB)</code> of <code>N</code> points to the <code>K</code> abscissas <code>XVAL</code>, and returns the values in <code>YVAL</code>.</p></div>
 <h2 id='how-it-fits'>How it fits</h2>
@@ -103,37 +103,77 @@
 <span class="line" id="L48"><span class="ln">48</span></span>
 <span class="line" id="L49"><span class="ln">49</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>RETURN</span></span>
 <span class="line" id="L50"><span class="ln">50</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of osplin.f (YREC 7be4133): interpolation by a</span></span>
-<span class="line" id="P2"><span class="ln">2</span><span class='hs'>shape-preserving osculatory quadratic spline (ACM Algorithm 574).&quot;&quot;&quot;</span></span>
+<span class="line" id="P2"><span class="ln">2</span><span class='hs'>shape-preserving osculatory quadratic spline (ACM Algorithm 574).</span></span>
 <span class="line" id="P3"><span class="ln">3</span></span>
-<span class="line" id="P4"><span class="ln">4</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
-<span class="line" id="P5"><span class="ln">5</span></span>
-<span class="line" id="P6"><span class="ln">6</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> dimensions_mod</span>
-<span class="line" id="P7"><span class="ln">7</span><span class='hk'>from</span> pyrec.meval <span class='hk'>import</span> meval</span>
-<span class="line" id="P8"><span class="ln">8</span><span class='hk'>from</span> pyrec.slopes <span class='hk'>import</span> slopes</span>
-<span class="line" id="P9"><span class="ln">9</span></span>
-<span class="line" id="P10"><span class="ln">10</span><span class='hc'># The local slope array M (SAVE).</span></span>
-<span class="line" id="P11"><span class="ln">11</span>m = np.zeros(dimensions_mod.json + <span class='hn'>1</span>)</span>
+<span class="line" id="P4"><span class="ln">4</span><span class='hs'>Functions</span></span>
+<span class="line" id="P5"><span class="ln">5</span><span class='hs'>---------</span></span>
+<span class="line" id="P6"><span class="ln">6</span><span class='hs'>osplin : The slopes (SLOPES), then the values (MEVAL) (the routine; its kernel when accel.USE_NUMBA).</span></span>
+<span class="line" id="P7"><span class="ln">7</span><span class='hs'>_osplin_nb : osplin&#x27;s Numba kernel, SLOPES and MEVAL through theirs, as one chain.</span></span>
+<span class="line" id="P8"><span class="ln">8</span></span>
+<span class="line" id="P9"><span class="ln">9</span><span class='hs'>Constants</span></span>
+<span class="line" id="P10"><span class="ln">10</span><span class='hs'>---------</span></span>
+<span class="line" id="P11"><span class="ln">11</span><span class='hs'>EPS : The tolerance CHOOSE uses, through MEVAL.</span></span>
 <span class="line" id="P12"><span class="ln">12</span></span>
-<span class="line" id="P13"><span class="ln">13</span></span>
-<span class="line" id="P14"><span class="ln">14</span><span class='hk'>def</span> osplin(xval: np.ndarray, yval: np.ndarray, xtab: np.ndarray, ytab: np.ndarray, n: <span class='hb'>int</span>, k: <span class='hb'>int</span>) -&gt; <span class='hk'>None</span>:</span>
-<span class="line" id="P15"><span class="ln">15</span>    <span class='hs'>&quot;&quot;&quot;Interpolate the table (xtab, ytab) of n points to the k abscissas</span></span>
-<span class="line" id="P16"><span class="ln">16</span><span class='hs'>    xval, with a spline that preserves the data&#x27;s monotonicity and</span></span>
-<span class="line" id="P17"><span class="ln">17</span><span class='hs'>    convexity: SLOPES gives the slopes at the data points, MEVAL evaluates.</span></span>
+<span class="line" id="P13"><span class="ln">13</span><span class='hs'>Variables</span></span>
+<span class="line" id="P14"><span class="ln">14</span><span class='hs'>---------</span></span>
+<span class="line" id="P15"><span class="ln">15</span><span class='hs'>m : The slope array M (SAVE).</span></span>
+<span class="line" id="P16"><span class="ln">16</span></span>
+<span class="line" id="P17"><span class="ln">17</span><span class='hs'>&quot;&quot;&quot;</span></span>
 <span class="line" id="P18"><span class="ln">18</span></span>
-<span class="line" id="P19"><span class="ln">19</span><span class='hs'>    Translates: osplin.f#OSPLIN (7be4133)</span></span>
+<span class="line" id="P19"><span class="ln">19</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
 <span class="line" id="P20"><span class="ln">20</span></span>
-<span class="line" id="P21"><span class="ln">21</span><span class='hs'>    Arguments: xval[1..k], the abscissas; yval, set in place to the values;</span></span>
-<span class="line" id="P22"><span class="ln">22</span><span class='hs'>    xtab[1..n], ytab[1..n], the table; n, k. Returns nothing.</span></span>
-<span class="line" id="P23"><span class="ln">23</span></span>
-<span class="line" id="P24"><span class="ln">24</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P21"><span class="ln">21</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> accel</span>
+<span class="line" id="P22"><span class="ln">22</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> dimensions_mod</span>
+<span class="line" id="P23"><span class="ln">23</span><span class='hk'>from</span> pyrec.meval <span class='hk'>import</span> _meval_nb, meval</span>
+<span class="line" id="P24"><span class="ln">24</span><span class='hk'>from</span> pyrec.slopes <span class='hk'>import</span> _slopes_nb, slopes</span>
 <span class="line" id="P25"><span class="ln">25</span></span>
-<span class="line" id="P26"><span class="ln">26</span>    <span class='hc'># The slopes at the data points (<a class='fl' href='#L42'>Fortran line 42</a>).</span></span>
-<span class="line" id="P27"><span class="ln">27</span>    slopes(xtab, ytab, m, n)</span>
-<span class="line" id="P28"><span class="ln">28</span></span>
-<span class="line" id="P29"><span class="ln">29</span>    <span class='hc'># The tolerance, and the evaluation (<a class='fl' href='#L45-L47'>Fortran lines 45–47</a>).</span></span>
-<span class="line" id="P30"><span class="ln">30</span>    <span class='hc'># Suspected bug (see the page): MEVAL&#x27;s error code is ignored.</span></span>
-<span class="line" id="P31"><span class="ln">31</span>    eps = <span class='hn'>1.0e-04</span></span>
-<span class="line" id="P32"><span class="ln">32</span>    err = meval(xval, yval, xtab, ytab, m, n, k, eps, <span class='hn'>0</span>)  <span class='hc'># noqa: F841  (unused in the Fortran too)</span></span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
+<span class="line" id="P26"><span class="ln">26</span>EPS = <span class='hn'>1.0e-04</span>  <span class='hc'># The tolerance CHOOSE uses, through MEVAL (<a class='fl' href='#L45'>Fortran line 45</a>).</span></span>
+<span class="line" id="P27"><span class="ln">27</span></span>
+<span class="line" id="P28"><span class="ln">28</span><span class='hc'># The local slope array M (SAVE).</span></span>
+<span class="line" id="P29"><span class="ln">29</span>m = np.zeros(dimensions_mod.json + <span class='hn'>1</span>)</span>
+<span class="line" id="P30"><span class="ln">30</span></span>
+<span class="line" id="P31"><span class="ln">31</span></span>
+<span class="line" id="P32"><span class="ln">32</span><span class='hk'>def</span> osplin(xval: np.ndarray, yval: np.ndarray, xtab: np.ndarray, ytab: np.ndarray, n: <span class='hb'>int</span>, k: <span class='hb'>int</span>) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P33"><span class="ln">33</span>    <span class='hs'>&quot;&quot;&quot;Interpolate the table (xtab, ytab) of n points to the k abscissas</span></span>
+<span class="line" id="P34"><span class="ln">34</span><span class='hs'>    xval, with a spline that preserves the data&#x27;s monotonicity and</span></span>
+<span class="line" id="P35"><span class="ln">35</span><span class='hs'>    convexity: SLOPES gives the slopes at the data points, MEVAL evaluates.</span></span>
+<span class="line" id="P36"><span class="ln">36</span></span>
+<span class="line" id="P37"><span class="ln">37</span><span class='hs'>    Translates: osplin.f#OSPLIN (7be4133)</span></span>
+<span class="line" id="P38"><span class="ln">38</span></span>
+<span class="line" id="P39"><span class="ln">39</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P40"><span class="ln">40</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P41"><span class="ln">41</span><span class='hs'>    xval : np.ndarray, shape: `(k + 1,)` at least, dtype: ``float64``</span></span>
+<span class="line" id="P42"><span class="ln">42</span><span class='hs'>        The abscissas xval[1..k].</span></span>
+<span class="line" id="P43"><span class="ln">43</span><span class='hs'>    yval : np.ndarray, shape: `(k + 1,)` at least, dtype: ``float64``</span></span>
+<span class="line" id="P44"><span class="ln">44</span><span class='hs'>        Set in place: the values yval[1..k].</span></span>
+<span class="line" id="P45"><span class="ln">45</span><span class='hs'>    xtab, ytab : np.ndarray, shape: `(n + 1,)` at least, dtype: ``float64``</span></span>
+<span class="line" id="P46"><span class="ln">46</span><span class='hs'>        The table xtab[1..n] (increasing), ytab[1..n].</span></span>
+<span class="line" id="P47"><span class="ln">47</span><span class='hs'>    n, k : int</span></span>
+<span class="line" id="P48"><span class="ln">48</span><span class='hs'>        The numbers of table points and of abscissas.</span></span>
+<span class="line" id="P49"><span class="ln">49</span></span>
+<span class="line" id="P50"><span class="ln">50</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P51"><span class="ln">51</span></span>
+<span class="line" id="P52"><span class="ln">52</span>    <span class='hk'>if</span> accel.USE_NUMBA:</span>
+<span class="line" id="P53"><span class="ln">53</span>        _osplin_nb(xval, yval, xtab, ytab, n, k, m)</span>
+<span class="line" id="P54"><span class="ln">54</span>        <span class='hk'>return</span></span>
+<span class="line" id="P55"><span class="ln">55</span></span>
+<span class="line" id="P56"><span class="ln">56</span>    <span class='hc'># The slopes at the data points (<a class='fl' href='#L42'>Fortran line 42</a>).</span></span>
+<span class="line" id="P57"><span class="ln">57</span>    slopes(xtab, ytab, m, n)</span>
+<span class="line" id="P58"><span class="ln">58</span></span>
+<span class="line" id="P59"><span class="ln">59</span>    <span class='hc'># The tolerance, and the evaluation (<a class='fl' href='#L45-L47'>Fortran lines 45–47</a>).</span></span>
+<span class="line" id="P60"><span class="ln">60</span>    <span class='hc'># Suspected bug (see the page): MEVAL&#x27;s error code is ignored.</span></span>
+<span class="line" id="P61"><span class="ln">61</span>    err = meval(xval, yval, xtab, ytab, m, n, k, EPS, <span class='hn'>0</span>)  <span class='hc'># noqa: F841  (unused in the Fortran too)</span></span>
+<span class="line" id="P62"><span class="ln">62</span></span>
+<span class="line" id="P63"><span class="ln">63</span></span>
+<span class="line" id="P64"><span class="ln">64</span>@accel.njit(_nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P65"><span class="ln">65</span><span class='hk'>def</span> _osplin_nb(xval: np.ndarray, yval: np.ndarray, xtab: np.ndarray, ytab: np.ndarray, n: <span class='hb'>int</span>, k: <span class='hb'>int</span>,</span>
+<span class="line" id="P66"><span class="ln">66</span>               mw: np.ndarray) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P67"><span class="ln">67</span>    <span class='hs'>&quot;&quot;&quot;osplin&#x27;s kernel: SLOPES and MEVAL through their kernels (with CASES, CHOOSE, SEARCH, and SPLINE), compiled as</span></span>
+<span class="line" id="P68"><span class="ln">68</span><span class='hs'>    one chain; mw is the SAVE&#x27;d slope array M, the other arguments as osplin&#x27;s.&quot;&quot;&quot;</span></span>
+<span class="line" id="P69"><span class="ln">69</span>    <span class='hc'># The slopes at the data points (<a class='fl' href='#L42'>Fortran line 42</a>).</span></span>
+<span class="line" id="P70"><span class="ln">70</span>    _slopes_nb(xtab, ytab, mw, n)</span>
+<span class="line" id="P71"><span class="ln">71</span>    <span class='hc'># The evaluation; MEVAL&#x27;s error code is ignored, as in the Fortran (<a class='fl' href='#L45-L47'>Fortran lines 45–47</a>).</span></span>
+<span class="line" id="P72"><span class="ln">72</span>    _meval_nb(xval, yval, xtab, ytab, mw, n, k, EPS, <span class='hn'>0</span>)</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
 function st(){try{return localStorage.getItem('pm-toc')}catch(e){return null}}function sv(v){try{localStorage.setItem('pm-toc',v)}catch(e){}}
 var b=nav.querySelector('.toc-toggle');function set(h){page.classList.toggle('toc-hidden',h);b.textContent=h?'show':'hide';}
 set(st()==='hidden');b.addEventListener('click',function(){var h=!page.classList.contains('toc-hidden');set(h);sv(h?'hidden':'shown');});

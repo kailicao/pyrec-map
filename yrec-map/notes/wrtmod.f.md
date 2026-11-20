@@ -4,9 +4,9 @@
 
 **How it fits.**
 - **Inputs:** the model (arguments: `M`, `JENV`, `HCOMP`, `HS1`, $`\log\rho`$, $`L`$, $`\log P`$, $`\log r`$, $`\log T`$, `MODEL`, $`\log L`$, $`\log T_\mathrm{eff}`$, `FP`, `FT`, $`\log m`$ `HS`, the age, the mixing length `CMIXL` and the star's mass `XMSOL`, a snapshot of `SMASS` taken by the main program), and through modules the per-shell physics: $`\Gamma_1`$ and the switch `LSOUND` (`SOUND_MOD`), the pulsation derivatives `PQDP`, `PQDT`, … (`PULSE1_MOD`), energy rates, opacity and gradients (`SCRTCH_MOD`), `STOTAL` (`COMP_MOD`), and the namelist switches and integration steps (`LSTORE`, `LSTATM`, `LSTENV`, `LPULSE`, `IPVER`, `SPOTF`, `SPOTX`, `ATMSTP`, `ENVSTP`, … in `NMLPAR_MOD`; formerly `CCOUT`, `PULSE`, `SPOTS`, `ENVGEN`, `INTATM`, `INTENV`).
-- **Who calls it:** [PUTSTORE](putstore.f.md#putstore) (when the atmosphere or envelope is stored) and [WRTOUT](wrtout.f.md#wrtout) (for pulsation output between stored models).
+- **Who calls it:** [PUTSTORE](https://github.com/yreclab/yrec/blob/7be4133/src/putstore.f#L13-L360) (when the atmosphere or envelope is stored) and [WRTOUT](wrtout.f.md#wrtout) (for pulsation output between stored models).
 - **What it calls:** [ENVINT](envint.f.md#envint), which itself prints the envelope and atmosphere (and the pulsation envelope with `LPULPT`).
-- **Outputs:** `IMODPT`, `ISOUND` (the file `FSOUND`, `Csound.dat` by default, opened once by [PARMIN](parmin.f.md#parmin)), `IOPMOD`, and the envelope printed by `ENVINT`.
+- **Outputs:** `IMODPT`, `ISOUND` (the file `FSOUND`, `Csound.dat` by default, opened once by [PARMIN](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489)), `IOPMOD`, and the envelope printed by `ENVINT`.
 
 **The method.**
 1. **Sound speed** (`LSOUND`). For each shell, with $`V = G m \rho/(P r)`$ and $`U = 4\pi\rho r^3/m`$: $`r/R_\odot`$, $`m/M_\odot`$, $`m/r^3`$ (solar units), $`V/\Gamma_1`$, $`\Gamma_1`$,
@@ -22,7 +22,7 @@
 
 **For users** (from YREC's [Quick Start](https://yrec.readthedocs.io/en/latest/quickstart.html)). With `LPULSE`, the pulsation output: the interior model on `IOPMOD` (`.pmod`, written here) and the envelope and atmosphere on `IOPENV` and `IOPATM` (`.penv`, `.patm`, written by [`ENVINT`](envint.f.md#envint) when called from here); the Quick Start names the last `.atm`, the test suite's namelists `.patm`. `IMODPT` is the `.full` file (`FMODPT`).
 
-> **Question** ([line 152](https://github.com/yreclab/yrec/blob/7be4133/src/wrtmod.f#L152); [line 171](https://github.com/yreclab/yrec/blob/7be4133/src/wrtmod.f#L171)). **The deprecated `.full` file.** YREC's Quick Start lists `.full` (`FMODPT`) as a deprecated output, and the test suite's namelists say "No longer used," but PARMIN still opens it (and writes the run's description to it), and WRTMOD (with `LSOUND`), [`CHECKJ`](checkj.f.md#checkj) and [`SECULR`](seculr.f.md#seculr) still write to it. Should these writes be removed, or should the documentation say what the file now holds?
+> **Question** ([line 152](https://github.com/yreclab/yrec/blob/7be4133/src/wrtmod.f#L152); [line 171](https://github.com/yreclab/yrec/blob/7be4133/src/wrtmod.f#L171)). **The deprecated `.full` file.** YREC's Quick Start lists `.full` (`FMODPT`) as a deprecated output, and the test suite's namelists say "No longer used," but PARMIN still opens it (and writes the run's description to it), and WRTMOD (with `LSOUND`), [`CHECKJ`](checkj.f.md#checkj) and [`SECULR`](https://github.com/yreclab/yrec/blob/7be4133/src/seculr.f#L6-L532) still write to it. Should these writes be removed, or should the documentation say what the file now holds?
 
 **Changed since `rp_1`.** `CMIXL` and `XMSOL` are now arguments (`CMIXL` is passed on to `ENVINT`); the sound-speed file is written to the unit `ISOUND`, opened once by `PARMIN`, instead of being opened on unit 500 at each call, which settles part of question 1; declarations: COMMON blocks to modules, `IMPLICIT NONE`.
 

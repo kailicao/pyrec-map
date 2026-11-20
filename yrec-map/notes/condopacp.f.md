@@ -3,7 +3,7 @@
 **Purpose.** This file interpolates the electron thermal conductivity in the table of A. Y. Potekhin (`condall.d`; Potekhin, Baiko, Haensel and Yakovlev [1999](https://ui.adsabs.harvard.edu/abs/1999A%26A...346..345P), A&A 346, 345, and Potekhin [1999](https://ui.adsabs.harvard.edu/abs/1999A%26A...351..787P), A&A 351, 787, per its header), for one ion charge $`Z_\mathrm{ion}`$, temperature and density. It is Potekhin's published routine (version 23.05.99), with small changes for YREC.
 
 **How it fits.**
-- **Inputs:** the arguments `Zion`, `TLG` ($`\log T`$), `RLG` ($`\log\rho`$); the table, read from unit `IcondOpacP` ([`IOUNITS_MOD`](iounits_mod.f.md#iounits_mod)) at the first call. [PARMIN](parmin.f.md#parmin) sets the unit (75) and opens the file ("MHP 8/25: file opening moved to parmin").
+- **Inputs:** the arguments `Zion`, `TLG` ($`\log T`$), `RLG` ($`\log\rho`$); the table, read from unit `IcondOpacP` ([`IOUNITS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/iounits_mod.f#L19-L54)) at the first call. [PARMIN](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489) sets the unit (75) and opens the file ("MHP 8/25: file opening moved to parmin").
 - **Who calls it:** [CONDOPACPINT](condopacpint.f.md#condopacpint), three times per point (for H, He and a metal of charge 8).
 - **What it calls:** [HUNT](#hunt) and [CINTERP3](#cinterp3), both in this file.
 - **Outputs:** `CK` = $`\log_{10} K`$ (the conductivity, cgs), `DRK` = $`\partial\log K/\partial\log\rho`$, `DTK` = $`\partial\log K/\partial\log T`$.

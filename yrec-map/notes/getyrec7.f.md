@@ -4,10 +4,10 @@
 
 **How it fits.**
 - **Who calls it:** only [STARIN](starin.f.md#starin), when the input model's first record starts with `NMOD`; Model2 files (`MOD2`) go to [GETMODEL2](getmodel2.f.md#getmodel2), which returns the same arguments.
-- **Who writes the format:** [PUTYREC7](putyrec7.f.md#putyrec7) (its formats match these), which nothing calls; so YREC7 files now come only from older codes.
+- **Who writes the format:** [PUTYREC7](https://github.com/yreclab/yrec/blob/7be4133/src/putyrec7.f#L8-L146) (its formats match these), which nothing calls; so YREC7 files now come only from older codes.
 - **Input:** the file on unit `IREAD`, rewound before and after; `ISHORT`, the unit of its error messages ([lines 140–141](https://github.com/yreclab/yrec/blob/7be4133/src/getyrec7.f#L140-L141), [line 249](https://github.com/yreclab/yrec/blob/7be4133/src/getyrec7.f#L249)), so that, unlike in `GETMODEL2`, this argument is used.
 - **Outputs (arguments):** the header (`MODEL`, `M`, `SMASS`, `TEFFL`, `BL`, `HSTOT`, `DAGE`, `DDAGE`), `LROT`, `LEXCOM`, `JCORE`, `JENV`, `CMIXL`, the luminosities `TLUMX` (converted to solar units if above $`10^{20}`$), the envelope triangle (`TRIT`, `TRIL`, `PS`, `TS`, `RS`, `CFENV`, `FTRI`), the shells (`HS`, `HR`, `HL`, `HP`, `HT`, `HD`, `LC`), `HCOMP` and `OMEGA`; plus the Model2-only items, set to defaults: the strings `ATM`, `EOS`, `HIK`, `ALOK` = "?," `COMPMIX` = "AG93," all flags false, `PDISK` = $`7.2722\times10^{-6}\,\mathrm{rad\,s^{-1}}`$ (a 10-day period), `TDISK` = 0, `WMAX` = $`3\times10^{-4}`$ ([lines 86–89](https://github.com/yreclab/yrec/blob/7be4133/src/getyrec7.f#L86-L89)). These three do not change the run's physics: STARIN receives them in its locals `PDISK0`, `TDISK0`, `WMAX0` ([starin.f, lines 280–285](https://github.com/yreclab/yrec/blob/7be4133/src/starin.f#L280-L285)), which it never reads (unused?), and the namelist's `PDISK`, `TDISK`, `WMAX` are untouched (settled from the code, Nov 9, 2026).
-- **Modules:** [`CONSTANTS_MOD`](constants_mod.f.md#constants_mod) (formerly `/CONST/`), for $`L_\odot`$.
+- **Modules:** [`CONSTANTS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/constants_mod.f#L37-L75) (formerly `/CONST/`), for $`L_\odot`$.
 
 **The format, as read.**
 1. Each shell stores $`X`$ and $`Z`$ as integers in units of $`10^{-6}`$; $`Y = 1 - X - Z - X(^3\mathrm{He})`$ is recomputed. The run stops (exit status 3, an input error) if a shell's $`\log m`$ is negative or above the total.

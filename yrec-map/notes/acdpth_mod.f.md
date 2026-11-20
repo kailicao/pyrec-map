@@ -1,18 +1,18 @@
 ## Explanation
 
-**Purpose.** `ACDPTH_MOD` holds the acoustic-depth output: the results of [`CALCAD`](calcad.f.md#calcad) and the switches that decide at which ages it runs, shared by 6 routines. It replaces `COMMON/ACDPTH/` (MHP via Claude, 10/14/26); `JSON` comes from `DIMENSIONS_MOD`. Five switches and the ages carry initial values, moved from PARMIN's `DATA` statements.
+**Purpose.** `ACDPTH_MOD` holds the acoustic-depth output: the results of [`CALCAD`](calcad.f.md#calcad) and the switches that decide at which ages it runs, shared by 6 routines. It replaces `COMMON/ACDPTH/` (MHP via Claude, 10/14/26); `JSON` comes from `DIMENSIONS_MOD`. Four switches and the ages carry initial values, moved from PARMIN's `DATA` statements.
 
 **What its variables hold, who sets them, who reads them.**
 - `TAUCZN`, `TCZ`, `TNORM`, `TAUHE`, `WHE`, `TATMOS`: the acoustic depths computed by `CALCAD` (`TAUCZN` $`= t_\mathrm{CZ}/t_\mathrm{norm}`$; `TATMOS` is always 0 there); [`WRTOUT`](wrtout.f.md#wrtout) writes them, and resets `TAUCZN` to 0 when there is no convective envelope.
 - `DELADJ(JSON)`: $`\nabla_\mathrm{ad}`$ at each point, set and read by `CALCAD`.
-- `LACOUT`: the master switch, `.FALSE.`; read by the [main program](main.f.md#file-level), [`PARMIN`](parmin.f.md#parmin) (the output file's name), [`GETOPAL95`](getopal95.f.md#getopal95) and `WRTOUT`.
+- `LACOUT`: the master switch, `.FALSE.`; read by the [main program](main.f.md#file-level), [`PARMIN`](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489) (the output file's name), [`GETOPAL95`](getopal95.f.md#getopal95), and `WRTOUT`.
 - `AGEOUT(5)`: the ages ($`\mathrm{Gyr}`$) at which to write, 0.5, 1, 5, 10, 20; read by the main program.
 - `LADON`, `LCLCD`, `LJLAST`, `LJWRT`: set by the main program from `LACOUT` and the age. `LADON` is read by `GETOPAL95` (four-point interpolation) and `WRTOUT`; `LCLCD` by `CALCAD` and [`ENVINT`](envint.f.md#envint); `LJLAST` by `WRTOUT`; `LJWRT` by the main program.
-- `ACATMR`, `ACATMD`, `ACATMP`, `ACATMT` (`JSON` each) and `LAOLY`: set and read nowhere (unused?; [lines 44–47](https://github.com/yreclab/yrec/blob/7be4133/src/acdpth_mod.f#L44-L47); [line 54](https://github.com/yreclab/yrec/blob/7be4133/src/acdpth_mod.f#L54)).
+- `ACATMR`, `ACATMD`, `ACATMP`, `ACATMT` (`JSON` each), and `LAOLY`: set and read nowhere (unused?; [lines 44–47](https://github.com/yreclab/yrec/blob/7be4133/src/acdpth_mod.f#L44-L47); [line 54](https://github.com/yreclab/yrec/blob/7be4133/src/acdpth_mod.f#L54)).
 
 **Design.** A blanket `USE ACDPTH_MOD` in each of the six routines. The module's header calls the initialized members namelist variables, but `LACOUT` is in no namelist and is set nowhere, so it stays `.FALSE.` and the acoustic-depth output never runs (so also at `rp_1`, where its default came from a `DATA` statement).
 
-**Changed since `rp_1`.** New file: `COMMON/ACDPTH/` as a module, with the defaults of `AGEOUT`, `LCLCD`, `LJLAST`, `LJWRT` and `LACOUT` moved from PARMIN.
+**Changed since `rp_1`.** New file: `COMMON/ACDPTH/` as a module, with the defaults of `AGEOUT`, `LCLCD`, `LJLAST`, `LJWRT`, and `LACOUT` moved from PARMIN.
 
 ## Bugs, by priority
 

@@ -1,0 +1,1486 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>State: what a run carries · PyREC scaffolding (from YREC development, 7be4133)</title><link rel='icon' type='image/svg+xml' href='../logo.svg'><script>function hlLines(){document.querySelectorAll('.line.hl').forEach(function(e){e.classList.remove('hl')});var m=location.hash.match(/^#([LP])(\d+)(?:-[LP](\d+))?$/);if(!m)return;var first=null;var col=document.querySelector('aside.codecol');if(col)col.dataset.view=m[1]==='P'?'p':'f';for(var i=+m[2];i<=+(m[3]||m[2]);i++){var e=document.getElementById(m[1]+i);if(!e)continue;e.classList.add('hl');first=first||e;for(var p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;}if(!first)return;var pane=first.closest('.panes');if(pane){pane.scrollTop=first.offsetTop-pane.clientHeight/2;}else first.scrollIntoView({block:'center'});}addEventListener('hashchange',hlLines);addEventListener('DOMContentLoaded',hlLines);document.addEventListener('click',function(ev){var a=ev.target.closest&&ev.target.closest('a[href^="#L"],a[href^="#P"]');if(!a||!document.querySelector('aside.codecol'))return;ev.preventDefault();history.pushState(null,'',a.getAttribute('href'));hlLines();});</script><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,flowchart:{wrappingWidth:400},theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
+<header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ A new design / State: what a run carries</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><main>
+<nav class='pages'><ul class='toc'><li><a href='overview.html'>A new design for YREC</a></li><li><strong>State: what a run carries</strong></li><li><a href='families.html'>The families</a></li><li><a href='directions.html'>Directions from MESA</a></li><li><a href='tree.html'>The compiled tree</a></li><li><a href='numba.html'>Writing a Numba family</a></li><li><a href='pilot-opacity.html'>The pilot: opacity</a></li><li><a href='names.html'>The families&#x27; names</a></li></ul></nav>
+<h1>State: what a run carries</h1>
+<p><em>Part of <a href="overview.html">A new design for YREC</a>. Every value a run carries has one home: the <code>State</code>, a family's cache, or work arrays. This page lists the <code>State</code>'s fields, each under its descriptive name beside YREC's, and says what the copy test found.</em></p>
+<h2>The three homes</h2>
+<ul>
+<li><strong><code>State</code>:</strong> the star at one moment: arrays over the shells, scalars, and any value carried from one step to the next that changes later results. <code>state.copy()</code> copies it whole, <code>state.differences(other)</code> lists the fields that differ byte for byte, and <code>state.to_npz(path)</code> and <code>State.from_npz(path)</code> save and load it exactly.</li>
+<li><strong>A family's cache:</strong> tables read once, interpolation coefficients, the tables' search guesses, values kept to save time; the family can rebuild it, and it changes no result.</li>
+<li><strong>Work arrays:</strong> scratch space inside one computation, preallocated and passed to the kernels (<a href="numba.html">Writing a Numba family</a>); nothing in them outlives the call.</li>
+</ul>
+<p><strong>The copy test.</strong> Copy a model in the middle of a run and run both copies on: They must match byte for byte. A value that breaks the test lives in the wrong home: It changes results, so it belongs to the <code>State</code>.</p>
+<h2>The copy test on the 1 M☉ ZAMS case</h2>
+<p>The run's driver does the test when asked (<code>PYREC_COPY_AT=k</code>): After step $k$ of the run's 268, it copies the model; the original runs on to the end of its kind card's loop (a kind card is one of the runs YREC chains in one job), and its output files, screen text, and <code>State</code> are kept; the output files are put back as they were at the copy, the copy takes the original's place, and the run goes on with it. When the copy reaches the original's last step, the two are compared: every output file and the screen byte for byte, and the <code>State</code> field by field.</p>
+<p><strong>What it found.</strong> The test ran after steps 1, 2, 3, 100, 200, and 267, and the copy now matches the original byte for byte at each, with every output file as YREC's. Getting there moved two kinds of value into the <code>State</code>:</p>
+<ul>
+<li><strong>A setting the run writes.</strong> After steps 100 and 200 the copy first failed (it crashed at step 100's copy, and stopped early at step 200's). Putting back the one value <code>LPTIME</code> made it identical: <a href="../yrec-map/htimer.f.html">HTIMER</a> turns off its structure criterion for good near the ZAMS by setting <code>LPTIME</code>, a namelist setting, so the setting is part of the star's history. It is now the field <code>structure_timestep_on</code>; the configuration holds its starting value.</li>
+<li><strong>Tables with a tolerance.</strong> After step 3 the copy differed. The surface opacity tables interpolated to the surface composition are rebuilt only when X or Z moves by more than a tolerance (<a href="../yrec-map/getalex06.f.html">getalex06.f</a>: 10⁻⁸; <a href="../yrec-map/getopal95.f.html">getopal95.f</a>: 10⁻⁴), so a table built at an earlier step serves later points, and its bits carry from step to step. The molecular table with its X and Z, and the OPAL table with its X, are now <code>State</code> fields (<code>molecular_opacity_table</code>, <code>molecular_table_x</code>, <code>molecular_table_z</code>, <code>surface_opal_table</code>, <code>surface_opal_table_x</code>); neither half alone made the copy identical.</li>
+</ul>
+<p>Two carried values were already in the <code>State</code>: eqsaha's starting guess for the Saha equations, <code>saha_guess</code> (each EOS call starts its Newton iteration from the last call's result, which changes results), and the network's saved scalars, <code>network_saved</code> (engeb's <code>SAVE</code>d values, read only below <code>TCUT(1)</code>).</p>
+<p><strong>Shared arrays.</strong> While the default families wrap the Fortran-tracking pyrec, the running model's <code>State</code> is a view of pyrec's own arrays: Its arrays are the very arrays pyrec's routines and kernels read, and its scalars are copied into pyrec's modules before each stage and back after it. Some of those arrays are also held inside the kernels' data tuples (eqsaha's guess is one), so a copy or a restore writes values into the arrays in place and never replaces an array: Replacing one would cut it off from the tuples that hold it. After every stage the model checks that each <code>State</code> array is still pyrec's.</p>
+<p><strong>Its reach.</strong> The test covers the 1 M☉ ZAMS case only, in which rotation, diffusion, and mass loss are off. Whether the values below stay where they are on a case with those on is open.</p>
+<h2>Names</h2>
+<p>The object-oriented pyrec uses descriptive names, each beside YREC's name, written in lower case as the Fortran-tracking pyrec writes it. The mapping is a table in the code, so that this page, <a href="names.html">the families' names</a>, and the site's glossary (linked at the top of every page) can show it. There is one table for the <code>State</code> (below) and one per family module, and each of YREC's variables has one descriptive name across all of them (<code>latmo</code> is <code>in_atmosphere</code> here, in the EOS, and in the solver); a routine's arguments are mapped per routine, as <a href="names.html">the families' names</a> explains.</p>
+<h2>The fields</h2>
+<p>All 153 fields, generated from the <code>State</code> class's metadata. Shapes are YREC's, JSON being YREC's largest number of shells (its array dimension; the shells in use are <code>n_shells</code>); pyrec's arrays keep one unused element at index 0 and the same index order, so that the default families wrap pyrec unchanged. The role says what a field is: <code>star</code> (the star at this moment), <code>old</code> (YREC's start-of-step copies), <code>carried</code> (a value carried from step to step that changes later results), <code>work</code> (the solver's scratch, kept for now), or <code>run</code> (the run's bookkeeping, which may move to the model or the configuration). The last column says what is not yet checked about a field. The <code>work</code> and <code>run</code> fields sit in the <code>State</code> while the defaults wrap pyrec's routines; whether they move to the solver's work arrays and to the model or the configuration is open.</p>
+<table>
+<thead>
+<tr>
+<th>Descriptive name</th>
+<th>YREC name</th>
+<th>Meaning</th>
+<th>Units</th>
+<th>Shape</th>
+<th>Role</th>
+<th>Not yet checked</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>log_mass</code></td>
+<td><code>hs</code></td>
+<td>mass inside each shell</td>
+<td>log10 g</td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>luminosity</code></td>
+<td><code>hl</code></td>
+<td>luminosity at each shell</td>
+<td>L_sun</td>
+<td>(JSON)</td>
+<td>star</td>
+<td>units from oldmod_mod.hlo/hlsuro (L/L_sun); to check</td>
+</tr>
+<tr>
+<td><code>log_radius</code></td>
+<td><code>hr</code></td>
+<td>radius of each shell</td>
+<td>log10 cm</td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>log_pressure</code></td>
+<td><code>hp</code></td>
+<td>pressure</td>
+<td>log10 dyn cm^-2</td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>log_temperature</code></td>
+<td><code>ht</code></td>
+<td>temperature</td>
+<td>log10 K</td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>log_density</code></td>
+<td><code>hd</code></td>
+<td>density</td>
+<td>log10 g cm^-3</td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>convective</code></td>
+<td><code>lc</code></td>
+<td>whether each shell is convective</td>
+<td></td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>composition</code></td>
+<td><code>hcomp</code></td>
+<td>X, Y, Z, then the tracked isotopes (HCOMP(K, J))</td>
+<td>mass fraction</td>
+<td>(15, JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>shell_mass</code></td>
+<td><code>hs1</code></td>
+<td>mass of each shell (unlogged)</td>
+<td>g</td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>mass_between_centers</code></td>
+<td><code>hs2</code></td>
+<td>mass between shell centers</td>
+<td>g</td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>omega</code></td>
+<td><code>omega</code></td>
+<td>angular velocity</td>
+<td>rad s^-1</td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>moment_of_inertia</code></td>
+<td><code>hi</code></td>
+<td>moment of inertia of each shell</td>
+<td>g cm^2</td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>specific_angular_momentum</code></td>
+<td><code>hjm</code></td>
+<td>j of each shell</td>
+<td>cm^2 s^-1</td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>rotational_energy</code></td>
+<td><code>hkerot</code></td>
+<td>rotational kinetic energy of each shell</td>
+<td>erg</td>
+<td>(JSON)</td>
+<td>star</td>
+<td>units not checked</td>
+</tr>
+<tr>
+<td><code>rotational_energy_old</code></td>
+<td><code>hkeroto</code></td>
+<td>the same at the start of the step</td>
+<td>erg</td>
+<td>(JSON)</td>
+<td>old</td>
+<td>units not checked</td>
+</tr>
+<tr>
+<td><code>distortion_fp</code></td>
+<td><code>fp</code></td>
+<td>distortion term f_P (FPFT)</td>
+<td></td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>distortion_ft</code></td>
+<td><code>ft</code></td>
+<td>distortion term f_T (FPFT)</td>
+<td></td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>equivalent_radius</code></td>
+<td><code>r0</code></td>
+<td>radius r_0 of each equipotential</td>
+<td>cm</td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>radau_eta2</code></td>
+<td><code>eta2</code></td>
+<td>eta_2 from Radau's equation</td>
+<td></td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>dinertia_domega</code></td>
+<td><code>qiw</code></td>
+<td>dI / dOmega of each shell (GETROT, MOMI)</td>
+<td></td>
+<td>(JSON)</td>
+<td>star</td>
+<td>units not checked</td>
+</tr>
+<tr>
+<td><code>mean_gravity</code></td>
+<td><code>hg</code></td>
+<td>mean gravity <g> on the equipotential</td>
+<td>cm s^-2</td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>angular_momentum_start_iteration</code></td>
+<td><code>hjm0</code></td>
+<td>start-of-step j for the structure-rotation iteration</td>
+<td>cm^2 s^-1</td>
+<td>(JSON)</td>
+<td>old</td>
+<td>a copy of start? (formerly COMMON/ORIGSTART/)</td>
+</tr>
+<tr>
+<td><code>composition_start_iteration</code></td>
+<td><code>hcompp0</code></td>
+<td>start-of-step composition for that iteration</td>
+<td>mass fraction</td>
+<td>(15, JSON)</td>
+<td>old</td>
+<td>a copy of start? (formerly COMMON/ORIGSTART/)</td>
+</tr>
+<tr>
+<td><code>luminosity_by_source</code></td>
+<td><code>tlumx</code></td>
+<td>luminosities by source (pp I-III, CNO, ...)</td>
+<td>L_sun</td>
+<td>(8)</td>
+<td>star</td>
+<td>units not checked</td>
+</tr>
+<tr>
+<td><code>envelope_triangle_log_l</code></td>
+<td><code>tril</code></td>
+<td>envelope triangle: log L</td>
+<td>log10 L_sun</td>
+<td>(3)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>envelope_triangle_log_teff</code></td>
+<td><code>trit</code></td>
+<td>envelope triangle: log Teff</td>
+<td>log10 K</td>
+<td>(3)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>envelope_triangle_log_p</code></td>
+<td><code>ps</code></td>
+<td>envelope triangle: P at the fit</td>
+<td>log10 dyn cm^-2</td>
+<td>(3)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>envelope_triangle_log_t</code></td>
+<td><code>ts</code></td>
+<td>envelope triangle: T at the fit</td>
+<td>log10 K</td>
+<td>(3)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>envelope_triangle_log_r</code></td>
+<td><code>rs</code></td>
+<td>envelope triangle: r at the fit</td>
+<td>log10 cm</td>
+<td>(3)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>envelope_fit_coefficients</code></td>
+<td><code>cfenv</code></td>
+<td>the envelope's fit coefficients</td>
+<td></td>
+<td>(9)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>starin_v</code></td>
+<td><code>v</code></td>
+<td>STARIN's V</td>
+<td></td>
+<td>(12)</td>
+<td>run</td>
+<td>meaning not checked</td>
+</tr>
+<tr>
+<td><code>mixed_zones</code></td>
+<td><code>mxzone</code></td>
+<td>mixed zones (bottom, top)</td>
+<td>shell index</td>
+<td>(12, 2)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>mixed_zones_old</code></td>
+<td><code>mxzon0</code></td>
+<td>mixed zones before</td>
+<td>shell index</td>
+<td>(12, 2)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>radiative_zones</code></td>
+<td><code>mrzone</code></td>
+<td>radiative zones</td>
+<td>shell index</td>
+<td>(13, 2)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>henyey_c</code></td>
+<td><code>hhc</code></td>
+<td>CRRECT's work array</td>
+<td></td>
+<td>(JSON)</td>
+<td>work</td>
+<td></td>
+</tr>
+<tr>
+<td><code>henyey_a</code></td>
+<td><code>hha</code></td>
+<td>CRRECT's work array</td>
+<td></td>
+<td>(4, 2, JSON)</td>
+<td>work</td>
+<td></td>
+</tr>
+<tr>
+<td><code>henyey_b</code></td>
+<td><code>hhb</code></td>
+<td>CRRECT's work array</td>
+<td></td>
+<td>(4, JSON)</td>
+<td>work</td>
+<td></td>
+</tr>
+<tr>
+<td><code>first_guess_log_p_rate</code></td>
+<td><code>hpp</code></td>
+<td>CRRECT's work array (log P)</td>
+<td></td>
+<td>(JSON)</td>
+<td>work</td>
+<td>read by step_store_rates: carried?</td>
+</tr>
+<tr>
+<td><code>first_guess_log_t_rate</code></td>
+<td><code>htt</code></td>
+<td>CRRECT's work array (log T)</td>
+<td></td>
+<td>(JSON)</td>
+<td>work</td>
+<td>read by step_store_rates: carried?</td>
+</tr>
+<tr>
+<td><code>max_correction</code></td>
+<td><code>hmax</code></td>
+<td>CRRECT's largest corrections</td>
+<td></td>
+<td>(4)</td>
+<td>work</td>
+<td></td>
+</tr>
+<tr>
+<td><code>max_correction_shell</code></td>
+<td><code>nhmax</code></td>
+<td>where they are</td>
+<td>shell index</td>
+<td>(4)</td>
+<td>work</td>
+<td></td>
+</tr>
+<tr>
+<td><code>stored_energies</code></td>
+<td><code>estore</code></td>
+<td>CRRECT's ESTORE</td>
+<td></td>
+<td>(4)</td>
+<td>work</td>
+<td>meaning not checked</td>
+</tr>
+<tr>
+<td><code>surface_values</code></td>
+<td><code>hsrf</code></td>
+<td>CRRECT's HSRF</td>
+<td></td>
+<td>(6)</td>
+<td>work</td>
+<td>meaning not checked</td>
+</tr>
+<tr>
+<td><code>log_luminosity</code></td>
+<td><code>bl</code></td>
+<td>surface luminosity</td>
+<td>log10 L_sun</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>log_teff</code></td>
+<td><code>teffl</code></td>
+<td>effective temperature</td>
+<td>log10 K</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>mass</code></td>
+<td><code>smass</code></td>
+<td>total mass</td>
+<td>M_sun</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>log_total_mass</code></td>
+<td><code>hstot</code></td>
+<td>total mass</td>
+<td>log10 g</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>age</code></td>
+<td><code>dage</code></td>
+<td>age</td>
+<td>Gyr</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>step_years</code></td>
+<td><code>ddage</code></td>
+<td>the step</td>
+<td>yr</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>timestep</code></td>
+<td><code>delts</code></td>
+<td>the time step</td>
+<td>s</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>timestep_htimer</code></td>
+<td><code>deltsh</code></td>
+<td>HTIMER's time step</td>
+<td>s</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>timestep_previous</code></td>
+<td><code>delts0</code></td>
+<td>the previous time step</td>
+<td>s</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>envelope_triangle_size</code></td>
+<td><code>ftri</code></td>
+<td>the envelope triangle size</td>
+<td></td>
+<td></td>
+<td>star</td>
+<td>meaning not checked</td>
+</tr>
+<tr>
+<td><code>max_omega_change</code></td>
+<td><code>dwmax</code></td>
+<td>largest change of Omega (HTIMER)</td>
+<td></td>
+<td></td>
+<td>star</td>
+<td>units</td>
+</tr>
+<tr>
+<td><code>log_g</code></td>
+<td><code>gl</code></td>
+<td>surface gravity (WRTOUT: CGL + STOTAL - 2 RL)</td>
+<td>log10 cm s^-2</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>total_angular_momentum</code></td>
+<td><code>sjtot</code></td>
+<td>total angular momentum</td>
+<td>g cm^2 s^-1</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>total_rotational_energy</code></td>
+<td><code>skerot</code></td>
+<td>total rotational kinetic energy</td>
+<td>erg</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>envelope_fit_mass_old</code></td>
+<td><code>senvold</code></td>
+<td>the previous fitting point</td>
+<td>log10(m/M)</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>convective_velocity</code></td>
+<td><code>vel</code></td>
+<td>convective velocity at STARIN's last TPGRAD call (the surface shell)</td>
+<td>cm s^-1</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>mixing_length</code></td>
+<td><code>cmixl</code></td>
+<td>mixing length alpha</td>
+<td>pressure scale heights</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>mass_for_output</code></td>
+<td><code>xmsol</code></td>
+<td>the mass kept for the output</td>
+<td>M_sun</td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>n_shells</code></td>
+<td><code>m</code></td>
+<td>number of shells in use</td>
+<td></td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>model_number</code></td>
+<td><code>model</code></td>
+<td>the model number</td>
+<td></td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>core_shell</code></td>
+<td><code>jcore</code></td>
+<td>H-burning shell / core edge</td>
+<td>shell index</td>
+<td></td>
+<td>star</td>
+<td>meaning per FINDSH</td>
+</tr>
+<tr>
+<td><code>envelope_base_shell</code></td>
+<td><code>jenv</code></td>
+<td>base of the surface convection zone</td>
+<td>shell index</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>envelope_base_shell_start</code></td>
+<td><code>jenv0</code></td>
+<td>the same at the step start</td>
+<td>shell index</td>
+<td></td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>shell_begin</code></td>
+<td><code>jxbeg</code></td>
+<td>H-burning shell: inner edge</td>
+<td>shell index</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>shell_end</code></td>
+<td><code>jxend</code></td>
+<td>H-burning shell: outer edge</td>
+<td>shell index</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>shell_middle</code></td>
+<td><code>jxmid</code></td>
+<td>H-burning shell: middle</td>
+<td>shell index</td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>n_radiative_zones</code></td>
+<td><code>nrzone</code></td>
+<td>CONVEC's radiative zones</td>
+<td></td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>n_mixed_zones</code></td>
+<td><code>nzone</code></td>
+<td>CONVEC's mixed zones</td>
+<td></td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>n_mixed_zones_old</code></td>
+<td><code>nzone0</code></td>
+<td>the same before</td>
+<td></td>
+<td></td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>iterations_done</code></td>
+<td><code>itdone</code></td>
+<td>CRRECT's iterations done</td>
+<td></td>
+<td></td>
+<td>work</td>
+<td></td>
+</tr>
+<tr>
+<td><code>starin_ikut</code></td>
+<td><code>ikut</code></td>
+<td>STARIN's IKUT</td>
+<td></td>
+<td></td>
+<td>work</td>
+<td>meaning not checked; name provisional</td>
+</tr>
+<tr>
+<td><code>store_index</code></td>
+<td><code>istore</code></td>
+<td>CRRECT's ISTORE</td>
+<td></td>
+<td></td>
+<td>work</td>
+<td>meaning not checked</td>
+</tr>
+<tr>
+<td><code>in_atmosphere</code></td>
+<td><code>latmo</code></td>
+<td>CRRECT's flag (whether an EOS call is in the atmosphere)</td>
+<td></td>
+<td></td>
+<td>work</td>
+<td></td>
+</tr>
+<tr>
+<td><code>want_derivatives</code></td>
+<td><code>lderiv</code></td>
+<td>CRRECT's flag (whether derivatives are wanted)</td>
+<td></td>
+<td></td>
+<td>work</td>
+<td></td>
+</tr>
+<tr>
+<td><code>mixed</code></td>
+<td><code>lmix</code></td>
+<td>CRRECT's flag</td>
+<td></td>
+<td></td>
+<td>work</td>
+<td></td>
+</tr>
+<tr>
+<td><code>conductive_opacity</code></td>
+<td><code>locond</code></td>
+<td>CRRECT's flag</td>
+<td></td>
+<td></td>
+<td>work</td>
+<td></td>
+</tr>
+<tr>
+<td><code>new_envelope</code></td>
+<td><code>lnew</code></td>
+<td>a new envelope triangle is needed</td>
+<td></td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>burning_shell</code></td>
+<td><code>lshell</code></td>
+<td>a H-burning shell exists</td>
+<td></td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>new_fitting_point</code></td>
+<td><code>lnewfit</code></td>
+<td>the fitting point moved (accretion)</td>
+<td></td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>rotation_summary</code></td>
+<td><code>lprt0</code></td>
+<td>rotation summary printed</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>diverged</code></td>
+<td><code>large</code></td>
+<td>the iteration diverged</td>
+<td></td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>reset</code></td>
+<td><code>lreset</code></td>
+<td>HPOINT's reset flag</td>
+<td></td>
+<td></td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>kind_card</code></td>
+<td><code>nk</code></td>
+<td>the kind card</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>pass_number</code></td>
+<td><code>modeln</code></td>
+<td>the pass of its model loop</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>next_output_age</code></td>
+<td><code>nao</code></td>
+<td>the next of the ages AGEOUT</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>computed</code></td>
+<td><code>lpunch</code></td>
+<td>a model was calculated</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>pulse_output</code></td>
+<td><code>lsavpu</code></td>
+<td>LPULSE as read</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>star_calibration</code></td>
+<td><code>lstar</code></td>
+<td>the star calibration's flag</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>star_matched</code></td>
+<td><code>lpassr</code></td>
+<td>the star is matched</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>star_calibration_alpha</code></td>
+<td><code>alri</code></td>
+<td>the star calibration's value</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>pulse_last_l</code></td>
+<td><code>pol1</code></td>
+<td>PDIST's last point</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>pulse_last_t</code></td>
+<td><code>pot1</code></td>
+<td>PDIST's last point</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>pulse_last_age</code></td>
+<td><code>poa1</code></td>
+<td>PDIST's last point</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>pulse_length</code></td>
+<td><code>polen</code></td>
+<td>PDIST's last point</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>mixture_name</code></td>
+<td><code>compmix</code></td>
+<td>the mixture's name</td>
+<td></td>
+<td></td>
+<td>run</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_log_pressure</code></td>
+<td><code>hpo</code></td>
+<td>old log P</td>
+<td>log10 dyn cm^-2</td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_log_temperature</code></td>
+<td><code>hto</code></td>
+<td>old log T</td>
+<td>log10 K</td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_log_radius</code></td>
+<td><code>hro</code></td>
+<td>old log r</td>
+<td>log10 cm</td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_luminosity</code></td>
+<td><code>hlo</code></td>
+<td>old L</td>
+<td>L_sun</td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_log_density</code></td>
+<td><code>hdo</code></td>
+<td>old log rho (also HPOINT scratch)</td>
+<td>log10 g cm^-3</td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_composition</code></td>
+<td><code>hcompp</code></td>
+<td>old composition</td>
+<td>mass fraction</td>
+<td>(15, JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_log_mass</code></td>
+<td><code>hss</code></td>
+<td>old mass coordinates</td>
+<td>log10 g</td>
+<td>(JSON)</td>
+<td>old</td>
+<td>units not stated in the glossary</td>
+</tr>
+<tr>
+<td><code>old_convective</code></td>
+<td><code>lco</code></td>
+<td>old convective flags</td>
+<td></td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_convective_rotation</code></td>
+<td><code>lczo</code></td>
+<td>old convective flags for GETROT</td>
+<td></td>
+<td>(JSON)</td>
+<td>old</td>
+<td>what it flags, as against lco</td>
+</tr>
+<tr>
+<td><code>old_log_teff</code></td>
+<td><code>tefflo</code></td>
+<td>old log Teff</td>
+<td>log10 K</td>
+<td></td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_surface_luminosity</code></td>
+<td><code>hlsuro</code></td>
+<td>old surface L</td>
+<td>L_sun</td>
+<td></td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_omega</code></td>
+<td><code>wold</code></td>
+<td>old Omega</td>
+<td>rad s^-1</td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_specific_angular_momentum</code></td>
+<td><code>hjx</code></td>
+<td>old j</td>
+<td>cm^2 s^-1</td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_moment_of_inertia</code></td>
+<td><code>hio</code></td>
+<td>old I (read nowhere)</td>
+<td>g cm^2</td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_mean_gravity</code></td>
+<td><code>hgo</code></td>
+<td>old <g></td>
+<td>cm s^-2</td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_equivalent_radius</code></td>
+<td><code>r0x</code></td>
+<td>old r_0</td>
+<td>cm</td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_radau_eta2</code></td>
+<td><code>eta2x</code></td>
+<td>old eta_2</td>
+<td></td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_li6_rate</code></td>
+<td><code>rli60</code></td>
+<td>old 6Li proton-capture rate</td>
+<td>s^-1</td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_li7_rate</code></td>
+<td><code>rli70</code></td>
+<td>old 7Li rate</td>
+<td>s^-1</td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_be9_rate</code></td>
+<td><code>rbe90</code></td>
+<td>old 9Be rate</td>
+<td>s^-1</td>
+<td>(JSON)</td>
+<td>old</td>
+<td></td>
+</tr>
+<tr>
+<td><code>old_deuterium_rate</code></td>
+<td><code>drate0</code></td>
+<td>old deuterium burning rate</td>
+<td>s^-1</td>
+<td>(JSON)</td>
+<td>old</td>
+<td>units not checked</td>
+</tr>
+<tr>
+<td><code>log_t_rate</code></td>
+<td><code>htt0</code></td>
+<td>d log T / dt over the last step</td>
+<td>s^-1</td>
+<td>(JSON)</td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>log_p_rate</code></td>
+<td><code>hpp0</code></td>
+<td>d log P / dt</td>
+<td>s^-1</td>
+<td>(JSON)</td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>luminosity_rate</code></td>
+<td><code>hll0</code></td>
+<td>relative dL / dt</td>
+<td>s^-1</td>
+<td>(JSON)</td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>log_r_rate</code></td>
+<td><code>hrr0</code></td>
+<td>d log r / dt</td>
+<td>s^-1</td>
+<td>(JSON)</td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>cz_base_radius_start</code></td>
+<td><code>rbase0</code></td>
+<td>convection-zone base at the step start</td>
+<td>cm</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>li6_burning_old</code></td>
+<td><code>bli6old</code></td>
+<td>CZ-averaged 6Li rate, previous step</td>
+<td>ln s^-1</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>li7_burning_old</code></td>
+<td><code>bli7old</code></td>
+<td>the same for 7Li</td>
+<td>ln s^-1</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>be9_burning_old</code></td>
+<td><code>bbe9old</code></td>
+<td>the same for 9Be</td>
+<td>ln s^-1</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>light_burning_stored</code></td>
+<td><code>lbliold</code></td>
+<td>the three hold end-of-step rates</td>
+<td></td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>envelope_base_shell_end</code></td>
+<td><code>jenvos</code></td>
+<td>the envelope's base at the step end</td>
+<td>shell index</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>overturn_time</code></td>
+<td><code>taucz</code></td>
+<td>convective overturn time</td>
+<td>s</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>overturn_time_start</code></td>
+<td><code>taucz0</code></td>
+<td>the same at the step start</td>
+<td>s</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>log_p_photosphere</code></td>
+<td><code>pphot</code></td>
+<td>photospheric P</td>
+<td>log10 dyn cm^-2</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>log_p_photosphere_start</code></td>
+<td><code>pphot0</code></td>
+<td>the same at the step start</td>
+<td>log10 dyn cm^-2</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>wind_step_fraction</code></td>
+<td><code>fracstep</code></td>
+<td>fraction of the step for the wind</td>
+<td></td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>overshoot_start</code></td>
+<td><code>pscal0</code></td>
+<td>overshoot distance at the step start</td>
+<td>cm</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>overshoot_end</code></td>
+<td><code>pscal1</code></td>
+<td>overshoot distance at the step end</td>
+<td>cm</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>envelope_fit_mass</code></td>
+<td><code>senv</code></td>
+<td>the envelope fitting point</td>
+<td>log10(m/M)</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>log_total_mass_comp</code></td>
+<td><code>stotal</code></td>
+<td>log M (COMP_MOD copy of hstot)</td>
+<td>log10 g</td>
+<td></td>
+<td>carried</td>
+<td>duplicate of log_total_mass?</td>
+</tr>
+<tr>
+<td><code>surface_x_table</code></td>
+<td><code>xnew</code></td>
+<td>surface X of the current surface opacity table</td>
+<td>mass fraction</td>
+<td></td>
+<td>carried</td>
+<td>a cache of the opacity family?</td>
+</tr>
+<tr>
+<td><code>surface_z_table</code></td>
+<td><code>znew</code></td>
+<td>surface Z of the same</td>
+<td>mass fraction</td>
+<td></td>
+<td>carried</td>
+<td>a cache of the opacity family?</td>
+</tr>
+<tr>
+<td><code>age_total</code></td>
+<td><code>sage</code></td>
+<td>total age for disk locking</td>
+<td>Gyr</td>
+<td></td>
+<td>carried</td>
+<td>duplicate of age?</td>
+</tr>
+<tr>
+<td><code>saha_guess</code></td>
+<td><code>e</code>, <code>sahex1</code>, <code>sahex2</code></td>
+<td>Saha's starting guess: electrons per atom, He+ and He++ fractions (eqsaha.f's SAVE'd E, SAHEX1, SAHEX2; pyrec's eqsaha.sv, the kernels' ssv)</td>
+<td></td>
+<td>(3)</td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>structure_timestep_on</code></td>
+<td><code>lptime</code></td>
+<td>whether HTIMER's structure criterion (PTIME) is on (the setting LPTIME, switched off for good near the ZAMS)</td>
+<td></td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>molecular_opacity_table</code></td>
+<td><code>capalex06</code></td>
+<td>Ferguson et al. 2005 (ALEX06) molecular log kappa at (molecular_table_x, molecular_table_z) (ALEX06TAB)</td>
+<td>log10 cm^2 g^-1</td>
+<td>(85, 19)</td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>molecular_table_x</code></td>
+<td><code>xe</code></td>
+<td>the X of molecular_opacity_table</td>
+<td>mass fraction</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>molecular_table_z</code></td>
+<td><code>ze</code></td>
+<td>the Z of molecular_opacity_table</td>
+<td>mass fraction</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>surface_opal_table</code></td>
+<td><code>cappae</code></td>
+<td>OPAL 1995 log kappa at X = surface_opal_table_x, Z = ZTAB (OP95XTAB)</td>
+<td>log10 cm^2 g^-1</td>
+<td>(70, 19)</td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>surface_opal_table_x</code></td>
+<td><code>xop95</code></td>
+<td>the X of surface_opal_table</td>
+<td>mass fraction</td>
+<td></td>
+<td>carried</td>
+<td></td>
+</tr>
+<tr>
+<td><code>network_saved</code></td>
+<td><code>ssv</code></td>
+<td>engeb's SAVE'd scalars (F1-F4, RHO, T9, T9M1, T9M12, T9M13, T9M23, T9P13, TM1, XXL8, Z58, Z28, BE7PROTON, BE7ELECTRON, CONVERT)</td>
+<td></td>
+<td>(18)</td>
+<td>carried</td>
+<td>read only below TCUT(1) (stale there: the suspected bug on engeb.f's page); changes the neutrino-flux output when TCUT(1) &gt; 6</td>
+</tr>
+<tr>
+<td><code>mean_molecular_weight</code></td>
+<td><code>hamu</code></td>
+<td>mean molecular weight, fully ionized (PHYSIC)</td>
+<td></td>
+<td>(JSON)</td>
+<td>star</td>
+<td></td>
+</tr>
+<tr>
+<td><code>thermal_diffusivity</code></td>
+<td><code>thdif</code></td>
+<td>radiative thermal diffusivity (VISCOS)</td>
+<td>cm^2 s^-1</td>
+<td>(JSON)</td>
+<td>star</td>
+<td>units not checked</td>
+</tr>
+<tr>
+<td><code>viscosity</code></td>
+<td><code>visc</code></td>
+<td>kinematic viscosity (VISCOS)</td>
+<td>cm^2 s^-1</td>
+<td>(JSON)</td>
+<td>star</td>
+<td>units not checked</td>
+</tr>
+<tr>
+<td><code>shear_limit</code></td>
+<td><code>qwrmax</code></td>
+<td>largest dOmega/dln r stable against shear (PHYSIC)</td>
+<td>rad s^-1</td>
+<td>(JSON)</td>
+<td>star</td>
+<td>units not checked</td>
+</tr>
+</tbody>
+</table>
+<h2>The caches</h2>
+<p>What the defaults keep as caches, each rebuilt by its family or shown not to change results:</p>
+<ul>
+<li><strong>The tables</strong> (opacity, EOS, atmosphere), read once at the setup into pyrec's modules, and passed to the kernels as data (<code>kernel_args()</code>).</li>
+<li><strong>The tables' search guesses:</strong> the EOS's SCV stencil (<code>IDTSCV</code>, <code>IDP</code>) and OPAL's <code>K3</code>, <code>L2</code>; the opacity's table indices (<code>IT</code>, <code>ID</code>), getopal95's, and condopacp's guesses. Resetting the EOS's at every point changed no result, and the copy test left all of them unrestored with the copy identical.</li>
+<li><strong>Each family's settings,</strong> read from the run's settings (still pyrec's modules, filled from YREC's namelists) into the kernels' data.</li>
+</ul>
+<h2>Values YREC keeps between calls</h2>
+<p>YREC's <code>SAVE</code>d locals, <code>DATA</code>-initialized state, and cached tables, as placed so far:</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Home</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>eqsaha's <code>E</code>, <code>SAHEX1</code>, <code>SAHEX2</code></td>
+<td><code>State</code> (<code>saha_guess</code>)</td>
+<td>the next call's starting guess; it changes results</td>
+</tr>
+<tr>
+<td>engeb's <code>SAVE</code>d scalars</td>
+<td><code>State</code> (<code>network_saved</code>)</td>
+<td>read below <code>TCUT(1)</code>, where they can change the neutrino-flux output</td>
+</tr>
+<tr>
+<td><code>LPTIME</code></td>
+<td><code>State</code> (<code>structure_timestep_on</code>)</td>
+<td>a setting HTIMER writes; the copy test</td>
+</tr>
+<tr>
+<td>alot06's and llot95e's surface tables, with their X and Z</td>
+<td><code>State</code></td>
+<td>rebuilt only past a tolerance; the copy test</td>
+</tr>
+<tr>
+<td>the tables' search guesses (EOS, opacity)</td>
+<td>cache</td>
+<td>the EOS's reset at every point with no change; the copy test</td>
+</tr>
+<tr>
+<td>eqstat2's saved Saha derivatives, its number fractions</td>
+<td>work arrays</td>
+<td>set before they are read, in the same call</td>
+</tr>
+<tr>
+<td>engeb's <code>SAVE</code>d arrays; mix's and coefft's rate arrays; <code>ctol_mod</code>'s <code>FCORR</code></td>
+<td>work arrays</td>
+<td>set before they are read at each call</td>
+</tr>
+<tr>
+<td>envint's <code>SAVE</code>s (<code>TAUP</code>, <code>OP</code>, <code>DP</code>, the step counts)</td>
+<td>pyrec's modules, for now</td>
+<td>the copy test left them unrestored with the copy identical; they feed later calls and printed counts (suspected bugs 3 and 4 on <a href="../yrec-map/envint.f.html">envint.f</a>'s page)</td>
+</tr>
+<tr>
+<td><code>deuter_mod</code>'s <code>JCZ</code>; hpoint's, htimer's, ptime's, and getnewenv's <code>SAVE</code>d arrays; the output modules'</td>
+<td>pyrec's modules, for now</td>
+<td>the copy test left them unrestored with the copy identical</td>
+</tr>
+</tbody>
+</table>
+<p>The values in the last two rows changed no result on the ZAMS case; where each finally lives, and whether the test is rerun on a case with rotation, diffusion, and mass loss before that is settled, is open. Which of YREC's saved values carry information in the runs the test has not covered stays question 5 of <a href="overview.html">the overview</a>.</p>
+
+</main></body></html>

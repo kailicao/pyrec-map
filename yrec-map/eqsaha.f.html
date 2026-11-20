@@ -2,7 +2,7 @@
 <header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ eqsaha.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-EQSAHA'>EQSAHA</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>eqsaha.f</h1>
 <p class='muted'>347 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/eqsaha.f'>on GitHub (7be4133)</a></p>
-<p><strong>Python version</strong>: <code>eqsaha.py</code>, 370 lines, on the right (switch to Python above the code).</p>
+<p><strong>Python version</strong>: <code>eqsaha.py</code>, 803 lines, on the right (switch to Python above the code).</p>
 <details class='vars' id='terms'><summary>Variables on this page (4)</summary><p><a href='../glossary.html#var-cgas' data-def='the molar gas constant $\mathcal{R}$, $8.314510\times10^{7}\,\mathrm{erg\,mol^{-1}\,K^{-1}}$; set in &lt;a href=&quot;../yrec-map/setups.f.html#def-SETUPS&quot;&gt;&lt;code&gt;SETUPS&lt;/code&gt;&lt;/a&gt;.'><code>cgas</code></a>, <a href='../glossary.html#var-cln' data-def='$\ln 10$; set in &lt;a href=&quot;../yrec-map/setups.f.html#def-SETUPS&quot;&gt;&lt;code&gt;SETUPS&lt;/code&gt;&lt;/a&gt; (and earlier in &lt;a href=&quot;../yrec-map/parmin.f.html#def-PARMIN&quot;&gt;&lt;code&gt;PARMIN&lt;/code&gt;&lt;/a&gt;); read by 68 files. &lt;em&gt;Name:&lt;/em&gt; C, LN.'><code>cln</code></a>, <a href='../glossary.html#var-cmkh' data-def='$\log_{10}[(2\pi m_e)^{3/2}k^{5/2}/h^3]$, for the Saha equation (cgs); set in &lt;a href=&quot;../yrec-map/setups.f.html#def-SETUPS&quot;&gt;&lt;code&gt;SETUPS&lt;/code&gt;&lt;/a&gt;. &lt;em&gt;Name:&lt;/em&gt; C, $m_e$, $k$, $h$.'><code>cmkh</code></a>, <a href='../glossary.html#var-ishort' data-def='unit 20, all diagnostic information, the &lt;code&gt;.short&lt;/code&gt; file.'><code>ishort</code></a></p></details><h2 id='purpose'>Purpose</h2>
 <div class='notes'><p><code>EQSAHA</code> is the Yale equation of state for partially ionized gas: it solves the Saha equations for hydrogen, helium (two stages) and ten metals, and returns the density, the ionization fractions and the thermodynamic derivatives. The name "Prather EOS" in <a href="../yrec-map/eqstat2.f.html#def-EQSTAT2">EQSTAT2</a>'s comments refers to it.</p></div>
 <h2 id='how-it-fits'>How it fits</h2>
@@ -389,376 +389,809 @@
 <span class="line" id="L344"><span class="ln">344</span><span class='lt'> 60   </span><span class='lr'> 60   </span><span class='hk'>CONTINUE</span></span>
 <span class="line" id="L345"><span class="ln">345</span></span>
 <span class="line" id="L346"><span class="ln">346</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>RETURN</span></span>
-<span class="line" id="L347"><span class="ln">347</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of eqsaha.f (YREC development, 7be4133): the Saha</span></span>
-<span class="line" id="P2"><span class="ln">2</span><span class='hs'>equation of state for partially ionized gas.&quot;&quot;&quot;</span></span>
-<span class="line" id="P3"><span class="ln">3</span></span>
-<span class="line" id="P4"><span class="ln">4</span><span class='hk'>import</span> math</span>
-<span class="line" id="P5"><span class="ln">5</span></span>
-<span class="line" id="P6"><span class="ln">6</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
-<span class="line" id="P7"><span class="ln">7</span></span>
-<span class="line" id="P8"><span class="ln">8</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> constants_mod</span>
-<span class="line" id="P9"><span class="ln">9</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> iounits_mod</span>
-<span class="line" id="P10"><span class="ln">10</span></span>
-<span class="line" id="P11"><span class="ln">11</span><span class='hc'># DATA: ionization temperatures chi/k (K) of the 11 species, in the order</span></span>
-<span class="line" id="P12"><span class="ln">12</span><span class='hc'># Na, Al, Mg, Fe, Si, C, H, O, N, Ar, Ne (index 0 unused), and of He, He+</span></span>
-<span class="line" id="P13"><span class="ln">13</span><span class='hc'># (<a class='fl' href='#L47-L54'>Fortran lines 47–54</a>).</span></span>
-<span class="line" id="P14"><span class="ln">14</span>SAHAT = np.array([<span class='hn'>0.0</span>, <span class='hn'>59630.</span>, <span class='hn'>69450.</span>, <span class='hn'>88710.</span>, <span class='hn'>91330.</span>, <span class='hn'>94570.</span>, <span class='hn'>130630.</span>,</span>
-<span class="line" id="P15"><span class="ln">15</span>                  <span class='hn'>157800.</span>, <span class='hn'>158000.</span>, <span class='hn'>168630.</span>, <span class='hn'>183080.</span>, <span class='hn'>250200.</span>])</span>
-<span class="line" id="P16"><span class="ln">16</span>SAHET0 = <span class='hn'>285270.</span></span>
-<span class="line" id="P17"><span class="ln">17</span>SAHET1 = <span class='hn'>631370.</span></span>
-<span class="line" id="P18"><span class="ln">18</span><span class='hc'># DATA SAHAU: the constant u_i of each Saha equation (13 values: the 11</span></span>
-<span class="line" id="P19"><span class="ln">19</span><span class='hc'># species, then He and He+), in double precision.</span></span>
-<span class="line" id="P20"><span class="ln">20</span><span class='hc'># Question (see the page): the source of the constants u_i.</span></span>
-<span class="line" id="P21"><span class="ln">21</span>SAHAU = np.array([<span class='hn'>0.0</span>, -<span class='hn'>.01</span>, -<span class='hn'>.47</span>, <span class='hn'>.60</span>, <span class='hn'>.49</span>, <span class='hn'>.08</span>, <span class='hn'>.11</span>, <span class='hn'>.0</span>, -<span class='hn'>.04</span>, <span class='hn'>.64</span>, <span class='hn'>.99</span>,</span>
-<span class="line" id="P22"><span class="ln">22</span>                  <span class='hn'>1.03</span>, <span class='hn'>.6</span>, <span class='hn'>.0</span>])</span>
-<span class="line" id="P23"><span class="ln">23</span>NZ = <span class='hn'>11</span></span>
-<span class="line" id="P24"><span class="ln">24</span>MAXS = <span class='hn'>20</span></span>
-<span class="line" id="P25"><span class="ln">25</span>STOL = <span class='hn'>4.0e1</span></span>
-<span class="line" id="P26"><span class="ln">26</span>STOLEE = <span class='hn'>1.0e-09</span></span>
+<span class="line" id="L347"><span class="ln">347</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of eqsaha.f (YREC development, 7be4133): the Saha equation of state for partially ionized gas.</span></span>
+<span class="line" id="P2"><span class="ln">2</span></span>
+<span class="line" id="P3"><span class="ln">3</span><span class='hs'>Functions</span></span>
+<span class="line" id="P4"><span class="ln">4</span><span class='hs'>---------</span></span>
+<span class="line" id="P5"><span class="ln">5</span><span class='hs'>eqsaha_saha_k : The Saha constants K of the 11 species (loop 11), and how many count (NZ0, NZ1).</span></span>
+<span class="line" id="P6"><span class="ln">6</span><span class='hs'>eqsaha_helium_k : The Saha constants of He and He+, and whether helium is neutral or not doubly ionized.</span></span>
+<span class="line" id="P7"><span class="ln">7</span><span class='hs'>eqsaha : The Saha solution: density, ionization fractions, and derivatives (the routine; its Numba kernel when</span></span>
+<span class="line" id="P8"><span class="ln">8</span><span class='hs'>    accel.USE_NUMBA).</span></span>
+<span class="line" id="P9"><span class="ln">9</span></span>
+<span class="line" id="P10"><span class="ln">10</span><span class='hs'>The utilities&#x27; kernels are `_&lt;name&gt;_nb`; the routine&#x27;s kernel is `_eqsaha_nb`, which eqstat2&#x27;s kernel calls</span></span>
+<span class="line" id="P11"><span class="ln">11</span><span class='hs'>directly; `_failure` writes its message when the iterations did not converge.</span></span>
+<span class="line" id="P12"><span class="ln">12</span></span>
+<span class="line" id="P13"><span class="ln">13</span><span class='hs'>The kernels are compiled without Numba&#x27;s reference counting (`_nrt=False`): They allocate nothing, and the</span></span>
+<span class="line" id="P14"><span class="ln">14</span><span class='hs'>count&#x27;s atomic increment and decrement of each array passed at each call was most of the OPAL kernels&#x27; gap to</span></span>
+<span class="line" id="P15"><span class="ln">15</span><span class='hs'>gfortran&#x27;s code (measured Nov 15, 2026).</span></span>
+<span class="line" id="P16"><span class="ln">16</span></span>
+<span class="line" id="P17"><span class="ln">17</span><span class='hs'>Module variables</span></span>
+<span class="line" id="P18"><span class="ln">18</span><span class='hs'>----------------</span></span>
+<span class="line" id="P19"><span class="ln">19</span><span class='hs'>sv : The SAVE&#x27;d [E, SAHEX1, SAHEX2], the next call&#x27;s starting guess.</span></span>
+<span class="line" id="P20"><span class="ln">20</span><span class='hs'>_wk, _fail : The kernel&#x27;s work arrays and its failure flag.</span></span>
+<span class="line" id="P21"><span class="ln">21</span></span>
+<span class="line" id="P22"><span class="ln">22</span><span class='hs'>&quot;&quot;&quot;</span></span>
+<span class="line" id="P23"><span class="ln">23</span></span>
+<span class="line" id="P24"><span class="ln">24</span><span class='hk'>import</span> math</span>
+<span class="line" id="P25"><span class="ln">25</span></span>
+<span class="line" id="P26"><span class="ln">26</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
 <span class="line" id="P27"><span class="ln">27</span></span>
-<span class="line" id="P28"><span class="ln">28</span><span class='hc'># DATA E,SAHEX1,SAHEX2 and SAVE: the electrons per atom and the He+ and</span></span>
-<span class="line" id="P29"><span class="ln">29</span><span class='hc'># He++ fractions, kept between calls as the next starting guess.</span></span>
-<span class="line" id="P30"><span class="ln">30</span><span class='hc'># Question (see the page): the result can depend on the order of calls.</span></span>
-<span class="line" id="P31"><span class="ln">31</span>e = <span class='hn'>0.1</span></span>
-<span class="line" id="P32"><span class="ln">32</span>sahex1 = <span class='hn'>0.0</span></span>
-<span class="line" id="P33"><span class="ln">33</span>sahex2 = <span class='hn'>0.0</span></span>
-<span class="line" id="P34"><span class="ln">34</span></span>
-<span class="line" id="P35"><span class="ln">35</span></span>
-<span class="line" id="P36"><span class="ln">36</span><span class='hk'>def</span> eqsaha(fx: np.ndarray, tl: <span class='hb'>float</span>, t: <span class='hb'>float</span>, pl: <span class='hb'>float</span>, p: <span class='hb'>float</span>, dl: <span class='hb'>float</span>, d: <span class='hb'>float</span>, beta: <span class='hb'>float</span>, betai: <span class='hb'>float</span>,</span>
-<span class="line" id="P37"><span class="ln">37</span>           beta14: <span class='hb'>float</span>, fxion: np.ndarray, rmu: <span class='hb'>float</span>, amu: <span class='hb'>float</span>, emu: <span class='hb'>float</span>, lderiv: <span class='hb'>bool</span>, latmo: <span class='hb'>bool</span>, qdt: <span class='hb'>float</span>,</span>
-<span class="line" id="P38"><span class="ln">38</span>           qdp: <span class='hb'>float</span>, qcp: <span class='hb'>float</span>, dela: <span class='hb'>float</span>, qdtt: <span class='hb'>float</span>, qdtp: <span class='hb'>float</span>, qat: <span class='hb'>float</span>, qap: <span class='hb'>float</span>, qcpt: <span class='hb'>float</span>,</span>
-<span class="line" id="P39"><span class="ln">39</span>           qcpp: <span class='hb'>float</span>, ksaha: <span class='hb'>int</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>,</span>
-<span class="line" id="P40"><span class="ln">40</span>           <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>int</span>]:</span>
-<span class="line" id="P41"><span class="ln">41</span>    <span class='hs'>&quot;&quot;&quot;Solve the Saha equations for hydrogen, helium (two stages) and ten</span></span>
-<span class="line" id="P42"><span class="ln">42</span><span class='hs'>    metals by Newton iteration on the electrons per atom, and return the</span></span>
-<span class="line" id="P43"><span class="ln">43</span><span class='hs'>    density, the ionization fractions and the thermodynamic derivatives.</span></span>
-<span class="line" id="P44"><span class="ln">44</span></span>
-<span class="line" id="P45"><span class="ln">45</span><span class='hs'>    Translates: eqsaha.f#EQSAHA (7be4133)</span></span>
-<span class="line" id="P46"><span class="ln">46</span></span>
-<span class="line" id="P47"><span class="ln">47</span><span class='hs'>    Arguments: fx, the number fractions of the 12 species (index 0</span></span>
-<span class="line" id="P48"><span class="ln">48</span><span class='hs'>    unused); tl, t, pl, p (log T, T, log P, P); beta and its relatives</span></span>
-<span class="line" id="P49"><span class="ln">49</span><span class='hs'>    betai (1/beta) and beta14; amu; lderiv (also the second derivatives);</span></span>
-<span class="line" id="P50"><span class="ln">50</span><span class='hs'>    latmo (skip the derivatives); ksaha, the caller&#x27;s iteration counter.</span></span>
-<span class="line" id="P51"><span class="ln">51</span><span class='hs'>    Array changed in place: fxion (H+, He+, He++ fractions, index 0</span></span>
-<span class="line" id="P52"><span class="ln">52</span><span class='hs'>    unused).</span></span>
-<span class="line" id="P53"><span class="ln">53</span></span>
-<span class="line" id="P54"><span class="ln">54</span><span class='hs'>    Returns (dl, d, rmu, emu, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap,</span></span>
-<span class="line" id="P55"><span class="ln">55</span><span class='hs'>    qcpt, qcpp, ksaha). With latmo, qdt ... qcpp are returned as passed in;</span></span>
-<span class="line" id="P56"><span class="ln">56</span><span class='hs'>    without lderiv, qdtt ... qcpp are.</span></span>
-<span class="line" id="P57"><span class="ln">57</span></span>
-<span class="line" id="P58"><span class="ln">58</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P28"><span class="ln">28</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> accel</span>
+<span class="line" id="P29"><span class="ln">29</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> constants_mod</span>
+<span class="line" id="P30"><span class="ln">30</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> iounits_mod</span>
+<span class="line" id="P31"><span class="ln">31</span></span>
+<span class="line" id="P32"><span class="ln">32</span><span class='hc'># DATA: ionization temperatures chi/k (K) of the 11 species, in the order</span></span>
+<span class="line" id="P33"><span class="ln">33</span><span class='hc'># Na, Al, Mg, Fe, Si, C, H, O, N, Ar, Ne (index 0 unused), and of He, He+</span></span>
+<span class="line" id="P34"><span class="ln">34</span><span class='hc'># (<a class='fl' href='#L47-L54'>Fortran lines 47–54</a>).</span></span>
+<span class="line" id="P35"><span class="ln">35</span>SAHAT = np.array([<span class='hn'>0.0</span>, <span class='hn'>59630.</span>, <span class='hn'>69450.</span>, <span class='hn'>88710.</span>, <span class='hn'>91330.</span>, <span class='hn'>94570.</span>, <span class='hn'>130630.</span>,</span>
+<span class="line" id="P36"><span class="ln">36</span>                  <span class='hn'>157800.</span>, <span class='hn'>158000.</span>, <span class='hn'>168630.</span>, <span class='hn'>183080.</span>, <span class='hn'>250200.</span>])</span>
+<span class="line" id="P37"><span class="ln">37</span>SAHET0 = <span class='hn'>285270.</span></span>
+<span class="line" id="P38"><span class="ln">38</span>SAHET1 = <span class='hn'>631370.</span></span>
+<span class="line" id="P39"><span class="ln">39</span><span class='hc'># DATA SAHAU: the constant u_i of each Saha equation (13 values: the 11</span></span>
+<span class="line" id="P40"><span class="ln">40</span><span class='hc'># species, then He and He+), in double precision.</span></span>
+<span class="line" id="P41"><span class="ln">41</span><span class='hc'># Question (see the page): the source of the constants u_i.</span></span>
+<span class="line" id="P42"><span class="ln">42</span>SAHAU = np.array([<span class='hn'>0.0</span>, -<span class='hn'>.01</span>, -<span class='hn'>.47</span>, <span class='hn'>.60</span>, <span class='hn'>.49</span>, <span class='hn'>.08</span>, <span class='hn'>.11</span>, <span class='hn'>.0</span>, -<span class='hn'>.04</span>, <span class='hn'>.64</span>, <span class='hn'>.99</span>,</span>
+<span class="line" id="P43"><span class="ln">43</span>                  <span class='hn'>1.03</span>, <span class='hn'>.6</span>, <span class='hn'>.0</span>])</span>
+<span class="line" id="P44"><span class="ln">44</span>NZ = <span class='hn'>11</span>                 <span class='hc'># The species of SAHAT (DATA).</span></span>
+<span class="line" id="P45"><span class="ln">45</span>MAXS = <span class='hn'>20</span>               <span class='hc'># The Newton iterations at most (DATA).</span></span>
+<span class="line" id="P46"><span class="ln">46</span>STOL = <span class='hn'>4.0e1</span>            <span class='hc'># The bound on |ln K| beyond which a species is neutral or fully ionized (DATA).</span></span>
+<span class="line" id="P47"><span class="ln">47</span>STOLEE = <span class='hn'>1.0e-09</span>        <span class='hc'># The convergence tolerance on E (DATA).</span></span>
+<span class="line" id="P48"><span class="ln">48</span>K_FULL = <span class='hn'>1.0e16</span>         <span class='hc'># K of a fully ionized species (<a class='fl' href='#L72'>Fortran line 72</a>).</span></span>
+<span class="line" id="P49"><span class="ln">49</span>FXHE_MIN = <span class='hn'>1.0e-10</span>      <span class='hc'># Below this helium number fraction, helium is neutral (<a class='fl' href='#L80'>Fortran line 80</a>).</span></span>
+<span class="line" id="P50"><span class="ln">50</span>UNDERFLOW_LOG = -<span class='hn'>38.0</span>   <span class='hc'># log10 of the old underflow guard&#x27;s bound (<a class='fl' href='#L140-L177'>Fortran lines 140–177</a>).</span></span>
+<span class="line" id="P51"><span class="ln">51</span>E_MIN = <span class='hn'>1.0e-11</span>         <span class='hc'># The lower bound on E (<a class='fl' href='#L187'>Fortran line 187</a>).</span></span>
+<span class="line" id="P52"><span class="ln">52</span></span>
+<span class="line" id="P53"><span class="ln">53</span><span class='hc'># DATA E,SAHEX1,SAHEX2 and SAVE: the electrons per atom and the He+ and</span></span>
+<span class="line" id="P54"><span class="ln">54</span><span class='hc'># He++ fractions, kept between calls as the next starting guess.</span></span>
+<span class="line" id="P55"><span class="ln">55</span><span class='hc'># Question (see the page): the result can depend on the order of calls.</span></span>
+<span class="line" id="P56"><span class="ln">56</span><span class='hc'># Held in one array, sv = [E, SAHEX1, SAHEX2], so that the Numba kernel</span></span>
+<span class="line" id="P57"><span class="ln">57</span><span class='hc'># reads and sets the same state as the plain code.</span></span>
+<span class="line" id="P58"><span class="ln">58</span>sv = np.array([<span class='hn'>0.1</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>])</span>
 <span class="line" id="P59"><span class="ln">59</span></span>
-<span class="line" id="P60"><span class="ln">60</span>    <span class='hk'>global</span> e, sahex1, sahex2</span>
-<span class="line" id="P61"><span class="ln">61</span>    c = constants_mod</span>
-<span class="line" id="P62"><span class="ln">62</span>    sahatt = np.zeros(NZ + <span class='hn'>1</span>)</span>
-<span class="line" id="P63"><span class="ln">63</span>    sahak = np.zeros(NZ + <span class='hn'>1</span>)</span>
-<span class="line" id="P64"><span class="ln">64</span>    sahax = np.zeros(NZ + <span class='hn'>1</span>)</span>
-<span class="line" id="P65"><span class="ln">65</span>    fxs = np.zeros(NZ + <span class='hn'>1</span>)</span>
-<span class="line" id="P66"><span class="ln">66</span>    fxt = np.zeros(NZ + <span class='hn'>1</span>)</span>
-<span class="line" id="P67"><span class="ln">67</span></span>
-<span class="line" id="P68"><span class="ln">68</span>    <span class='hc'># <a class='fl' href='#L58-L60'>Fortran lines 58–60</a>.</span></span>
-<span class="line" id="P69"><span class="ln">69</span>    fxhe = fx[<span class='hn'>12</span>]</span>
-<span class="line" id="P70"><span class="ln">70</span>    emax = <span class='hn'>1.0</span> + fxhe</span>
-<span class="line" id="P71"><span class="ln">71</span>    ti = <span class='hn'>1.0</span> / t</span>
-<span class="line" id="P72"><span class="ln">72</span></span>
-<span class="line" id="P73"><span class="ln">73</span>    <span class='hc'># The Saha K&#x27;s (<a class='fl' href='#L63-L77'>Fortran lines 63–77</a>), in the order of increasing ionization temperature. The</span></span>
-<span class="line" id="P74"><span class="ln">74</span>    <span class='hc'># first species with an exponent below -STOL ends the list: it and all</span></span>
-<span class="line" id="P75"><span class="ln">75</span>    <span class='hc'># later ones count as neutral. Above +STOL, the species is fully</span></span>
-<span class="line" id="P76"><span class="ln">76</span>    <span class='hc'># ionized (K = 1e16) and left out of the derivative sums (nz1).</span></span>
-<span class="line" id="P77"><span class="ln">77</span>    stemp = <span class='hn'>2.50</span> * tl - pl + c.cmkh</span>
-<span class="line" id="P78"><span class="ln">78</span>    nz1 = <span class='hn'>1</span></span>
-<span class="line" id="P79"><span class="ln">79</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, NZ + <span class='hn'>1</span>):</span>
-<span class="line" id="P80"><span class="ln">80</span>        sahatt[i] = SAHAT[i] * ti</span>
-<span class="line" id="P81"><span class="ln">81</span>        sahak[i] = c.cln * (SAHAU[i] + stemp) - sahatt[i]</span>
-<span class="line" id="P82"><span class="ln">82</span>        <span class='hk'>if</span> sahak[i] &lt; -STOL:</span>
-<span class="line" id="P83"><span class="ln">83</span>            <span class='hk'>break</span>                                  <span class='hc'># go to 12</span></span>
-<span class="line" id="P84"><span class="ln">84</span>        <span class='hk'>if</span> sahak[i] &gt; +STOL:</span>
-<span class="line" id="P85"><span class="ln">85</span>            sahak[i] = <span class='hn'>1.0e16</span>                      <span class='hc'># label 10</span></span>
-<span class="line" id="P86"><span class="ln">86</span>            nz1 = i + <span class='hn'>1</span></span>
-<span class="line" id="P87"><span class="ln">87</span>            <span class='hk'>continue</span></span>
-<span class="line" id="P88"><span class="ln">88</span>        sahak[i] = betai * math.exp(sahak[i])</span>
-<span class="line" id="P89"><span class="ln">89</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P90"><span class="ln">90</span>        i = NZ + <span class='hn'>1</span></span>
-<span class="line" id="P91"><span class="ln">91</span>    nz0 = i - <span class='hn'>1</span>                                    <span class='hc'># label 12</span></span>
-<span class="line" id="P92"><span class="ln">92</span>    nz1 = <span class='hb'>min</span>(NZ, nz1)</span>
-<span class="line" id="P93"><span class="ln">93</span></span>
-<span class="line" id="P94"><span class="ln">94</span>    <span class='hc'># Helium: neutral (lnohe), or no He++ (lnohe2) (<a class='fl' href='#L78-L92'>Fortran lines 78–92</a>).</span></span>
-<span class="line" id="P95"><span class="ln">95</span>    lnohe = <span class='hk'>True</span></span>
-<span class="line" id="P96"><span class="ln">96</span>    lnohe2 = <span class='hk'>True</span></span>
-<span class="line" id="P97"><span class="ln">97</span>    sahek0 = sahek1 = <span class='hn'>0.0</span></span>
-<span class="line" id="P98"><span class="ln">98</span>    <span class='hk'>if</span> fxhe &lt; <span class='hn'>1.0e-10</span>:</span>
-<span class="line" id="P99"><span class="ln">99</span>        sahex1 = <span class='hn'>0.0</span>                               <span class='hc'># label 13</span></span>
-<span class="line" id="P100"><span class="ln">100</span>        sahex2 = <span class='hn'>0.0</span>                               <span class='hc'># label 14</span></span>
-<span class="line" id="P101"><span class="ln">101</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P102"><span class="ln">102</span>        sahek0 = c.cln * (SAHAU[<span class='hn'>12</span>] + stemp) - SAHET0 / t</span>
-<span class="line" id="P103"><span class="ln">103</span>        <span class='hk'>if</span> sahek0 &lt; -STOL:</span>
-<span class="line" id="P104"><span class="ln">104</span>            sahex1 = <span class='hn'>0.0</span></span>
-<span class="line" id="P105"><span class="ln">105</span>            sahex2 = <span class='hn'>0.0</span></span>
-<span class="line" id="P106"><span class="ln">106</span>        <span class='hk'>else</span>:</span>
-<span class="line" id="P107"><span class="ln">107</span>            lnohe = <span class='hk'>False</span></span>
-<span class="line" id="P108"><span class="ln">108</span>            sahek0 = betai * math.exp(sahek0)</span>
-<span class="line" id="P109"><span class="ln">109</span>            sahek1 = c.cln * (SAHAU[<span class='hn'>13</span>] + stemp) - SAHET1 / t</span>
-<span class="line" id="P110"><span class="ln">110</span>            <span class='hk'>if</span> sahek1 &lt; -STOL:</span>
-<span class="line" id="P111"><span class="ln">111</span>                sahex2 = <span class='hn'>0.0</span></span>
-<span class="line" id="P112"><span class="ln">112</span>            <span class='hk'>else</span>:</span>
-<span class="line" id="P113"><span class="ln">113</span>                lnohe2 = <span class='hk'>False</span></span>
-<span class="line" id="P114"><span class="ln">114</span>                sahek1 = betai * math.exp(sahek1)</span>
-<span class="line" id="P115"><span class="ln">115</span></span>
-<span class="line" id="P116"><span class="ln">116</span>    <span class='hc'># Newton iterations for e, sahex1, sahex2 (the 3x3 system reduced by</span></span>
-<span class="line" id="P117"><span class="ln">117</span>    <span class='hc'># hand; <a class='fl' href='#L94-L192'>Fortran lines 94–192</a>).</span></span>
-<span class="line" id="P118"><span class="ln">118</span>    cr12 = cr13 = cr23 = <span class='hn'>0.0</span></span>
-<span class="line" id="P119"><span class="ln">119</span>    c11 = c12 = c13 = c22 = c23 = <span class='hn'>0.0</span></span>
-<span class="line" id="P120"><span class="ln">120</span>    r1 = r2 = <span class='hn'>0.0</span></span>
-<span class="line" id="P121"><span class="ln">121</span>    <span class='hk'>for</span> isaha <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, MAXS + <span class='hn'>1</span>):</span>
-<span class="line" id="P122"><span class="ln">122</span>        ksaha = ksaha + <span class='hn'>1</span></span>
-<span class="line" id="P123"><span class="ln">123</span>        ep1 = <span class='hn'>1.0</span> / (<span class='hn'>1.0</span> + e)</span>
-<span class="line" id="P124"><span class="ln">124</span>        ep1e = ep1 / e</span>
-<span class="line" id="P125"><span class="ln">125</span>        ep12 = ep1 * ep1</span>
-<span class="line" id="P126"><span class="ln">126</span>        eep1 = e * ep1</span>
-<span class="line" id="P127"><span class="ln">127</span>        c33 = -e * (<span class='hn'>1.0</span> + e)</span>
-<span class="line" id="P128"><span class="ln">128</span>        r3 = e</span>
-<span class="line" id="P129"><span class="ln">129</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nz0 + <span class='hn'>1</span>):</span>
-<span class="line" id="P130"><span class="ln">130</span>            div = <span class='hn'>1.0</span> / (sahak[i] + eep1)</span>
-<span class="line" id="P131"><span class="ln">131</span>            temp8 = sahak[i] * div</span>
-<span class="line" id="P132"><span class="ln">132</span>            sahax[i] = temp8</span>
-<span class="line" id="P133"><span class="ln">133</span>            temp8 = temp8 * fx[i]</span>
-<span class="line" id="P134"><span class="ln">134</span>            r3 = r3 - temp8</span>
-<span class="line" id="P135"><span class="ln">135</span>            temp8 = temp8 * eep1 * div</span>
-<span class="line" id="P136"><span class="ln">136</span>            c33 = c33 - temp8</span>
-<span class="line" id="P137"><span class="ln">137</span>            fxs[i] = temp8</span>
-<span class="line" id="P138"><span class="ln">138</span>        c33 = c33 * ep1e                           <span class='hc'># label 22</span></span>
-<span class="line" id="P139"><span class="ln">139</span>        r3 = r3 - fxhe * (sahex1 + sahex2 + sahex2)</span>
-<span class="line" id="P140"><span class="ln">140</span>        lfin = <span class='hb'>abs</span>(r3) &lt; STOLEE</span>
-<span class="line" id="P141"><span class="ln">141</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe:</span>
-<span class="line" id="P142"><span class="ln">142</span>            c22 = sahek0 + eep1</span>
-<span class="line" id="P143"><span class="ln">143</span>            c23 = sahex1 * ep12</span>
-<span class="line" id="P144"><span class="ln">144</span>            c32 = fxhe</span>
-<span class="line" id="P145"><span class="ln">145</span>            r2 = sahek0 * (<span class='hn'>1.0</span> - sahex1 - sahex2) - sahex1 * eep1</span>
-<span class="line" id="P146"><span class="ln">146</span>            <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
-<span class="line" id="P147"><span class="ln">147</span>                c11 = eep1</span>
-<span class="line" id="P148"><span class="ln">148</span>                c12 = -sahek1</span>
-<span class="line" id="P149"><span class="ln">149</span>                c13 = sahex2 * ep12</span>
-<span class="line" id="P150"><span class="ln">150</span>                c21 = sahek0</span>
-<span class="line" id="P151"><span class="ln">151</span>                c31 = <span class='hn'>2.0</span> * fxhe</span>
-<span class="line" id="P152"><span class="ln">152</span>                r1 = sahex1 * sahek1 - sahex2 * eep1</span>
-<span class="line" id="P153"><span class="ln">153</span>                <span class='hc'># Reduction of the Saha matrix to diagonal form.</span></span>
-<span class="line" id="P154"><span class="ln">154</span>                cr12 = -c21 / c11</span>
-<span class="line" id="P155"><span class="ln">155</span>                cr13 = -c31 / c11</span>
-<span class="line" id="P156"><span class="ln">156</span>                c22 = c22 + cr12 * c12</span>
-<span class="line" id="P157"><span class="ln">157</span>                c32 = c32 + cr13 * c12</span>
-<span class="line" id="P158"><span class="ln">158</span>                c23 = c23 + cr12 * c13</span>
-<span class="line" id="P159"><span class="ln">159</span>                c33 = c33 + cr13 * c13</span>
-<span class="line" id="P160"><span class="ln">160</span>                <span class='hc'># Products below 1e-38 are skipped (an old underflow guard).</span></span>
-<span class="line" id="P161"><span class="ln">161</span>                <span class='hk'>if</span> r1 != <span class='hn'>0.0</span>:</span>
-<span class="line" id="P162"><span class="ln">162</span>                    r1l = math.log10(<span class='hb'>abs</span>(r1))</span>
-<span class="line" id="P163"><span class="ln">163</span>                    <span class='hk'>if</span> cr12 != <span class='hn'>0.0</span>:</span>
-<span class="line" id="P164"><span class="ln">164</span>                        fact = math.log10(<span class='hb'>abs</span>(cr12)) + r1l</span>
-<span class="line" id="P165"><span class="ln">165</span>                        <span class='hk'>if</span> <span class='hk'>not</span> fact &lt; -<span class='hn'>38.0</span>:</span>
-<span class="line" id="P166"><span class="ln">166</span>                            r2 = r2 + cr12 * r1</span>
-<span class="line" id="P167"><span class="ln">167</span>                    <span class='hk'>if</span> cr13 != <span class='hn'>0.0</span>:                <span class='hc'># label 200</span></span>
-<span class="line" id="P168"><span class="ln">168</span>                        fact = math.log10(<span class='hb'>abs</span>(cr13)) + r1l</span>
-<span class="line" id="P169"><span class="ln">169</span>                        <span class='hk'>if</span> <span class='hk'>not</span> fact &lt; -<span class='hn'>38.0</span>:</span>
-<span class="line" id="P170"><span class="ln">170</span>                            r3 = r3 + cr13 * r1</span>
-<span class="line" id="P171"><span class="ln">171</span>            <span class='hc'># label 23: entry for no fully ionized helium</span></span>
-<span class="line" id="P172"><span class="ln">172</span>            cr23 = -c32 / c22</span>
-<span class="line" id="P173"><span class="ln">173</span>            c33 = c33 + cr23 * c23</span>
-<span class="line" id="P174"><span class="ln">174</span>            r3 = r3 + cr23 * r2</span>
-<span class="line" id="P175"><span class="ln">175</span>        <span class='hc'># label 25: entry for neutral helium</span></span>
-<span class="line" id="P176"><span class="ln">176</span>        delte = r3 / c33</span>
-<span class="line" id="P177"><span class="ln">177</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe:</span>
-<span class="line" id="P178"><span class="ln">178</span>            deltx1 = (r2 - c23 * delte) / c22</span>
-<span class="line" id="P179"><span class="ln">179</span>            sahex1 = sahex1 + deltx1</span>
-<span class="line" id="P180"><span class="ln">180</span>            sahex1 = <span class='hb'>max</span>(<span class='hn'>0.0</span>, <span class='hb'>min</span>(<span class='hn'>1.0</span>, sahex1))</span>
-<span class="line" id="P181"><span class="ln">181</span>            <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
-<span class="line" id="P182"><span class="ln">182</span>                <span class='hc'># Products below 1e-38 are replaced by +-1e-38 (&quot;statement</span></span>
-<span class="line" id="P183"><span class="ln">183</span>                <span class='hc'># recalculated for DEC-20 system&quot;).</span></span>
-<span class="line" id="P184"><span class="ln">184</span>                fact1 = c12 * deltx1               <span class='hc'># label 100</span></span>
-<span class="line" id="P185"><span class="ln">185</span>                <span class='hk'>if</span> c12 != <span class='hn'>0.0</span> <span class='hk'>and</span> deltx1 != <span class='hn'>0.0</span>:</span>
-<span class="line" id="P186"><span class="ln">186</span>                    <span class='hk'>if</span> math.log10(<span class='hb'>abs</span>(c12)) + math.log10(<span class='hb'>abs</span>(deltx1)) &lt; -<span class='hn'>38.0</span>:</span>
-<span class="line" id="P187"><span class="ln">187</span>                        fact1 = (math.exp(c.cln * -<span class='hn'>38.0</span>)</span>
-<span class="line" id="P188"><span class="ln">188</span>                                 * math.copysign(<span class='hn'>1.0</span>, c12)</span>
-<span class="line" id="P189"><span class="ln">189</span>                                 * math.copysign(<span class='hn'>1.0</span>, deltx1))</span>
-<span class="line" id="P190"><span class="ln">190</span>                fact2 = c13 * delte                <span class='hc'># label 110</span></span>
-<span class="line" id="P191"><span class="ln">191</span>                <span class='hk'>if</span> c13 != <span class='hn'>0.0</span> <span class='hk'>and</span> delte != <span class='hn'>0.0</span>:</span>
-<span class="line" id="P192"><span class="ln">192</span>                    <span class='hk'>if</span> math.log10(<span class='hb'>abs</span>(c13)) + math.log10(<span class='hb'>abs</span>(delte)) &lt; -<span class='hn'>38.0</span>:</span>
-<span class="line" id="P193"><span class="ln">193</span>                        fact2 = (math.exp(c.cln * -<span class='hn'>38.0</span>)</span>
-<span class="line" id="P194"><span class="ln">194</span>                                 * math.copysign(<span class='hn'>1.0</span>, c13)</span>
-<span class="line" id="P195"><span class="ln">195</span>                                 * math.copysign(<span class='hn'>1.0</span>, delte))</span>
-<span class="line" id="P196"><span class="ln">196</span>                deltx2 = (r1 - fact1 - fact2) / c11</span>
-<span class="line" id="P197"><span class="ln">197</span>                sahex2 = sahex2 + deltx2</span>
-<span class="line" id="P198"><span class="ln">198</span>                sahex2 = <span class='hb'>max</span>(<span class='hn'>0.0</span>, <span class='hb'>min</span>(<span class='hn'>1.0</span>, sahex2))</span>
-<span class="line" id="P199"><span class="ln">199</span>        e = e + delte                              <span class='hc'># label 26</span></span>
-<span class="line" id="P200"><span class="ln">200</span>        e = <span class='hb'>max</span>(<span class='hn'>1.0e-11</span>, <span class='hb'>min</span>(emax, e))</span>
-<span class="line" id="P201"><span class="ln">201</span>        lfin = lfin <span class='hk'>and</span> <span class='hb'>abs</span>(delte) &lt; STOLEE</span>
-<span class="line" id="P202"><span class="ln">202</span>        <span class='hk'>if</span> lfin:</span>
-<span class="line" id="P203"><span class="ln">203</span>            <span class='hk'>break</span>                                  <span class='hc'># go to 29</span></span>
-<span class="line" id="P204"><span class="ln">204</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P205"><span class="ln">205</span>        <span class='hc'># Question (see the page): the run goes on with the unconverged e.</span></span>
-<span class="line" id="P206"><span class="ln">206</span>        iounits_mod.write(iounits_mod.ishort,</span>
-<span class="line" id="P207"><span class="ln">207</span>                          <span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'> -----SAHA FAILURE (TL,PL)=</span><span class='hs'>{</span>tl<span class='hs'>:</span><span class='hs'>10.6f</span><span class='hs'>}</span><span class='hs'>{</span>pl<span class='hs'>:</span><span class='hs'>10.6f</span><span class='hs'>}</span><span class='hs'>&quot;</span></span>
-<span class="line" id="P208"><span class="ln">208</span>                          <span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'>  (E,DE)=</span><span class='hs'>{</span>e<span class='hs'>:</span><span class='hs'>20.12f</span><span class='hs'>}</span><span class='hs'>{</span>delte<span class='hs'>:</span><span class='hs'>20.12f</span><span class='hs'>}</span><span class='hs'>&quot;</span>)  <span class='hc'># format 99</span></span>
-<span class="line" id="P209"><span class="ln">209</span></span>
-<span class="line" id="P210"><span class="ln">210</span>    <span class='hc'># label 29: the system has been solved for e (<a class='fl' href='#L194-L202'>Fortran lines 194–202</a>).</span></span>
-<span class="line" id="P211"><span class="ln">211</span>    emu = e * amu</span>
-<span class="line" id="P212"><span class="ln">212</span>    rmu = c.cgas * (emu + amu)</span>
-<span class="line" id="P213"><span class="ln">213</span>    d = beta * p / (rmu * t)</span>
-<span class="line" id="P214"><span class="ln">214</span>    dl = math.log10(d)</span>
-<span class="line" id="P215"><span class="ln">215</span>    fxion[<span class='hn'>1</span>] = <span class='hn'>0.0</span></span>
-<span class="line" id="P216"><span class="ln">216</span>    <span class='hk'>if</span> nz0 &gt;= <span class='hn'>7</span>:</span>
-<span class="line" id="P217"><span class="ln">217</span>        fxion[<span class='hn'>1</span>] = sahax[<span class='hn'>7</span>]                        <span class='hc'># hydrogen is species 7</span></span>
-<span class="line" id="P218"><span class="ln">218</span>    fxion[<span class='hn'>2</span>] = sahex1</span>
-<span class="line" id="P219"><span class="ln">219</span>    fxion[<span class='hn'>3</span>] = sahex2</span>
-<span class="line" id="P220"><span class="ln">220</span>    <span class='hk'>if</span> latmo:</span>
-<span class="line" id="P221"><span class="ln">221</span>        <span class='hk'>return</span> (dl, d, rmu, emu, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap,</span>
-<span class="line" id="P222"><span class="ln">222</span>                qcpt, qcpp, ksaha)                 <span class='hc'># go to 60</span></span>
-<span class="line" id="P223"><span class="ln">223</span></span>
-<span class="line" id="P224"><span class="ln">224</span>    <span class='hc'># First derivatives: d ln E / d ln T (sqet) and d ln P (sqep)</span></span>
-<span class="line" id="P225"><span class="ln">225</span>    <span class='hc'># (<a class='fl' href='#L204-L235'>Fortran lines 204–235</a>).</span></span>
-<span class="line" id="P226"><span class="ln">226</span>    rmub = rmu * betai  <span class='hc'># noqa: F841  (unused in the Fortran too)</span></span>
-<span class="line" id="P227"><span class="ln">227</span>    r3t = <span class='hn'>0.0</span></span>
-<span class="line" id="P228"><span class="ln">228</span>    r3p = <span class='hn'>0.0</span></span>
-<span class="line" id="P229"><span class="ln">229</span>    <span class='hk'>if</span> nz0 &gt; <span class='hn'>0</span>:</span>
-<span class="line" id="P230"><span class="ln">230</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(nz1, nz0 + <span class='hn'>1</span>):</span>
-<span class="line" id="P231"><span class="ln">231</span>            r3p = r3p - fxs[i]</span>
-<span class="line" id="P232"><span class="ln">232</span>            r3t = r3t - fxs[i] * (<span class='hn'>2.5</span> + beta14 + sahatt[i])</span>
-<span class="line" id="P233"><span class="ln">233</span>        r3p = -betai * r3p</span>
-<span class="line" id="P234"><span class="ln">234</span>    r1t = r1p = r2t = r2p = <span class='hn'>0.0</span></span>
-<span class="line" id="P235"><span class="ln">235</span>    sahex0 = sk0qt = sk1qt = <span class='hn'>0.0</span></span>
-<span class="line" id="P236"><span class="ln">236</span>    <span class='hk'>if</span> <span class='hk'>not</span> lnohe:                                  <span class='hc'># label 31</span></span>
-<span class="line" id="P237"><span class="ln">237</span>        sahex0 = <span class='hn'>1.0</span> - sahex1 - sahex2</span>
-<span class="line" id="P238"><span class="ln">238</span>        sk0qt = <span class='hn'>2.5</span> + beta14 + SAHET0 * ti</span>
-<span class="line" id="P239"><span class="ln">239</span>        temp = sahek0 * sahex0</span>
-<span class="line" id="P240"><span class="ln">240</span>        r2t = temp * sk0qt</span>
-<span class="line" id="P241"><span class="ln">241</span>        r2p = -temp * betai</span>
-<span class="line" id="P242"><span class="ln">242</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
-<span class="line" id="P243"><span class="ln">243</span>            sk1qt = <span class='hn'>2.5</span> + beta14 + SAHET1 * ti</span>
-<span class="line" id="P244"><span class="ln">244</span>            temp = sahek1 * sahex1</span>
-<span class="line" id="P245"><span class="ln">245</span>            r1t = temp * sk1qt</span>
-<span class="line" id="P246"><span class="ln">246</span>            r1p = -temp * betai</span>
-<span class="line" id="P247"><span class="ln">247</span>            r2t = r2t + cr12 * r1t</span>
-<span class="line" id="P248"><span class="ln">248</span>            r2p = r2p + cr12 * r1p</span>
-<span class="line" id="P249"><span class="ln">249</span>            r3t = r3t + cr13 * r1t</span>
-<span class="line" id="P250"><span class="ln">250</span>            r3p = r3p + cr13 * r1p</span>
-<span class="line" id="P251"><span class="ln">251</span>        r3t = r3t + cr23 * r2t                     <span class='hc'># label 32</span></span>
-<span class="line" id="P252"><span class="ln">252</span>        r3p = r3p + cr23 * r2p</span>
-<span class="line" id="P253"><span class="ln">253</span>    sqet = r3t / c33                               <span class='hc'># label 33</span></span>
-<span class="line" id="P254"><span class="ln">254</span>    sqep = r3p / c33</span>
-<span class="line" id="P255"><span class="ln">255</span>    qdt = -<span class='hn'>1.0</span> - beta14 - ep1 * sqet</span>
-<span class="line" id="P256"><span class="ln">256</span>    qdp = betai - ep1 * sqep</span>
-<span class="line" id="P257"><span class="ln">257</span></span>
-<span class="line" id="P258"><span class="ln">258</span>    <span class='hc'># Internal energy temperature derivative (qut; <a class='fl' href='#L237-L260'>Fortran lines 237–260</a>).</span></span>
-<span class="line" id="P259"><span class="ln">259</span>    usum = <span class='hn'>0.0</span></span>
-<span class="line" id="P260"><span class="ln">260</span>    sx0qt = sx0qp = sx1qt = sx1qp = sx2qt = sx2qp = <span class='hn'>0.0</span></span>
-<span class="line" id="P261"><span class="ln">261</span>    <span class='hk'>if</span> <span class='hk'>not</span> lnohe:</span>
-<span class="line" id="P262"><span class="ln">262</span>        sx1qt = (r2t - c23 * sqet) / c22</span>
-<span class="line" id="P263"><span class="ln">263</span>        sx1qp = (r2p - c23 * sqep) / c22</span>
-<span class="line" id="P264"><span class="ln">264</span>        sx2qt = <span class='hn'>0.0</span></span>
-<span class="line" id="P265"><span class="ln">265</span>        sx2qp = <span class='hn'>0.0</span></span>
-<span class="line" id="P266"><span class="ln">266</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
-<span class="line" id="P267"><span class="ln">267</span>            sx2qt = (r1t - c12 * sx1qt - c13 * sqet) / c11</span>
-<span class="line" id="P268"><span class="ln">268</span>            sx2qp = (r1p - c12 * sx1qp - c13 * sqep) / c11</span>
-<span class="line" id="P269"><span class="ln">269</span>        sx0qt = -(sx1qt + sx2qt)                   <span class='hc'># label 34</span></span>
-<span class="line" id="P270"><span class="ln">270</span>        sx0qp = -(sx1qp + sx2qp)</span>
-<span class="line" id="P271"><span class="ln">271</span>        usum = fxhe * (sx1qt * SAHET0 + sx2qt * (SAHET0 + SAHET1))</span>
-<span class="line" id="P272"><span class="ln">272</span>    <span class='hk'>if</span> nz0 &gt; <span class='hn'>0</span>:                                    <span class='hc'># label 35</span></span>
-<span class="line" id="P273"><span class="ln">273</span>        stemp = <span class='hn'>2.50</span> + beta14 - ep1e * sqet</span>
-<span class="line" id="P274"><span class="ln">274</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(nz1, nz0 + <span class='hn'>1</span>):</span>
-<span class="line" id="P275"><span class="ln">275</span>            fxt[i] = fxs[i] * (stemp + sahatt[i])</span>
-<span class="line" id="P276"><span class="ln">276</span>            usum = usum + fxt[i] * SAHAT[i]</span>
-<span class="line" id="P277"><span class="ln">277</span>    betaut = <span class='hn'>0.75</span> * (<span class='hn'>2.0</span> + beta14)                 <span class='hc'># label 37</span></span>
-<span class="line" id="P278"><span class="ln">278</span>    ramu = c.cgas * amu</span>
-<span class="line" id="P279"><span class="ln">279</span>    qut = ramu * ((<span class='hn'>1.0</span> + e) * (betaut + <span class='hn'>3.0</span> * betai * beta14)</span>
-<span class="line" id="P280"><span class="ln">280</span>                  + betaut * sqet + usum * ti)</span>
-<span class="line" id="P281"><span class="ln">281</span></span>
-<span class="line" id="P282"><span class="ln">282</span>    <span class='hc'># Specific heat (qcp) and adiabatic gradient (dela; Fortran lines</span></span>
-<span class="line" id="P283"><span class="ln">283</span>    <span class='hc'># 262–267).</span></span>
-<span class="line" id="P284"><span class="ln">284</span>    pdt = p / (d * t)</span>
-<span class="line" id="P285"><span class="ln">285</span>    pdtq = pdt * qdt</span>
-<span class="line" id="P286"><span class="ln">286</span>    qcp = qut - pdtq</span>
-<span class="line" id="P287"><span class="ln">287</span>    qcpi = <span class='hn'>1.0</span> / qcp</span>
-<span class="line" id="P288"><span class="ln">288</span>    dela = -pdtq * qcpi</span>
-<span class="line" id="P289"><span class="ln">289</span>    <span class='hk'>if</span> <span class='hk'>not</span> lderiv:</span>
-<span class="line" id="P290"><span class="ln">290</span>        <span class='hk'>return</span> (dl, d, rmu, emu, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap,</span>
-<span class="line" id="P291"><span class="ln">291</span>                qcpt, qcpp, ksaha)                 <span class='hc'># go to 60</span></span>
-<span class="line" id="P292"><span class="ln">292</span></span>
-<span class="line" id="P293"><span class="ln">293</span>    <span class='hc'># Derivatives of qdt, qcp and dela: the second derivatives of E</span></span>
-<span class="line" id="P294"><span class="ln">294</span>    <span class='hc'># (<a class='fl' href='#L269-L311'>Fortran lines 269–311</a>).</span></span>
-<span class="line" id="P295"><span class="ln">295</span>    beta16 = <span class='hn'>4.0</span> * betai * beta14</span>
-<span class="line" id="P296"><span class="ln">296</span>    r3t = <span class='hn'>0.0</span></span>
-<span class="line" id="P297"><span class="ln">297</span>    r3p = <span class='hn'>0.0</span></span>
-<span class="line" id="P298"><span class="ln">298</span>    utsum = <span class='hn'>0.0</span></span>
-<span class="line" id="P299"><span class="ln">299</span>    upsum = <span class='hn'>0.0</span></span>
-<span class="line" id="P300"><span class="ln">300</span>    <span class='hk'>if</span> nz0 &gt; <span class='hn'>0</span>:</span>
-<span class="line" id="P301"><span class="ln">301</span>        etemp = (<span class='hn'>1.0</span> + e + e) / (e * (<span class='hn'>1.0</span> + e))**<span class='hn'>2</span></span>
-<span class="line" id="P302"><span class="ln">302</span>        stemp1 = <span class='hn'>2.5</span> + beta14 - sqet * ep1e</span>
-<span class="line" id="P303"><span class="ln">303</span>        stemp2 = -betai - sqep * ep1e</span>
-<span class="line" id="P304"><span class="ln">304</span>        stemp3 = etemp * sqep * sqet - betai * beta14</span>
-<span class="line" id="P305"><span class="ln">305</span>        stemp4 = etemp * sqet**<span class='hn'>2</span> + beta16</span>
-<span class="line" id="P306"><span class="ln">306</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(nz1, nz0 + <span class='hn'>1</span>):</span>
-<span class="line" id="P307"><span class="ln">307</span>            stemp5 = (stemp1 + sahatt[i]) * (<span class='hn'>1.0</span> - <span class='hn'>2.0</span> * sahax[i])</span>
-<span class="line" id="P308"><span class="ln">308</span>            stemp6 = fxs[i] * (stemp4 - sahatt[i]) + fxt[i] * stemp5</span>
-<span class="line" id="P309"><span class="ln">309</span>            r3t = r3t - stemp6</span>
-<span class="line" id="P310"><span class="ln">310</span>            utsum = utsum + SAHAT[i] * (stemp6 - fxt[i])</span>
-<span class="line" id="P311"><span class="ln">311</span>            stemp7 = fxs[i] * (stemp3 + stemp2 * stemp5)</span>
-<span class="line" id="P312"><span class="ln">312</span>            r3p = r3p - stemp7</span>
-<span class="line" id="P313"><span class="ln">313</span>            upsum = upsum + SAHAT[i] * stemp7</span>
-<span class="line" id="P314"><span class="ln">314</span>    <span class='hk'>if</span> <span class='hk'>not</span> lnohe:                                  <span class='hc'># label 42</span></span>
-<span class="line" id="P315"><span class="ln">315</span>        stemp = <span class='hn'>2.0</span> * sahex1 * ep1 * sqet</span>
-<span class="line" id="P316"><span class="ln">316</span>        r2t = (sahek0 * (sahex0 * (beta16 - SAHET0 * ti + sk0qt**<span class='hn'>2</span>)</span>
-<span class="line" id="P317"><span class="ln">317</span>                         + <span class='hn'>2.0</span> * sx0qt * sk0qt)</span>
-<span class="line" id="P318"><span class="ln">318</span>               + ep12 * (stemp * sqet - <span class='hn'>2.0</span> * sx1qt * sqet))</span>
-<span class="line" id="P319"><span class="ln">319</span>        r2p = (sahek0 * (sahex0 * betai * (-beta14 - sk0qt) + sx0qp * sk0qt</span>
-<span class="line" id="P320"><span class="ln">320</span>                         - betai * sx0qt)</span>
-<span class="line" id="P321"><span class="ln">321</span>               + ep12 * (stemp * sqep - sx1qp * sqet - sx1qt * sqep))</span>
-<span class="line" id="P322"><span class="ln">322</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
-<span class="line" id="P323"><span class="ln">323</span>            stemp = <span class='hn'>2.0</span> * sahex2 * ep1 * sqet</span>
-<span class="line" id="P324"><span class="ln">324</span>            r1t = (sahek1 * (sahex1 * (beta16 - SAHET1 * ti + sk1qt**<span class='hn'>2</span>)</span>
-<span class="line" id="P325"><span class="ln">325</span>                             + <span class='hn'>2.0</span> * sx1qt * sk1qt)</span>
-<span class="line" id="P326"><span class="ln">326</span>                   + ep12 * (stemp * sqet - <span class='hn'>2.0</span> * sx2qt * sqet))</span>
-<span class="line" id="P327"><span class="ln">327</span>            r1p = (sahek1 * (sahex1 * betai * (-beta14 - sk1qt)</span>
-<span class="line" id="P328"><span class="ln">328</span>                             + sx1qp * sk1qt - betai * sx1qt)</span>
-<span class="line" id="P329"><span class="ln">329</span>                   + ep12 * (stemp * sqep - sx2qp * sqet - sx2qt * sqep))</span>
-<span class="line" id="P330"><span class="ln">330</span>            r2t = r2t + cr12 * r1t</span>
-<span class="line" id="P331"><span class="ln">331</span>            r2p = r2p + cr12 * r1p</span>
-<span class="line" id="P332"><span class="ln">332</span>            r3p = r3p + cr13 * r1p</span>
-<span class="line" id="P333"><span class="ln">333</span>            r3t = r3t + cr13 * r1t</span>
-<span class="line" id="P334"><span class="ln">334</span>        r3p = r3p + cr23 * r2p                     <span class='hc'># label 43</span></span>
-<span class="line" id="P335"><span class="ln">335</span>        r3t = r3t + cr23 * r2t</span>
-<span class="line" id="P336"><span class="ln">336</span>    sqett = r3t / c33                              <span class='hc'># label 44</span></span>
-<span class="line" id="P337"><span class="ln">337</span>    sqetp = r3p / c33</span>
-<span class="line" id="P338"><span class="ln">338</span></span>
-<span class="line" id="P339"><span class="ln">339</span>    <span class='hc'># <a class='fl' href='#L312-L343'>Fortran lines 312–343</a>.</span></span>
-<span class="line" id="P340"><span class="ln">340</span>    qdtt = -beta16 + (ep1 * sqet)**<span class='hn'>2</span> - ep1 * sqett</span>
-<span class="line" id="P341"><span class="ln">341</span>    qdtp = betai * beta14 + ep12 * sqet * sqep - ep1 * sqetp</span>
+<span class="line" id="P60"><span class="ln">60</span></span>
+<span class="line" id="P61"><span class="ln">61</span><span class='hc'># --- Utilities (each routine its own copies) --------------------------------------------------------------------</span></span>
+<span class="line" id="P62"><span class="ln">62</span></span>
+<span class="line" id="P63"><span class="ln">63</span></span>
+<span class="line" id="P64"><span class="ln">64</span><span class='hk'>def</span> eqsaha_saha_k(tl: <span class='hb'>float</span>, pl: <span class='hb'>float</span>, ti: <span class='hb'>float</span>, betai: <span class='hb'>float</span>, cln: <span class='hb'>float</span>, cmkh: <span class='hb'>float</span>, sahatt: np.ndarray,</span>
+<span class="line" id="P65"><span class="ln">65</span>                  sahak: np.ndarray) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>int</span>, <span class='hb'>int</span>]:</span>
+<span class="line" id="P66"><span class="ln">66</span>    <span class='hs'>&quot;&quot;&quot;The Saha K&#x27;s of the 11 species (loop 11, Fortran lines 63–77), in the order of increasing ionization</span></span>
+<span class="line" id="P67"><span class="ln">67</span><span class='hs'>    temperature.</span></span>
+<span class="line" id="P68"><span class="ln">68</span></span>
+<span class="line" id="P69"><span class="ln">69</span><span class='hs'>    The first species with an exponent below -STOL ends the list: it and all later ones count as neutral. Above</span></span>
+<span class="line" id="P70"><span class="ln">70</span><span class='hs'>    +STOL, the species is fully ionized (K = K_FULL) and left out of the derivative sums (NZ1).</span></span>
+<span class="line" id="P71"><span class="ln">71</span></span>
+<span class="line" id="P72"><span class="ln">72</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P73"><span class="ln">73</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P74"><span class="ln">74</span><span class='hs'>    tl, pl : float</span></span>
+<span class="line" id="P75"><span class="ln">75</span><span class='hs'>        log10 T and log10 P.</span></span>
+<span class="line" id="P76"><span class="ln">76</span><span class='hs'>    ti : float</span></span>
+<span class="line" id="P77"><span class="ln">77</span><span class='hs'>        1/T.</span></span>
+<span class="line" id="P78"><span class="ln">78</span><span class='hs'>    betai : float</span></span>
+<span class="line" id="P79"><span class="ln">79</span><span class='hs'>        1/beta.</span></span>
+<span class="line" id="P80"><span class="ln">80</span><span class='hs'>    cln, cmkh : float</span></span>
+<span class="line" id="P81"><span class="ln">81</span><span class='hs'>        constants_mod&#x27;s ln 10 and its Saha constant (module variables, passed in).</span></span>
+<span class="line" id="P82"><span class="ln">82</span><span class='hs'>    sahatt, sahak : np.ndarray, shape: `(NZ + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P83"><span class="ln">83</span><span class='hs'>        Filled in place up to the first neutral species: chi/kT and K.</span></span>
+<span class="line" id="P84"><span class="ln">84</span></span>
+<span class="line" id="P85"><span class="ln">85</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P86"><span class="ln">86</span><span class='hs'>    -------</span></span>
+<span class="line" id="P87"><span class="ln">87</span><span class='hs'>    stemp, nz0, nz1 : float, int, int</span></span>
+<span class="line" id="P88"><span class="ln">88</span><span class='hs'>        2.5 log T - log P + CMKH; the last species not neutral; the first not fully ionized (at most NZ).</span></span>
+<span class="line" id="P89"><span class="ln">89</span></span>
+<span class="line" id="P90"><span class="ln">90</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P91"><span class="ln">91</span>    stemp = <span class='hn'>2.50</span> * tl - pl + cmkh</span>
+<span class="line" id="P92"><span class="ln">92</span>    nz1 = <span class='hn'>1</span></span>
+<span class="line" id="P93"><span class="ln">93</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, NZ + <span class='hn'>1</span>):</span>
+<span class="line" id="P94"><span class="ln">94</span>        sahatt[i] = SAHAT[i] * ti</span>
+<span class="line" id="P95"><span class="ln">95</span>        sahak[i] = cln * (SAHAU[i] + stemp) - sahatt[i]</span>
+<span class="line" id="P96"><span class="ln">96</span>        <span class='hk'>if</span> sahak[i] &lt; -STOL:</span>
+<span class="line" id="P97"><span class="ln">97</span>            <span class='hk'>break</span>                                  <span class='hc'># go to 12</span></span>
+<span class="line" id="P98"><span class="ln">98</span>        <span class='hk'>if</span> sahak[i] &gt; +STOL:</span>
+<span class="line" id="P99"><span class="ln">99</span>            sahak[i] = K_FULL                      <span class='hc'># label 10</span></span>
+<span class="line" id="P100"><span class="ln">100</span>            nz1 = i + <span class='hn'>1</span></span>
+<span class="line" id="P101"><span class="ln">101</span>            <span class='hk'>continue</span></span>
+<span class="line" id="P102"><span class="ln">102</span>        sahak[i] = betai * math.exp(sahak[i])</span>
+<span class="line" id="P103"><span class="ln">103</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P104"><span class="ln">104</span>        i = NZ + <span class='hn'>1</span></span>
+<span class="line" id="P105"><span class="ln">105</span>    nz0 = i - <span class='hn'>1</span>                                    <span class='hc'># label 12</span></span>
+<span class="line" id="P106"><span class="ln">106</span>    nz1 = <span class='hb'>min</span>(NZ, nz1)</span>
+<span class="line" id="P107"><span class="ln">107</span>    <span class='hk'>return</span> stemp, nz0, nz1</span>
+<span class="line" id="P108"><span class="ln">108</span></span>
+<span class="line" id="P109"><span class="ln">109</span></span>
+<span class="line" id="P110"><span class="ln">110</span><span class='hk'>def</span> eqsaha_helium_k(fxhe: <span class='hb'>float</span>, stemp: <span class='hb'>float</span>, t: <span class='hb'>float</span>, betai: <span class='hb'>float</span>, cln: <span class='hb'>float</span>, sahek0: <span class='hb'>float</span>, sahek1: <span class='hb'>float</span>,</span>
+<span class="line" id="P111"><span class="ln">111</span>                    sahex1: <span class='hb'>float</span>, sahex2: <span class='hb'>float</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>bool</span>, <span class='hb'>bool</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>]:</span>
+<span class="line" id="P112"><span class="ln">112</span>    <span class='hs'>&quot;&quot;&quot;The Saha K&#x27;s of He and He+ (Fortran lines 78–92).</span></span>
+<span class="line" id="P113"><span class="ln">113</span></span>
+<span class="line" id="P114"><span class="ln">114</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P115"><span class="ln">115</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P116"><span class="ln">116</span><span class='hs'>    fxhe : float</span></span>
+<span class="line" id="P117"><span class="ln">117</span><span class='hs'>        The helium number fraction FX(12).</span></span>
+<span class="line" id="P118"><span class="ln">118</span><span class='hs'>    stemp : float</span></span>
+<span class="line" id="P119"><span class="ln">119</span><span class='hs'>        From eqsaha_saha_k.</span></span>
+<span class="line" id="P120"><span class="ln">120</span><span class='hs'>    t, betai : float</span></span>
+<span class="line" id="P121"><span class="ln">121</span><span class='hs'>        T and 1/beta.</span></span>
+<span class="line" id="P122"><span class="ln">122</span><span class='hs'>    cln : float</span></span>
+<span class="line" id="P123"><span class="ln">123</span><span class='hs'>        constants_mod.cln.</span></span>
+<span class="line" id="P124"><span class="ln">124</span><span class='hs'>    sahek0, sahek1 : float</span></span>
+<span class="line" id="P125"><span class="ln">125</span><span class='hs'>        Their values before (returned unchanged where the Fortran does not set them).</span></span>
+<span class="line" id="P126"><span class="ln">126</span><span class='hs'>    sahex1, sahex2 : float</span></span>
+<span class="line" id="P127"><span class="ln">127</span><span class='hs'>        The He+ and He++ fractions before (the starting guess).</span></span>
+<span class="line" id="P128"><span class="ln">128</span></span>
+<span class="line" id="P129"><span class="ln">129</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P130"><span class="ln">130</span><span class='hs'>    -------</span></span>
+<span class="line" id="P131"><span class="ln">131</span><span class='hs'>    lnohe, lnohe2, sahek0, sahek1, sahex1, sahex2 : bool, bool, float, float, float, float</span></span>
+<span class="line" id="P132"><span class="ln">132</span><span class='hs'>        Whether helium is neutral, and whether it has no He++; the two K&#x27;s; the fractions, set to 0 where helium</span></span>
+<span class="line" id="P133"><span class="ln">133</span><span class='hs'>        is neutral (both) or not doubly ionized (sahex2).</span></span>
+<span class="line" id="P134"><span class="ln">134</span></span>
+<span class="line" id="P135"><span class="ln">135</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P136"><span class="ln">136</span>    lnohe = <span class='hk'>True</span></span>
+<span class="line" id="P137"><span class="ln">137</span>    lnohe2 = <span class='hk'>True</span></span>
+<span class="line" id="P138"><span class="ln">138</span>    <span class='hk'>if</span> fxhe &lt; FXHE_MIN:</span>
+<span class="line" id="P139"><span class="ln">139</span>        sahex1 = <span class='hn'>0.0</span>                               <span class='hc'># label 13</span></span>
+<span class="line" id="P140"><span class="ln">140</span>        sahex2 = <span class='hn'>0.0</span>                               <span class='hc'># label 14</span></span>
+<span class="line" id="P141"><span class="ln">141</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P142"><span class="ln">142</span>        sahek0 = cln * (SAHAU[<span class='hn'>12</span>] + stemp) - SAHET0 / t</span>
+<span class="line" id="P143"><span class="ln">143</span>        <span class='hk'>if</span> sahek0 &lt; -STOL:</span>
+<span class="line" id="P144"><span class="ln">144</span>            sahex1 = <span class='hn'>0.0</span></span>
+<span class="line" id="P145"><span class="ln">145</span>            sahex2 = <span class='hn'>0.0</span></span>
+<span class="line" id="P146"><span class="ln">146</span>        <span class='hk'>else</span>:</span>
+<span class="line" id="P147"><span class="ln">147</span>            lnohe = <span class='hk'>False</span></span>
+<span class="line" id="P148"><span class="ln">148</span>            sahek0 = betai * math.exp(sahek0)</span>
+<span class="line" id="P149"><span class="ln">149</span>            sahek1 = cln * (SAHAU[<span class='hn'>13</span>] + stemp) - SAHET1 / t</span>
+<span class="line" id="P150"><span class="ln">150</span>            <span class='hk'>if</span> sahek1 &lt; -STOL:</span>
+<span class="line" id="P151"><span class="ln">151</span>                sahex2 = <span class='hn'>0.0</span></span>
+<span class="line" id="P152"><span class="ln">152</span>            <span class='hk'>else</span>:</span>
+<span class="line" id="P153"><span class="ln">153</span>                lnohe2 = <span class='hk'>False</span></span>
+<span class="line" id="P154"><span class="ln">154</span>                sahek1 = betai * math.exp(sahek1)</span>
+<span class="line" id="P155"><span class="ln">155</span>    <span class='hk'>return</span> lnohe, lnohe2, sahek0, sahek1, sahex1, sahex2</span>
+<span class="line" id="P156"><span class="ln">156</span></span>
+<span class="line" id="P157"><span class="ln">157</span></span>
+<span class="line" id="P158"><span class="ln">158</span>_eqsaha_saha_k_nb = accel.njit(eqsaha_saha_k, _nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P159"><span class="ln">159</span>_eqsaha_helium_k_nb = accel.njit(eqsaha_helium_k, _nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P160"><span class="ln">160</span></span>
+<span class="line" id="P161"><span class="ln">161</span></span>
+<span class="line" id="P162"><span class="ln">162</span><span class='hk'>def</span> eqsaha(fx: np.ndarray, tl: <span class='hb'>float</span>, t: <span class='hb'>float</span>, pl: <span class='hb'>float</span>, p: <span class='hb'>float</span>, dl: <span class='hb'>float</span>, d: <span class='hb'>float</span>, beta: <span class='hb'>float</span>, betai: <span class='hb'>float</span>,</span>
+<span class="line" id="P163"><span class="ln">163</span>           beta14: <span class='hb'>float</span>, fxion: np.ndarray, rmu: <span class='hb'>float</span>, amu: <span class='hb'>float</span>, emu: <span class='hb'>float</span>, lderiv: <span class='hb'>bool</span>, latmo: <span class='hb'>bool</span>, qdt: <span class='hb'>float</span>,</span>
+<span class="line" id="P164"><span class="ln">164</span>           qdp: <span class='hb'>float</span>, qcp: <span class='hb'>float</span>, dela: <span class='hb'>float</span>, qdtt: <span class='hb'>float</span>, qdtp: <span class='hb'>float</span>, qat: <span class='hb'>float</span>, qap: <span class='hb'>float</span>, qcpt: <span class='hb'>float</span>,</span>
+<span class="line" id="P165"><span class="ln">165</span>           qcpp: <span class='hb'>float</span>, ksaha: <span class='hb'>int</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>,</span>
+<span class="line" id="P166"><span class="ln">166</span>           <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>int</span>]:</span>
+<span class="line" id="P167"><span class="ln">167</span>    <span class='hs'>&quot;&quot;&quot;Solve the Saha equations for hydrogen, helium (two stages), and ten metals by Newton iteration on the</span></span>
+<span class="line" id="P168"><span class="ln">168</span><span class='hs'>    electrons per atom, and return the density, the ionization fractions, and the thermodynamic derivatives.</span></span>
+<span class="line" id="P169"><span class="ln">169</span></span>
+<span class="line" id="P170"><span class="ln">170</span><span class='hs'>    Translates: eqsaha.f#EQSAHA (7be4133)</span></span>
+<span class="line" id="P171"><span class="ln">171</span></span>
+<span class="line" id="P172"><span class="ln">172</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P173"><span class="ln">173</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P174"><span class="ln">174</span><span class='hs'>    fx : np.ndarray, shape: `(13,)`, dtype: ``float64``</span></span>
+<span class="line" id="P175"><span class="ln">175</span><span class='hs'>        The number fractions of the 12 species (index 0 unused).</span></span>
+<span class="line" id="P176"><span class="ln">176</span><span class='hs'>    tl, t, pl, p : float</span></span>
+<span class="line" id="P177"><span class="ln">177</span><span class='hs'>        log10 T, T, log10 P, and P.</span></span>
+<span class="line" id="P178"><span class="ln">178</span><span class='hs'>    dl, d, rmu, emu, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap, qcpt, qcpp : float</span></span>
+<span class="line" id="P179"><span class="ln">179</span><span class='hs'>        Set (passed in with any value).</span></span>
+<span class="line" id="P180"><span class="ln">180</span><span class='hs'>    beta, betai, beta14 : float</span></span>
+<span class="line" id="P181"><span class="ln">181</span><span class='hs'>        P_gas/P, 1/beta, and eqstat2&#x27;s 4 (1 - beta)/beta.</span></span>
+<span class="line" id="P182"><span class="ln">182</span><span class='hs'>    fxion : np.ndarray, shape: `(4,)`, dtype: ``float64``</span></span>
+<span class="line" id="P183"><span class="ln">183</span><span class='hs'>        Changed in place: the H+, He+, He++ fractions (index 0 unused).</span></span>
+<span class="line" id="P184"><span class="ln">184</span><span class='hs'>    amu : float</span></span>
+<span class="line" id="P185"><span class="ln">185</span><span class='hs'>        The ions&#x27; term.</span></span>
+<span class="line" id="P186"><span class="ln">186</span><span class='hs'>    lderiv : bool</span></span>
+<span class="line" id="P187"><span class="ln">187</span><span class='hs'>        Also the second derivatives.</span></span>
+<span class="line" id="P188"><span class="ln">188</span><span class='hs'>    latmo : bool</span></span>
+<span class="line" id="P189"><span class="ln">189</span><span class='hs'>        Skip the derivatives.</span></span>
+<span class="line" id="P190"><span class="ln">190</span><span class='hs'>    ksaha : int</span></span>
+<span class="line" id="P191"><span class="ln">191</span><span class='hs'>        The caller&#x27;s iteration counter.</span></span>
+<span class="line" id="P192"><span class="ln">192</span></span>
+<span class="line" id="P193"><span class="ln">193</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P194"><span class="ln">194</span><span class='hs'>    -------</span></span>
+<span class="line" id="P195"><span class="ln">195</span><span class='hs'>    tuple</span></span>
+<span class="line" id="P196"><span class="ln">196</span><span class='hs'>        (dl, d, rmu, emu, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap, qcpt, qcpp, ksaha). With latmo, qdt ... qcpp</span></span>
+<span class="line" id="P197"><span class="ln">197</span><span class='hs'>        are returned as passed in; without lderiv, qdtt ... qcpp are.</span></span>
+<span class="line" id="P198"><span class="ln">198</span></span>
+<span class="line" id="P199"><span class="ln">199</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P200"><span class="ln">200</span></span>
+<span class="line" id="P201"><span class="ln">201</span>    c = constants_mod</span>
+<span class="line" id="P202"><span class="ln">202</span>    <span class='hk'>if</span> accel.USE_NUMBA:</span>
+<span class="line" id="P203"><span class="ln">203</span>        r = _eqsaha_nb(fx, tl, t, pl, p, dl, d, beta, betai, beta14, fxion, rmu, amu, emu, lderiv, latmo, qdt, qdp,</span>
+<span class="line" id="P204"><span class="ln">204</span>                       qcp, dela, qdtt, qdtp, qat, qap, qcpt, qcpp, ksaha, sv, c.cgas, c.cln, c.cmkh, _wk, _fail)</span>
+<span class="line" id="P205"><span class="ln">205</span>        <span class='hk'>if</span> _fail[<span class='hn'>0</span>] != <span class='hn'>0.0</span>:</span>
+<span class="line" id="P206"><span class="ln">206</span>            _failure(tl, pl)</span>
+<span class="line" id="P207"><span class="ln">207</span>        <span class='hk'>return</span> r</span>
+<span class="line" id="P208"><span class="ln">208</span>    e, sahex1, sahex2 = <span class='hb'>float</span>(sv[<span class='hn'>0</span>]), <span class='hb'>float</span>(sv[<span class='hn'>1</span>]), <span class='hb'>float</span>(sv[<span class='hn'>2</span>])</span>
+<span class="line" id="P209"><span class="ln">209</span>    sahatt = np.zeros(NZ + <span class='hn'>1</span>)</span>
+<span class="line" id="P210"><span class="ln">210</span>    sahak = np.zeros(NZ + <span class='hn'>1</span>)</span>
+<span class="line" id="P211"><span class="ln">211</span>    sahax = np.zeros(NZ + <span class='hn'>1</span>)</span>
+<span class="line" id="P212"><span class="ln">212</span>    fxs = np.zeros(NZ + <span class='hn'>1</span>)</span>
+<span class="line" id="P213"><span class="ln">213</span>    fxt = np.zeros(NZ + <span class='hn'>1</span>)</span>
+<span class="line" id="P214"><span class="ln">214</span></span>
+<span class="line" id="P215"><span class="ln">215</span>    <span class='hc'># <a class='fl' href='#L58-L60'>Fortran lines 58–60</a>.</span></span>
+<span class="line" id="P216"><span class="ln">216</span>    fxhe = fx[<span class='hn'>12</span>]</span>
+<span class="line" id="P217"><span class="ln">217</span>    emax = <span class='hn'>1.0</span> + fxhe</span>
+<span class="line" id="P218"><span class="ln">218</span>    ti = <span class='hn'>1.0</span> / t</span>
+<span class="line" id="P219"><span class="ln">219</span></span>
+<span class="line" id="P220"><span class="ln">220</span>    <span class='hc'># The Saha K&#x27;s of the 11 species (<a class='fl' href='#L63-L77'>Fortran lines 63–77</a>).</span></span>
+<span class="line" id="P221"><span class="ln">221</span>    stemp, nz0, nz1 = eqsaha_saha_k(tl, pl, ti, betai, c.cln, c.cmkh, sahatt, sahak)</span>
+<span class="line" id="P222"><span class="ln">222</span></span>
+<span class="line" id="P223"><span class="ln">223</span>    <span class='hc'># Helium: neutral (lnohe), or no He++ (lnohe2) (<a class='fl' href='#L78-L92'>Fortran lines 78–92</a>).</span></span>
+<span class="line" id="P224"><span class="ln">224</span>    lnohe, lnohe2, sahek0, sahek1, sahex1, sahex2 = eqsaha_helium_k(fxhe, stemp, t, betai, c.cln, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, sahex1,</span>
+<span class="line" id="P225"><span class="ln">225</span>                                                                    sahex2)</span>
+<span class="line" id="P226"><span class="ln">226</span></span>
+<span class="line" id="P227"><span class="ln">227</span>    <span class='hc'># Newton iterations for e, sahex1, sahex2 (the 3x3 system reduced by</span></span>
+<span class="line" id="P228"><span class="ln">228</span>    <span class='hc'># hand; <a class='fl' href='#L94-L192'>Fortran lines 94–192</a>).</span></span>
+<span class="line" id="P229"><span class="ln">229</span>    cr12 = cr13 = cr23 = <span class='hn'>0.0</span></span>
+<span class="line" id="P230"><span class="ln">230</span>    c11 = c12 = c13 = c22 = c23 = <span class='hn'>0.0</span></span>
+<span class="line" id="P231"><span class="ln">231</span>    r1 = r2 = <span class='hn'>0.0</span></span>
+<span class="line" id="P232"><span class="ln">232</span>    <span class='hk'>for</span> isaha <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, MAXS + <span class='hn'>1</span>):</span>
+<span class="line" id="P233"><span class="ln">233</span>        ksaha = ksaha + <span class='hn'>1</span></span>
+<span class="line" id="P234"><span class="ln">234</span>        ep1 = <span class='hn'>1.0</span> / (<span class='hn'>1.0</span> + e)</span>
+<span class="line" id="P235"><span class="ln">235</span>        ep1e = ep1 / e</span>
+<span class="line" id="P236"><span class="ln">236</span>        ep12 = ep1 * ep1</span>
+<span class="line" id="P237"><span class="ln">237</span>        eep1 = e * ep1</span>
+<span class="line" id="P238"><span class="ln">238</span>        c33 = -e * (<span class='hn'>1.0</span> + e)</span>
+<span class="line" id="P239"><span class="ln">239</span>        r3 = e</span>
+<span class="line" id="P240"><span class="ln">240</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nz0 + <span class='hn'>1</span>):</span>
+<span class="line" id="P241"><span class="ln">241</span>            div = <span class='hn'>1.0</span> / (sahak[i] + eep1)</span>
+<span class="line" id="P242"><span class="ln">242</span>            temp8 = sahak[i] * div</span>
+<span class="line" id="P243"><span class="ln">243</span>            sahax[i] = temp8</span>
+<span class="line" id="P244"><span class="ln">244</span>            temp8 = temp8 * fx[i]</span>
+<span class="line" id="P245"><span class="ln">245</span>            r3 = r3 - temp8</span>
+<span class="line" id="P246"><span class="ln">246</span>            temp8 = temp8 * eep1 * div</span>
+<span class="line" id="P247"><span class="ln">247</span>            c33 = c33 - temp8</span>
+<span class="line" id="P248"><span class="ln">248</span>            fxs[i] = temp8</span>
+<span class="line" id="P249"><span class="ln">249</span>        c33 = c33 * ep1e                           <span class='hc'># label 22</span></span>
+<span class="line" id="P250"><span class="ln">250</span>        r3 = r3 - fxhe * (sahex1 + sahex2 + sahex2)</span>
+<span class="line" id="P251"><span class="ln">251</span>        lfin = <span class='hb'>abs</span>(r3) &lt; STOLEE</span>
+<span class="line" id="P252"><span class="ln">252</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe:</span>
+<span class="line" id="P253"><span class="ln">253</span>            c22 = sahek0 + eep1</span>
+<span class="line" id="P254"><span class="ln">254</span>            c23 = sahex1 * ep12</span>
+<span class="line" id="P255"><span class="ln">255</span>            c32 = fxhe</span>
+<span class="line" id="P256"><span class="ln">256</span>            r2 = sahek0 * (<span class='hn'>1.0</span> - sahex1 - sahex2) - sahex1 * eep1</span>
+<span class="line" id="P257"><span class="ln">257</span>            <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
+<span class="line" id="P258"><span class="ln">258</span>                c11 = eep1</span>
+<span class="line" id="P259"><span class="ln">259</span>                c12 = -sahek1</span>
+<span class="line" id="P260"><span class="ln">260</span>                c13 = sahex2 * ep12</span>
+<span class="line" id="P261"><span class="ln">261</span>                c21 = sahek0</span>
+<span class="line" id="P262"><span class="ln">262</span>                c31 = <span class='hn'>2.0</span> * fxhe</span>
+<span class="line" id="P263"><span class="ln">263</span>                r1 = sahex1 * sahek1 - sahex2 * eep1</span>
+<span class="line" id="P264"><span class="ln">264</span>                <span class='hc'># Reduction of the Saha matrix to diagonal form.</span></span>
+<span class="line" id="P265"><span class="ln">265</span>                cr12 = -c21 / c11</span>
+<span class="line" id="P266"><span class="ln">266</span>                cr13 = -c31 / c11</span>
+<span class="line" id="P267"><span class="ln">267</span>                c22 = c22 + cr12 * c12</span>
+<span class="line" id="P268"><span class="ln">268</span>                c32 = c32 + cr13 * c12</span>
+<span class="line" id="P269"><span class="ln">269</span>                c23 = c23 + cr12 * c13</span>
+<span class="line" id="P270"><span class="ln">270</span>                c33 = c33 + cr13 * c13</span>
+<span class="line" id="P271"><span class="ln">271</span>                <span class='hc'># Products below 1e-38 are skipped (an old underflow guard).</span></span>
+<span class="line" id="P272"><span class="ln">272</span>                <span class='hk'>if</span> r1 != <span class='hn'>0.0</span>:</span>
+<span class="line" id="P273"><span class="ln">273</span>                    r1l = math.log10(<span class='hb'>abs</span>(r1))</span>
+<span class="line" id="P274"><span class="ln">274</span>                    <span class='hk'>if</span> cr12 != <span class='hn'>0.0</span>:</span>
+<span class="line" id="P275"><span class="ln">275</span>                        fact = math.log10(<span class='hb'>abs</span>(cr12)) + r1l</span>
+<span class="line" id="P276"><span class="ln">276</span>                        <span class='hk'>if</span> <span class='hk'>not</span> fact &lt; UNDERFLOW_LOG:</span>
+<span class="line" id="P277"><span class="ln">277</span>                            r2 = r2 + cr12 * r1</span>
+<span class="line" id="P278"><span class="ln">278</span>                    <span class='hk'>if</span> cr13 != <span class='hn'>0.0</span>:                <span class='hc'># label 200</span></span>
+<span class="line" id="P279"><span class="ln">279</span>                        fact = math.log10(<span class='hb'>abs</span>(cr13)) + r1l</span>
+<span class="line" id="P280"><span class="ln">280</span>                        <span class='hk'>if</span> <span class='hk'>not</span> fact &lt; UNDERFLOW_LOG:</span>
+<span class="line" id="P281"><span class="ln">281</span>                            r3 = r3 + cr13 * r1</span>
+<span class="line" id="P282"><span class="ln">282</span>            <span class='hc'># label 23: entry for no fully ionized helium</span></span>
+<span class="line" id="P283"><span class="ln">283</span>            cr23 = -c32 / c22</span>
+<span class="line" id="P284"><span class="ln">284</span>            c33 = c33 + cr23 * c23</span>
+<span class="line" id="P285"><span class="ln">285</span>            r3 = r3 + cr23 * r2</span>
+<span class="line" id="P286"><span class="ln">286</span>        <span class='hc'># label 25: entry for neutral helium</span></span>
+<span class="line" id="P287"><span class="ln">287</span>        delte = r3 / c33</span>
+<span class="line" id="P288"><span class="ln">288</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe:</span>
+<span class="line" id="P289"><span class="ln">289</span>            deltx1 = (r2 - c23 * delte) / c22</span>
+<span class="line" id="P290"><span class="ln">290</span>            sahex1 = sahex1 + deltx1</span>
+<span class="line" id="P291"><span class="ln">291</span>            sahex1 = <span class='hb'>max</span>(<span class='hn'>0.0</span>, <span class='hb'>min</span>(<span class='hn'>1.0</span>, sahex1))</span>
+<span class="line" id="P292"><span class="ln">292</span>            <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
+<span class="line" id="P293"><span class="ln">293</span>                <span class='hc'># Products below 1e-38 are replaced by +-1e-38 (&quot;statement</span></span>
+<span class="line" id="P294"><span class="ln">294</span>                <span class='hc'># recalculated for DEC-20 system&quot;).</span></span>
+<span class="line" id="P295"><span class="ln">295</span>                fact1 = c12 * deltx1               <span class='hc'># label 100</span></span>
+<span class="line" id="P296"><span class="ln">296</span>                <span class='hk'>if</span> c12 != <span class='hn'>0.0</span> <span class='hk'>and</span> deltx1 != <span class='hn'>0.0</span>:</span>
+<span class="line" id="P297"><span class="ln">297</span>                    <span class='hk'>if</span> math.log10(<span class='hb'>abs</span>(c12)) + math.log10(<span class='hb'>abs</span>(deltx1)) &lt; UNDERFLOW_LOG:</span>
+<span class="line" id="P298"><span class="ln">298</span>                        fact1 = (math.exp(c.cln * UNDERFLOW_LOG)</span>
+<span class="line" id="P299"><span class="ln">299</span>                                 * math.copysign(<span class='hn'>1.0</span>, c12)</span>
+<span class="line" id="P300"><span class="ln">300</span>                                 * math.copysign(<span class='hn'>1.0</span>, deltx1))</span>
+<span class="line" id="P301"><span class="ln">301</span>                fact2 = c13 * delte                <span class='hc'># label 110</span></span>
+<span class="line" id="P302"><span class="ln">302</span>                <span class='hk'>if</span> c13 != <span class='hn'>0.0</span> <span class='hk'>and</span> delte != <span class='hn'>0.0</span>:</span>
+<span class="line" id="P303"><span class="ln">303</span>                    <span class='hk'>if</span> math.log10(<span class='hb'>abs</span>(c13)) + math.log10(<span class='hb'>abs</span>(delte)) &lt; UNDERFLOW_LOG:</span>
+<span class="line" id="P304"><span class="ln">304</span>                        fact2 = (math.exp(c.cln * UNDERFLOW_LOG)</span>
+<span class="line" id="P305"><span class="ln">305</span>                                 * math.copysign(<span class='hn'>1.0</span>, c13)</span>
+<span class="line" id="P306"><span class="ln">306</span>                                 * math.copysign(<span class='hn'>1.0</span>, delte))</span>
+<span class="line" id="P307"><span class="ln">307</span>                deltx2 = (r1 - fact1 - fact2) / c11</span>
+<span class="line" id="P308"><span class="ln">308</span>                sahex2 = sahex2 + deltx2</span>
+<span class="line" id="P309"><span class="ln">309</span>                sahex2 = <span class='hb'>max</span>(<span class='hn'>0.0</span>, <span class='hb'>min</span>(<span class='hn'>1.0</span>, sahex2))</span>
+<span class="line" id="P310"><span class="ln">310</span>        e = e + delte                              <span class='hc'># label 26</span></span>
+<span class="line" id="P311"><span class="ln">311</span>        e = <span class='hb'>max</span>(E_MIN, <span class='hb'>min</span>(emax, e))</span>
+<span class="line" id="P312"><span class="ln">312</span>        lfin = lfin <span class='hk'>and</span> <span class='hb'>abs</span>(delte) &lt; STOLEE</span>
+<span class="line" id="P313"><span class="ln">313</span>        <span class='hk'>if</span> lfin:</span>
+<span class="line" id="P314"><span class="ln">314</span>            <span class='hk'>break</span>                                  <span class='hc'># go to 29</span></span>
+<span class="line" id="P315"><span class="ln">315</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P316"><span class="ln">316</span>        <span class='hc'># Question (see the page): the run goes on with the unconverged e.</span></span>
+<span class="line" id="P317"><span class="ln">317</span>        iounits_mod.write(iounits_mod.ishort,</span>
+<span class="line" id="P318"><span class="ln">318</span>                          <span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'> -----SAHA FAILURE (TL,PL)=</span><span class='hs'>{</span>tl<span class='hs'>:</span><span class='hs'>10.6f</span><span class='hs'>}</span><span class='hs'>{</span>pl<span class='hs'>:</span><span class='hs'>10.6f</span><span class='hs'>}</span><span class='hs'>&quot;</span></span>
+<span class="line" id="P319"><span class="ln">319</span>                          <span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'>  (E,DE)=</span><span class='hs'>{</span>e<span class='hs'>:</span><span class='hs'>20.12f</span><span class='hs'>}</span><span class='hs'>{</span>delte<span class='hs'>:</span><span class='hs'>20.12f</span><span class='hs'>}</span><span class='hs'>&quot;</span>)  <span class='hc'># format 99</span></span>
+<span class="line" id="P320"><span class="ln">320</span></span>
+<span class="line" id="P321"><span class="ln">321</span>    sv[<span class='hn'>0</span>], sv[<span class='hn'>1</span>], sv[<span class='hn'>2</span>] = e, sahex1, sahex2</span>
+<span class="line" id="P322"><span class="ln">322</span></span>
+<span class="line" id="P323"><span class="ln">323</span>    <span class='hc'># label 29: the system has been solved for e (<a class='fl' href='#L194-L202'>Fortran lines 194–202</a>).</span></span>
+<span class="line" id="P324"><span class="ln">324</span>    emu = e * amu</span>
+<span class="line" id="P325"><span class="ln">325</span>    rmu = c.cgas * (emu + amu)</span>
+<span class="line" id="P326"><span class="ln">326</span>    d = beta * p / (rmu * t)</span>
+<span class="line" id="P327"><span class="ln">327</span>    dl = math.log10(d)</span>
+<span class="line" id="P328"><span class="ln">328</span>    fxion[<span class='hn'>1</span>] = <span class='hn'>0.0</span></span>
+<span class="line" id="P329"><span class="ln">329</span>    <span class='hk'>if</span> nz0 &gt;= <span class='hn'>7</span>:</span>
+<span class="line" id="P330"><span class="ln">330</span>        fxion[<span class='hn'>1</span>] = sahax[<span class='hn'>7</span>]                        <span class='hc'># hydrogen is species 7</span></span>
+<span class="line" id="P331"><span class="ln">331</span>    fxion[<span class='hn'>2</span>] = sahex1</span>
+<span class="line" id="P332"><span class="ln">332</span>    fxion[<span class='hn'>3</span>] = sahex2</span>
+<span class="line" id="P333"><span class="ln">333</span>    <span class='hk'>if</span> latmo:</span>
+<span class="line" id="P334"><span class="ln">334</span>        <span class='hk'>return</span> (dl, d, rmu, emu, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap,</span>
+<span class="line" id="P335"><span class="ln">335</span>                qcpt, qcpp, ksaha)                 <span class='hc'># go to 60</span></span>
+<span class="line" id="P336"><span class="ln">336</span></span>
+<span class="line" id="P337"><span class="ln">337</span>    <span class='hc'># First derivatives: d ln E / d ln T (sqet) and d ln P (sqep)</span></span>
+<span class="line" id="P338"><span class="ln">338</span>    <span class='hc'># (<a class='fl' href='#L204-L235'>Fortran lines 204–235</a>).</span></span>
+<span class="line" id="P339"><span class="ln">339</span>    rmub = rmu * betai  <span class='hc'># noqa: F841  (unused in the Fortran too)</span></span>
+<span class="line" id="P340"><span class="ln">340</span>    r3t = <span class='hn'>0.0</span></span>
+<span class="line" id="P341"><span class="ln">341</span>    r3p = <span class='hn'>0.0</span></span>
 <span class="line" id="P342"><span class="ln">342</span>    <span class='hk'>if</span> nz0 &gt; <span class='hn'>0</span>:</span>
-<span class="line" id="P343"><span class="ln">343</span>        stemp = ep1e * sqett</span>
-<span class="line" id="P344"><span class="ln">344</span>        stemp1 = ep1e * sqetp</span>
-<span class="line" id="P345"><span class="ln">345</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(nz1, nz0 + <span class='hn'>1</span>):</span>
-<span class="line" id="P346"><span class="ln">346</span>            utsum = utsum - fxs[i] * SAHAT[i] * stemp</span>
-<span class="line" id="P347"><span class="ln">347</span>            upsum = upsum - fxs[i] * SAHAT[i] * stemp1</span>
-<span class="line" id="P348"><span class="ln">348</span>    <span class='hk'>if</span> <span class='hk'>not</span> lnohe:                                  <span class='hc'># label 46</span></span>
-<span class="line" id="P349"><span class="ln">349</span>        sx1qtt = (r2t - c23 * sqett) / c22</span>
-<span class="line" id="P350"><span class="ln">350</span>        sx1qtp = (r2p - c23 * sqetp) / c22</span>
-<span class="line" id="P351"><span class="ln">351</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
-<span class="line" id="P352"><span class="ln">352</span>            sx2qtt = (r1t - c12 * sx1qtt - c13 * sqett) / c11</span>
-<span class="line" id="P353"><span class="ln">353</span>            sx2qtp = (r1p - c12 * sx1qtp - c13 * sqetp) / c11</span>
-<span class="line" id="P354"><span class="ln">354</span>            utsum = utsum + fxhe * (SAHET0 + SAHET1) * (sx2qtt - sx2qt)</span>
-<span class="line" id="P355"><span class="ln">355</span>            upsum = upsum + fxhe * (SAHET0 + SAHET1) * sx2qtp</span>
-<span class="line" id="P356"><span class="ln">356</span>        utsum = utsum + fxhe * SAHET0 * (sx1qtt - sx1qt)   <span class='hc'># label 47</span></span>
-<span class="line" id="P357"><span class="ln">357</span>        upsum = upsum + fxhe * SAHET0 * sx1qtp</span>
-<span class="line" id="P358"><span class="ln">358</span>    btemp = (<span class='hn'>1.0</span> + e) * beta14 * betai * (<span class='hn'>24.0</span> * betai - <span class='hn'>9.0</span>)   <span class='hc'># label 48</span></span>
-<span class="line" id="P359"><span class="ln">359</span>    qqutt = ramu * (btemp + <span class='hn'>0.75</span> * (<span class='hn'>2.0</span> + beta14 * (<span class='hn'>8.0</span> * betai + <span class='hn'>1.0</span>)) * sqet</span>
-<span class="line" id="P360"><span class="ln">360</span>                    + betaut * sqett + utsum * ti)</span>
-<span class="line" id="P361"><span class="ln">361</span>    qqutp = ramu * (-<span class='hn'>0.25</span> * btemp</span>
-<span class="line" id="P362"><span class="ln">362</span>                    + <span class='hn'>0.75</span> * ((<span class='hn'>2.0</span> + beta14 * (<span class='hn'>4.0</span> * betai + <span class='hn'>1.0</span>)) * sqep</span>
-<span class="line" id="P363"><span class="ln">363</span>                              - beta14 * betai * sqet)</span>
-<span class="line" id="P364"><span class="ln">364</span>                    + betaut * sqetp + upsum * ti)</span>
-<span class="line" id="P365"><span class="ln">365</span>    qcpt = qcpi * (qqutt + pdtq * (<span class='hn'>1.0</span> + qdt) - pdt * qdtt)</span>
-<span class="line" id="P366"><span class="ln">366</span>    qcpp = qcpi * (qqutp - pdtq * (<span class='hn'>1.0</span> - qdp) - pdt * qdtp)</span>
-<span class="line" id="P367"><span class="ln">367</span>    qat = -<span class='hn'>1.0</span> - qdt - qcpt + qdtt / qdt</span>
-<span class="line" id="P368"><span class="ln">368</span>    qap = <span class='hn'>1.0</span> - qdp - qcpp + qdtp / qdt</span>
-<span class="line" id="P369"><span class="ln">369</span>    <span class='hk'>return</span> (dl, d, rmu, emu, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap,</span>
-<span class="line" id="P370"><span class="ln">370</span>            qcpt, qcpp, ksaha)                     <span class='hc'># label 60</span></span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
+<span class="line" id="P343"><span class="ln">343</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(nz1, nz0 + <span class='hn'>1</span>):</span>
+<span class="line" id="P344"><span class="ln">344</span>            r3p = r3p - fxs[i]</span>
+<span class="line" id="P345"><span class="ln">345</span>            r3t = r3t - fxs[i] * (<span class='hn'>2.5</span> + beta14 + sahatt[i])</span>
+<span class="line" id="P346"><span class="ln">346</span>        r3p = -betai * r3p</span>
+<span class="line" id="P347"><span class="ln">347</span>    r1t = r1p = r2t = r2p = <span class='hn'>0.0</span></span>
+<span class="line" id="P348"><span class="ln">348</span>    sahex0 = sk0qt = sk1qt = <span class='hn'>0.0</span></span>
+<span class="line" id="P349"><span class="ln">349</span>    <span class='hk'>if</span> <span class='hk'>not</span> lnohe:                                  <span class='hc'># label 31</span></span>
+<span class="line" id="P350"><span class="ln">350</span>        sahex0 = <span class='hn'>1.0</span> - sahex1 - sahex2</span>
+<span class="line" id="P351"><span class="ln">351</span>        sk0qt = <span class='hn'>2.5</span> + beta14 + SAHET0 * ti</span>
+<span class="line" id="P352"><span class="ln">352</span>        temp = sahek0 * sahex0</span>
+<span class="line" id="P353"><span class="ln">353</span>        r2t = temp * sk0qt</span>
+<span class="line" id="P354"><span class="ln">354</span>        r2p = -temp * betai</span>
+<span class="line" id="P355"><span class="ln">355</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
+<span class="line" id="P356"><span class="ln">356</span>            sk1qt = <span class='hn'>2.5</span> + beta14 + SAHET1 * ti</span>
+<span class="line" id="P357"><span class="ln">357</span>            temp = sahek1 * sahex1</span>
+<span class="line" id="P358"><span class="ln">358</span>            r1t = temp * sk1qt</span>
+<span class="line" id="P359"><span class="ln">359</span>            r1p = -temp * betai</span>
+<span class="line" id="P360"><span class="ln">360</span>            r2t = r2t + cr12 * r1t</span>
+<span class="line" id="P361"><span class="ln">361</span>            r2p = r2p + cr12 * r1p</span>
+<span class="line" id="P362"><span class="ln">362</span>            r3t = r3t + cr13 * r1t</span>
+<span class="line" id="P363"><span class="ln">363</span>            r3p = r3p + cr13 * r1p</span>
+<span class="line" id="P364"><span class="ln">364</span>        r3t = r3t + cr23 * r2t                     <span class='hc'># label 32</span></span>
+<span class="line" id="P365"><span class="ln">365</span>        r3p = r3p + cr23 * r2p</span>
+<span class="line" id="P366"><span class="ln">366</span>    sqet = r3t / c33                               <span class='hc'># label 33</span></span>
+<span class="line" id="P367"><span class="ln">367</span>    sqep = r3p / c33</span>
+<span class="line" id="P368"><span class="ln">368</span>    qdt = -<span class='hn'>1.0</span> - beta14 - ep1 * sqet</span>
+<span class="line" id="P369"><span class="ln">369</span>    qdp = betai - ep1 * sqep</span>
+<span class="line" id="P370"><span class="ln">370</span></span>
+<span class="line" id="P371"><span class="ln">371</span>    <span class='hc'># Internal energy temperature derivative (qut; <a class='fl' href='#L237-L260'>Fortran lines 237–260</a>).</span></span>
+<span class="line" id="P372"><span class="ln">372</span>    usum = <span class='hn'>0.0</span></span>
+<span class="line" id="P373"><span class="ln">373</span>    sx0qt = sx0qp = sx1qt = sx1qp = sx2qt = sx2qp = <span class='hn'>0.0</span></span>
+<span class="line" id="P374"><span class="ln">374</span>    <span class='hk'>if</span> <span class='hk'>not</span> lnohe:</span>
+<span class="line" id="P375"><span class="ln">375</span>        sx1qt = (r2t - c23 * sqet) / c22</span>
+<span class="line" id="P376"><span class="ln">376</span>        sx1qp = (r2p - c23 * sqep) / c22</span>
+<span class="line" id="P377"><span class="ln">377</span>        sx2qt = <span class='hn'>0.0</span></span>
+<span class="line" id="P378"><span class="ln">378</span>        sx2qp = <span class='hn'>0.0</span></span>
+<span class="line" id="P379"><span class="ln">379</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
+<span class="line" id="P380"><span class="ln">380</span>            sx2qt = (r1t - c12 * sx1qt - c13 * sqet) / c11</span>
+<span class="line" id="P381"><span class="ln">381</span>            sx2qp = (r1p - c12 * sx1qp - c13 * sqep) / c11</span>
+<span class="line" id="P382"><span class="ln">382</span>        sx0qt = -(sx1qt + sx2qt)                   <span class='hc'># label 34</span></span>
+<span class="line" id="P383"><span class="ln">383</span>        sx0qp = -(sx1qp + sx2qp)</span>
+<span class="line" id="P384"><span class="ln">384</span>        usum = fxhe * (sx1qt * SAHET0 + sx2qt * (SAHET0 + SAHET1))</span>
+<span class="line" id="P385"><span class="ln">385</span>    <span class='hk'>if</span> nz0 &gt; <span class='hn'>0</span>:                                    <span class='hc'># label 35</span></span>
+<span class="line" id="P386"><span class="ln">386</span>        stemp = <span class='hn'>2.50</span> + beta14 - ep1e * sqet</span>
+<span class="line" id="P387"><span class="ln">387</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(nz1, nz0 + <span class='hn'>1</span>):</span>
+<span class="line" id="P388"><span class="ln">388</span>            fxt[i] = fxs[i] * (stemp + sahatt[i])</span>
+<span class="line" id="P389"><span class="ln">389</span>            usum = usum + fxt[i] * SAHAT[i]</span>
+<span class="line" id="P390"><span class="ln">390</span>    betaut = <span class='hn'>0.75</span> * (<span class='hn'>2.0</span> + beta14)                 <span class='hc'># label 37</span></span>
+<span class="line" id="P391"><span class="ln">391</span>    ramu = c.cgas * amu</span>
+<span class="line" id="P392"><span class="ln">392</span>    qut = ramu * ((<span class='hn'>1.0</span> + e) * (betaut + <span class='hn'>3.0</span> * betai * beta14)</span>
+<span class="line" id="P393"><span class="ln">393</span>                  + betaut * sqet + usum * ti)</span>
+<span class="line" id="P394"><span class="ln">394</span></span>
+<span class="line" id="P395"><span class="ln">395</span>    <span class='hc'># Specific heat (qcp) and adiabatic gradient (dela; Fortran lines</span></span>
+<span class="line" id="P396"><span class="ln">396</span>    <span class='hc'># 262–267).</span></span>
+<span class="line" id="P397"><span class="ln">397</span>    pdt = p / (d * t)</span>
+<span class="line" id="P398"><span class="ln">398</span>    pdtq = pdt * qdt</span>
+<span class="line" id="P399"><span class="ln">399</span>    qcp = qut - pdtq</span>
+<span class="line" id="P400"><span class="ln">400</span>    qcpi = <span class='hn'>1.0</span> / qcp</span>
+<span class="line" id="P401"><span class="ln">401</span>    dela = -pdtq * qcpi</span>
+<span class="line" id="P402"><span class="ln">402</span>    <span class='hk'>if</span> <span class='hk'>not</span> lderiv:</span>
+<span class="line" id="P403"><span class="ln">403</span>        <span class='hk'>return</span> (dl, d, rmu, emu, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap,</span>
+<span class="line" id="P404"><span class="ln">404</span>                qcpt, qcpp, ksaha)                 <span class='hc'># go to 60</span></span>
+<span class="line" id="P405"><span class="ln">405</span></span>
+<span class="line" id="P406"><span class="ln">406</span>    <span class='hc'># Derivatives of qdt, qcp and dela: the second derivatives of E</span></span>
+<span class="line" id="P407"><span class="ln">407</span>    <span class='hc'># (<a class='fl' href='#L269-L311'>Fortran lines 269–311</a>).</span></span>
+<span class="line" id="P408"><span class="ln">408</span>    beta16 = <span class='hn'>4.0</span> * betai * beta14</span>
+<span class="line" id="P409"><span class="ln">409</span>    r3t = <span class='hn'>0.0</span></span>
+<span class="line" id="P410"><span class="ln">410</span>    r3p = <span class='hn'>0.0</span></span>
+<span class="line" id="P411"><span class="ln">411</span>    utsum = <span class='hn'>0.0</span></span>
+<span class="line" id="P412"><span class="ln">412</span>    upsum = <span class='hn'>0.0</span></span>
+<span class="line" id="P413"><span class="ln">413</span>    <span class='hk'>if</span> nz0 &gt; <span class='hn'>0</span>:</span>
+<span class="line" id="P414"><span class="ln">414</span>        etemp = (<span class='hn'>1.0</span> + e + e) / ((e * (<span class='hn'>1.0</span> + e)) * (e * (<span class='hn'>1.0</span> + e)))</span>
+<span class="line" id="P415"><span class="ln">415</span>        stemp1 = <span class='hn'>2.5</span> + beta14 - sqet * ep1e</span>
+<span class="line" id="P416"><span class="ln">416</span>        stemp2 = -betai - sqep * ep1e</span>
+<span class="line" id="P417"><span class="ln">417</span>        stemp3 = etemp * sqep * sqet - betai * beta14</span>
+<span class="line" id="P418"><span class="ln">418</span>        stemp4 = etemp * (sqet * sqet) + beta16</span>
+<span class="line" id="P419"><span class="ln">419</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(nz1, nz0 + <span class='hn'>1</span>):</span>
+<span class="line" id="P420"><span class="ln">420</span>            stemp5 = (stemp1 + sahatt[i]) * (<span class='hn'>1.0</span> - <span class='hn'>2.0</span> * sahax[i])</span>
+<span class="line" id="P421"><span class="ln">421</span>            stemp6 = fxs[i] * (stemp4 - sahatt[i]) + fxt[i] * stemp5</span>
+<span class="line" id="P422"><span class="ln">422</span>            r3t = r3t - stemp6</span>
+<span class="line" id="P423"><span class="ln">423</span>            utsum = utsum + SAHAT[i] * (stemp6 - fxt[i])</span>
+<span class="line" id="P424"><span class="ln">424</span>            stemp7 = fxs[i] * (stemp3 + stemp2 * stemp5)</span>
+<span class="line" id="P425"><span class="ln">425</span>            r3p = r3p - stemp7</span>
+<span class="line" id="P426"><span class="ln">426</span>            upsum = upsum + SAHAT[i] * stemp7</span>
+<span class="line" id="P427"><span class="ln">427</span>    <span class='hk'>if</span> <span class='hk'>not</span> lnohe:                                  <span class='hc'># label 42</span></span>
+<span class="line" id="P428"><span class="ln">428</span>        stemp = <span class='hn'>2.0</span> * sahex1 * ep1 * sqet</span>
+<span class="line" id="P429"><span class="ln">429</span>        r2t = (sahek0 * (sahex0 * (beta16 - SAHET0 * ti + (sk0qt * sk0qt))</span>
+<span class="line" id="P430"><span class="ln">430</span>                         + <span class='hn'>2.0</span> * sx0qt * sk0qt)</span>
+<span class="line" id="P431"><span class="ln">431</span>               + ep12 * (stemp * sqet - <span class='hn'>2.0</span> * sx1qt * sqet))</span>
+<span class="line" id="P432"><span class="ln">432</span>        r2p = (sahek0 * (sahex0 * betai * (-beta14 - sk0qt) + sx0qp * sk0qt</span>
+<span class="line" id="P433"><span class="ln">433</span>                         - betai * sx0qt)</span>
+<span class="line" id="P434"><span class="ln">434</span>               + ep12 * (stemp * sqep - sx1qp * sqet - sx1qt * sqep))</span>
+<span class="line" id="P435"><span class="ln">435</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
+<span class="line" id="P436"><span class="ln">436</span>            stemp = <span class='hn'>2.0</span> * sahex2 * ep1 * sqet</span>
+<span class="line" id="P437"><span class="ln">437</span>            r1t = (sahek1 * (sahex1 * (beta16 - SAHET1 * ti + (sk1qt * sk1qt))</span>
+<span class="line" id="P438"><span class="ln">438</span>                             + <span class='hn'>2.0</span> * sx1qt * sk1qt)</span>
+<span class="line" id="P439"><span class="ln">439</span>                   + ep12 * (stemp * sqet - <span class='hn'>2.0</span> * sx2qt * sqet))</span>
+<span class="line" id="P440"><span class="ln">440</span>            r1p = (sahek1 * (sahex1 * betai * (-beta14 - sk1qt)</span>
+<span class="line" id="P441"><span class="ln">441</span>                             + sx1qp * sk1qt - betai * sx1qt)</span>
+<span class="line" id="P442"><span class="ln">442</span>                   + ep12 * (stemp * sqep - sx2qp * sqet - sx2qt * sqep))</span>
+<span class="line" id="P443"><span class="ln">443</span>            r2t = r2t + cr12 * r1t</span>
+<span class="line" id="P444"><span class="ln">444</span>            r2p = r2p + cr12 * r1p</span>
+<span class="line" id="P445"><span class="ln">445</span>            r3p = r3p + cr13 * r1p</span>
+<span class="line" id="P446"><span class="ln">446</span>            r3t = r3t + cr13 * r1t</span>
+<span class="line" id="P447"><span class="ln">447</span>        r3p = r3p + cr23 * r2p                     <span class='hc'># label 43</span></span>
+<span class="line" id="P448"><span class="ln">448</span>        r3t = r3t + cr23 * r2t</span>
+<span class="line" id="P449"><span class="ln">449</span>    sqett = r3t / c33                              <span class='hc'># label 44</span></span>
+<span class="line" id="P450"><span class="ln">450</span>    sqetp = r3p / c33</span>
+<span class="line" id="P451"><span class="ln">451</span></span>
+<span class="line" id="P452"><span class="ln">452</span>    <span class='hc'># <a class='fl' href='#L312-L343'>Fortran lines 312–343</a>.</span></span>
+<span class="line" id="P453"><span class="ln">453</span>    qdtt = -beta16 + ((ep1 * sqet) * (ep1 * sqet)) - ep1 * sqett</span>
+<span class="line" id="P454"><span class="ln">454</span>    qdtp = betai * beta14 + ep12 * sqet * sqep - ep1 * sqetp</span>
+<span class="line" id="P455"><span class="ln">455</span>    <span class='hk'>if</span> nz0 &gt; <span class='hn'>0</span>:</span>
+<span class="line" id="P456"><span class="ln">456</span>        stemp = ep1e * sqett</span>
+<span class="line" id="P457"><span class="ln">457</span>        stemp1 = ep1e * sqetp</span>
+<span class="line" id="P458"><span class="ln">458</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(nz1, nz0 + <span class='hn'>1</span>):</span>
+<span class="line" id="P459"><span class="ln">459</span>            utsum = utsum - fxs[i] * SAHAT[i] * stemp</span>
+<span class="line" id="P460"><span class="ln">460</span>            upsum = upsum - fxs[i] * SAHAT[i] * stemp1</span>
+<span class="line" id="P461"><span class="ln">461</span>    <span class='hk'>if</span> <span class='hk'>not</span> lnohe:                                  <span class='hc'># label 46</span></span>
+<span class="line" id="P462"><span class="ln">462</span>        sx1qtt = (r2t - c23 * sqett) / c22</span>
+<span class="line" id="P463"><span class="ln">463</span>        sx1qtp = (r2p - c23 * sqetp) / c22</span>
+<span class="line" id="P464"><span class="ln">464</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
+<span class="line" id="P465"><span class="ln">465</span>            sx2qtt = (r1t - c12 * sx1qtt - c13 * sqett) / c11</span>
+<span class="line" id="P466"><span class="ln">466</span>            sx2qtp = (r1p - c12 * sx1qtp - c13 * sqetp) / c11</span>
+<span class="line" id="P467"><span class="ln">467</span>            utsum = utsum + fxhe * (SAHET0 + SAHET1) * (sx2qtt - sx2qt)</span>
+<span class="line" id="P468"><span class="ln">468</span>            upsum = upsum + fxhe * (SAHET0 + SAHET1) * sx2qtp</span>
+<span class="line" id="P469"><span class="ln">469</span>        utsum = utsum + fxhe * SAHET0 * (sx1qtt - sx1qt)   <span class='hc'># label 47</span></span>
+<span class="line" id="P470"><span class="ln">470</span>        upsum = upsum + fxhe * SAHET0 * sx1qtp</span>
+<span class="line" id="P471"><span class="ln">471</span>    btemp = (<span class='hn'>1.0</span> + e) * beta14 * betai * (<span class='hn'>24.0</span> * betai - <span class='hn'>9.0</span>)   <span class='hc'># label 48</span></span>
+<span class="line" id="P472"><span class="ln">472</span>    qqutt = ramu * (btemp + <span class='hn'>0.75</span> * (<span class='hn'>2.0</span> + beta14 * (<span class='hn'>8.0</span> * betai + <span class='hn'>1.0</span>)) * sqet</span>
+<span class="line" id="P473"><span class="ln">473</span>                    + betaut * sqett + utsum * ti)</span>
+<span class="line" id="P474"><span class="ln">474</span>    qqutp = ramu * (-<span class='hn'>0.25</span> * btemp</span>
+<span class="line" id="P475"><span class="ln">475</span>                    + <span class='hn'>0.75</span> * ((<span class='hn'>2.0</span> + beta14 * (<span class='hn'>4.0</span> * betai + <span class='hn'>1.0</span>)) * sqep</span>
+<span class="line" id="P476"><span class="ln">476</span>                              - beta14 * betai * sqet)</span>
+<span class="line" id="P477"><span class="ln">477</span>                    + betaut * sqetp + upsum * ti)</span>
+<span class="line" id="P478"><span class="ln">478</span>    qcpt = qcpi * (qqutt + pdtq * (<span class='hn'>1.0</span> + qdt) - pdt * qdtt)</span>
+<span class="line" id="P479"><span class="ln">479</span>    qcpp = qcpi * (qqutp - pdtq * (<span class='hn'>1.0</span> - qdp) - pdt * qdtp)</span>
+<span class="line" id="P480"><span class="ln">480</span>    qat = -<span class='hn'>1.0</span> - qdt - qcpt + qdtt / qdt</span>
+<span class="line" id="P481"><span class="ln">481</span>    qap = <span class='hn'>1.0</span> - qdp - qcpp + qdtp / qdt</span>
+<span class="line" id="P482"><span class="ln">482</span>    <span class='hk'>return</span> (dl, d, rmu, emu, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap,</span>
+<span class="line" id="P483"><span class="ln">483</span>            qcpt, qcpp, ksaha)                     <span class='hc'># label 60</span></span>
+<span class="line" id="P484"><span class="ln">484</span></span>
+<span class="line" id="P485"><span class="ln">485</span></span>
+<span class="line" id="P486"><span class="ln">486</span><span class='hk'>def</span> _failure(tl: <span class='hb'>float</span>, pl: <span class='hb'>float</span>) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P487"><span class="ln">487</span>    <span class='hs'>&quot;&quot;&quot;The kernel&#x27;s message when the iterations did not converge (format 99), as the plain code writes it.&quot;&quot;&quot;</span></span>
+<span class="line" id="P488"><span class="ln">488</span>    e, delte = <span class='hb'>float</span>(_fail[<span class='hn'>1</span>]), <span class='hb'>float</span>(_fail[<span class='hn'>2</span>])</span>
+<span class="line" id="P489"><span class="ln">489</span>    iounits_mod.write(iounits_mod.ishort, <span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'> -----SAHA FAILURE (TL,PL)=</span><span class='hs'>{</span>tl<span class='hs'>:</span><span class='hs'>10.6f</span><span class='hs'>}</span><span class='hs'>{</span>pl<span class='hs'>:</span><span class='hs'>10.6f</span><span class='hs'>}</span><span class='hs'>&quot;</span></span>
+<span class="line" id="P490"><span class="ln">490</span>                      <span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'>  (E,DE)=</span><span class='hs'>{</span>e<span class='hs'>:</span><span class='hs'>20.12f</span><span class='hs'>}</span><span class='hs'>{</span>delte<span class='hs'>:</span><span class='hs'>20.12f</span><span class='hs'>}</span><span class='hs'>&quot;</span>)  <span class='hc'># format 99</span></span>
+<span class="line" id="P491"><span class="ln">491</span></span>
+<span class="line" id="P492"><span class="ln">492</span></span>
+<span class="line" id="P493"><span class="ln">493</span><span class='hc'># The kernel&#x27;s work arrays (sahatt, sahak, sahax, fxs, fxt; each element read only after this call set it) and its</span></span>
+<span class="line" id="P494"><span class="ln">494</span><span class='hc'># failure flag with E and DELTE for the message.</span></span>
+<span class="line" id="P495"><span class="ln">495</span>_wk = np.zeros((<span class='hn'>5</span>, NZ + <span class='hn'>1</span>))</span>
+<span class="line" id="P496"><span class="ln">496</span>_fail = np.zeros(<span class='hn'>3</span>)</span>
+<span class="line" id="P497"><span class="ln">497</span></span>
+<span class="line" id="P498"><span class="ln">498</span></span>
+<span class="line" id="P499"><span class="ln">499</span>@accel.njit(_nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P500"><span class="ln">500</span><span class='hk'>def</span> _eqsaha_nb(fx: np.ndarray, tl: <span class='hb'>float</span>, t: <span class='hb'>float</span>, pl: <span class='hb'>float</span>, p: <span class='hb'>float</span>, dl: <span class='hb'>float</span>, d: <span class='hb'>float</span>, beta: <span class='hb'>float</span>, betai: <span class='hb'>float</span>,</span>
+<span class="line" id="P501"><span class="ln">501</span>               beta14: <span class='hb'>float</span>, fxion: np.ndarray, rmu: <span class='hb'>float</span>, amu: <span class='hb'>float</span>, emu: <span class='hb'>float</span>, lderiv: <span class='hb'>bool</span>, latmo: <span class='hb'>bool</span>,</span>
+<span class="line" id="P502"><span class="ln">502</span>               qdt: <span class='hb'>float</span>, qdp: <span class='hb'>float</span>, qcp: <span class='hb'>float</span>, dela: <span class='hb'>float</span>, qdtt: <span class='hb'>float</span>, qdtp: <span class='hb'>float</span>, qat: <span class='hb'>float</span>, qap: <span class='hb'>float</span>,</span>
+<span class="line" id="P503"><span class="ln">503</span>               qcpt: <span class='hb'>float</span>, qcpp: <span class='hb'>float</span>, ksaha: <span class='hb'>int</span>, sv: np.ndarray, cgas: <span class='hb'>float</span>, cln: <span class='hb'>float</span>, cmkh: <span class='hb'>float</span>,</span>
+<span class="line" id="P504"><span class="ln">504</span>               wk: np.ndarray, fail: np.ndarray) -&gt; <span class='hb'>tuple</span>:</span>
+<span class="line" id="P505"><span class="ln">505</span>    <span class='hs'>&quot;&quot;&quot;The Numba kernel of eqsaha: the plain code&#x27;s operations, with the constants, the SAVE&#x27;d state sv, and the</span></span>
+<span class="line" id="P506"><span class="ln">506</span><span class='hs'>    work arrays passed in; a failure to converge is left in fail for the routine to write.</span></span>
+<span class="line" id="P507"><span class="ln">507</span></span>
+<span class="line" id="P508"><span class="ln">508</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P509"><span class="ln">509</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P510"><span class="ln">510</span><span class='hs'>    fx, tl, ..., ksaha</span></span>
+<span class="line" id="P511"><span class="ln">511</span><span class='hs'>        As for eqsaha.</span></span>
+<span class="line" id="P512"><span class="ln">512</span><span class='hs'>    sv : np.ndarray, shape: `(3,)`, dtype: ``float64``</span></span>
+<span class="line" id="P513"><span class="ln">513</span><span class='hs'>        The SAVE&#x27;d [E, SAHEX1, SAHEX2], changed in place.</span></span>
+<span class="line" id="P514"><span class="ln">514</span><span class='hs'>    cgas, cln, cmkh : float</span></span>
+<span class="line" id="P515"><span class="ln">515</span><span class='hs'>        constants_mod&#x27;s.</span></span>
+<span class="line" id="P516"><span class="ln">516</span><span class='hs'>    wk : np.ndarray, shape: `(5, NZ + 1)`, dtype: ``float64``</span></span>
+<span class="line" id="P517"><span class="ln">517</span><span class='hs'>        Work arrays (this file&#x27;s _wk).</span></span>
+<span class="line" id="P518"><span class="ln">518</span><span class='hs'>    fail : np.ndarray, shape: `(3,)`, dtype: ``float64``</span></span>
+<span class="line" id="P519"><span class="ln">519</span><span class='hs'>        Filled: the failure flag, and E and DELTE for the message.</span></span>
+<span class="line" id="P520"><span class="ln">520</span></span>
+<span class="line" id="P521"><span class="ln">521</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P522"><span class="ln">522</span><span class='hs'>    -------</span></span>
+<span class="line" id="P523"><span class="ln">523</span><span class='hs'>    tuple</span></span>
+<span class="line" id="P524"><span class="ln">524</span><span class='hs'>        What eqsaha returns.</span></span>
+<span class="line" id="P525"><span class="ln">525</span></span>
+<span class="line" id="P526"><span class="ln">526</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P527"><span class="ln">527</span>    sahatt = wk[<span class='hn'>0</span>]</span>
+<span class="line" id="P528"><span class="ln">528</span>    sahak = wk[<span class='hn'>1</span>]</span>
+<span class="line" id="P529"><span class="ln">529</span>    sahax = wk[<span class='hn'>2</span>]</span>
+<span class="line" id="P530"><span class="ln">530</span>    fxs = wk[<span class='hn'>3</span>]</span>
+<span class="line" id="P531"><span class="ln">531</span>    fxt = wk[<span class='hn'>4</span>]</span>
+<span class="line" id="P532"><span class="ln">532</span>    e, sahex1, sahex2 = sv[<span class='hn'>0</span>], sv[<span class='hn'>1</span>], sv[<span class='hn'>2</span>]</span>
+<span class="line" id="P533"><span class="ln">533</span>    fail[<span class='hn'>0</span>] = <span class='hn'>0.0</span></span>
+<span class="line" id="P534"><span class="ln">534</span></span>
+<span class="line" id="P535"><span class="ln">535</span>    <span class='hc'># <a class='fl' href='#L58-L60'>Fortran lines 58–60</a>.</span></span>
+<span class="line" id="P536"><span class="ln">536</span>    fxhe = fx[<span class='hn'>12</span>]</span>
+<span class="line" id="P537"><span class="ln">537</span>    emax = <span class='hn'>1.0</span> + fxhe</span>
+<span class="line" id="P538"><span class="ln">538</span>    ti = <span class='hn'>1.0</span> / t</span>
+<span class="line" id="P539"><span class="ln">539</span></span>
+<span class="line" id="P540"><span class="ln">540</span>    <span class='hc'># The Saha K&#x27;s of the 11 species (<a class='fl' href='#L63-L77'>Fortran lines 63–77</a>).</span></span>
+<span class="line" id="P541"><span class="ln">541</span>    stemp, nz0, nz1 = _eqsaha_saha_k_nb(tl, pl, ti, betai, cln, cmkh, sahatt, sahak)</span>
+<span class="line" id="P542"><span class="ln">542</span></span>
+<span class="line" id="P543"><span class="ln">543</span>    <span class='hc'># Helium: neutral (lnohe), or no He++ (lnohe2) (<a class='fl' href='#L78-L92'>Fortran lines 78–92</a>).</span></span>
+<span class="line" id="P544"><span class="ln">544</span>    lnohe, lnohe2, sahek0, sahek1, sahex1, sahex2 = _eqsaha_helium_k_nb(fxhe, stemp, t, betai, cln, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>,</span>
+<span class="line" id="P545"><span class="ln">545</span>                                                                        sahex1, sahex2)</span>
+<span class="line" id="P546"><span class="ln">546</span></span>
+<span class="line" id="P547"><span class="ln">547</span>    <span class='hc'># Newton iterations for e, sahex1, sahex2 (the 3x3 system reduced by</span></span>
+<span class="line" id="P548"><span class="ln">548</span>    <span class='hc'># hand; <a class='fl' href='#L94-L192'>Fortran lines 94–192</a>).</span></span>
+<span class="line" id="P549"><span class="ln">549</span>    cr12 = cr13 = cr23 = <span class='hn'>0.0</span></span>
+<span class="line" id="P550"><span class="ln">550</span>    c11 = c12 = c13 = c22 = c23 = <span class='hn'>0.0</span></span>
+<span class="line" id="P551"><span class="ln">551</span>    r1 = r2 = <span class='hn'>0.0</span></span>
+<span class="line" id="P552"><span class="ln">552</span>    <span class='hk'>for</span> isaha <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, MAXS + <span class='hn'>1</span>):</span>
+<span class="line" id="P553"><span class="ln">553</span>        ksaha = ksaha + <span class='hn'>1</span></span>
+<span class="line" id="P554"><span class="ln">554</span>        ep1 = <span class='hn'>1.0</span> / (<span class='hn'>1.0</span> + e)</span>
+<span class="line" id="P555"><span class="ln">555</span>        ep1e = ep1 / e</span>
+<span class="line" id="P556"><span class="ln">556</span>        ep12 = ep1 * ep1</span>
+<span class="line" id="P557"><span class="ln">557</span>        eep1 = e * ep1</span>
+<span class="line" id="P558"><span class="ln">558</span>        c33 = -e * (<span class='hn'>1.0</span> + e)</span>
+<span class="line" id="P559"><span class="ln">559</span>        r3 = e</span>
+<span class="line" id="P560"><span class="ln">560</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nz0 + <span class='hn'>1</span>):</span>
+<span class="line" id="P561"><span class="ln">561</span>            div = <span class='hn'>1.0</span> / (sahak[i] + eep1)</span>
+<span class="line" id="P562"><span class="ln">562</span>            temp8 = sahak[i] * div</span>
+<span class="line" id="P563"><span class="ln">563</span>            sahax[i] = temp8</span>
+<span class="line" id="P564"><span class="ln">564</span>            temp8 = temp8 * fx[i]</span>
+<span class="line" id="P565"><span class="ln">565</span>            r3 = r3 - temp8</span>
+<span class="line" id="P566"><span class="ln">566</span>            temp8 = temp8 * eep1 * div</span>
+<span class="line" id="P567"><span class="ln">567</span>            c33 = c33 - temp8</span>
+<span class="line" id="P568"><span class="ln">568</span>            fxs[i] = temp8</span>
+<span class="line" id="P569"><span class="ln">569</span>        c33 = c33 * ep1e                           <span class='hc'># label 22</span></span>
+<span class="line" id="P570"><span class="ln">570</span>        r3 = r3 - fxhe * (sahex1 + sahex2 + sahex2)</span>
+<span class="line" id="P571"><span class="ln">571</span>        lfin = <span class='hb'>abs</span>(r3) &lt; STOLEE</span>
+<span class="line" id="P572"><span class="ln">572</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe:</span>
+<span class="line" id="P573"><span class="ln">573</span>            c22 = sahek0 + eep1</span>
+<span class="line" id="P574"><span class="ln">574</span>            c23 = sahex1 * ep12</span>
+<span class="line" id="P575"><span class="ln">575</span>            c32 = fxhe</span>
+<span class="line" id="P576"><span class="ln">576</span>            r2 = sahek0 * (<span class='hn'>1.0</span> - sahex1 - sahex2) - sahex1 * eep1</span>
+<span class="line" id="P577"><span class="ln">577</span>            <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
+<span class="line" id="P578"><span class="ln">578</span>                c11 = eep1</span>
+<span class="line" id="P579"><span class="ln">579</span>                c12 = -sahek1</span>
+<span class="line" id="P580"><span class="ln">580</span>                c13 = sahex2 * ep12</span>
+<span class="line" id="P581"><span class="ln">581</span>                c21 = sahek0</span>
+<span class="line" id="P582"><span class="ln">582</span>                c31 = <span class='hn'>2.0</span> * fxhe</span>
+<span class="line" id="P583"><span class="ln">583</span>                r1 = sahex1 * sahek1 - sahex2 * eep1</span>
+<span class="line" id="P584"><span class="ln">584</span>                <span class='hc'># Reduction of the Saha matrix to diagonal form.</span></span>
+<span class="line" id="P585"><span class="ln">585</span>                cr12 = -c21 / c11</span>
+<span class="line" id="P586"><span class="ln">586</span>                cr13 = -c31 / c11</span>
+<span class="line" id="P587"><span class="ln">587</span>                c22 = c22 + cr12 * c12</span>
+<span class="line" id="P588"><span class="ln">588</span>                c32 = c32 + cr13 * c12</span>
+<span class="line" id="P589"><span class="ln">589</span>                c23 = c23 + cr12 * c13</span>
+<span class="line" id="P590"><span class="ln">590</span>                c33 = c33 + cr13 * c13</span>
+<span class="line" id="P591"><span class="ln">591</span>                <span class='hc'># Products below 1e-38 are skipped (an old underflow guard).</span></span>
+<span class="line" id="P592"><span class="ln">592</span>                <span class='hk'>if</span> r1 != <span class='hn'>0.0</span>:</span>
+<span class="line" id="P593"><span class="ln">593</span>                    r1l = math.log10(<span class='hb'>abs</span>(r1))</span>
+<span class="line" id="P594"><span class="ln">594</span>                    <span class='hk'>if</span> cr12 != <span class='hn'>0.0</span>:</span>
+<span class="line" id="P595"><span class="ln">595</span>                        fact = math.log10(<span class='hb'>abs</span>(cr12)) + r1l</span>
+<span class="line" id="P596"><span class="ln">596</span>                        <span class='hk'>if</span> <span class='hk'>not</span> fact &lt; UNDERFLOW_LOG:</span>
+<span class="line" id="P597"><span class="ln">597</span>                            r2 = r2 + cr12 * r1</span>
+<span class="line" id="P598"><span class="ln">598</span>                    <span class='hk'>if</span> cr13 != <span class='hn'>0.0</span>:                <span class='hc'># label 200</span></span>
+<span class="line" id="P599"><span class="ln">599</span>                        fact = math.log10(<span class='hb'>abs</span>(cr13)) + r1l</span>
+<span class="line" id="P600"><span class="ln">600</span>                        <span class='hk'>if</span> <span class='hk'>not</span> fact &lt; UNDERFLOW_LOG:</span>
+<span class="line" id="P601"><span class="ln">601</span>                            r3 = r3 + cr13 * r1</span>
+<span class="line" id="P602"><span class="ln">602</span>            <span class='hc'># label 23: entry for no fully ionized helium</span></span>
+<span class="line" id="P603"><span class="ln">603</span>            cr23 = -c32 / c22</span>
+<span class="line" id="P604"><span class="ln">604</span>            c33 = c33 + cr23 * c23</span>
+<span class="line" id="P605"><span class="ln">605</span>            r3 = r3 + cr23 * r2</span>
+<span class="line" id="P606"><span class="ln">606</span>        <span class='hc'># label 25: entry for neutral helium</span></span>
+<span class="line" id="P607"><span class="ln">607</span>        delte = r3 / c33</span>
+<span class="line" id="P608"><span class="ln">608</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe:</span>
+<span class="line" id="P609"><span class="ln">609</span>            deltx1 = (r2 - c23 * delte) / c22</span>
+<span class="line" id="P610"><span class="ln">610</span>            sahex1 = sahex1 + deltx1</span>
+<span class="line" id="P611"><span class="ln">611</span>            sahex1 = <span class='hb'>max</span>(<span class='hn'>0.0</span>, <span class='hb'>min</span>(<span class='hn'>1.0</span>, sahex1))</span>
+<span class="line" id="P612"><span class="ln">612</span>            <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
+<span class="line" id="P613"><span class="ln">613</span>                <span class='hc'># Products below 1e-38 are replaced by +-1e-38 (&quot;statement</span></span>
+<span class="line" id="P614"><span class="ln">614</span>                <span class='hc'># recalculated for DEC-20 system&quot;).</span></span>
+<span class="line" id="P615"><span class="ln">615</span>                fact1 = c12 * deltx1               <span class='hc'># label 100</span></span>
+<span class="line" id="P616"><span class="ln">616</span>                <span class='hk'>if</span> c12 != <span class='hn'>0.0</span> <span class='hk'>and</span> deltx1 != <span class='hn'>0.0</span>:</span>
+<span class="line" id="P617"><span class="ln">617</span>                    <span class='hk'>if</span> math.log10(<span class='hb'>abs</span>(c12)) + math.log10(<span class='hb'>abs</span>(deltx1)) &lt; UNDERFLOW_LOG:</span>
+<span class="line" id="P618"><span class="ln">618</span>                        fact1 = (math.exp(cln * UNDERFLOW_LOG)</span>
+<span class="line" id="P619"><span class="ln">619</span>                                 * math.copysign(<span class='hn'>1.0</span>, c12)</span>
+<span class="line" id="P620"><span class="ln">620</span>                                 * math.copysign(<span class='hn'>1.0</span>, deltx1))</span>
+<span class="line" id="P621"><span class="ln">621</span>                fact2 = c13 * delte                <span class='hc'># label 110</span></span>
+<span class="line" id="P622"><span class="ln">622</span>                <span class='hk'>if</span> c13 != <span class='hn'>0.0</span> <span class='hk'>and</span> delte != <span class='hn'>0.0</span>:</span>
+<span class="line" id="P623"><span class="ln">623</span>                    <span class='hk'>if</span> math.log10(<span class='hb'>abs</span>(c13)) + math.log10(<span class='hb'>abs</span>(delte)) &lt; UNDERFLOW_LOG:</span>
+<span class="line" id="P624"><span class="ln">624</span>                        fact2 = (math.exp(cln * UNDERFLOW_LOG)</span>
+<span class="line" id="P625"><span class="ln">625</span>                                 * math.copysign(<span class='hn'>1.0</span>, c13)</span>
+<span class="line" id="P626"><span class="ln">626</span>                                 * math.copysign(<span class='hn'>1.0</span>, delte))</span>
+<span class="line" id="P627"><span class="ln">627</span>                deltx2 = (r1 - fact1 - fact2) / c11</span>
+<span class="line" id="P628"><span class="ln">628</span>                sahex2 = sahex2 + deltx2</span>
+<span class="line" id="P629"><span class="ln">629</span>                sahex2 = <span class='hb'>max</span>(<span class='hn'>0.0</span>, <span class='hb'>min</span>(<span class='hn'>1.0</span>, sahex2))</span>
+<span class="line" id="P630"><span class="ln">630</span>        e = e + delte                              <span class='hc'># label 26</span></span>
+<span class="line" id="P631"><span class="ln">631</span>        e = <span class='hb'>max</span>(E_MIN, <span class='hb'>min</span>(emax, e))</span>
+<span class="line" id="P632"><span class="ln">632</span>        lfin = lfin <span class='hk'>and</span> <span class='hb'>abs</span>(delte) &lt; STOLEE</span>
+<span class="line" id="P633"><span class="ln">633</span>        <span class='hk'>if</span> lfin:</span>
+<span class="line" id="P634"><span class="ln">634</span>            <span class='hk'>break</span>                                  <span class='hc'># go to 29</span></span>
+<span class="line" id="P635"><span class="ln">635</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P636"><span class="ln">636</span>        <span class='hc'># Question (see the page): the run goes on with the unconverged e.</span></span>
+<span class="line" id="P637"><span class="ln">637</span>        fail[<span class='hn'>0</span>] = <span class='hn'>1.0</span></span>
+<span class="line" id="P638"><span class="ln">638</span>        fail[<span class='hn'>1</span>] = e</span>
+<span class="line" id="P639"><span class="ln">639</span>        fail[<span class='hn'>2</span>] = delte</span>
+<span class="line" id="P640"><span class="ln">640</span></span>
+<span class="line" id="P641"><span class="ln">641</span>    sv[<span class='hn'>0</span>], sv[<span class='hn'>1</span>], sv[<span class='hn'>2</span>] = e, sahex1, sahex2</span>
+<span class="line" id="P642"><span class="ln">642</span></span>
+<span class="line" id="P643"><span class="ln">643</span>    <span class='hc'># label 29: the system has been solved for e (<a class='fl' href='#L194-L202'>Fortran lines 194–202</a>).</span></span>
+<span class="line" id="P644"><span class="ln">644</span>    emu = e * amu</span>
+<span class="line" id="P645"><span class="ln">645</span>    rmu = cgas * (emu + amu)</span>
+<span class="line" id="P646"><span class="ln">646</span>    d = beta * p / (rmu * t)</span>
+<span class="line" id="P647"><span class="ln">647</span>    dl = math.log10(d)</span>
+<span class="line" id="P648"><span class="ln">648</span>    fxion[<span class='hn'>1</span>] = <span class='hn'>0.0</span></span>
+<span class="line" id="P649"><span class="ln">649</span>    <span class='hk'>if</span> nz0 &gt;= <span class='hn'>7</span>:</span>
+<span class="line" id="P650"><span class="ln">650</span>        fxion[<span class='hn'>1</span>] = sahax[<span class='hn'>7</span>]                        <span class='hc'># hydrogen is species 7</span></span>
+<span class="line" id="P651"><span class="ln">651</span>    fxion[<span class='hn'>2</span>] = sahex1</span>
+<span class="line" id="P652"><span class="ln">652</span>    fxion[<span class='hn'>3</span>] = sahex2</span>
+<span class="line" id="P653"><span class="ln">653</span>    <span class='hk'>if</span> latmo:</span>
+<span class="line" id="P654"><span class="ln">654</span>        <span class='hk'>return</span> (dl, d, rmu, emu, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap,</span>
+<span class="line" id="P655"><span class="ln">655</span>                qcpt, qcpp, ksaha)                 <span class='hc'># go to 60</span></span>
+<span class="line" id="P656"><span class="ln">656</span></span>
+<span class="line" id="P657"><span class="ln">657</span>    <span class='hc'># First derivatives: d ln E / d ln T (sqet) and d ln P (sqep)</span></span>
+<span class="line" id="P658"><span class="ln">658</span>    <span class='hc'># (<a class='fl' href='#L204-L235'>Fortran lines 204–235</a>).</span></span>
+<span class="line" id="P659"><span class="ln">659</span>    rmub = rmu * betai  <span class='hc'># noqa: F841  (unused in the Fortran too)</span></span>
+<span class="line" id="P660"><span class="ln">660</span>    r3t = <span class='hn'>0.0</span></span>
+<span class="line" id="P661"><span class="ln">661</span>    r3p = <span class='hn'>0.0</span></span>
+<span class="line" id="P662"><span class="ln">662</span>    <span class='hk'>if</span> nz0 &gt; <span class='hn'>0</span>:</span>
+<span class="line" id="P663"><span class="ln">663</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(nz1, nz0 + <span class='hn'>1</span>):</span>
+<span class="line" id="P664"><span class="ln">664</span>            r3p = r3p - fxs[i]</span>
+<span class="line" id="P665"><span class="ln">665</span>            r3t = r3t - fxs[i] * (<span class='hn'>2.5</span> + beta14 + sahatt[i])</span>
+<span class="line" id="P666"><span class="ln">666</span>        r3p = -betai * r3p</span>
+<span class="line" id="P667"><span class="ln">667</span>    r1t = r1p = r2t = r2p = <span class='hn'>0.0</span></span>
+<span class="line" id="P668"><span class="ln">668</span>    sahex0 = sk0qt = sk1qt = <span class='hn'>0.0</span></span>
+<span class="line" id="P669"><span class="ln">669</span>    <span class='hk'>if</span> <span class='hk'>not</span> lnohe:                                  <span class='hc'># label 31</span></span>
+<span class="line" id="P670"><span class="ln">670</span>        sahex0 = <span class='hn'>1.0</span> - sahex1 - sahex2</span>
+<span class="line" id="P671"><span class="ln">671</span>        sk0qt = <span class='hn'>2.5</span> + beta14 + SAHET0 * ti</span>
+<span class="line" id="P672"><span class="ln">672</span>        temp = sahek0 * sahex0</span>
+<span class="line" id="P673"><span class="ln">673</span>        r2t = temp * sk0qt</span>
+<span class="line" id="P674"><span class="ln">674</span>        r2p = -temp * betai</span>
+<span class="line" id="P675"><span class="ln">675</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
+<span class="line" id="P676"><span class="ln">676</span>            sk1qt = <span class='hn'>2.5</span> + beta14 + SAHET1 * ti</span>
+<span class="line" id="P677"><span class="ln">677</span>            temp = sahek1 * sahex1</span>
+<span class="line" id="P678"><span class="ln">678</span>            r1t = temp * sk1qt</span>
+<span class="line" id="P679"><span class="ln">679</span>            r1p = -temp * betai</span>
+<span class="line" id="P680"><span class="ln">680</span>            r2t = r2t + cr12 * r1t</span>
+<span class="line" id="P681"><span class="ln">681</span>            r2p = r2p + cr12 * r1p</span>
+<span class="line" id="P682"><span class="ln">682</span>            r3t = r3t + cr13 * r1t</span>
+<span class="line" id="P683"><span class="ln">683</span>            r3p = r3p + cr13 * r1p</span>
+<span class="line" id="P684"><span class="ln">684</span>        r3t = r3t + cr23 * r2t                     <span class='hc'># label 32</span></span>
+<span class="line" id="P685"><span class="ln">685</span>        r3p = r3p + cr23 * r2p</span>
+<span class="line" id="P686"><span class="ln">686</span>    sqet = r3t / c33                               <span class='hc'># label 33</span></span>
+<span class="line" id="P687"><span class="ln">687</span>    sqep = r3p / c33</span>
+<span class="line" id="P688"><span class="ln">688</span>    qdt = -<span class='hn'>1.0</span> - beta14 - ep1 * sqet</span>
+<span class="line" id="P689"><span class="ln">689</span>    qdp = betai - ep1 * sqep</span>
+<span class="line" id="P690"><span class="ln">690</span></span>
+<span class="line" id="P691"><span class="ln">691</span>    <span class='hc'># Internal energy temperature derivative (qut; <a class='fl' href='#L237-L260'>Fortran lines 237–260</a>).</span></span>
+<span class="line" id="P692"><span class="ln">692</span>    usum = <span class='hn'>0.0</span></span>
+<span class="line" id="P693"><span class="ln">693</span>    sx0qt = sx0qp = sx1qt = sx1qp = sx2qt = sx2qp = <span class='hn'>0.0</span></span>
+<span class="line" id="P694"><span class="ln">694</span>    <span class='hk'>if</span> <span class='hk'>not</span> lnohe:</span>
+<span class="line" id="P695"><span class="ln">695</span>        sx1qt = (r2t - c23 * sqet) / c22</span>
+<span class="line" id="P696"><span class="ln">696</span>        sx1qp = (r2p - c23 * sqep) / c22</span>
+<span class="line" id="P697"><span class="ln">697</span>        sx2qt = <span class='hn'>0.0</span></span>
+<span class="line" id="P698"><span class="ln">698</span>        sx2qp = <span class='hn'>0.0</span></span>
+<span class="line" id="P699"><span class="ln">699</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
+<span class="line" id="P700"><span class="ln">700</span>            sx2qt = (r1t - c12 * sx1qt - c13 * sqet) / c11</span>
+<span class="line" id="P701"><span class="ln">701</span>            sx2qp = (r1p - c12 * sx1qp - c13 * sqep) / c11</span>
+<span class="line" id="P702"><span class="ln">702</span>        sx0qt = -(sx1qt + sx2qt)                   <span class='hc'># label 34</span></span>
+<span class="line" id="P703"><span class="ln">703</span>        sx0qp = -(sx1qp + sx2qp)</span>
+<span class="line" id="P704"><span class="ln">704</span>        usum = fxhe * (sx1qt * SAHET0 + sx2qt * (SAHET0 + SAHET1))</span>
+<span class="line" id="P705"><span class="ln">705</span>    <span class='hk'>if</span> nz0 &gt; <span class='hn'>0</span>:                                    <span class='hc'># label 35</span></span>
+<span class="line" id="P706"><span class="ln">706</span>        stemp = <span class='hn'>2.50</span> + beta14 - ep1e * sqet</span>
+<span class="line" id="P707"><span class="ln">707</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(nz1, nz0 + <span class='hn'>1</span>):</span>
+<span class="line" id="P708"><span class="ln">708</span>            fxt[i] = fxs[i] * (stemp + sahatt[i])</span>
+<span class="line" id="P709"><span class="ln">709</span>            usum = usum + fxt[i] * SAHAT[i]</span>
+<span class="line" id="P710"><span class="ln">710</span>    betaut = <span class='hn'>0.75</span> * (<span class='hn'>2.0</span> + beta14)                 <span class='hc'># label 37</span></span>
+<span class="line" id="P711"><span class="ln">711</span>    ramu = cgas * amu</span>
+<span class="line" id="P712"><span class="ln">712</span>    qut = ramu * ((<span class='hn'>1.0</span> + e) * (betaut + <span class='hn'>3.0</span> * betai * beta14)</span>
+<span class="line" id="P713"><span class="ln">713</span>                  + betaut * sqet + usum * ti)</span>
+<span class="line" id="P714"><span class="ln">714</span></span>
+<span class="line" id="P715"><span class="ln">715</span>    <span class='hc'># Specific heat (qcp) and adiabatic gradient (dela; Fortran lines</span></span>
+<span class="line" id="P716"><span class="ln">716</span>    <span class='hc'># 262–267).</span></span>
+<span class="line" id="P717"><span class="ln">717</span>    pdt = p / (d * t)</span>
+<span class="line" id="P718"><span class="ln">718</span>    pdtq = pdt * qdt</span>
+<span class="line" id="P719"><span class="ln">719</span>    qcp = qut - pdtq</span>
+<span class="line" id="P720"><span class="ln">720</span>    qcpi = <span class='hn'>1.0</span> / qcp</span>
+<span class="line" id="P721"><span class="ln">721</span>    dela = -pdtq * qcpi</span>
+<span class="line" id="P722"><span class="ln">722</span>    <span class='hk'>if</span> <span class='hk'>not</span> lderiv:</span>
+<span class="line" id="P723"><span class="ln">723</span>        <span class='hk'>return</span> (dl, d, rmu, emu, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap,</span>
+<span class="line" id="P724"><span class="ln">724</span>                qcpt, qcpp, ksaha)                 <span class='hc'># go to 60</span></span>
+<span class="line" id="P725"><span class="ln">725</span></span>
+<span class="line" id="P726"><span class="ln">726</span>    <span class='hc'># Derivatives of qdt, qcp and dela: the second derivatives of E</span></span>
+<span class="line" id="P727"><span class="ln">727</span>    <span class='hc'># (<a class='fl' href='#L269-L311'>Fortran lines 269–311</a>).</span></span>
+<span class="line" id="P728"><span class="ln">728</span>    beta16 = <span class='hn'>4.0</span> * betai * beta14</span>
+<span class="line" id="P729"><span class="ln">729</span>    r3t = <span class='hn'>0.0</span></span>
+<span class="line" id="P730"><span class="ln">730</span>    r3p = <span class='hn'>0.0</span></span>
+<span class="line" id="P731"><span class="ln">731</span>    utsum = <span class='hn'>0.0</span></span>
+<span class="line" id="P732"><span class="ln">732</span>    upsum = <span class='hn'>0.0</span></span>
+<span class="line" id="P733"><span class="ln">733</span>    <span class='hk'>if</span> nz0 &gt; <span class='hn'>0</span>:</span>
+<span class="line" id="P734"><span class="ln">734</span>        etemp = (<span class='hn'>1.0</span> + e + e) / ((e * (<span class='hn'>1.0</span> + e)) * (e * (<span class='hn'>1.0</span> + e)))</span>
+<span class="line" id="P735"><span class="ln">735</span>        stemp1 = <span class='hn'>2.5</span> + beta14 - sqet * ep1e</span>
+<span class="line" id="P736"><span class="ln">736</span>        stemp2 = -betai - sqep * ep1e</span>
+<span class="line" id="P737"><span class="ln">737</span>        stemp3 = etemp * sqep * sqet - betai * beta14</span>
+<span class="line" id="P738"><span class="ln">738</span>        stemp4 = etemp * (sqet * sqet) + beta16</span>
+<span class="line" id="P739"><span class="ln">739</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(nz1, nz0 + <span class='hn'>1</span>):</span>
+<span class="line" id="P740"><span class="ln">740</span>            stemp5 = (stemp1 + sahatt[i]) * (<span class='hn'>1.0</span> - <span class='hn'>2.0</span> * sahax[i])</span>
+<span class="line" id="P741"><span class="ln">741</span>            stemp6 = fxs[i] * (stemp4 - sahatt[i]) + fxt[i] * stemp5</span>
+<span class="line" id="P742"><span class="ln">742</span>            r3t = r3t - stemp6</span>
+<span class="line" id="P743"><span class="ln">743</span>            utsum = utsum + SAHAT[i] * (stemp6 - fxt[i])</span>
+<span class="line" id="P744"><span class="ln">744</span>            stemp7 = fxs[i] * (stemp3 + stemp2 * stemp5)</span>
+<span class="line" id="P745"><span class="ln">745</span>            r3p = r3p - stemp7</span>
+<span class="line" id="P746"><span class="ln">746</span>            upsum = upsum + SAHAT[i] * stemp7</span>
+<span class="line" id="P747"><span class="ln">747</span>    <span class='hk'>if</span> <span class='hk'>not</span> lnohe:                                  <span class='hc'># label 42</span></span>
+<span class="line" id="P748"><span class="ln">748</span>        stemp = <span class='hn'>2.0</span> * sahex1 * ep1 * sqet</span>
+<span class="line" id="P749"><span class="ln">749</span>        r2t = (sahek0 * (sahex0 * (beta16 - SAHET0 * ti + (sk0qt * sk0qt))</span>
+<span class="line" id="P750"><span class="ln">750</span>                         + <span class='hn'>2.0</span> * sx0qt * sk0qt)</span>
+<span class="line" id="P751"><span class="ln">751</span>               + ep12 * (stemp * sqet - <span class='hn'>2.0</span> * sx1qt * sqet))</span>
+<span class="line" id="P752"><span class="ln">752</span>        r2p = (sahek0 * (sahex0 * betai * (-beta14 - sk0qt) + sx0qp * sk0qt</span>
+<span class="line" id="P753"><span class="ln">753</span>                         - betai * sx0qt)</span>
+<span class="line" id="P754"><span class="ln">754</span>               + ep12 * (stemp * sqep - sx1qp * sqet - sx1qt * sqep))</span>
+<span class="line" id="P755"><span class="ln">755</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
+<span class="line" id="P756"><span class="ln">756</span>            stemp = <span class='hn'>2.0</span> * sahex2 * ep1 * sqet</span>
+<span class="line" id="P757"><span class="ln">757</span>            r1t = (sahek1 * (sahex1 * (beta16 - SAHET1 * ti + (sk1qt * sk1qt))</span>
+<span class="line" id="P758"><span class="ln">758</span>                             + <span class='hn'>2.0</span> * sx1qt * sk1qt)</span>
+<span class="line" id="P759"><span class="ln">759</span>                   + ep12 * (stemp * sqet - <span class='hn'>2.0</span> * sx2qt * sqet))</span>
+<span class="line" id="P760"><span class="ln">760</span>            r1p = (sahek1 * (sahex1 * betai * (-beta14 - sk1qt)</span>
+<span class="line" id="P761"><span class="ln">761</span>                             + sx1qp * sk1qt - betai * sx1qt)</span>
+<span class="line" id="P762"><span class="ln">762</span>                   + ep12 * (stemp * sqep - sx2qp * sqet - sx2qt * sqep))</span>
+<span class="line" id="P763"><span class="ln">763</span>            r2t = r2t + cr12 * r1t</span>
+<span class="line" id="P764"><span class="ln">764</span>            r2p = r2p + cr12 * r1p</span>
+<span class="line" id="P765"><span class="ln">765</span>            r3p = r3p + cr13 * r1p</span>
+<span class="line" id="P766"><span class="ln">766</span>            r3t = r3t + cr13 * r1t</span>
+<span class="line" id="P767"><span class="ln">767</span>        r3p = r3p + cr23 * r2p                     <span class='hc'># label 43</span></span>
+<span class="line" id="P768"><span class="ln">768</span>        r3t = r3t + cr23 * r2t</span>
+<span class="line" id="P769"><span class="ln">769</span>    sqett = r3t / c33                              <span class='hc'># label 44</span></span>
+<span class="line" id="P770"><span class="ln">770</span>    sqetp = r3p / c33</span>
+<span class="line" id="P771"><span class="ln">771</span></span>
+<span class="line" id="P772"><span class="ln">772</span>    <span class='hc'># <a class='fl' href='#L312-L343'>Fortran lines 312–343</a>.</span></span>
+<span class="line" id="P773"><span class="ln">773</span>    qdtt = -beta16 + ((ep1 * sqet) * (ep1 * sqet)) - ep1 * sqett</span>
+<span class="line" id="P774"><span class="ln">774</span>    qdtp = betai * beta14 + ep12 * sqet * sqep - ep1 * sqetp</span>
+<span class="line" id="P775"><span class="ln">775</span>    <span class='hk'>if</span> nz0 &gt; <span class='hn'>0</span>:</span>
+<span class="line" id="P776"><span class="ln">776</span>        stemp = ep1e * sqett</span>
+<span class="line" id="P777"><span class="ln">777</span>        stemp1 = ep1e * sqetp</span>
+<span class="line" id="P778"><span class="ln">778</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(nz1, nz0 + <span class='hn'>1</span>):</span>
+<span class="line" id="P779"><span class="ln">779</span>            utsum = utsum - fxs[i] * SAHAT[i] * stemp</span>
+<span class="line" id="P780"><span class="ln">780</span>            upsum = upsum - fxs[i] * SAHAT[i] * stemp1</span>
+<span class="line" id="P781"><span class="ln">781</span>    <span class='hk'>if</span> <span class='hk'>not</span> lnohe:                                  <span class='hc'># label 46</span></span>
+<span class="line" id="P782"><span class="ln">782</span>        sx1qtt = (r2t - c23 * sqett) / c22</span>
+<span class="line" id="P783"><span class="ln">783</span>        sx1qtp = (r2p - c23 * sqetp) / c22</span>
+<span class="line" id="P784"><span class="ln">784</span>        <span class='hk'>if</span> <span class='hk'>not</span> lnohe2:</span>
+<span class="line" id="P785"><span class="ln">785</span>            sx2qtt = (r1t - c12 * sx1qtt - c13 * sqett) / c11</span>
+<span class="line" id="P786"><span class="ln">786</span>            sx2qtp = (r1p - c12 * sx1qtp - c13 * sqetp) / c11</span>
+<span class="line" id="P787"><span class="ln">787</span>            utsum = utsum + fxhe * (SAHET0 + SAHET1) * (sx2qtt - sx2qt)</span>
+<span class="line" id="P788"><span class="ln">788</span>            upsum = upsum + fxhe * (SAHET0 + SAHET1) * sx2qtp</span>
+<span class="line" id="P789"><span class="ln">789</span>        utsum = utsum + fxhe * SAHET0 * (sx1qtt - sx1qt)   <span class='hc'># label 47</span></span>
+<span class="line" id="P790"><span class="ln">790</span>        upsum = upsum + fxhe * SAHET0 * sx1qtp</span>
+<span class="line" id="P791"><span class="ln">791</span>    btemp = (<span class='hn'>1.0</span> + e) * beta14 * betai * (<span class='hn'>24.0</span> * betai - <span class='hn'>9.0</span>)   <span class='hc'># label 48</span></span>
+<span class="line" id="P792"><span class="ln">792</span>    qqutt = ramu * (btemp + <span class='hn'>0.75</span> * (<span class='hn'>2.0</span> + beta14 * (<span class='hn'>8.0</span> * betai + <span class='hn'>1.0</span>)) * sqet</span>
+<span class="line" id="P793"><span class="ln">793</span>                    + betaut * sqett + utsum * ti)</span>
+<span class="line" id="P794"><span class="ln">794</span>    qqutp = ramu * (-<span class='hn'>0.25</span> * btemp</span>
+<span class="line" id="P795"><span class="ln">795</span>                    + <span class='hn'>0.75</span> * ((<span class='hn'>2.0</span> + beta14 * (<span class='hn'>4.0</span> * betai + <span class='hn'>1.0</span>)) * sqep</span>
+<span class="line" id="P796"><span class="ln">796</span>                              - beta14 * betai * sqet)</span>
+<span class="line" id="P797"><span class="ln">797</span>                    + betaut * sqetp + upsum * ti)</span>
+<span class="line" id="P798"><span class="ln">798</span>    qcpt = qcpi * (qqutt + pdtq * (<span class='hn'>1.0</span> + qdt) - pdt * qdtt)</span>
+<span class="line" id="P799"><span class="ln">799</span>    qcpp = qcpi * (qqutp - pdtq * (<span class='hn'>1.0</span> - qdp) - pdt * qdtp)</span>
+<span class="line" id="P800"><span class="ln">800</span>    qat = -<span class='hn'>1.0</span> - qdt - qcpt + qdtt / qdt</span>
+<span class="line" id="P801"><span class="ln">801</span>    qap = <span class='hn'>1.0</span> - qdp - qcpp + qdtp / qdt</span>
+<span class="line" id="P802"><span class="ln">802</span>    <span class='hk'>return</span> (dl, d, rmu, emu, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap,</span>
+<span class="line" id="P803"><span class="ln">803</span>            qcpt, qcpp, ksaha)                     <span class='hc'># label 60</span></span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
 function st(){try{return localStorage.getItem('pm-toc')}catch(e){return null}}function sv(v){try{localStorage.setItem('pm-toc',v)}catch(e){}}
 var b=nav.querySelector('.toc-toggle');function set(h){page.classList.toggle('toc-hidden',h);b.textContent=h?'show':'hide';}
 set(st()==='hidden');b.addEventListener('click',function(){var h=!page.classList.contains('toc-hidden');set(h);sv(h?'hidden':'shown');});

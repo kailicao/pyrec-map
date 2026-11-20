@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `VFACT_MOD` holds the factors at each interface from which the circulation velocities and the stability criteria of rotational mixing are computed; [`SETUPV`](setupv.f.md#setupv) sets them once per step and [`VCIRC`](vcirc.f.md#vcirc) uses them. Shared by 2 routines. It replaces `COMMON/VFACT/` (MHP via Claude, 10/14/26); `JSON` comes from `DIMENSIONS_MOD`.
+**Purpose.** `VFACT_MOD` holds the factors at each interface from which the circulation velocities and the stability criteria of rotational mixing are computed; [`SETUPV`](https://github.com/yreclab/yrec/blob/7be4133/src/setupv.f#L3-L467) sets them once per step and [`VCIRC`](vcirc.f.md#vcirc) uses them. Shared by 2 routines. It replaces `COMMON/VFACT/` (MHP via Claude, 10/14/26); `JSON` comes from `DIMENSIONS_MOD`.
 
 **What its variables hold, who sets them, who reads them.** All are set by `SETUPV` (to 0 first, then at each interface); SETUPV's page gives the equations.
 - `FACT1`, `FACT2` (`JSON` each): the Eddington–Sweet velocity, `VES` = `FACT1`·`FACT2`·$`\Omega^2`$ ("Endal and Sofia paper II"), with `FACT6` of `TAUKH_MOD`; read by `VCIRC`, which also uses `FACT1` for the $`\mu`$ currents.

@@ -1,11 +1,11 @@
 ## Explanation
 
-**Purpose.** Diffuses one species over one time step on the equally spaced grid, for [MICRODIFF](microdiff.f.md#microdiff), and returns the change in its abundance. The comments describe the diffusion equation as two terms: one with $`d\ln P/dr`$ and the abundance gradient (solved explicitly, by the two-step Lax–Wendroff scheme of Numerical Recipes), and one with the second derivative of the abundance (solved implicitly).
+**Purpose.** Diffuses one species over one time step on the equally spaced grid, for [MICRODIFF](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff.f#L4-L245), and returns the change in its abundance. The comments describe the diffusion equation as two terms: one with $`d\ln P/dr`$ and the abundance gradient (solved explicitly, by the two-step Lax–Wendroff scheme of Numerical Recipes), and one with the second derivative of the abundance (solved implicitly).
 
 **How it fits.**
-- **Inputs:** the equal grid and midpoint variables from [MICRODIFF_MTE](microdiff_mte.f.md#microdiff_mte): mass `EM`, radius `ER`, density, temperature, $`d\ln P/dr`$, $`\nabla`$ and the three-species abundances `ESPEC(3,·)`; the spacing `DR`; `DT` and `STOT` in Bahcall–Loeb units; and the species' weight `THEA`, charge `THEZ` and column `J` (1 for hydrogen, 3 for metals or a light element).
+- **Inputs:** the equal grid and midpoint variables from [MICRODIFF_MTE](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_mte.f#L4-L294): mass `EM`, radius `ER`, density, temperature, $`d\ln P/dr`$, $`\nabla`$ and the three-species abundances `ESPEC(3,·)`; the spacing `DR`; `DT` and `STOT` in Bahcall–Loeb units; and the species' weight `THEA`, charge `THEZ` and column `J` (1 for hydrogen, 3 for metals or a light element).
 - **Who calls it:** only `MICRODIFF`, once per diffused species.
-- **What it calls:** [MICRODIFF_COD](microdiff_cod.f.md#microdiff_cod) (the coefficients, twice), [LAX_WENDROF1](lax_wendrof1.f.md#lax_wendrof1) and [LAX_WENDROF2](lax_wendrof2.f.md#lax_wendrof2) (the explicit term), [GET_IMP_DIFFCO](get_imp_diffco.f.md#get_imp_diffco) (the matrix) and [TRIDIAG_GS](tridiag_gs.f.md#tridiag_gs) (its solution).
+- **What it calls:** [MICRODIFF_COD](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_cod.f#L4-L217) (the coefficients, twice), [LAX_WENDROF1](lax_wendrof1.f.md#lax_wendrof1) and [LAX_WENDROF2](lax_wendrof2.f.md#lax_wendrof2) (the explicit term), [GET_IMP_DIFFCO](get_imp_diffco.f.md#get_imp_diffco) (the matrix) and [TRIDIAG_GS](tridiag_gs.f.md#tridiag_gs) (its solution).
 - **Output:** `ESPEC(J,·)` is overwritten with the change $`X^\mathrm{new}_i - X^\mathrm{old}_i`$; `EDXDR` (the hydrogen concentration gradient, filled on the hydrogen call) is kept for later calls. A line per iteration goes to `ISHORT`, and a warning to `IOWR` and `ISHORT` if the iteration does not converge.
 - **Modules:** `NMLPAR_MOD` (`GRTOL`, `NITER_GS`), `CONSTANTS_MOD` ($`4\pi`$, `C4PI`), `IOUNITS_MOD` (`ISHORT`, `IOWR`) and `DIMENSIONS_MOD` (`JSON`). The unused `/THEAGE/` of `rp_1` is no longer declared.
 
@@ -34,7 +34,7 @@
 
 6. **Result:** $`\Delta X_i = X^\mathrm{new}_i - X_i`$ in `ESPEC(J,·)`.
 
-**Design.** The change rather than the new abundance is returned, as the comments explain, so that the interpolation back to the model grid adds less error. The first and last cells hold the masses of the convective core and envelope, whose changes [MICRODIFF_ETM](microdiff_etm.f.md#microdiff_etm) then applies to every point inside them.
+**Design.** The change rather than the new abundance is returned, as the comments explain, so that the interpolation back to the model grid adds less error. The first and last cells hold the masses of the convective core and envelope, whose changes [MICRODIFF_ETM](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_etm.f#L2-L174) then applies to every point inside them.
 
 **From YREC's documentation.** [Physics Options](https://yrec.readthedocs.io/en/latest/namelist_physics.html): `GRTOL` (default 1.0D-8) is the numerical tolerance on the abundance changes from diffusion, and `NITER_GS` (10) the largest number of iterations of the solver.
 
@@ -71,7 +71,7 @@
 
     **Checked by running YREC** (Nov 9, 2026; a line added at each suspected path counted how often it was taken, the outputs otherwise unchanged): The test ran in all seven runs with settling, 4,496 to 22,220 times per run, never more than two iterations a call. In 14 to 259 first iterations per run, the largest signed change was below `GRTOL` while the largest change in size, $`2.0\times10^{-7}`$ to $`1.87\times10^{-6}`$, was not, so the loop ended one iteration early. With the fix, `testsuite/Test_m1p4feh+0p0GS98_dif_TAMS` and `testsuite/Test_solarM22M_difkur` give identical tracks and stored models; the `.short` file differs beyond 2% (presumably its iteration lines; not checked). This agrees with the above: The second iteration repeats the first. Intent: none found.
 
-3. **(cannot be reached)** **The midpoint change is shifted by one point.** ([lines 155–157](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_run.f#L155-L157)) `ED_H(I) = 0.5*(ED(I)+ED(I-1)-…)` for `I = 2..NPT` assigns to midpoint `I` the mean of points `I-1` and `I`, while in [MICRODIFF_MTE](microdiff_mte.f.md#microdiff_mte) midpoint `I` lies between points `I` and `I+1` ([microdiff_mte.f, lines 85–93](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_mte.f#L85-L93)); midpoint 1 keeps its value from `LAX_WENDROF1`. No effect today, since `EQCOD2X_H` is zero (question 1), but it would matter if `EQCOD2X_H` were used.
+3. **(cannot be reached)** **The midpoint change is shifted by one point.** ([lines 155–157](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_run.f#L155-L157)) `ED_H(I) = 0.5*(ED(I)+ED(I-1)-…)` for `I = 2..NPT` assigns to midpoint `I` the mean of points `I-1` and `I`, while in [MICRODIFF_MTE](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_mte.f#L4-L294) midpoint `I` lies between points `I` and `I+1` ([microdiff_mte.f, lines 85–93](https://github.com/yreclab/yrec/blob/7be4133/src/microdiff_mte.f#L85-L93)); midpoint 1 keeps its value from `LAX_WENDROF1`. No effect today, since `EQCOD2X_H` is zero (question 1), but it would matter if `EQCOD2X_H` were used.
 
     **A possible fix:**
 

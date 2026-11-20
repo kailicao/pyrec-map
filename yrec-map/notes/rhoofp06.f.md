@@ -2,7 +2,7 @@
 
 **Purpose.** Inverts the OPAL 2006 equation of state: the density for a given $`X`$, $`T_6`$ and pressure. It follows the method of `RHOOFP` and `RHOOFP01`, the versions for the original and 2001 tables (both removed since `rp_1`), with a different treatment of radiation.
 
-**How it fits.** Called by [`OEQOS06`](oeqos06.f.md#oeqos06); calls [`ESAC06`](esac06.f.md#esac06) for each trial density. Modules: `AEOS06_MOD` (tables and grids from [`READCOEOS06`](readcoeos06.f.md#readcoeos06)) and `EOS06MISC_MOD` (`EOS`, the results of `ESAC06`, and `NRA`, the last density index at each temperature, set by a `DATA` statement in the module and also used by [`EQBOUND06`](eqbound06.f.md#eqbound06)). It returns the density, or $`-999`$.
+**How it fits.** Called by [`OEQOS06`](https://github.com/yreclab/yrec/blob/7be4133/src/oeqos06.f#L30-L132); calls [`ESAC06`](esac06.f.md#esac06) for each trial density. Modules: `AEOS06_MOD` (tables and grids from [`READCOEOS06`](https://github.com/yreclab/yrec/blob/7be4133/src/readcoeos06.f#L7-L163)) and `EOS06MISC_MOD` (`EOS`, the results of `ESAC06`, and `NRA`, the last density index at each temperature, set by a `DATA` statement in the module and also used by [`EQBOUND06`](eqbound06.f.md#eqbound06)). It returns the density, or $`-999`$.
 
 **The method.**
 1. Find the bracketing composition index `MLO` in `XA` and temperature index `KLO` in `T6LIST(1,·)`, by bisection.

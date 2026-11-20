@@ -3,10 +3,10 @@
 **Purpose.** `FUNC` evaluates, at one colatitude $`\theta`$ on an equipotential surface of a rotating star, the effective gravity $`g = |\nabla\Phi|`$ and the surface element. It is the integrand for the angular averages $`\langle g\rangle`$ and $`\langle g^{-1}\rangle`$ that the rotation form factors need.
 
 **How it fits.**
-- **Who calls it:** only [QGAUSS](qgauss.f.md#qgauss), a ten-point Gauss–Legendre quadrature over $`0 \le \theta \le \pi/2`$, called by [FPFT](fpft.f.md#fpft).
+- **Who calls it:** only [QGAUSS](https://github.com/yreclab/yrec/blob/7be4133/src/qgauss.f#L4-L43), a ten-point Gauss–Legendre quadrature over $`0 \le \theta \le \pi/2`$, called by [FPFT](fpft.f.md#fpft).
 - **Inputs:** `X` ($`\theta`$), `R0` (mean radii of the equipotentials), `HS` ($`\log m`$), `AINT` and `Q` (the distortion integral and its integrand, from [TRAPZD](trapzd.f.md#trapzd)), `W2` ($`\Omega^2`$), `A` (the distortion amplitude), `I` (the shell).
 - **Outputs:** `G` ($`g`$) and `S` (the surface element per unit $`\theta`$).
-- **Modules:** constants only ([`CONSTANTS_MOD`](constants_mod.f.md#constants_mod): $`4\pi`$, $`1/3`$, $`\ln 10`$, $`\log G`$).
+- **Modules:** constants only ([`CONSTANTS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/constants_mod.f#L37-L75): $`4\pi`$, $`1/3`$, $`\ln 10`$, $`\log G`$).
 
 **The method.** With $`P_2 = 1 - \tfrac32\sin^2\theta`$, the equipotential is $`r = r_0(1 - aP_2)`$. Then
 ```math

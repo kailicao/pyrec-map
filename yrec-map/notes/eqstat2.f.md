@@ -5,7 +5,7 @@
 **How it fits.**
 - **Who calls it:** `EQSTAT` (once or five times per call, see there) and [CALCAD](calcad.f.md#calcad) directly.
 - **Inputs:** `TL`, `PL`, `X`, `Z`, `LDERIV`, `LATMO`; `DL` as a starting guess.
-- **What it calls:** [EQSAHA](eqsaha.f.md#eqsaha) (Saha ionization), [EQSCVE](eqscve.f.md#eqscve) (SCV tables), [EQRELV](eqrelv.f.md#eqrelv) (fully ionized, degenerate gas), and for OPAL [OEQOS06](oeqos06.f.md#oeqos06) with [EQBOUND06](eqbound06.f.md#eqbound06) (the OPAL 1995 and 2001 tables, with `OEQOS`, `EQBOUND`, `OEQOS01` and `EQBOUND01`, removed since `rp_1`).
+- **What it calls:** [EQSAHA](eqsaha.f.md#eqsaha) (Saha ionization), [EQSCVE](eqscve.f.md#eqscve) (SCV tables), [EQRELV](eqrelv.f.md#eqrelv) (fully ionized, degenerate gas), and for OPAL [OEQOS06](https://github.com/yreclab/yrec/blob/7be4133/src/oeqos06.f#L30-L132) with [EQBOUND06](eqbound06.f.md#eqbound06) (the OPAL 1995 and 2001 tables, with `OEQOS`, `EQBOUND`, `OEQOS01` and `EQBOUND01`, removed since `rp_1`).
 - **Outputs:** as listed in `EQSTAT`: $`T`$, $`P`$, $`\rho`$, $`\beta`$, the ionization fractions, $`\mu`$ terms, $`\eta`$, $`Q_{\rho T}`$, $`Q_{\rho P}`$, $`c_P`$, $`\nabla_\mathrm{ad}`$ and their derivatives.
 - **Modules:** `NMLPAR_MOD` (the namelist settings: the flag `LOPALE06`, `LSCV`, `TSCUT`, the temperature below which Saha is solved, and `LDIFZ`, metal diffusion); `COMP_MOD` (the envelope composition `XENV`, `ZENV`, `AMUENV`, `FXENV`, set in [STARIN](starin.f.md#starin)); `CONSTANTS_MOD` (constants: $`\ln 10`$, $`R`$ as `CGAS`, $`a/3`$ as `CA3`); `IOUNITS_MOD` (`ISHORT`).
 

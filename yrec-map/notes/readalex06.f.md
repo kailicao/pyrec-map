@@ -3,12 +3,12 @@
 **Purpose.** Reads the low-temperature opacity tables of Ferguson et al. ([2005](https://ui.adsabs.harvard.edu/abs/2005ApJ...623..585F), ApJ 623, 585), called the "Alexander 2006" tables in the code, for all compositions at once.
 
 **How it fits.**
-- **Who calls it:** [`SETUPOPAC`](setupopac.f.md#setupopac), when `LALEX06` is true.
-- **Input:** the formatted file `FALEX06` (its name passed through `SETUPOPAC` since the change "MHP 8/25"), opened on unit `IALEX06` from [`IOUNITS_MOD`](iounits_mod.f.md#iounits_mod) (set in [`PARMIN`](parmin.f.md#parmin)).
+- **Who calls it:** [`SETUPOPAC`](https://github.com/yreclab/yrec/blob/7be4133/src/setupopac.f#L14-L95), when `LALEX06` is true.
+- **Input:** the formatted file `FALEX06` (its name passed through `SETUPOPAC` since the change "MHP 8/25"), opened on unit `IALEX06` from [`IOUNITS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/iounits_mod.f#L19-L54) (set in [`PARMIN`](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489)).
 - **Outputs, through modules:**
-  - [`ALOT06ALL_MOD`](alot06all_mod.f.md#alot06all_mod): `CAPTALEX06(143, 85, 19)`, all tables, read by [`ALEX06TAB`](alex06tab.f.md#alex06tab);
-  - [`GALOT06_MOD`](galot06_mod.f.md#galot06_mod): the grids `TGR06` ($`\log T`$), `XXG06` ($`X`$), `R0GR06` ($`\log R`$), `ZZG06` ($`Z`$), initialized in the module itself and read here (to check the tables) and by `ALEX06TAB` and [`GETALEX06`](getalex06.f.md#getalex06);
-  - [`ALOT06_MOD`](alot06_mod.f.md#alot06_mod): the table for one composition, `CAPALEX06(85, 19)`, initialized here to the first table ($`X = 0`$, $`Z = 0`$), and the composition and starting indices (`XE`, `ZE`, `IX`, `IT`, `ID`, initialized in the module). `ALEX06TAB` rebuilds it for the envelope's composition, and `GETALEX06` interpolates in it.
+  - [`ALOT06ALL_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/alot06all_mod.f#L23-L34): `CAPTALEX06(143, 85, 19)`, all tables, read by [`ALEX06TAB`](alex06tab.f.md#alex06tab);
+  - [`GALOT06_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/galot06_mod.f#L29-L51): the grids `TGR06` ($`\log T`$), `XXG06` ($`X`$), `R0GR06` ($`\log R`$), `ZZG06` ($`Z`$), initialized in the module itself and read here (to check the tables) and by `ALEX06TAB` and [`GETALEX06`](getalex06.f.md#getalex06);
+  - [`ALOT06_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/alot06_mod.f#L29-L44): the table for one composition, `CAPALEX06(85, 19)`, initialized here to the first table ($`X = 0`$, $`Z = 0`$), and the composition and starting indices (`XE`, `ZE`, `IX`, `IT`, `ID`, initialized in the module). `ALEX06TAB` rebuilds it for the envelope's composition, and `GETALEX06` interpolates in it.
 
 **The tables.** From the header comments: $`X`$ = 0, 0.1, 0.2, 0.35, 0.5, 0.7, 0.8, 0.9 and $`1-Z`$; 16 values of $`Z`$ from 0 to 0.1; 85 values of $`\log T`$ from 2.7 to 4.5 ($`0.05\,\mathrm{dex}`$ steps, $`0.01\,\mathrm{dex}`$ between 2.9 and 3.5); 19 values of $`\log R`$ from $`-8`$ to 1, with
 

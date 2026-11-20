@@ -1,10 +1,10 @@
 ## Explanation
 
-**Purpose.** The same deuterium burning as [DBURN](dburn.f.md#dburn), for the substeps of a model in the middle of a time step: it is called by [MIDMOD](midmod.f.md#midmod) with rates interpolated to the substep and with the accreted mass scaled to the substep's share ("unlike the routine called by MIX, the timestep here is only a portion of the total model DT"). Its header still says "DBURN."
+**Purpose.** The same deuterium burning as [DBURN](dburn.f.md#dburn), for the substeps of a model in the middle of a time step: it is called by [MIDMOD](https://github.com/yreclab/yrec/blob/7be4133/src/midmod.f#L2-L523) with rates interpolated to the substep and with the accreted mass scaled to the substep's share ("unlike the routine called by MIX, the timestep here is only a portion of the total model DT"). Its header still says "DBURN."
 
 **How it fits.**
 - **Inputs:** as DBURN, plus `DRATEM`, `DRATEM0` (the rates at the end and start of the substep, interpolated in MIDMOD from `DRATE0`, `DRATE` with the fraction `FAC2`) and `FAC2` itself. `DT` is in seconds (MIDMOD's `FAC2 = DT/DELTS`), converted to $`\mathrm{Gyr}`$ with `DTT = DT*1.0D-9/CSECYR` (`CSECYR` from `CONSTANTS_MOD`, formerly `/CONST3/`). The other module data are DBURN's: `HCOMPP` from `OLDMOD_MOD`, `FMASSACC` from `DEUTER_MOD`, `LMDOT` and `COMPACC` from `NMLPAR_MOD`.
-- **Who calls it:** [MIDMOD](midmod.f.md#midmod).
+- **Who calls it:** [MIDMOD](https://github.com/yreclab/yrec/blob/7be4133/src/midmod.f#L2-L523).
 - **Output:** `HCOMP` (H, $`^3\mathrm{He}`$, D) over the shell or zone.
 
 **The method.** As in DBURN: mass-weighted means over the zone, substeps with $`X_D \leftarrow X_D e^{-2r_k\Delta t/n}`$ (the factor 2 as in DBURN, whose question 2 asks what it is for, [dburn.f, question 2](dburn.f.md#q2)), then $`\Delta X = \tfrac12\Delta X_D`$ and $`\Delta X_3 = -\tfrac32\Delta X_D`$. The differences from DBURN:

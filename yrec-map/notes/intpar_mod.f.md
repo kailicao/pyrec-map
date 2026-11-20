@@ -1,11 +1,11 @@
 ## Explanation
 
-**Purpose.** `INTPAR_MOD` holds the settings of the Bulirsch–Stoer integration of the atmosphere and envelope, shared by [`PARMIN`](parmin.f.md#parmin), [`ENVINT`](envint.f.md#envint) and [`BSSTEP`](bsstep.f.md#bsstep). It replaces `COMMON/INTPAR/` (MHP via Claude, 10/14/26), the first of the conversion's `DATA` migrations: the three defaults come from PARMIN's `DATA STOLR0,IMAX,NUSE/1.0D-3,11,7/`.
+**Purpose.** `INTPAR_MOD` holds the settings of the Bulirsch–Stoer integration of the atmosphere and envelope, shared by [`PARMIN`](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489), [`ENVINT`](envint.f.md#envint), and [`BSSTEP`](bsstep.f.md#bsstep). It replaces `COMMON/INTPAR/` (MHP via Claude, 10/14/26), the first of the conversion's `DATA` migrations: the three defaults come from PARMIN's `DATA STOLR0,IMAX,NUSE/1.0D-3,11,7/`.
 
 **What its variables hold, who sets them, who reads them.** All three are in the `PHYSICS` namelist read by `PARMIN`, so a run can change them; no routine assigns them.
 - `STOLR0` (`REAL*8`, 1.0D-3): the integration tolerance. `ENVINT` uses it as such for the atmosphere and scales it by $`|`$`SENV`$`|`$ for the envelope.
 - `IMAX` (`INTEGER*4`, 11): the largest number of step subdivisions `BSSTEP` tries.
-- `NUSE` (`INTEGER*4`, 7): the number of points used in `BSSTEP`'s extrapolation to zero step (passed to [`RATEXT`](ratext.f.md#ratext)), and the subdivision count that decides the next step.
+- `NUSE` (`INTEGER*4`, 7): the number of points used in `BSSTEP`'s extrapolation to zero step (passed to [`RATEXT`](https://github.com/yreclab/yrec/blob/7be4133/src/ratext.f#L4-L56)), and the subdivision count that decides the next step.
 
 **Design.** A blanket `USE INTPAR_MOD`.
 

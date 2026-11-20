@@ -2,7 +2,7 @@
 <header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ eqstat.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#documentation'>From YREC&#x27;s documentation</a></li><li><a href='#bugs'>Suspected bugs, checked by running the code</a><ol><li><a href='#b1'>1. A misspelled counter</a></li></ol></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-EQSTAT'>EQSTAT</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>eqstat.f</h1>
 <p class='muted'>175 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/eqstat.f'>on GitHub (7be4133)</a></p>
-<p><strong>Python version</strong>: <code>eqstat.py</code>, 144 lines, on the right (switch to Python above the code).</p>
+<p><strong>Python version</strong>: <code>eqstat.py</code>, 386 lines, on the right (switch to Python above the code).</p>
 <details class='vars' id='terms'><summary>Variables on this page (2)</summary><p><a href='../glossary.html#var-cln' data-def='$\ln 10$; set in &lt;a href=&quot;../yrec-map/setups.f.html#def-SETUPS&quot;&gt;&lt;code&gt;SETUPS&lt;/code&gt;&lt;/a&gt; (and earlier in &lt;a href=&quot;../yrec-map/parmin.f.html#def-PARMIN&quot;&gt;&lt;code&gt;PARMIN&lt;/code&gt;&lt;/a&gt;); read by 68 files. &lt;em&gt;Name:&lt;/em&gt; C, LN.'><code>cln</code></a>, <a href='../glossary.html#var-lnumderiv' data-def='numerical rather than analytic derivatives of the equation of state (very slow); default &lt;code&gt;.FALSE.&lt;/code&gt;; read by &lt;a href=&quot;#def-EQSTAT&quot;&gt;&lt;code&gt;EQSTAT&lt;/code&gt;&lt;/a&gt;.'><code>lnumderiv</code></a></p></details><h2 id='purpose'>Purpose</h2>
 <div class='notes'><p><code>EQSTAT</code> is the equation of state that the rest of YREC calls. Its header says it was added ("LLP 10-22-06") as a "new front end" so that the derivatives of the equation of state can be computed numerically, by calling the older routine, now <a href="../yrec-map/eqstat2.f.html#def-EQSTAT2">EQSTAT2</a>, at neighbouring points. All the physics is in <code>EQSTAT2</code>.</p></div>
 <h2 id='how-it-fits'>How it fits</h2>
@@ -233,150 +233,392 @@ and the same in $\log P$. A last call at the point itself, without derivatives, 
 <span class="line" id="L172"><span class="ln">172</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>ENDIF</span></span>
 <span class="line" id="L173"><span class="ln">173</span></span>
 <span class="line" id="L174"><span class="ln">174</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>RETURN</span></span>
-<span class="line" id="L175"><span class="ln">175</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of eqstat.f (YREC 7be4133): the front end to the</span></span>
-<span class="line" id="P2"><span class="ln">2</span><span class='hs'>equation of state, with numerical second derivatives.&quot;&quot;&quot;</span></span>
+<span class="line" id="L175"><span class="ln">175</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of eqstat.f (YREC 7be4133): the front end to the equation of state, with numerical second</span></span>
+<span class="line" id="P2"><span class="ln">2</span><span class='hs'>derivatives.</span></span>
 <span class="line" id="P3"><span class="ln">3</span></span>
-<span class="line" id="P4"><span class="ln">4</span><span class='hk'>import</span> math</span>
-<span class="line" id="P5"><span class="ln">5</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
-<span class="line" id="P6"><span class="ln">6</span></span>
-<span class="line" id="P7"><span class="ln">7</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> constants_mod</span>
-<span class="line" id="P8"><span class="ln">8</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> nmlpar_mod</span>
-<span class="line" id="P9"><span class="ln">9</span><span class='hk'>from</span> pyrec.eqstat2 <span class='hk'>import</span> eqstat2</span>
+<span class="line" id="P4"><span class="ln">4</span><span class='hs'>Functions</span></span>
+<span class="line" id="P5"><span class="ln">5</span><span class='hs'>---------</span></span>
+<span class="line" id="P6"><span class="ln">6</span><span class='hs'>eqstat : The routine (eqstat2 through its kernel when Numba runs).</span></span>
+<span class="line" id="P7"><span class="ln">7</span><span class='hs'>eos_args : The EOS&#x27;s scalars and structures a chain of kernels passes to eqstat2&#x27;s kernel.</span></span>
+<span class="line" id="P8"><span class="ln">8</span><span class='hs'>eos_in, eos_out : A chain&#x27;s EOS state (EIST) from and to the modules.</span></span>
+<span class="line" id="P9"><span class="ln">9</span><span class='hs'>eos_tail : The plain lines after a chain&#x27;s EOS call that has a message or a status.</span></span>
 <span class="line" id="P10"><span class="ln">10</span></span>
-<span class="line" id="P11"><span class="ln">11</span><span class='hc'># SAVE: the counters of the derivative calls. ksahax is never set from</span></span>
-<span class="line" id="P12"><span class="ln">12</span><span class='hc'># ksaha, because of the misspelled kssahax (see the page&#x27;s suspected bug).</span></span>
-<span class="line" id="P13"><span class="ln">13</span>ksahax = <span class='hn'>0</span></span>
-<span class="line" id="P14"><span class="ln">14</span>kssahax = <span class='hn'>0</span></span>
-<span class="line" id="P15"><span class="ln">15</span></span>
+<span class="line" id="P11"><span class="ln">11</span><span class='hs'>The kernels: `_eqstat_k` (the dispatch without numerical derivatives, for chains: qatm.py, qenv.py) and</span></span>
+<span class="line" id="P12"><span class="ln">12</span><span class='hs'>`_eqstat_forced` (for the tests&#x27; forced stops).</span></span>
+<span class="line" id="P13"><span class="ln">13</span></span>
+<span class="line" id="P14"><span class="ln">14</span><span class='hs'>Its kernels are compiled without Numba&#x27;s reference counting (`_nrt=False`), as the block&#x27;s others (esac06.py): They</span></span>
+<span class="line" id="P15"><span class="ln">15</span><span class='hs'>read eqstat2&#x27;s and esac06&#x27;s arrays from the named tuples eos_args() holds, and allocate nothing.</span></span>
 <span class="line" id="P16"><span class="ln">16</span></span>
-<span class="line" id="P17"><span class="ln">17</span><span class='hk'>def</span> eqstat(tl: <span class='hb'>float</span>, t: <span class='hb'>float</span>, pl: <span class='hb'>float</span>, p: <span class='hb'>float</span>, dl: <span class='hb'>float</span>, d: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, beta: <span class='hb'>float</span>, betai: <span class='hb'>float</span>,</span>
-<span class="line" id="P18"><span class="ln">18</span>           beta14: <span class='hb'>float</span>, fxion: np.ndarray, rmu: <span class='hb'>float</span>, amu: <span class='hb'>float</span>, emu: <span class='hb'>float</span>, eta: <span class='hb'>float</span>, qdt: <span class='hb'>float</span>, qdp: <span class='hb'>float</span>,</span>
-<span class="line" id="P19"><span class="ln">19</span>           qcp: <span class='hb'>float</span>, dela: <span class='hb'>float</span>, qdtt: <span class='hb'>float</span>, qdtp: <span class='hb'>float</span>, qat: <span class='hb'>float</span>, qap: <span class='hb'>float</span>, qcpt: <span class='hb'>float</span>, qcpp: <span class='hb'>float</span>,</span>
-<span class="line" id="P20"><span class="ln">20</span>           lderiv: <span class='hb'>bool</span>, latmo: <span class='hb'>bool</span>, ksaha: <span class='hb'>int</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>,</span>
-<span class="line" id="P21"><span class="ln">21</span>           <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>int</span>]:</span>
-<span class="line" id="P22"><span class="ln">22</span>    <span class='hs'>&quot;&quot;&quot;Call EQSTAT2, the equation of state, at the point; with lderiv and</span></span>
-<span class="line" id="P23"><span class="ln">23</span><span class='hs'>    nmlpar_mod.lnumderiv, first compute the second derivatives by central</span></span>
-<span class="line" id="P24"><span class="ln">24</span><span class='hs'>    differences from four calls at log T +- 3e-4 and log P +- 1.5e-3.</span></span>
-<span class="line" id="P25"><span class="ln">25</span></span>
-<span class="line" id="P26"><span class="ln">26</span><span class='hs'>    Translates: eqstat.f#EQSTAT (7be4133)</span></span>
-<span class="line" id="P27"><span class="ln">27</span></span>
-<span class="line" id="P28"><span class="ln">28</span><span class='hs'>    Arguments: tl, pl (log T, log P), x, z, lderiv (second derivatives</span></span>
-<span class="line" id="P29"><span class="ln">29</span><span class='hs'>    wanted), latmo (atmosphere), ksaha (EQSAHA&#x27;s iteration counter,</span></span>
-<span class="line" id="P30"><span class="ln">30</span><span class='hs'>    updated); dl, d are starting guesses. t, p, beta ... qcpp are set.</span></span>
-<span class="line" id="P31"><span class="ln">31</span><span class='hs'>    Array changed in place: fxion (index 0 unused).</span></span>
-<span class="line" id="P32"><span class="ln">32</span></span>
-<span class="line" id="P33"><span class="ln">33</span><span class='hs'>    Returns (t, p, dl, d, beta, betai, beta14, rmu, amu, emu, eta, qdt,</span></span>
-<span class="line" id="P34"><span class="ln">34</span><span class='hs'>    qdp, qcp, dela, qdtt, qdtp, qat, qap, qcpt, qcpp, ksaha). The Fortran</span></span>
-<span class="line" id="P35"><span class="ln">35</span><span class='hs'>    also assigns TL and PL, but only back to their own values, so they are</span></span>
-<span class="line" id="P36"><span class="ln">36</span><span class='hs'>    not returned. Without lderiv, qdtt ... qcpp come back as passed in.</span></span>
-<span class="line" id="P37"><span class="ln">37</span></span>
-<span class="line" id="P38"><span class="ln">38</span><span class='hs'>    &quot;&quot;&quot;</span></span>
-<span class="line" id="P39"><span class="ln">39</span></span>
-<span class="line" id="P40"><span class="ln">40</span>    <span class='hk'>global</span> ksahax, kssahax</span>
-<span class="line" id="P41"><span class="ln">41</span>    cln = constants_mod.cln</span>
+<span class="line" id="P17"><span class="ln">17</span><span class='hs'>Module variables</span></span>
+<span class="line" id="P18"><span class="ln">18</span><span class='hs'>----------------</span></span>
+<span class="line" id="P19"><span class="ln">19</span><span class='hs'>ksahax, kssahax : The SAVE&#x27;d counters of the derivative calls (ksahax never set, the Fortran&#x27;s misspelling).</span></span>
+<span class="line" id="P20"><span class="ln">20</span></span>
+<span class="line" id="P21"><span class="ln">21</span><span class='hs'>&quot;&quot;&quot;</span></span>
+<span class="line" id="P22"><span class="ln">22</span></span>
+<span class="line" id="P23"><span class="ln">23</span><span class='hk'>import</span> math</span>
+<span class="line" id="P24"><span class="ln">24</span></span>
+<span class="line" id="P25"><span class="ln">25</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
+<span class="line" id="P26"><span class="ln">26</span></span>
+<span class="line" id="P27"><span class="ln">27</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> accel</span>
+<span class="line" id="P28"><span class="ln">28</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> comp_mod</span>
+<span class="line" id="P29"><span class="ln">29</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> constants_mod</span>
+<span class="line" id="P30"><span class="ln">30</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> debhu_mod</span>
+<span class="line" id="P31"><span class="ln">31</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> eos06misc_mod</span>
+<span class="line" id="P32"><span class="ln">32</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> eqrelv <span class='hk'>as</span> eqrelv_mod</span>
+<span class="line" id="P33"><span class="ln">33</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> eqsaha <span class='hk'>as</span> eqsaha_mod</span>
+<span class="line" id="P34"><span class="ln">34</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> eqstat2 <span class='hk'>as</span> eqstat2_mod</span>
+<span class="line" id="P35"><span class="ln">35</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> esac06 <span class='hk'>as</span> esac06_mod</span>
+<span class="line" id="P36"><span class="ln">36</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> iounits_mod</span>
+<span class="line" id="P37"><span class="ln">37</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> nmlpar_mod</span>
+<span class="line" id="P38"><span class="ln">38</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> scveos_mod</span>
+<span class="line" id="P39"><span class="ln">39</span><span class='hk'>from</span> pyrec.eqscve <span class='hk'>import</span> eqscve</span>
+<span class="line" id="P40"><span class="ln">40</span><span class='hk'>from</span> pyrec.eqstat2 <span class='hk'>import</span> eqstat2  <span class='hc'># OOP eos: _eqstat2_k no longer called here</span></span>
+<span class="line" id="P41"><span class="ln">41</span><span class='hk'>from</span> pyrec.eqstat2 <span class='hk'>import</span> _eos_point <span class='hk'>as</span> eos_point  <span class='hc'># OOP eos: the chains&#x27; EOS (families.py)</span></span>
 <span class="line" id="P42"><span class="ln">42</span></span>
-<span class="line" id="P43"><span class="ln">43</span>    <span class='hc'># Keep the point&#x27;s TL and PL (<a class='fl' href='#L82-L85'>Fortran lines 82–85</a>).</span></span>
-<span class="line" id="P44"><span class="ln">44</span>    plo = pl</span>
-<span class="line" id="P45"><span class="ln">45</span>    tlo = tl</span>
-<span class="line" id="P46"><span class="ln">46</span>    latmox = latmo</span>
-<span class="line" id="P47"><span class="ln">47</span>    <span class='hc'># Suspected bug (see the page): the misspelled kssahax leaves ksahax</span></span>
-<span class="line" id="P48"><span class="ln">48</span>    <span class='hc'># unset.</span></span>
-<span class="line" id="P49"><span class="ln">49</span>    kssahax = ksaha</span>
-<span class="line" id="P50"><span class="ln">50</span></span>
-<span class="line" id="P51"><span class="ln">51</span>    <span class='hk'>if</span> lderiv <span class='hk'>and</span> nmlpar_mod.lnumderiv:</span>
-<span class="line" id="P52"><span class="ln">52</span>        <span class='hc'># Central differences, error of order h**2: the steps (Fortran</span></span>
-<span class="line" id="P53"><span class="ln">53</span>        <span class='hc'># <a class='fl' href='#L87-L106'>lines 87–106</a>).</span></span>
-<span class="line" id="P54"><span class="ln">54</span>        dpl = <span class='hn'>0.150</span>      <span class='hc'># the approximate table intervals</span></span>
-<span class="line" id="P55"><span class="ln">55</span>        dtl = <span class='hn'>0.030</span></span>
-<span class="line" id="P56"><span class="ln">56</span>        dpl = dpl * <span class='hn'>0.01</span>  <span class='hc'># empirically, scaling the intervals down by 100</span></span>
-<span class="line" id="P57"><span class="ln">57</span>        dtl = dtl * <span class='hn'>0.01</span>  <span class='hc'># seemed to work best</span></span>
-<span class="line" id="P58"><span class="ln">58</span>        dpl2 = <span class='hn'>2.0</span> * dpl</span>
-<span class="line" id="P59"><span class="ln">59</span>        dtl2 = <span class='hn'>2.0</span> * dtl</span>
-<span class="line" id="P60"><span class="ln">60</span></span>
-<span class="line" id="P61"><span class="ln">61</span>        dl1 = dl  <span class='hc'># start the table lookups from the called values</span></span>
-<span class="line" id="P62"><span class="ln">62</span>        d1 = d</span>
-<span class="line" id="P63"><span class="ln">63</span></span>
-<span class="line" id="P64"><span class="ln">64</span>        <span class='hc'># Derivatives with respect to T (<a class='fl' href='#L108-L125'>Fortran lines 108–125</a>).</span></span>
-<span class="line" id="P65"><span class="ln">65</span>        ttl = tl + dtl</span>
-<span class="line" id="P66"><span class="ln">66</span>        t = <span class='hn'>10.0</span> ** ttl</span>
-<span class="line" id="P67"><span class="ln">67</span>        lderiv2 = <span class='hk'>False</span></span>
-<span class="line" id="P68"><span class="ln">68</span>        (t, p, dl1, d1, beta, betai, beta14, rmu, amu, emu, eta, qdt1,</span>
-<span class="line" id="P69"><span class="ln">69</span>         qdp1, qcp1, dela1, _, _, _, _, _, _, ksahax) = eqstat2(</span>
-<span class="line" id="P70"><span class="ln">70</span>            ttl, t, pl, p, dl1, d1, x, z, beta, betai, beta14, fxion, rmu,</span>
-<span class="line" id="P71"><span class="ln">71</span>            amu, emu, eta, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>,</span>
-<span class="line" id="P72"><span class="ln">72</span>            <span class='hn'>0.0</span>, lderiv2, latmox, ksahax)</span>
-<span class="line" id="P73"><span class="ln">73</span></span>
-<span class="line" id="P74"><span class="ln">74</span>        ttl = tl - dtl</span>
-<span class="line" id="P75"><span class="ln">75</span>        t = <span class='hn'>10.0</span> ** ttl</span>
-<span class="line" id="P76"><span class="ln">76</span>        lderiv2 = <span class='hk'>False</span></span>
-<span class="line" id="P77"><span class="ln">77</span>        (t, p, dl1, d1, beta, betai, beta14, rmu, amu, emu, eta, qdt2,</span>
-<span class="line" id="P78"><span class="ln">78</span>         qdp2, qcp2, dela2, _, _, _, _, _, _, ksahax) = eqstat2(</span>
-<span class="line" id="P79"><span class="ln">79</span>            ttl, t, pl, p, dl1, d1, x, z, beta, betai, beta14, fxion, rmu,</span>
-<span class="line" id="P80"><span class="ln">80</span>            amu, emu, eta, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>,</span>
-<span class="line" id="P81"><span class="ln">81</span>            <span class='hn'>0.0</span>, lderiv2, latmox, ksahax)</span>
-<span class="line" id="P82"><span class="ln">82</span>        qdtt1 = (qdt1 - qdt2) / dtl2 / cln</span>
-<span class="line" id="P83"><span class="ln">83</span>        qcpt1 = (math.log10(qcp1) - math.log10(qcp2)) / dtl2</span>
-<span class="line" id="P84"><span class="ln">84</span>        qat1 = (math.log10(dela1) - math.log10(dela2)) / dtl2</span>
-<span class="line" id="P85"><span class="ln">85</span>        tl = tlo</span>
-<span class="line" id="P86"><span class="ln">86</span>        t = <span class='hn'>10.0</span> ** tlo  <span class='hc'># restore the original T</span></span>
-<span class="line" id="P87"><span class="ln">87</span></span>
-<span class="line" id="P88"><span class="ln">88</span>        <span class='hc'># Derivatives with respect to P (<a class='fl' href='#L127-L143'>Fortran lines 127–143</a>).</span></span>
-<span class="line" id="P89"><span class="ln">89</span>        ppl = pl + dpl</span>
-<span class="line" id="P90"><span class="ln">90</span>        p = <span class='hn'>10.0</span> ** ppl</span>
-<span class="line" id="P91"><span class="ln">91</span>        lderiv2 = <span class='hk'>False</span></span>
-<span class="line" id="P92"><span class="ln">92</span>        (t, p, dl1, d1, beta, betai, beta14, rmu, amu, emu, eta, qdt1,</span>
-<span class="line" id="P93"><span class="ln">93</span>         qdp1, qcp1, dela1, _, _, _, _, _, _, ksahax) = eqstat2(</span>
-<span class="line" id="P94"><span class="ln">94</span>            tl, t, ppl, p, dl1, d1, x, z, beta, betai, beta14, fxion, rmu,</span>
-<span class="line" id="P95"><span class="ln">95</span>            amu, emu, eta, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>,</span>
-<span class="line" id="P96"><span class="ln">96</span>            <span class='hn'>0.0</span>, lderiv2, latmox, ksahax)</span>
-<span class="line" id="P97"><span class="ln">97</span>        ppl = pl - dpl</span>
-<span class="line" id="P98"><span class="ln">98</span>        p = <span class='hn'>10.0</span> ** ppl</span>
-<span class="line" id="P99"><span class="ln">99</span>        lderiv2 = <span class='hk'>False</span></span>
-<span class="line" id="P100"><span class="ln">100</span>        (t, p, dl1, d1, beta, betai, beta14, rmu, amu, emu, eta, qdt2,</span>
-<span class="line" id="P101"><span class="ln">101</span>         qdp2, qcp2, dela2, _, _, _, _, _, _, ksahax) = eqstat2(</span>
-<span class="line" id="P102"><span class="ln">102</span>            tl, t, ppl, p, dl1, d1, x, z, beta, betai, beta14, fxion, rmu,</span>
-<span class="line" id="P103"><span class="ln">103</span>            amu, emu, eta, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>,</span>
-<span class="line" id="P104"><span class="ln">104</span>            <span class='hn'>0.0</span>, lderiv2, latmox, ksahax)</span>
-<span class="line" id="P105"><span class="ln">105</span>        pl = plo</span>
-<span class="line" id="P106"><span class="ln">106</span>        p = <span class='hn'>10.0</span> ** plo  <span class='hc'># restore the original P</span></span>
-<span class="line" id="P107"><span class="ln">107</span>        qdtp1 = (qdt1 - qdt2) / dpl2 / cln</span>
-<span class="line" id="P108"><span class="ln">108</span>        qcpp1 = (math.log10(qcp1) - math.log10(qcp2)) / dpl2</span>
-<span class="line" id="P109"><span class="ln">109</span>        qap1 = (math.log10(dela1) - math.log10(dela2)) / dpl2</span>
+<span class="line" id="P43"><span class="ln">43</span><span class='hc'># SAVE: the counters of the derivative calls. ksahax is never set from</span></span>
+<span class="line" id="P44"><span class="ln">44</span><span class='hc'># ksaha, because of the misspelled kssahax (see the page&#x27;s suspected bug).</span></span>
+<span class="line" id="P45"><span class="ln">45</span>ksahax = <span class='hn'>0</span></span>
+<span class="line" id="P46"><span class="ln">46</span>kssahax = <span class='hn'>0</span></span>
+<span class="line" id="P47"><span class="ln">47</span></span>
+<span class="line" id="P48"><span class="ln">48</span></span>
+<span class="line" id="P49"><span class="ln">49</span><span class='hk'>def</span> eqstat(tl: <span class='hb'>float</span>, t: <span class='hb'>float</span>, pl: <span class='hb'>float</span>, p: <span class='hb'>float</span>, dl: <span class='hb'>float</span>, d: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, beta: <span class='hb'>float</span>, betai: <span class='hb'>float</span>,</span>
+<span class="line" id="P50"><span class="ln">50</span>           beta14: <span class='hb'>float</span>, fxion: np.ndarray, rmu: <span class='hb'>float</span>, amu: <span class='hb'>float</span>, emu: <span class='hb'>float</span>, eta: <span class='hb'>float</span>, qdt: <span class='hb'>float</span>, qdp: <span class='hb'>float</span>,</span>
+<span class="line" id="P51"><span class="ln">51</span>           qcp: <span class='hb'>float</span>, dela: <span class='hb'>float</span>, qdtt: <span class='hb'>float</span>, qdtp: <span class='hb'>float</span>, qat: <span class='hb'>float</span>, qap: <span class='hb'>float</span>, qcpt: <span class='hb'>float</span>, qcpp: <span class='hb'>float</span>,</span>
+<span class="line" id="P52"><span class="ln">52</span>           lderiv: <span class='hb'>bool</span>, latmo: <span class='hb'>bool</span>, ksaha: <span class='hb'>int</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>,</span>
+<span class="line" id="P53"><span class="ln">53</span>           <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>int</span>]:</span>
+<span class="line" id="P54"><span class="ln">54</span>    <span class='hs'>&quot;&quot;&quot;Call EQSTAT2, the equation of state, at the point; with lderiv and nmlpar_mod.lnumderiv, first compute the</span></span>
+<span class="line" id="P55"><span class="ln">55</span><span class='hs'>    second derivatives by central differences from four calls at log T +- 3e-4 and log P +- 1.5e-3.</span></span>
+<span class="line" id="P56"><span class="ln">56</span></span>
+<span class="line" id="P57"><span class="ln">57</span><span class='hs'>    Translates: eqstat.f#EQSTAT (7be4133)</span></span>
+<span class="line" id="P58"><span class="ln">58</span></span>
+<span class="line" id="P59"><span class="ln">59</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P60"><span class="ln">60</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P61"><span class="ln">61</span><span class='hs'>    tl, pl : float</span></span>
+<span class="line" id="P62"><span class="ln">62</span><span class='hs'>        log10 T and log10 P.</span></span>
+<span class="line" id="P63"><span class="ln">63</span><span class='hs'>    dl, d : float</span></span>
+<span class="line" id="P64"><span class="ln">64</span><span class='hs'>        Starting guesses of log10 rho and rho.</span></span>
+<span class="line" id="P65"><span class="ln">65</span><span class='hs'>    x, z : float</span></span>
+<span class="line" id="P66"><span class="ln">66</span><span class='hs'>        The mass fractions of hydrogen and of the metals.</span></span>
+<span class="line" id="P67"><span class="ln">67</span><span class='hs'>    t, p, beta, betai, beta14, rmu, amu, emu, eta, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap, qcpt, qcpp : float</span></span>
+<span class="line" id="P68"><span class="ln">68</span><span class='hs'>        Set (passed in with any value).</span></span>
+<span class="line" id="P69"><span class="ln">69</span><span class='hs'>    fxion : np.ndarray, shape: `(4,)`, dtype: ``float64``</span></span>
+<span class="line" id="P70"><span class="ln">70</span><span class='hs'>        Changed in place: the H+, He+, He++ fractions (index 0 unused).</span></span>
+<span class="line" id="P71"><span class="ln">71</span><span class='hs'>    lderiv : bool</span></span>
+<span class="line" id="P72"><span class="ln">72</span><span class='hs'>        Second derivatives wanted.</span></span>
+<span class="line" id="P73"><span class="ln">73</span><span class='hs'>    latmo : bool</span></span>
+<span class="line" id="P74"><span class="ln">74</span><span class='hs'>        In the atmosphere (passed to EQSAHA).</span></span>
+<span class="line" id="P75"><span class="ln">75</span><span class='hs'>    ksaha : int</span></span>
+<span class="line" id="P76"><span class="ln">76</span><span class='hs'>        EQSAHA&#x27;s iteration counter, updated.</span></span>
+<span class="line" id="P77"><span class="ln">77</span></span>
+<span class="line" id="P78"><span class="ln">78</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P79"><span class="ln">79</span><span class='hs'>    -------</span></span>
+<span class="line" id="P80"><span class="ln">80</span><span class='hs'>    tuple</span></span>
+<span class="line" id="P81"><span class="ln">81</span><span class='hs'>        (t, p, dl, d, beta, betai, beta14, rmu, amu, emu, eta, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap, qcpt,</span></span>
+<span class="line" id="P82"><span class="ln">82</span><span class='hs'>        qcpp, ksaha). The Fortran also assigns TL and PL, but only back to their own values, so they are not</span></span>
+<span class="line" id="P83"><span class="ln">83</span><span class='hs'>        returned. Without lderiv, qdtt ... qcpp come back as passed in.</span></span>
+<span class="line" id="P84"><span class="ln">84</span></span>
+<span class="line" id="P85"><span class="ln">85</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P86"><span class="ln">86</span></span>
+<span class="line" id="P87"><span class="ln">87</span>    <span class='hk'>global</span> ksahax, kssahax</span>
+<span class="line" id="P88"><span class="ln">88</span>    cln = constants_mod.cln</span>
+<span class="line" id="P89"><span class="ln">89</span></span>
+<span class="line" id="P90"><span class="ln">90</span>    <span class='hc'># Keep the point&#x27;s TL and PL (<a class='fl' href='#L82-L85'>Fortran lines 82–85</a>).</span></span>
+<span class="line" id="P91"><span class="ln">91</span>    plo = pl</span>
+<span class="line" id="P92"><span class="ln">92</span>    tlo = tl</span>
+<span class="line" id="P93"><span class="ln">93</span>    latmox = latmo</span>
+<span class="line" id="P94"><span class="ln">94</span>    <span class='hc'># Suspected bug (see the page): the misspelled kssahax leaves ksahax</span></span>
+<span class="line" id="P95"><span class="ln">95</span>    <span class='hc'># unset.</span></span>
+<span class="line" id="P96"><span class="ln">96</span>    kssahax = ksaha</span>
+<span class="line" id="P97"><span class="ln">97</span></span>
+<span class="line" id="P98"><span class="ln">98</span>    <span class='hk'>if</span> lderiv <span class='hk'>and</span> nmlpar_mod.lnumderiv:</span>
+<span class="line" id="P99"><span class="ln">99</span>        <span class='hc'># Central differences, error of order h**2: the steps (Fortran</span></span>
+<span class="line" id="P100"><span class="ln">100</span>        <span class='hc'># <a class='fl' href='#L87-L106'>lines 87–106</a>).</span></span>
+<span class="line" id="P101"><span class="ln">101</span>        dpl = <span class='hn'>0.150</span>      <span class='hc'># the approximate table intervals</span></span>
+<span class="line" id="P102"><span class="ln">102</span>        dtl = <span class='hn'>0.030</span></span>
+<span class="line" id="P103"><span class="ln">103</span>        dpl = dpl * <span class='hn'>0.01</span>  <span class='hc'># empirically, scaling the intervals down by 100</span></span>
+<span class="line" id="P104"><span class="ln">104</span>        dtl = dtl * <span class='hn'>0.01</span>  <span class='hc'># seemed to work best</span></span>
+<span class="line" id="P105"><span class="ln">105</span>        dpl2 = <span class='hn'>2.0</span> * dpl</span>
+<span class="line" id="P106"><span class="ln">106</span>        dtl2 = <span class='hn'>2.0</span> * dtl</span>
+<span class="line" id="P107"><span class="ln">107</span></span>
+<span class="line" id="P108"><span class="ln">108</span>        dl1 = dl  <span class='hc'># start the table lookups from the called values</span></span>
+<span class="line" id="P109"><span class="ln">109</span>        d1 = d</span>
 <span class="line" id="P110"><span class="ln">110</span></span>
-<span class="line" id="P111"><span class="ln">111</span>        <span class='hc'># <a class='fl' href='#L145-L150'>Fortran lines 145–150</a>.</span></span>
-<span class="line" id="P112"><span class="ln">112</span>        qdtt = qdtt1</span>
-<span class="line" id="P113"><span class="ln">113</span>        qdtp = qdtp1</span>
-<span class="line" id="P114"><span class="ln">114</span>        qat = qat1</span>
-<span class="line" id="P115"><span class="ln">115</span>        qap = qap1</span>
-<span class="line" id="P116"><span class="ln">116</span>        qcpp = qcpp1</span>
-<span class="line" id="P117"><span class="ln">117</span>        qcpt = qcpt1</span>
-<span class="line" id="P118"><span class="ln">118</span></span>
-<span class="line" id="P119"><span class="ln">119</span>    <span class='hc'># Restore the original TL and PL (<a class='fl' href='#L153-L154'>Fortran lines 153–154</a>).</span></span>
-<span class="line" id="P120"><span class="ln">120</span>    tl = tlo</span>
-<span class="line" id="P121"><span class="ln">121</span>    pl = plo</span>
-<span class="line" id="P122"><span class="ln">122</span></span>
-<span class="line" id="P123"><span class="ln">123</span>    <span class='hc'># The call at the point (<a class='fl' href='#L156-L172'>Fortran lines 156–172</a>).</span></span>
-<span class="line" id="P124"><span class="ln">124</span>    <span class='hk'>if</span> lderiv <span class='hk'>and</span> <span class='hk'>not</span> nmlpar_mod.lnumderiv:</span>
-<span class="line" id="P125"><span class="ln">125</span>        <span class='hc'># Derivatives wanted, none numerical: EQSTAT2&#x27;s analytic ones.</span></span>
-<span class="line" id="P126"><span class="ln">126</span>        lderiv2 = <span class='hk'>True</span></span>
-<span class="line" id="P127"><span class="ln">127</span>        (t, p, dl, d, beta, betai, beta14, rmu, amu, emu, eta, qdt, qdp,</span>
-<span class="line" id="P128"><span class="ln">128</span>         qcp, dela, qdtt, qdtp, qat, qap, qcpt, qcpp, ksaha) = eqstat2(</span>
-<span class="line" id="P129"><span class="ln">129</span>            tl, t, pl, p, dl, d, x, z, beta, betai, beta14, fxion, rmu,</span>
-<span class="line" id="P130"><span class="ln">130</span>            amu, emu, eta, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap,</span>
-<span class="line" id="P131"><span class="ln">131</span>            qcpt, qcpp, lderiv2, latmo, ksaha)</span>
-<span class="line" id="P132"><span class="ln">132</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P133"><span class="ln">133</span>        <span class='hc'># Numerical derivatives already in hand, or none needed: the</span></span>
-<span class="line" id="P134"><span class="ln">134</span>        <span class='hc'># second derivatives go to dummies so they cannot overwrite them.</span></span>
-<span class="line" id="P135"><span class="ln">135</span>        lderiv2 = <span class='hk'>False</span></span>
-<span class="line" id="P136"><span class="ln">136</span>        (t, p, dl, d, beta, betai, beta14, rmu, amu, emu, eta, qdt, qdp,</span>
-<span class="line" id="P137"><span class="ln">137</span>         qcp, dela, _, _, _, _, _, _, ksaha) = eqstat2(</span>
-<span class="line" id="P138"><span class="ln">138</span>            tl, t, pl, p, dl, d, x, z, beta, betai, beta14, fxion, rmu,</span>
-<span class="line" id="P139"><span class="ln">139</span>            amu, emu, eta, qdt, qdp, qcp, dela, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>,</span>
-<span class="line" id="P140"><span class="ln">140</span>            <span class='hn'>0.0</span>, lderiv2, latmo, ksaha)</span>
-<span class="line" id="P141"><span class="ln">141</span></span>
-<span class="line" id="P142"><span class="ln">142</span>    <span class='hk'>return</span> (t, p, dl, d, beta, betai, beta14, rmu, amu, emu, eta, qdt, qdp,</span>
-<span class="line" id="P143"><span class="ln">143</span>            qcp, dela, qdtt, qdtp, qat, qap, qcpt, qcpp, ksaha)</span>
-<span class="line" id="P144"><span class="ln">144</span></span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
+<span class="line" id="P111"><span class="ln">111</span>        <span class='hc'># Derivatives with respect to T (<a class='fl' href='#L108-L125'>Fortran lines 108–125</a>).</span></span>
+<span class="line" id="P112"><span class="ln">112</span>        ttl = tl + dtl</span>
+<span class="line" id="P113"><span class="ln">113</span>        t = <span class='hn'>10.0</span> ** ttl</span>
+<span class="line" id="P114"><span class="ln">114</span>        lderiv2 = <span class='hk'>False</span></span>
+<span class="line" id="P115"><span class="ln">115</span>        (t, p, dl1, d1, beta, betai, beta14, rmu, amu, emu, eta, qdt1,</span>
+<span class="line" id="P116"><span class="ln">116</span>         qdp1, qcp1, dela1, _, _, _, _, _, _, ksahax) = eqstat2(</span>
+<span class="line" id="P117"><span class="ln">117</span>            ttl, t, pl, p, dl1, d1, x, z, beta, betai, beta14, fxion, rmu,</span>
+<span class="line" id="P118"><span class="ln">118</span>            amu, emu, eta, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>,</span>
+<span class="line" id="P119"><span class="ln">119</span>            <span class='hn'>0.0</span>, lderiv2, latmox, ksahax)</span>
+<span class="line" id="P120"><span class="ln">120</span></span>
+<span class="line" id="P121"><span class="ln">121</span>        ttl = tl - dtl</span>
+<span class="line" id="P122"><span class="ln">122</span>        t = <span class='hn'>10.0</span> ** ttl</span>
+<span class="line" id="P123"><span class="ln">123</span>        lderiv2 = <span class='hk'>False</span></span>
+<span class="line" id="P124"><span class="ln">124</span>        (t, p, dl1, d1, beta, betai, beta14, rmu, amu, emu, eta, qdt2,</span>
+<span class="line" id="P125"><span class="ln">125</span>         qdp2, qcp2, dela2, _, _, _, _, _, _, ksahax) = eqstat2(</span>
+<span class="line" id="P126"><span class="ln">126</span>            ttl, t, pl, p, dl1, d1, x, z, beta, betai, beta14, fxion, rmu,</span>
+<span class="line" id="P127"><span class="ln">127</span>            amu, emu, eta, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>,</span>
+<span class="line" id="P128"><span class="ln">128</span>            <span class='hn'>0.0</span>, lderiv2, latmox, ksahax)</span>
+<span class="line" id="P129"><span class="ln">129</span>        qdtt1 = (qdt1 - qdt2) / dtl2 / cln</span>
+<span class="line" id="P130"><span class="ln">130</span>        qcpt1 = (math.log10(qcp1) - math.log10(qcp2)) / dtl2</span>
+<span class="line" id="P131"><span class="ln">131</span>        qat1 = (math.log10(dela1) - math.log10(dela2)) / dtl2</span>
+<span class="line" id="P132"><span class="ln">132</span>        tl = tlo</span>
+<span class="line" id="P133"><span class="ln">133</span>        t = <span class='hn'>10.0</span> ** tlo  <span class='hc'># restore the original T</span></span>
+<span class="line" id="P134"><span class="ln">134</span></span>
+<span class="line" id="P135"><span class="ln">135</span>        <span class='hc'># Derivatives with respect to P (<a class='fl' href='#L127-L143'>Fortran lines 127–143</a>).</span></span>
+<span class="line" id="P136"><span class="ln">136</span>        ppl = pl + dpl</span>
+<span class="line" id="P137"><span class="ln">137</span>        p = <span class='hn'>10.0</span> ** ppl</span>
+<span class="line" id="P138"><span class="ln">138</span>        lderiv2 = <span class='hk'>False</span></span>
+<span class="line" id="P139"><span class="ln">139</span>        (t, p, dl1, d1, beta, betai, beta14, rmu, amu, emu, eta, qdt1,</span>
+<span class="line" id="P140"><span class="ln">140</span>         qdp1, qcp1, dela1, _, _, _, _, _, _, ksahax) = eqstat2(</span>
+<span class="line" id="P141"><span class="ln">141</span>            tl, t, ppl, p, dl1, d1, x, z, beta, betai, beta14, fxion, rmu,</span>
+<span class="line" id="P142"><span class="ln">142</span>            amu, emu, eta, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>,</span>
+<span class="line" id="P143"><span class="ln">143</span>            <span class='hn'>0.0</span>, lderiv2, latmox, ksahax)</span>
+<span class="line" id="P144"><span class="ln">144</span>        ppl = pl - dpl</span>
+<span class="line" id="P145"><span class="ln">145</span>        p = <span class='hn'>10.0</span> ** ppl</span>
+<span class="line" id="P146"><span class="ln">146</span>        lderiv2 = <span class='hk'>False</span></span>
+<span class="line" id="P147"><span class="ln">147</span>        (t, p, dl1, d1, beta, betai, beta14, rmu, amu, emu, eta, qdt2,</span>
+<span class="line" id="P148"><span class="ln">148</span>         qdp2, qcp2, dela2, _, _, _, _, _, _, ksahax) = eqstat2(</span>
+<span class="line" id="P149"><span class="ln">149</span>            tl, t, ppl, p, dl1, d1, x, z, beta, betai, beta14, fxion, rmu,</span>
+<span class="line" id="P150"><span class="ln">150</span>            amu, emu, eta, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>,</span>
+<span class="line" id="P151"><span class="ln">151</span>            <span class='hn'>0.0</span>, lderiv2, latmox, ksahax)</span>
+<span class="line" id="P152"><span class="ln">152</span>        pl = plo</span>
+<span class="line" id="P153"><span class="ln">153</span>        p = <span class='hn'>10.0</span> ** plo  <span class='hc'># restore the original P</span></span>
+<span class="line" id="P154"><span class="ln">154</span>        qdtp1 = (qdt1 - qdt2) / dpl2 / cln</span>
+<span class="line" id="P155"><span class="ln">155</span>        qcpp1 = (math.log10(qcp1) - math.log10(qcp2)) / dpl2</span>
+<span class="line" id="P156"><span class="ln">156</span>        qap1 = (math.log10(dela1) - math.log10(dela2)) / dpl2</span>
+<span class="line" id="P157"><span class="ln">157</span></span>
+<span class="line" id="P158"><span class="ln">158</span>        <span class='hc'># <a class='fl' href='#L145-L150'>Fortran lines 145–150</a>.</span></span>
+<span class="line" id="P159"><span class="ln">159</span>        qdtt = qdtt1</span>
+<span class="line" id="P160"><span class="ln">160</span>        qdtp = qdtp1</span>
+<span class="line" id="P161"><span class="ln">161</span>        qat = qat1</span>
+<span class="line" id="P162"><span class="ln">162</span>        qap = qap1</span>
+<span class="line" id="P163"><span class="ln">163</span>        qcpp = qcpp1</span>
+<span class="line" id="P164"><span class="ln">164</span>        qcpt = qcpt1</span>
+<span class="line" id="P165"><span class="ln">165</span></span>
+<span class="line" id="P166"><span class="ln">166</span>    <span class='hc'># Restore the original TL and PL (<a class='fl' href='#L153-L154'>Fortran lines 153–154</a>).</span></span>
+<span class="line" id="P167"><span class="ln">167</span>    tl = tlo</span>
+<span class="line" id="P168"><span class="ln">168</span>    pl = plo</span>
+<span class="line" id="P169"><span class="ln">169</span></span>
+<span class="line" id="P170"><span class="ln">170</span>    <span class='hc'># The call at the point (<a class='fl' href='#L156-L172'>Fortran lines 156–172</a>).</span></span>
+<span class="line" id="P171"><span class="ln">171</span>    <span class='hk'>if</span> lderiv <span class='hk'>and</span> <span class='hk'>not</span> nmlpar_mod.lnumderiv:</span>
+<span class="line" id="P172"><span class="ln">172</span>        <span class='hc'># Derivatives wanted, none numerical: EQSTAT2&#x27;s analytic ones.</span></span>
+<span class="line" id="P173"><span class="ln">173</span>        lderiv2 = <span class='hk'>True</span></span>
+<span class="line" id="P174"><span class="ln">174</span>        (t, p, dl, d, beta, betai, beta14, rmu, amu, emu, eta, qdt, qdp,</span>
+<span class="line" id="P175"><span class="ln">175</span>         qcp, dela, qdtt, qdtp, qat, qap, qcpt, qcpp, ksaha) = eqstat2(</span>
+<span class="line" id="P176"><span class="ln">176</span>            tl, t, pl, p, dl, d, x, z, beta, betai, beta14, fxion, rmu,</span>
+<span class="line" id="P177"><span class="ln">177</span>            amu, emu, eta, qdt, qdp, qcp, dela, qdtt, qdtp, qat, qap,</span>
+<span class="line" id="P178"><span class="ln">178</span>            qcpt, qcpp, lderiv2, latmo, ksaha)</span>
+<span class="line" id="P179"><span class="ln">179</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P180"><span class="ln">180</span>        <span class='hc'># Numerical derivatives already in hand, or none needed: the</span></span>
+<span class="line" id="P181"><span class="ln">181</span>        <span class='hc'># second derivatives go to dummies so they cannot overwrite them.</span></span>
+<span class="line" id="P182"><span class="ln">182</span>        lderiv2 = <span class='hk'>False</span></span>
+<span class="line" id="P183"><span class="ln">183</span>        (t, p, dl, d, beta, betai, beta14, rmu, amu, emu, eta, qdt, qdp,</span>
+<span class="line" id="P184"><span class="ln">184</span>         qcp, dela, _, _, _, _, _, _, ksaha) = eqstat2(</span>
+<span class="line" id="P185"><span class="ln">185</span>            tl, t, pl, p, dl, d, x, z, beta, betai, beta14, fxion, rmu,</span>
+<span class="line" id="P186"><span class="ln">186</span>            amu, emu, eta, qdt, qdp, qcp, dela, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>,</span>
+<span class="line" id="P187"><span class="ln">187</span>            <span class='hn'>0.0</span>, lderiv2, latmo, ksaha)</span>
+<span class="line" id="P188"><span class="ln">188</span></span>
+<span class="line" id="P189"><span class="ln">189</span>    <span class='hk'>return</span> (t, p, dl, d, beta, betai, beta14, rmu, amu, emu, eta, qdt, qdp,</span>
+<span class="line" id="P190"><span class="ln">190</span>            qcp, dela, qdtt, qdtp, qat, qap, qcpt, qcpp, ksaha)</span>
+<span class="line" id="P191"><span class="ln">191</span></span>
+<span class="line" id="P192"><span class="ln">192</span></span>
+<span class="line" id="P193"><span class="ln">193</span></span>
+<span class="line" id="P194"><span class="ln">194</span><span class='hc'># --- The dispatch as a kernel, for chains (the envelope&#x27;s derivative kernels, qatm.py and qenv.py) ----------------</span></span>
+<span class="line" id="P195"><span class="ln">195</span><span class='hc'>#</span></span>
+<span class="line" id="P196"><span class="ln">196</span><span class='hc'># _eqstat_k is eqstat&#x27;s dispatch without numerical derivatives (the chain&#x27;s callers check LNUMDERIV): one call of</span></span>
+<span class="line" id="P197"><span class="ln">197</span><span class='hc'># eqstat2&#x27;s kernel, LDERIV as passed. The module scalars a chain of calls carries are in an integer array (EIST):</span></span>
+<span class="line" id="P198"><span class="ln">198</span><span class='hc'># scveos_mod&#x27;s IDTSCV and IDP, eos06misc_mod&#x27;s K3 and L2 (brought forward from esac06&#x27;s st after each call, as the</span></span>
+<span class="line" id="P199"><span class="ln">199</span><span class='hc'># next call reads them), esac06&#x27;s flags st[13:16] OR&#x27;ed over the calls, and KSSAHAX. eos_in() fills it, eos_out()</span></span>
+<span class="line" id="P200"><span class="ln">200</span><span class='hc'># writes it back (esac06.finish called once for the merged flags), as coefft.py&#x27;s kernel does. A call with a message</span></span>
+<span class="line" id="P201"><span class="ln">201</span><span class='hc'># or a status stops the chain (stop true): its 28 values are left for eos_tail(), the plain code&#x27;s lines.</span></span>
+<span class="line" id="P202"><span class="ln">202</span></span>
+<span class="line" id="P203"><span class="ln">203</span>EIST = <span class='hn'>8</span>      <span class='hc'># idtscv, idp, k3, l2, f13, f14, f15, kssahax</span></span>
+<span class="line" id="P204"><span class="ln">204</span></span>
+<span class="line" id="P205"><span class="ln">205</span></span>
+<span class="line" id="P206"><span class="ln">206</span><span class='hk'>def</span> eos_args() -&gt; <span class='hb'>tuple</span>:</span>
+<span class="line" id="P207"><span class="ln">207</span>    <span class='hs'>&quot;&quot;&quot;The scalars eqstat2&#x27;s kernel reads that the envelope&#x27;s chain does not change, and its two groups of module</span></span>
+<span class="line" id="P208"><span class="ln">208</span><span class='hs'>    arrays, as named tuples (esac06.eos_tuple, eqstat2.eq2_tuple: a structure inside this tuple would make Numba type</span></span>
+<span class="line" id="P209"><span class="ln">209</span><span class='hs'>    the chain&#x27;s whole context in Python at each call).&quot;&quot;&quot;</span></span>
+<span class="line" id="P210"><span class="ln">210</span>    c = constants_mod</span>
+<span class="line" id="P211"><span class="ln">211</span>    nml = nmlpar_mod</span>
+<span class="line" id="P212"><span class="ln">212</span>    cmp = comp_mod</span>
+<span class="line" id="P213"><span class="ln">213</span>    dh = debhu_mod</span>
+<span class="line" id="P214"><span class="ln">214</span>    <span class='hk'>return</span> (c.cln, c.ca3, c.cgas, c.cmkh, c.clni, nml.tscut, nml.ldifz, nml.lscv, nml.lopale06, nml.ldh,</span>
+<span class="line" id="P215"><span class="ln">215</span>            nml.etadh0, nml.etadh1, cmp.xenv, cmp.zenv, cmp.amuenv, dh.cdh, dh.xxdh, dh.yydh, dh.zzdh,</span>
+<span class="line" id="P216"><span class="ln">216</span>            esac06_mod.eos_tuple(), eqstat2_mod.eq2_tuple())</span>
+<span class="line" id="P217"><span class="ln">217</span></span>
+<span class="line" id="P218"><span class="ln">218</span></span>
+<span class="line" id="P219"><span class="ln">219</span><span class='hk'>def</span> eos_in(ist: np.ndarray) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P220"><span class="ln">220</span>    <span class='hs'>&quot;&quot;&quot;The chain&#x27;s integer state from the modules (EIST).&quot;&quot;&quot;</span></span>
+<span class="line" id="P221"><span class="ln">221</span>    m = eos06misc_mod</span>
+<span class="line" id="P222"><span class="ln">222</span>    ist[<span class='hn'>0</span>] = scveos_mod.idtscv</span>
+<span class="line" id="P223"><span class="ln">223</span>    ist[<span class='hn'>1</span>] = scveos_mod.idp</span>
+<span class="line" id="P224"><span class="ln">224</span>    ist[<span class='hn'>2</span>] = m.k3</span>
+<span class="line" id="P225"><span class="ln">225</span>    ist[<span class='hn'>3</span>] = m.l2</span>
+<span class="line" id="P226"><span class="ln">226</span>    ist[<span class='hn'>4</span>] = <span class='hn'>0</span></span>
+<span class="line" id="P227"><span class="ln">227</span>    ist[<span class='hn'>5</span>] = <span class='hn'>0</span></span>
+<span class="line" id="P228"><span class="ln">228</span>    ist[<span class='hn'>6</span>] = <span class='hn'>0</span></span>
+<span class="line" id="P229"><span class="ln">229</span>    ist[<span class='hn'>7</span>] = -<span class='hn'>1</span></span>
+<span class="line" id="P230"><span class="ln">230</span></span>
+<span class="line" id="P231"><span class="ln">231</span></span>
+<span class="line" id="P232"><span class="ln">232</span><span class='hk'>def</span> eos_out(ist: np.ndarray) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P233"><span class="ln">233</span>    <span class='hs'>&quot;&quot;&quot;The chain&#x27;s integer state back to the modules: scveos_mod&#x27;s stencil, eqstat&#x27;s KSSAHAX (if a call was made),</span></span>
+<span class="line" id="P234"><span class="ln">234</span><span class='hs'>    and esac06&#x27;s module scalars as the last call to set each left them (esac06.finish, no messages).&quot;&quot;&quot;</span></span>
+<span class="line" id="P235"><span class="ln">235</span>    <span class='hk'>global</span> kssahax</span>
+<span class="line" id="P236"><span class="ln">236</span>    idtscv, idp, _, _, f13, f14, f15, kx = ist.tolist()</span>
+<span class="line" id="P237"><span class="ln">237</span>    scveos_mod.idtscv, scveos_mod.idp = idtscv, idp</span>
+<span class="line" id="P238"><span class="ln">238</span>    <span class='hk'>if</span> kx &gt;= <span class='hn'>0</span>:</span>
+<span class="line" id="P239"><span class="ln">239</span>        kssahax = kx</span>
+<span class="line" id="P240"><span class="ln">240</span>    <span class='hk'>if</span> f13 <span class='hk'>or</span> f14 <span class='hk'>or</span> f15:</span>
+<span class="line" id="P241"><span class="ln">241</span>        st = esac06_mod.st</span>
+<span class="line" id="P242"><span class="ln">242</span>        st[<span class='hn'>12</span>] = <span class='hn'>0</span></span>
+<span class="line" id="P243"><span class="ln">243</span>        st[<span class='hn'>13</span>] = f13</span>
+<span class="line" id="P244"><span class="ln">244</span>        st[<span class='hn'>14</span>] = f14</span>
+<span class="line" id="P245"><span class="ln">245</span>        st[<span class='hn'>15</span>] = f15</span>
+<span class="line" id="P246"><span class="ln">246</span>        esac06_mod.finish(<span class='hn'>0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
+<span class="line" id="P247"><span class="ln">247</span></span>
+<span class="line" id="P248"><span class="ln">248</span></span>
+<span class="line" id="P249"><span class="ln">249</span><span class='hk'>def</span> eos_tail(r: np.ndarray, tl: <span class='hb'>float</span>, pl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, fxion: np.ndarray) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P250"><span class="ln">250</span>    <span class='hs'>&quot;&quot;&quot;What eqstat2&#x27;s wrapper does after its kernel, for a call that stopped the chain: the messages, scveos_mod&#x27;s</span></span>
+<span class="line" id="P251"><span class="ln">251</span><span class='hs'>    stencil, and esac06.finish, from the kernel&#x27;s 28 values in r (eqstat2._eqstat2_fast&#x27;s lines, in its order; the</span></span>
+<span class="line" id="P252"><span class="ln">252</span><span class='hs'>    earlier calls&#x27; esac06 flags were merged into st by the kernel and their module scalars written back by</span></span>
+<span class="line" id="P253"><span class="ln">253</span><span class='hs'>    eos_out).&quot;&quot;&quot;</span></span>
+<span class="line" id="P254"><span class="ln">254</span>    scv = scveos_mod</span>
+<span class="line" id="P255"><span class="ln">255</span>    flags = <span class='hb'>int</span>(r[<span class='hn'>24</span>])</span>
+<span class="line" id="P256"><span class="ln">256</span>    status, rlast, t6 = <span class='hb'>int</span>(r[<span class='hn'>25</span>]), <span class='hb'>float</span>(r[<span class='hn'>26</span>]), <span class='hb'>float</span>(r[<span class='hn'>27</span>])</span>
+<span class="line" id="P257"><span class="ln">257</span>    <span class='hk'>if</span> flags &amp; <span class='hn'>1</span>:</span>
+<span class="line" id="P258"><span class="ln">258</span>        fo = eqstat2_mod.fo</span>
+<span class="line" id="P259"><span class="ln">259</span>        iounits_mod.write(iounits_mod.ishort, <span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'> EQSTAT2: BETA is negative: TL,PL,BETA,1-BETA </span><span class='hs'>&quot;</span></span>
+<span class="line" id="P260"><span class="ln">260</span>                                              <span class='hs'>f</span><span class='hs'>&quot;</span><span class='hs'>{</span>tl<span class='hs'>}</span> <span class='hs'>{</span>pl<span class='hs'>}</span> <span class='hs'>{</span><span class='hb'>float</span>(fo[<span class='hn'>0</span>])<span class='hs'>}</span> <span class='hs'>{</span><span class='hn'>1.0</span> - <span class='hb'>float</span>(fo[<span class='hn'>0</span>])<span class='hs'>}</span><span class='hs'>&quot;</span>)</span>
+<span class="line" id="P261"><span class="ln">261</span>    <span class='hk'>if</span> flags &amp; <span class='hn'>2</span>:</span>
+<span class="line" id="P262"><span class="ln">262</span>        eqsaha_mod._failure(tl, pl)</span>
+<span class="line" id="P263"><span class="ln">263</span>    <span class='hk'>if</span> flags &amp; <span class='hn'>4</span>:</span>
+<span class="line" id="P264"><span class="ln">264</span>        eqrelv_mod._failure(tl, pl)</span>
+<span class="line" id="P265"><span class="ln">265</span>    <span class='hk'>if</span> flags &amp; <span class='hn'>16</span>:</span>
+<span class="line" id="P266"><span class="ln">266</span>        eqscve(tl, r[<span class='hn'>0</span>], r[<span class='hn'>1</span>], r[<span class='hn'>2</span>], r[<span class='hn'>3</span>], x, z, r[<span class='hn'>4</span>], fxion, r[<span class='hn'>11</span>], r[<span class='hn'>12</span>], r[<span class='hn'>13</span>], r[<span class='hn'>14</span>], <span class='hk'>False</span>)</span>
+<span class="line" id="P267"><span class="ln">267</span>        <span class='hk'>raise</span> RuntimeError(<span class='hs'>&quot;</span><span class='hs'>eqstat2</span><span class='hs'>&#x27;</span><span class='hs'>s kernel: eqscve stopped, the plain code did not</span><span class='hs'>&quot;</span>)</span>
+<span class="line" id="P268"><span class="ln">268</span>    scv.idtscv, scv.idp = <span class='hb'>int</span>(r[<span class='hn'>22</span>]), <span class='hb'>int</span>(r[<span class='hn'>23</span>])</span>
+<span class="line" id="P269"><span class="ln">269</span>    st = esac06_mod.st</span>
+<span class="line" id="P270"><span class="ln">270</span>    <span class='hk'>if</span> rlast != <span class='hn'>0.0</span>:</span>
+<span class="line" id="P271"><span class="ln">271</span>        esac06_mod.finish(status, x, t6, rlast)</span>
+<span class="line" id="P272"><span class="ln">272</span>    <span class='hk'>elif</span> st[<span class='hn'>13</span>] <span class='hk'>or</span> st[<span class='hn'>14</span>] <span class='hk'>or</span> st[<span class='hn'>15</span>]:</span>
+<span class="line" id="P273"><span class="ln">273</span>        esac06_mod.finish(<span class='hn'>0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
+<span class="line" id="P274"><span class="ln">274</span>    <span class='hk'>if</span> flags &amp; <span class='hn'>8</span>:</span>
+<span class="line" id="P275"><span class="ln">275</span>        iounits_mod.write(iounits_mod.ishort, <span class='hs'>&quot;</span><span class='hs'> WARNNING... OPAL TBL FAIL</span><span class='hs'>&quot;</span>)</span>
+<span class="line" id="P276"><span class="ln">276</span></span>
+<span class="line" id="P277"><span class="ln">277</span></span>
+<span class="line" id="P278"><span class="ln">278</span>@accel.njit(_nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P279"><span class="ln">279</span><span class='hk'>def</span> _eqstat_k(tl: <span class='hb'>float</span>, pl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, fxion: np.ndarray, lderiv: <span class='hb'>bool</span>, latmo: <span class='hb'>bool</span>, ksaha: <span class='hb'>int</span>,</span>
+<span class="line" id="P280"><span class="ln">280</span>              ea: <span class='hb'>tuple</span>, ist: np.ndarray, r: np.ndarray) -&gt; <span class='hb'>bool</span>:</span>
+<span class="line" id="P281"><span class="ln">281</span>    <span class='hs'>&quot;&quot;&quot;eqstat&#x27;s dispatch without numerical derivatives, through eqstat2&#x27;s kernel, for a chain.</span></span>
+<span class="line" id="P282"><span class="ln">282</span></span>
+<span class="line" id="P283"><span class="ln">283</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P284"><span class="ln">284</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P285"><span class="ln">285</span><span class='hs'>    tl, pl, x, z, lderiv, latmo, ksaha</span></span>
+<span class="line" id="P286"><span class="ln">286</span><span class='hs'>        As eqstat&#x27;s; T, P, DL, D, and the derivatives passed in are zero, as qatm and qenv pass them.</span></span>
+<span class="line" id="P287"><span class="ln">287</span><span class='hs'>    fxion : np.ndarray, shape: `(4,)`, dtype: ``float``</span></span>
+<span class="line" id="P288"><span class="ln">288</span><span class='hs'>        Set: the ionization fractions (index 0 unused).</span></span>
+<span class="line" id="P289"><span class="ln">289</span><span class='hs'>    ea : tuple</span></span>
+<span class="line" id="P290"><span class="ln">290</span><span class='hs'>        OOP eos: (eos_args(), the EOS family&#x27;s data, eqsaha&#x27;s starting guess, a composition array of shape (16,))</span></span>
+<span class="line" id="P291"><span class="ln">291</span><span class='hs'>        (families.eos_chain_args()); the first is the chain&#x27;s own (its Debye-Hueckel X, Y, Z and esac06&#x27;s flags),</span></span>
+<span class="line" id="P292"><span class="ln">292</span><span class='hs'>        the others go to `eos_point`. The envelope&#x27;s composition is X and Z only (qenv&#x27;s and qatm&#x27;s arguments), so</span></span>
+<span class="line" id="P293"><span class="ln">293</span><span class='hs'>        the composition array gets X, 1 - X - Z, Z in [1:4] and zeros after.</span></span>
+<span class="line" id="P294"><span class="ln">294</span><span class='hs'>    ist : np.ndarray, shape: `(EIST,)`, dtype: ``int64``</span></span>
+<span class="line" id="P295"><span class="ln">295</span><span class='hs'>        The chain&#x27;s EOS state, read and updated.</span></span>
+<span class="line" id="P296"><span class="ln">296</span><span class='hs'>    r : np.ndarray, shape: `(28,)` or more, dtype: ``float``</span></span>
+<span class="line" id="P297"><span class="ln">297</span><span class='hs'>        Set: eqstat2&#x27;s 22 values, then IDTSCV, IDP, the message flags, esac06&#x27;s status, density, and T6. Without</span></span>
+<span class="line" id="P298"><span class="ln">298</span><span class='hs'>        LDERIV, eqstat passes zeros for QDTT ... QCPP and keeps them, so r[15:21] are zero.</span></span>
+<span class="line" id="P299"><span class="ln">299</span></span>
+<span class="line" id="P300"><span class="ln">300</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P301"><span class="ln">301</span><span class='hs'>    -------</span></span>
+<span class="line" id="P302"><span class="ln">302</span><span class='hs'>    bool</span></span>
+<span class="line" id="P303"><span class="ln">303</span><span class='hs'>        True when the call has a message or a status for the plain code (eos_tail); the earlier calls&#x27; esac06</span></span>
+<span class="line" id="P304"><span class="ln">304</span><span class='hs'>        flags are then merged into st.</span></span>
+<span class="line" id="P305"><span class="ln">305</span></span>
+<span class="line" id="P306"><span class="ln">306</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P307"><span class="ln">307</span>    ec, data, ssv, comp = ea                        <span class='hc'># OOP eos: the chain&#x27;s context, the family&#x27;s data, the guess</span></span>
+<span class="line" id="P308"><span class="ln">308</span>    comp[<span class='hn'>1</span>] = x                                     <span class='hc'># OOP eos: the envelope&#x27;s composition, as far as it is known</span></span>
+<span class="line" id="P309"><span class="ln">309</span>    comp[<span class='hn'>2</span>] = <span class='hn'>1.0</span> - x - z</span>
+<span class="line" id="P310"><span class="ln">310</span>    comp[<span class='hn'>3</span>] = z</span>
+<span class="line" id="P311"><span class="ln">311</span>    xxdh = ec[<span class='hn'>16</span>]</span>
+<span class="line" id="P312"><span class="ln">312</span>    yydh = ec[<span class='hn'>17</span>]</span>
+<span class="line" id="P313"><span class="ln">313</span>    zzdh = ec[<span class='hn'>18</span>]</span>
+<span class="line" id="P314"><span class="ln">314</span>    ist[<span class='hn'>7</span>] = ksaha                                  <span class='hc'># KSSAHAX = KSAHA (eqstat&#x27;s misspelling)</span></span>
+<span class="line" id="P315"><span class="ln">315</span>    <span class='hc'># OOP eos: through `eos_point` (_eos_point, eqstat2&#x27;s kernel; or the installed family&#x27;s, families.py).</span></span>
+<span class="line" id="P316"><span class="ln">316</span>    v = eos_point(tl, pl, <span class='hn'>0.0</span>, x, z, comp, fxion, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, lderiv, latmo, ksaha, xxdh, yydh, zzdh, ist[<span class='hn'>0</span>], ist[<span class='hn'>1</span>],</span>
+<span class="line" id="P317"><span class="ln">317</span>                  ist[<span class='hn'>2</span>], ist[<span class='hn'>3</span>], ssv, data)</span>
+<span class="line" id="P318"><span class="ln">318</span>    r[<span class='hn'>0</span>] = v[<span class='hn'>0</span>]</span>
+<span class="line" id="P319"><span class="ln">319</span>    r[<span class='hn'>1</span>] = v[<span class='hn'>1</span>]</span>
+<span class="line" id="P320"><span class="ln">320</span>    r[<span class='hn'>2</span>] = v[<span class='hn'>2</span>]</span>
+<span class="line" id="P321"><span class="ln">321</span>    r[<span class='hn'>3</span>] = v[<span class='hn'>3</span>]</span>
+<span class="line" id="P322"><span class="ln">322</span>    r[<span class='hn'>4</span>] = v[<span class='hn'>4</span>]</span>
+<span class="line" id="P323"><span class="ln">323</span>    r[<span class='hn'>5</span>] = v[<span class='hn'>5</span>]</span>
+<span class="line" id="P324"><span class="ln">324</span>    r[<span class='hn'>6</span>] = v[<span class='hn'>6</span>]</span>
+<span class="line" id="P325"><span class="ln">325</span>    r[<span class='hn'>7</span>] = v[<span class='hn'>7</span>]</span>
+<span class="line" id="P326"><span class="ln">326</span>    r[<span class='hn'>8</span>] = v[<span class='hn'>8</span>]</span>
+<span class="line" id="P327"><span class="ln">327</span>    r[<span class='hn'>9</span>] = v[<span class='hn'>9</span>]</span>
+<span class="line" id="P328"><span class="ln">328</span>    r[<span class='hn'>10</span>] = v[<span class='hn'>10</span>]</span>
+<span class="line" id="P329"><span class="ln">329</span>    r[<span class='hn'>11</span>] = v[<span class='hn'>11</span>]</span>
+<span class="line" id="P330"><span class="ln">330</span>    r[<span class='hn'>12</span>] = v[<span class='hn'>12</span>]</span>
+<span class="line" id="P331"><span class="ln">331</span>    r[<span class='hn'>13</span>] = v[<span class='hn'>13</span>]</span>
+<span class="line" id="P332"><span class="ln">332</span>    r[<span class='hn'>14</span>] = v[<span class='hn'>14</span>]</span>
+<span class="line" id="P333"><span class="ln">333</span>    <span class='hk'>if</span> lderiv:</span>
+<span class="line" id="P334"><span class="ln">334</span>        r[<span class='hn'>15</span>] = v[<span class='hn'>15</span>]</span>
+<span class="line" id="P335"><span class="ln">335</span>        r[<span class='hn'>16</span>] = v[<span class='hn'>16</span>]</span>
+<span class="line" id="P336"><span class="ln">336</span>        r[<span class='hn'>17</span>] = v[<span class='hn'>17</span>]</span>
+<span class="line" id="P337"><span class="ln">337</span>        r[<span class='hn'>18</span>] = v[<span class='hn'>18</span>]</span>
+<span class="line" id="P338"><span class="ln">338</span>        r[<span class='hn'>19</span>] = v[<span class='hn'>19</span>]</span>
+<span class="line" id="P339"><span class="ln">339</span>        r[<span class='hn'>20</span>] = v[<span class='hn'>20</span>]</span>
+<span class="line" id="P340"><span class="ln">340</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P341"><span class="ln">341</span>        r[<span class='hn'>15</span>] = <span class='hn'>0.0</span></span>
+<span class="line" id="P342"><span class="ln">342</span>        r[<span class='hn'>16</span>] = <span class='hn'>0.0</span></span>
+<span class="line" id="P343"><span class="ln">343</span>        r[<span class='hn'>17</span>] = <span class='hn'>0.0</span></span>
+<span class="line" id="P344"><span class="ln">344</span>        r[<span class='hn'>18</span>] = <span class='hn'>0.0</span></span>
+<span class="line" id="P345"><span class="ln">345</span>        r[<span class='hn'>19</span>] = <span class='hn'>0.0</span></span>
+<span class="line" id="P346"><span class="ln">346</span>        r[<span class='hn'>20</span>] = <span class='hn'>0.0</span></span>
+<span class="line" id="P347"><span class="ln">347</span>    r[<span class='hn'>21</span>] = v[<span class='hn'>21</span>]</span>
+<span class="line" id="P348"><span class="ln">348</span>    r[<span class='hn'>22</span>] = v[<span class='hn'>22</span>]</span>
+<span class="line" id="P349"><span class="ln">349</span>    r[<span class='hn'>23</span>] = v[<span class='hn'>23</span>]</span>
+<span class="line" id="P350"><span class="ln">350</span>    r[<span class='hn'>24</span>] = v[<span class='hn'>24</span>]</span>
+<span class="line" id="P351"><span class="ln">351</span>    r[<span class='hn'>25</span>] = v[<span class='hn'>25</span>]</span>
+<span class="line" id="P352"><span class="ln">352</span>    r[<span class='hn'>26</span>] = v[<span class='hn'>26</span>]</span>
+<span class="line" id="P353"><span class="ln">353</span>    r[<span class='hn'>27</span>] = v[<span class='hn'>27</span>]</span>
+<span class="line" id="P354"><span class="ln">354</span>    st = ec[<span class='hn'>19</span>].sti</span>
+<span class="line" id="P355"><span class="ln">355</span>    <span class='hk'>if</span> v[<span class='hn'>24</span>] != <span class='hn'>0</span> <span class='hk'>or</span> v[<span class='hn'>25</span>] != <span class='hn'>0</span> <span class='hk'>or</span> st[<span class='hn'>12</span>] != <span class='hn'>0</span>:</span>
+<span class="line" id="P356"><span class="ln">356</span>        st[<span class='hn'>13</span>] = st[<span class='hn'>13</span>] | ist[<span class='hn'>4</span>]</span>
+<span class="line" id="P357"><span class="ln">357</span>        st[<span class='hn'>14</span>] = st[<span class='hn'>14</span>] | ist[<span class='hn'>5</span>]</span>
+<span class="line" id="P358"><span class="ln">358</span>        st[<span class='hn'>15</span>] = st[<span class='hn'>15</span>] | ist[<span class='hn'>6</span>]</span>
+<span class="line" id="P359"><span class="ln">359</span>        ist[<span class='hn'>4</span>] = <span class='hn'>0</span></span>
+<span class="line" id="P360"><span class="ln">360</span>        ist[<span class='hn'>5</span>] = <span class='hn'>0</span></span>
+<span class="line" id="P361"><span class="ln">361</span>        ist[<span class='hn'>6</span>] = <span class='hn'>0</span></span>
+<span class="line" id="P362"><span class="ln">362</span>        <span class='hk'>return</span> <span class='hk'>True</span></span>
+<span class="line" id="P363"><span class="ln">363</span>    ist[<span class='hn'>0</span>] = v[<span class='hn'>22</span>]</span>
+<span class="line" id="P364"><span class="ln">364</span>    ist[<span class='hn'>1</span>] = v[<span class='hn'>23</span>]</span>
+<span class="line" id="P365"><span class="ln">365</span>    <span class='hk'>if</span> st[<span class='hn'>13</span>] != <span class='hn'>0</span>:</span>
+<span class="line" id="P366"><span class="ln">366</span>        ist[<span class='hn'>4</span>] = <span class='hn'>1</span></span>
+<span class="line" id="P367"><span class="ln">367</span>        ist[<span class='hn'>2</span>] = st[<span class='hn'>8</span>]</span>
+<span class="line" id="P368"><span class="ln">368</span>        ist[<span class='hn'>3</span>] = st[<span class='hn'>3</span>]</span>
+<span class="line" id="P369"><span class="ln">369</span>    <span class='hk'>if</span> st[<span class='hn'>14</span>] != <span class='hn'>0</span>:</span>
+<span class="line" id="P370"><span class="ln">370</span>        ist[<span class='hn'>5</span>] = <span class='hn'>1</span></span>
+<span class="line" id="P371"><span class="ln">371</span>    <span class='hk'>if</span> st[<span class='hn'>15</span>] != <span class='hn'>0</span>:</span>
+<span class="line" id="P372"><span class="ln">372</span>        ist[<span class='hn'>6</span>] = <span class='hn'>1</span></span>
+<span class="line" id="P373"><span class="ln">373</span>    <span class='hk'>return</span> <span class='hk'>False</span></span>
+<span class="line" id="P374"><span class="ln">374</span></span>
+<span class="line" id="P375"><span class="ln">375</span></span>
+<span class="line" id="P376"><span class="ln">376</span>@accel.njit(_nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P377"><span class="ln">377</span><span class='hk'>def</span> _eqstat_forced(ea: <span class='hb'>tuple</span>, ist: np.ndarray) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P378"><span class="ln">378</span>    <span class='hs'>&quot;&quot;&quot;For the tests (qenv.test_stop): a call that succeeded made to stop the chain as a message would, its esac06</span></span>
+<span class="line" id="P379"><span class="ln">379</span><span class='hs'>    flags merged into st (as _eqstat_k does before it returns true).&quot;&quot;&quot;</span></span>
+<span class="line" id="P380"><span class="ln">380</span>    st = ea[<span class='hn'>0</span>][<span class='hn'>19</span>].sti                              <span class='hc'># OOP eos: ea as _eqstat_k&#x27;s</span></span>
+<span class="line" id="P381"><span class="ln">381</span>    st[<span class='hn'>13</span>] = st[<span class='hn'>13</span>] | ist[<span class='hn'>4</span>]</span>
+<span class="line" id="P382"><span class="ln">382</span>    st[<span class='hn'>14</span>] = st[<span class='hn'>14</span>] | ist[<span class='hn'>5</span>]</span>
+<span class="line" id="P383"><span class="ln">383</span>    st[<span class='hn'>15</span>] = st[<span class='hn'>15</span>] | ist[<span class='hn'>6</span>]</span>
+<span class="line" id="P384"><span class="ln">384</span>    ist[<span class='hn'>4</span>] = <span class='hn'>0</span></span>
+<span class="line" id="P385"><span class="ln">385</span>    ist[<span class='hn'>5</span>] = <span class='hn'>0</span></span>
+<span class="line" id="P386"><span class="ln">386</span>    ist[<span class='hn'>6</span>] = <span class='hn'>0</span></span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
 function st(){try{return localStorage.getItem('pm-toc')}catch(e){return null}}function sv(v){try{localStorage.setItem('pm-toc',v)}catch(e){}}
 var b=nav.querySelector('.toc-toggle');function set(h){page.classList.toggle('toc-hidden',h);b.textContent=h?'show':'hide';}
 set(st()==='hidden');b.addEventListener('click',function(){var h=!page.classList.contains('toc-hidden');set(h);sv(h?'hidden':'shown');});

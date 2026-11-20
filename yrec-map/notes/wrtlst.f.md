@@ -5,7 +5,7 @@
 **How it fits.**
 - **Inputs:** the model and its envelope triangle (arguments), the unit `IWRITE`, the mixing length `CMIXL` and `COMPMIX` (the initial composition's code, carried from input to output), both now arguments; and the physics switches in [`NMLPAR_MOD`](nmlpar_mod.f.md): `KTTAU`, `LDH`, `LSCV`, `LOPALE06`, `LOPAL95` for the labels, and `LEXCOM`, `LROT`, `LDIFY`, `LDIFZ`, `LDISK`, `LINSTB`, `LJDOT0`, `LOVSTC`, `LOVSTE`, `LOVSTM`, `LPUREZ`, `LSEMIC`, `PDISK`, `TDISK`, `WMAX`, whose values are written as they are. The units `ILAST`, `IOWR`, `ISHORT` come from [`IOUNITS_MOD`](iounits_mod.f.md).
 - **Who calls it:** the main program [main.f](main.f.md#file-level) (unit `ILAST`) and [WRTOUT](wrtout.f.md#wrtout) (`ILAST`, and `IJLAST`).
-- **What it calls:** [PUTMODEL2](putmodel2.f.md#putmodel2), which writes the file.
+- **What it calls:** [PUTMODEL2](https://github.com/yreclab/yrec/blob/7be4133/src/putmodel2.f#L7-L131), which writes the file.
 - **Outputs:** the model file on `IWRITE`; a line on `IOWR` and one on `ISHORT`, which omits the age when `IWRITE` is 11, the unit number PARMIN gives `ILAST` ([parmin.f, line 658](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L658)) (settled from the code, Nov 9, 2026: [lines 150–156](https://github.com/yreclab/yrec/blob/7be4133/src/wrtlst.f#L150-L156)). The unit `ILAST` is rewound, so it holds only the latest model.
 
 **The labels.**
@@ -19,7 +19,7 @@
 
 ## Bugs, by priority
 
-1. **(never occurred)** **A lost label.** ([lines 110–118](https://github.com/yreclab/yrec/blob/7be4133/src/wrtlst.f#L110-L118)) In the SCV branch, `IF (LOPALE06) EOS='SCV+O6'` sits inside `IF (LDH)` and is overwritten on the next line by `'SCV+DH'`, so SCV with OPAL 2006 and without Debye–Hückel is labelled `SCV`. What follows: a wrong equation-of-state label in the model file's flags line; GETMODEL2 reads the label back, but nothing acts on it. Only with `LSCV` and `LOPALE06` on and `LDH` off. [PUTSTORE](putstore.f.md#putstore) has the same lines ([putstore.f, suspected bug 1](putstore.f.md#b1)).
+1. **(never occurred)** **A lost label.** ([lines 110–118](https://github.com/yreclab/yrec/blob/7be4133/src/wrtlst.f#L110-L118)) In the SCV branch, `IF (LOPALE06) EOS='SCV+O6'` sits inside `IF (LDH)` and is overwritten on the next line by `'SCV+DH'`, so SCV with OPAL 2006 and without Debye–Hückel is labelled `SCV`. What follows: a wrong equation-of-state label in the model file's flags line; GETMODEL2 reads the label back, but nothing acts on it. Only with `LSCV` and `LOPALE06` on and `LDH` off. [PUTSTORE](https://github.com/yreclab/yrec/blob/7be4133/src/putstore.f#L13-L360) has the same lines ([putstore.f, suspected bug 1](putstore.f.md#b1)).
 
     **A possible fix:**
 

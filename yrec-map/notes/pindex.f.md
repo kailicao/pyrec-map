@@ -3,8 +3,8 @@
 **Purpose.** Chooses which shells of a model are printed (`ID(1..IDM)`): every `NPRTPT`-th shell, plus every shell of the hydrogen-burning shell when `LSHELL` is true. The first and last shells are always included.
 
 **How it fits.**
-- **Inputs:** the edges of the burning shell `JXBEG`, `JXEND`, the flag `LSHELL`, the number of shells `M`; `NPRTPT` from `NMLPAR_MOD` (formerly `/CCOUT1/`; set in [PARMIN](parmin.f.md#parmin)).
-- **Who calls it:** only [PUTSTORE](putstore.f.md#putstore), which passes `LSHELL`, `JXBEG` and `JXEND` as locals it never sets ([putstore.f, line 262](https://github.com/yreclab/yrec/blob/7be4133/src/putstore.f#L262)), so the `LSHELL` branch is not taken wherever the compiler zero-fills `SAVE`d locals (settled from the code, Nov 9, 2026).
+- **Inputs:** the edges of the burning shell `JXBEG`, `JXEND`, the flag `LSHELL`, the number of shells `M`; `NPRTPT` from `NMLPAR_MOD` (formerly `/CCOUT1/`; set in [PARMIN](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489)).
+- **Who calls it:** only [PUTSTORE](https://github.com/yreclab/yrec/blob/7be4133/src/putstore.f#L13-L360), which passes `LSHELL`, `JXBEG` and `JXEND` as locals it never sets ([putstore.f, line 262](https://github.com/yreclab/yrec/blob/7be4133/src/putstore.f#L262)), so the `LSHELL` branch is not taken wherever the compiler zero-fills `SAVE`d locals (settled from the code, Nov 9, 2026).
 - **Outputs:** the list `ID` and its length `IDM`.
 
 **The method.** Without a shell: $`1, k, 2k, \dots, M`$ with $`k`$ = `NPRTPT`. With a shell: the multiples of $`k`$ below `JXBEG`, every shell from `JXBEG` to `JXEND`, the multiples of $`k`$ above, and $`M`$.

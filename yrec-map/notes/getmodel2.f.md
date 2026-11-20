@@ -4,13 +4,13 @@
 
 **How it fits.**
 - **Who calls it:** only [STARIN](starin.f.md#starin), when the first record of the input model starts with `MOD2`; for the older YREC7 format (`NMOD`) it calls [GETYREC7](getyrec7.f.md#getyrec7) instead.
-- **Who writes the format:** [PUTMODEL2](putmodel2.f.md#putmodel2) (and the format is mentioned in [PUTSTORE](putstore.f.md#putstore) and [WRTLST](wrtlst.f.md#wrtlst)).
+- **Who writes the format:** [PUTMODEL2](https://github.com/yreclab/yrec/blob/7be4133/src/putmodel2.f#L7-L131) (and the format is mentioned in [PUTSTORE](https://github.com/yreclab/yrec/blob/7be4133/src/putstore.f#L13-L360) and [WRTLST](wrtlst.f.md#wrtlst)).
 - **Input:** the file on unit `IREAD`, rewound first.
 - **Outputs (arguments):** the header values (`MODEL`, `M`, `SMASS`, `TEFFL`, `BL`, `HSTOT`, `DAGE`, `DDAGE`); the flags and names of the input physics (`EOS`, `ATM`, `ALOK`, `HIK`, `COMPMIX`, `LDIFY`, `LDIFZ`, `LROT`, …, and the disk-locking `TDISK`, `PDISK`, `WMAX`); the luminosities `TLUMX` (the three pp chains, CNO, helium burning, neutrinos, gravitational; converted to solar units if they exceed $`10^{20}`$, that is, if they were written in $`\mathrm{erg\,s^{-1}}`$); the envelope triangle `TRIT`, `TRIL`, `PS`, `TS`, `RS`, `CFENV` and its orientation `FTRI` ($`\pm 1`$: [SURFBC](surfbc.f.md#surfbc) flips its sign each time it reflects a corner of the triangle, and uses it in its test of whether ($`T_\mathrm{eff}`$, $`L`$) lies inside; PUTMODEL2 writes the record numbers as −1, −2, −3 when it is negative, and GETMODEL2 reads the sign back); and per shell `HS`, `HR`, `HL`, `HP`, `HT`, `HD`, `OMEGA`, `LC` and 15 abundances `HCOMP`.
 
     > **Question** ([lines 75–83](https://github.com/yreclab/yrec/blob/7be4133/src/getmodel2.f#L75-L83)). **Units guessed from size.** The luminosities are taken as $`\mathrm{erg\,s^{-1}}`$ if any exceeds $`10^{20}`$, else as solar units. Could the format carry the unit instead?
 
-- **Modules:** [`CONSTANTS_MOD`](constants_mod.f.md#constants_mod) (formerly `/CONST/`), for $`L_\odot`$ (`CLSUN`).
+- **Modules:** [`CONSTANTS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/constants_mod.f#L37-L75) (formerly `/CONST/`), for $`L_\odot`$ (`CLSUN`).
 
 **Changed since `rp_1`.** Declarations only: COMMON blocks to modules, `IMPLICIT NONE`.
 

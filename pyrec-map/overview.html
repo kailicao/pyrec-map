@@ -1,18 +1,41 @@
 <!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>A new design for YREC · PyREC scaffolding (from YREC development, 7be4133)</title><link rel='icon' type='image/svg+xml' href='../logo.svg'><script>function hlLines(){document.querySelectorAll('.line.hl').forEach(function(e){e.classList.remove('hl')});var m=location.hash.match(/^#([LP])(\d+)(?:-[LP](\d+))?$/);if(!m)return;var first=null;var col=document.querySelector('aside.codecol');if(col)col.dataset.view=m[1]==='P'?'p':'f';for(var i=+m[2];i<=+(m[3]||m[2]);i++){var e=document.getElementById(m[1]+i);if(!e)continue;e.classList.add('hl');first=first||e;for(var p=e.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;}if(!first)return;var pane=first.closest('.panes');if(pane){pane.scrollTop=first.offsetTop-pane.clientHeight/2;}else first.scrollIntoView({block:'center'});}addEventListener('hashchange',hlLines);addEventListener('DOMContentLoaded',hlLines);document.addEventListener('click',function(ev){var a=ev.target.closest&&ev.target.closest('a[href^="#L"],a[href^="#P"]');if(!a||!document.querySelector('aside.codecol'))return;ev.preventDefault();history.pushState(null,'',a.getAttribute('href'));hlLines();});</script><link rel='stylesheet' href='../style.css'><script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']]}};</script><script async src='https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js'></script><script type='module'>import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';document.querySelectorAll('pre > code.language-mermaid').forEach(c=>{const d=document.createElement('div');d.className='mermaid';d.textContent=c.textContent;c.parentElement.replaceWith(d);});mermaid.initialize({startOnLoad:false,flowchart:{wrappingWidth:400},theme:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'});mermaid.run();</script></head><body><div class='banner'>This site is under development and contains unvetted AI-generated content. It is not part of YREC's official documentation; please refer to the <a href='https://yrec.readthedocs.io/en/latest/'>YREC documentation</a>.</div>
-<header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ A new design</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><main>
-
+<header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ A new design / A new design for YREC</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><main>
+<nav class='pages'><ul class='toc'><li><strong>A new design for YREC</strong></li><li><a href='state.html'>State: what a run carries</a></li><li><a href='families.html'>The families</a></li><li><a href='directions.html'>Directions from MESA</a></li><li><a href='tree.html'>The compiled tree</a></li><li><a href='numba.html'>Writing a Numba family</a></li><li><a href='pilot-opacity.html'>The pilot: opacity</a></li><li><a href='names.html'>The families&#x27; names</a></li></ul></nav>
 <h1>A new design for YREC</h1>
-<p><em>A high-level design (Nov 9, 2026): the structure the code is meant to have, kept in mind while the current code is mapped and debugged. It names responsibilities, not routines, so that bug fixes and small improvements to the Fortran leave it unchanged. Python with Numba is its scope; modern Fortran is mentioned at the end. The earlier, detailed design (modern-Fortran types, Python stubs, the COMMON-block map, Oct 25–31, 2026) is in this repository's history.</em></p>
+<p><em>A high-level design (Nov 9, 2026), brought up to date with Kaili Cao's decisions of Nov 18, 2026: the structure the code is meant to have, kept in mind while the current code is mapped and debugged. It names responsibilities, not routines, so that bug fixes and small improvements to the Fortran leave it unchanged. Python with Numba is its scope; modern Fortran is mentioned at the end. The earlier, detailed design (modern-Fortran types, Python stubs, the COMMON-block map, Oct 25–31, 2026) is in this repository's history.</em></p>
+<p><strong>The pages of this design,</strong> besides this overview:</p>
+<ul>
+<li><a href="state.html">State</a>: what a run carries, each value under its descriptive name beside YREC's;</li>
+<li><a href="families.html">The families</a>: each family's inputs and outputs;</li>
+<li><a href="directions.html">Directions from MESA</a>: where each family could grow beyond YREC (none built);</li>
+<li><a href="tree.html">The compiled tree</a>: what runs compiled, and what in plain Python;</li>
+<li><a href="numba.html">Writing a Numba family</a>: how a family's hot paths are compiled;</li>
+<li><a href="pilot-opacity.html">The pilot: opacity</a>: the first family, beside the code it wraps;</li>
+<li><a href="names.html">The families' names</a>: each family's names beside YREC's.</li>
+</ul>
 <h2>Goals</h2>
 <p>YREC's physics is mature and validated; what makes it hard to read, test, and extend is its structure: state shared through modules (COMMON blocks until recently), routines that set and read the same variables from far apart, and new physics added by editing those routines. The new structure should let an astronomer who does not read Fortran:</p>
 <ul>
 <li><strong>find each piece of physics</strong> in one place, under the name of what it does;</li>
 <li><strong>replace it</strong> with their own, in a few lines of Python, without touching the rest;</li>
-<li><strong>inspect any value</strong> between two steps, or two lines, as Python allows;</li>
-<li><strong>trust the results,</strong> because every piece is checked against the Fortran it replaces;</li>
+<li><strong>inspect any value</strong> between two steps, or two lines, as Python allows, and <strong>plot any array</strong> (below, Looking inside);</li>
+<li><strong>trust the results,</strong> because every piece is checked against the Fortran it replaces, bit for bit for the default physics;</li>
 <li><strong>run what astronomers run:</strong> grids of models, settings that change along a track, and branches from a model.</li>
 </ul>
-<p>One rule makes these possible: <strong>everything that changes during a run lives in the model's data;</strong> the physics and the numerical methods hold none of it. YREC keeps values between calls inside its routines (<code>SAVE</code>d locals, cached tables, ESAC06's growing <code>EOS(5)</code>); in the new structure such a value belongs to the <code>State</code>, or to a cache its family can rebuild, so that copying a model copies everything that defines it.</p>
+<p>One rule makes these possible: <strong>everything that changes during a run lives in the model's data;</strong> the physics and the numerical methods hold none of it. YREC keeps values between calls inside its routines (<code>SAVE</code>d locals, cached tables, ESAC06's growing <code>EOS(5)</code>); in the new structure every value a run carries has one home (<a href="state.html">State</a>):</p>
+<ul>
+<li><strong>the <code>State</code>,</strong> the star at one moment: arrays over the shells, scalars, and any value carried from one step to the next that changes later results;</li>
+<li><strong>a family's cache,</strong> which the family can rebuild and which changes no result;</li>
+<li><strong>work arrays,</strong> scratch space inside one computation.</li>
+</ul>
+<p><strong>The test:</strong> Copy a model in the middle of a run and run both copies on: They must match byte for byte.</p>
+<h2>Two versions</h2>
+<p>pyrec comes in two versions:</p>
+<ol>
+<li><strong>The Fortran-tracking pyrec,</strong> the translation as it is: one Python module per Fortran file, Numba kernels, byte-identical to YREC on the 1 M☉ ZAMS case and the solar model (YREC's test-suite case <code>Test_solarGS98_base</code>).</li>
+<li><strong>The object-oriented pyrec,</strong> the design on these pages, committed with the first in one commit (Nov 19, 2026) as the package <code>pyrec_oop</code>. Once it no longer runs through the Fortran-tracking routines, it becomes pyrec's main branch, and the Fortran-tracking version moves to a branch of its own, relabeled "legacy" (a relabeling only).</li>
+</ol>
+<p>This site shows both, cross-referenced: each family's section of <a href="families.html">The families</a> names the Fortran-tracking routines its default wraps, and each file's page the family that wraps it (and is to replace it). The object-oriented version runs in pyrec as <code>pyrec_oop</code>, beside the Fortran-tracking path (<code>PYREC_FAMILIES=0</code>).</p>
 <h2>The model</h2>
 <p>The central object is a <code>Model</code>: In a stellar code, a model is one star at one time, and <code>model()</code> advances it by one step. It holds the data (the star now, the star at the start of the step, and its history) and, as attributes, the callables that act on it, grouped in two bundles: the physics, and the numerical methods.</p>
 <pre class='hlb'><code>Model                       # one star; model() advances it one step
@@ -21,42 +44,55 @@
 │                           #   rotation) and scalars (age, mass, model number); state.copy()
 ├── start: State            # the state at the start of the step
 ├── history: History        # a table of per-step summaries, plus full snapshots now and then (NPZ)
-├── controls: list           # callables run at the start of each step, which may change any setting
-├── physics: Physics        # what the star is made of and how it behaves
-│   ├── eos: Eos
-│   ├── opacity: Opacity
-│   ├── atmosphere: Atmosphere
-│   ├── network: Network         # reaction rates, energy generation, neutrinos
-│   ├── convection: Convection   # mixing length, overshoot, semiconvection
-│   ├── diffusion: Diffusion     # settling
-│   ├── rotation: Rotation       # transport of angular momentum, rotational mixing
-│   └── mass_loss: MassLoss      # winds, braking, accretion
+├── controls: list          # callables run at the start of each step, which may change any setting
+├── hooks: dict             # callables run between a step's stages (Looking inside)
+├── stops: list             # the stopping conditions, checked at the end of each step
+├── outputs: list           # callables writing the output at the end of each step
+├── physics: Physics        # what the star is made of and how it behaves (each a base class; YREC's default)
+│   ├── eos: EOSBase                 # EOS
+│   ├── opacity: OpacityBase         # Opacity
+│   ├── atmosphere: AtmosphereBase   # Atmosphere
+│   ├── network: NetworkBase         # Network: reaction rates, energy generation, neutrinos
+│   ├── convection: ConvectionBase   # Convection: mixing length, overshoot, semiconvection
+│   ├── diffusion: DiffusionBase     # Diffusion: settling
+│   ├── rotation: RotationBase       # Rotation: transport of angular momentum, rotational mixing
+│   └── mass_loss: MassLossBase      # MassLoss: winds, braking, accretion
 └── numerics: Numerics      # how the equations are solved
-    ├── solver: StructureSolver  # the Henyey iteration
-    ├── timestep: TimeStep       # choosing the next step
-    └── rezoner: Rezoner         # placing the shells
+    ├── solver: SolverBase           # Solver: the Henyey iteration
+    ├── timestep: TimestepBase       # Timestep: choosing the next step
+    └── rezoner: RezonerBase         # Rezoner: placing the shells
 </code></pre>
 <ul>
 <li><strong>Data and behavior apart.</strong> <code>State</code> is plain data, arrays and scalars, so that copying it, saving it, and comparing it with the Fortran's are each one line. <code>Physics</code> and <code>Numerics</code> hold no state of the star; they are given it.</li>
 <li><strong>Physics and numerics apart,</strong> because they change for different reasons: an astronomer swaps an opacity table, a numerical analyst the solver.</li>
-<li><strong>Each family is a base class</strong> with one <code>__call__</code> and a fixed set of inputs and outputs, for example <code>Opacity.__call__(rho, T, X, Z) -&gt; (kappa, dlnkappa_dlnrho, dlnkappa_dlnT)</code>. A new piece of physics is a subclass, or any callable with the same signature (a <code>typing.Protocol</code>), so a plain function will do; it is installed with one assignment, <code>model.physics.opacity = MyOpacity(...)</code>. The base classes replace the hooks a Fortran code would need.</li>
-<li><strong>The start of the step</strong> is kept as a state of its own: YREC's operator split redoes the burning and mixing from the start-of-step composition once the structure is solved (levels 3 and 4 of <a href="../yrec-map/crrect.f.html#def-CRRECT"><code>CRRECT</code></a>), and a step that fails could be retried from it with a shorter step (today a divergence ends the run; an open question below).</li>
-<li><strong>The default of every family reproduces YREC,</strong> each linked below to the routines it replaces.</li>
+<li><strong>Each family is a base class</strong> with a fixed set of inputs and outputs, for example the opacity's <code>point(log_density, log_temperature, x, z, ionization, data) -&gt; (kappa, log_kappa, dlnkappa_dlnrho, dlnkappa_dlnt, status)</code> (<a href="families.html">The families</a>); the base class's name ends in <code>Base</code> (<code>OpacityBase</code>), and YREC's default takes the plain name (<code>Opacity</code>). The local families (<code>eos</code>, <code>opacity</code>, <code>atmosphere</code>, <code>network</code>, <code>convection</code>), which the solver and the envelope call point by point, put their hot paths, the loops a run spends its time in, in compiled (Numba) static methods, so that a whole chain of families runs compiled (<a href="numba.html">Writing a Numba family</a>); the stage families, called once a step, are plain Python calling compiled kernels (<a href="families.html">The families</a>, Two kinds of family). A family written in plain Python also works: It is installed with one assignment, <code>model.physics.opacity = MyOpacity(...)</code>, and pyrec warns that the run will be slower, since every compiled chain that calls it then runs in Python (<a href="tree.html">The compiled tree</a> shows which).</li>
+<li><strong>The start of the step</strong> is kept as a state of its own: YREC's operator split redoes the burning and mixing from the start-of-step composition once the structure is solved (levels 3 and 4 of <a href="../yrec-map/crrect.f.html#def-CRRECT"><code>CRRECT</code></a>), and a step that fails may be retried from it with a shorter step (below, One step).</li>
+<li><strong>The default of every family reproduces YREC,</strong> bit for bit, each linked below to the routines it replaces.</li>
+<li><strong>Descriptive names,</strong> each beside YREC's name (written in lower case in pyrec) for the variables the two share; the mapping is a table in the code, so that the glossary can show it (<a href="state.html">State</a>; <a href="names.html">The families' names</a>). Each of YREC's variables has one descriptive name, the same in every table; a routine's arguments are mapped per routine, so that a YREC name meaning different quantities in different routines has one descriptive name for each.</li>
 </ul>
 <h2>One step</h2>
 <p><code>model()</code> does what one pass of <a href="../yrec-map/main.f.html">main.f</a>'s model loop does today, in the same order, each stage through a family:</p>
 <ol>
 <li>the controls, in order (below);</li>
-<li><code>start = state.copy()</code>;</li>
-<li>mass loss or accretion (<code>mass_loss</code>);</li>
-<li>burning, mixing, and settling of the composition over the step, with the current structure (<code>network</code>, <code>convection</code>, <code>diffusion</code>);</li>
+<li><code>start = state.copy()</code>, and whether the step ages the star (<code>timestep</code>);</li>
+<li>mass loss or accretion (<code>mass_loss</code>), on a step that ages the star;</li>
+<li>burning, mixing, and settling of the composition over the step, with the current structure (<code>convection</code>, whose mixing calls <code>network</code> and <code>diffusion</code> as YREC's MIX does), and the age advanced;</li>
 <li>the shells placed (<code>rezoner</code>);</li>
-<li>the structure solved for $P$, $T$, $r$, and $L$ at fixed composition, the burning and mixing redone with the new structure (<code>solver</code>, which calls <code>eos</code>, <code>opacity</code>, <code>atmosphere</code>, and <code>network</code>);</li>
-<li>rotation (<code>rotation</code>);</li>
-<li>the next step's length (<code>timestep</code>), a summary row added to <code>history</code>, and the stopping conditions checked.</li>
+<li>the structure solved for $P$, $T$, $r$, and $L$ at fixed composition, the burning and mixing redone with the new structure (<code>solver</code>, which calls <code>eos</code>, <code>opacity</code>, <code>atmosphere</code>, and <code>network</code>, and with rotation the <code>rotation</code> family, which YREC iterates with the structure);</li>
+<li>the zones located, and the light elements burned (<code>rezoner</code>, <code>convection</code>, <code>network</code>);</li>
+<li>the next step's length (<code>timestep</code>), the output, a summary row added to <code>history</code>, and the stopping conditions checked.</li>
 </ol>
+<p><strong>A step that fails</strong> to converge may be retried from <code>start</code> with a shorter step; the default reproduces YREC, which stops the run.</p>
+<h2>Looking inside</h2>
+<p>Every array can be looked at and plotted:</p>
+<ul>
+<li><strong>A family on its own,</strong> without a model: for example, the opacity on a grid of $\rho$ and $T$, called as the solver calls it, and plotted.</li>
+<li><strong>A model stopped at any step,</strong> its <code>State</code> read and its profiles plotted, then run on.</li>
+<li><strong>Hooks between a step's stages</strong> (<code>model.hooks</code>), callables run after any of the eight stages above, which may read the state, record it, or stop the run.</li>
+</ul>
+<p>How memory is managed (views, copies, preallocated arrays) is chosen for speed, as long as all three work.</p>
 <h2>The families</h2>
-<p>Each family against the home page's topics and the routines whose behavior its default reproduces (their pages give the code, the questions, and the suspected bugs).</p>
+<p>Each family against the home page's topics and the routines whose behavior its default reproduces (their pages give the code, the questions, and the suspected bugs); each family's inputs and outputs are on <a href="families.html">The families</a>.</p>
 <table>
 <thead>
 <tr>
@@ -114,7 +150,7 @@
 <tr>
 <td><code>timestep</code>, <code>rezoner</code></td>
 <td>The time step and rezoning</td>
-<td><a href="../yrec-map/htimer.f.html">htimer.f</a>, <a href="../yrec-map/ytime.f.html">ytime.f</a>, <a href="../yrec-map/xtime.f.html">xtime.f</a>, <a href="../yrec-map/hpoint.f.html">hpoint.f</a>, <a href="../yrec-map/getnewenv.f.html">getnewenv.f</a></td>
+<td><a href="../yrec-map/htimer.f.html">htimer.f</a>, <a href="../yrec-map/ytime.f.html">ytime.f</a>, <a href="../yrec-map/xtime.f.html">xtime.f</a>, <a href="../yrec-map/hpoint.f.html">hpoint.f</a>, <a href="../yrec-map/findsh.f.html">findsh.f</a>, <a href="../yrec-map/getnewenv.f.html">getnewenv.f</a></td>
 </tr>
 <tr>
 <td><code>history</code>, input and output</td>
@@ -124,6 +160,7 @@
 </tbody>
 </table>
 <p>The numerical utilities (splines, interpolation, quadrature, linear solvers) become a small library the families share, one routine where YREC has several.</p>
+<p><strong>What is dropped:</strong> whatever YREC's test suite does not cover; the coverage is measured later.</p>
 <h2>Grids and calibrations</h2>
 <p>Above the model sit two small classes:</p>
 <pre class='hlb'><code>Grid                 # many stars: one Model per point of the parameter grid
@@ -132,43 +169,45 @@
 Calibration          # adjusts one model's parameters until it matches the Sun or a given star
 </code></pre>
 <ul>
-<li><strong>A <code>Grid</code></strong> comes from a configuration in which some settings are lists (below). Its results are one table, one row per model and step, keyed by the grid's parameters. YREC's "kind cards", several runs in one job, are a small grid.</li>
+<li><strong>A <code>Grid</code></strong> comes from a configuration in which some settings are lists (below). Its results are one table, one row per model and step, keyed by the grid's parameters. YREC's "kind cards," several runs in one job, are a small grid.</li>
 <li><strong>A <code>Calibration</code></strong> runs a model, compares it with its target, and adjusts the mixing length and helium until they match: the Sun, or a star of given $L$ and $T_\mathrm{eff}$, as <a href="../yrec-map/setcal.f.html">setcal.f</a>, <a href="../yrec-map/chkcal.f.html">chkcal.f</a>, <a href="../yrec-map/setscal.f.html">setscal.f</a>, and <a href="../yrec-map/chkscal.f.html">chkscal.f</a> do today.</li>
 </ul>
 <h2>Controls: settings that change along a track</h2>
 <p><code>model.controls</code> is a list of plain callables; the model calls each at the start of every step, and each may change any setting or swap any family:</p>
 <pre class='hlb'><code><span class='hk'>def</span> evolving_alpha(model):
-    model.physics.convection.alpha = <span class='hn'>1.8</span> + <span class='hn'>0.1</span> * model.state.age / <span class='hn'>1e9</span>
+    model.state.mixing_length = <span class='hn'>1.8</span> + <span class='hn'>0.1</span> * model.state.age   <span class='hc'># the age in Gyr</span>
 
 model.controls.append(evolving_alpha)
 </code></pre>
-<p>A mixing length that evolves, an accretion rate that follows a disk (<code>model.physics.mass_loss.rate</code>; accretion is mass loss with the other sign), a switch turned on at the end of the main sequence: each is a control. The values the controls set are written to the history, so that a run can be reproduced.</p>
+<p>A mixing length that evolves, an accretion rate that follows a disk (a mass-loss family whose <code>rate(state)</code> follows it; accretion is mass loss with the other sign), a switch turned on at the end of the main sequence: Each is a control. The values the controls set are written to the history, so that a run can be reproduced.</p>
 <h2>Branching</h2>
-<p><code>branch = model.copy()</code> copies the state, the start-of-step state, the configuration, the history, and the controls; the physics and numerics are shared, since they hold no state of the star. The branch is then changed (<code>branch.physics.rotation = ...</code>) and advanced on its own. A branch from a saved model is <code>Model.from_npz(path, config)</code>. Both rest on the rule above: A model's data is all that defines it.</p>
+<p><code>branch = model.copy()</code> copies the state, the start-of-step state, the configuration, the history, and the controls; the physics and numerics are shared, since they hold no state of the star. The branch is then changed (<code>branch.physics.rotation = ...</code>) and advanced on its own. A branch from a saved model is <code>Model.from_npz(path, config)</code>. Both rest on the rule above: A model's data is all that defines it, which the copy test checks.</p>
 <h2>Configuration and files</h2>
 <ul>
 <li><strong>Configuration in YAML,</strong> one file per run: the settings of YREC's two namelists, grouped by family, with a converter from the namelists. <strong>Any setting may be a single value or a list.</strong> If every setting is a single value, the configuration describes one model (<code>Model</code>); each setting given as a list is an axis of a grid (<code>Grid</code>), its models every combination of the axes' values (or, if asked, the axes taken together, element by element). A setting that is itself a list (YREC's tolerances <code>HTOLER</code>, the time-step limits <code>ATIME</code>) is an axis only when given as a list of lists. One entry point, <code>pyrec.run(config)</code>, returns the model or the grid. The numbers YREC writes into its code today (limits, tolerances, switches; the earlier design's list is in this repository's history) become named settings with YREC's values as defaults.</li>
 <li><strong>Models in NPZ,</strong> a dump of <code>State</code>, with converters both ways for YREC's model files (those <a href="../yrec-map/getyrec7.f.html">getyrec7.f</a> and <a href="../yrec-map/getmodel2.f.html">getmodel2.f</a> read, and the stored models of <a href="../yrec-map/putstore.f.html">putstore.f</a>). The converters are also what lets each new piece be compared with the Fortran on the same model.</li>
 <li><strong>History</strong> as a table (one row per step) written as YREC's track output is, plus NPZ snapshots at the steps the configuration asks for.</li>
+<li><strong>Tables</strong> (opacities, equations of state, atmospheres) as binary copies (NPY) of YREC's text tables, kept outside the repository; pyrec's <code>npyio.py</code> writes and reads them. The time a conversion takes does not count against the run.</li>
 </ul>
 <h2>Performance</h2>
-<p>The driver, <code>Model</code> and its loop, is plain Python. Each family is free to use whatever makes it fast; the default is <strong>Numba</strong>, in kernels that take and return arrays and change nothing else, which is also what lets a family be tested on its own. JAX is an option for a family that would gain from it: it could differentiate the physics for the Henyey solver's Jacobian, where YREC's hand-written derivatives hold several of today's suspected bugs (<a href="../yrec-map/condopacpint.f.html">condopacpint.f</a>, <a href="../yrec-map/engeb.f.html">engeb.f</a>; <code>KNOWN_ISSUES.md</code>, issue 40).</p>
+<p><strong>As fast as possible</strong>. The driver, <code>Model</code> and its loop, is plain Python; every family's hot loops run in <strong>Numba</strong>, in kernels that fill arrays given to them and change nothing else, which is also what lets a family be tested on its own (<a href="numba.html">Writing a Numba family</a>). Tables and models are read from NPY and NPZ, not text. The Fortran-tracking pyrec ran the 1 M☉ ZAMS case in 11.8–12.4 s on the NPY path against the Fortran's 11.4–12.4 s, run back to back on a busy machine (Nov 18, 2026; indicative); the object-oriented version is held to the same. A family in plain Python works, with a warning, and <a href="tree.html">The compiled tree</a> shows what it slows down. JAX stays an option for a family other than the defaults: It could differentiate the physics for the Henyey solver's Jacobian, where YREC's hand-written derivatives hold several of today's suspected bugs (<a href="../yrec-map/condopacpint.f.html">condopacpint.f</a>, <a href="../yrec-map/engeb.f.html">engeb.f</a>; <a href="https://github.com/yreclab/yrec/blob/7be4133/KNOWN_ISSUES.md"><code>KNOWN_ISSUES.md</code></a>, issue 40).</p>
 <p><strong>Modern Fortran</strong> stays possible: the same families as derived types with type-bound procedures, called from Python, for the families that need the speed once the Python is right.</p>
 <h2>The route there</h2>
 <ol>
 <li><strong>The Python translation</strong> in YREC's current structure (pyrec): one Python file per Fortran file, each routine beside its Fortran on this site, and the Fortran's apparent bugs reproduced and marked.</li>
-<li><strong>Differential tests</strong> against the Fortran at a frozen commit (<a href="https://github.com/yreclab/yrec/commit/7be4133">7be4133</a> since Nov 9, 2026), routine by routine, then on whole models through the NPZ converters; agreement to a tolerance per quantity, since Python and Numba reorder floating-point operations. YREC's development branch brings a test suite of 298 cases and a rebaseline protocol (<code>REBASELINE_PROTOCOL.md</code>) for changes meant to change results.</li>
-<li><strong>The new structure, family by family:</strong> each family's default first wraps the translated routines, then replaces them, with the tests passing after each step. Bug fixes the developers confirm come in commits of their own, each with its rebaseline.</li>
+<li><strong>Differential tests</strong> against the Fortran at a frozen commit (<a href="https://github.com/yreclab/yrec/commit/7be4133">7be4133</a> since Nov 9, 2026), routine by routine, then on whole models. They reached byte identity: Every recorded call agrees with the Fortran to the last bit, and the 1 M☉ run to the ZAMS and the solar model to 4.568 Gyr write byte-identical output (pyrec's README, Status). YREC's development branch brings a test suite of 298 cases and a rebaseline protocol (<a href="https://github.com/yreclab/yrec/blob/7be4133/REBASELINE_PROTOCOL.md"><code>REBASELINE_PROTOCOL.md</code></a>) for changes meant to change results.</li>
+<li><strong>The new structure, family by family,</strong> starting with the opacity (<a href="pilot-opacity.html">The pilot: opacity</a>): Each family's default first wraps the translated routines, then replaces them. <strong>Bit for bit:</strong> After every step of the restructuring, the outputs stay byte-identical with the Fortran-tracking pyrec, and so with YREC, for the default families; a change of bits is a deliberate change of its own. Bug fixes the developers confirm come in commits of their own, each with its rebaseline.</li>
 </ol>
+<p><strong>Where it stands.</strong> In pyrec's <code>pyrec_oop</code>, every family is a base class with YREC's default, which wraps the Fortran-tracking pyrec's routines unchanged, and a <code>Model</code> drives each step of the 1 M☉ ZAMS case and of the solar model through the families, on a <code>State</code>: Every output file is byte-identical to YREC's, and a copy of the model taken after steps 1, 2, 3, 100, 200, or 267 and run on matches the original byte for byte (<a href="state.html">State</a>). Warm, the run took 16.1–17.1 s against 15.3–16.0 s for the Fortran-tracking pyrec, the two Python versions run in turn on a loaded machine: at the edge of its noise (indicative, not a comparison with the Fortran). Not yet done: a run from a YAML configuration (the families still read YREC's namelists through pyrec's modules), the defaults replacing the routines they wrap, and a case with rotation, diffusion, and mass loss, which are wired but off in the ZAMS case.</p>
 <h2>Open questions</h2>
+<p>Questions about pyrec's own design are Kaili Cao's, since he is pyrec's only developer; each is marked with his answer. Questions about YREC itself stay the team's.</p>
 <ol>
-<li><em>[Team]</em> <strong>Retrying a failed step.</strong> Today a model that fails to converge ends the run (<code>STARIN</code> stops; <a href="../yrec-map/main.f.html">main.f</a>'s comment speaks of cutting the step). Should <code>model()</code> retry from <code>start</code> with a shorter step?</li>
-<li><em>[Team]</em> <strong>What to drop:</strong> code that never runs or is never called (marked "unused?" on the pages), unless an expert wants it back.</li>
+<li><em>[KC]</em> <strong>Retrying a failed step.</strong> Today a model that fails to converge ends the run (<code>STARIN</code> stops; <a href="../yrec-map/main.f.html">main.f</a>'s comment speaks of cutting the step). Should <code>model()</code> retry from <code>start</code> with a shorter step? <em>Settled:</em> It may retry; the default reproduces YREC and stops.</li>
+<li><em>[KC]</em> <strong>What to drop:</strong> code that never runs or is never called (marked "unused?" on the pages), unless an expert wants it back. <em>Settled:</em> Whatever YREC's test suite does not cover is dropped; the coverage is measured later.</li>
 <li><em>[Team]</em> <strong>Two settling solvers:</strong> keep <a href="../yrec-map/grsett.f.html">grsett.f</a> ("retained for backwards compatability") beside <a href="../yrec-map/microdiff.f.html">microdiff.f</a>, or keep one?</li>
-<li><em>[Team]</em> <strong>Names:</strong> keep YREC's names (<code>HCOMP</code>, <code>HTOLER</code>, <code>ATIME</code>) in <code>State</code> and the configuration, as this site does with its glossary, or move to the "more intuitively named" ones that <a href="../yrec-map/remap.f.html">remap.f</a> already accepts?</li>
-<li><em>[Team]</em> <strong>Values kept between calls:</strong> which of YREC's saved values (<code>SAVE</code>d locals, <code>DATA</code>-initialized state, cached tables) carry information from one step to the next, and so belong to the <code>State</code>, and which are caches a family can rebuild?</li>
-<li><em>[KC]</em> <strong>Speed:</strong> how slow may the Python be while it is developed (a model a minute? a track an hour?), and which families get Numba kernels first?</li>
-<li><em>[KC]</em> <strong>Working with YREC's developers:</strong> when to tell them of the plan, and whether this design is proposed to them as the code's next stage.</li>
+<li><em>[KC]</em> <strong>Names:</strong> keep YREC's names (<code>HCOMP</code>, <code>HTOLER</code>, <code>ATIME</code>) in <code>State</code> and the configuration, as this site does with its glossary, or move to the "more intuitively named" ones that <a href="../yrec-map/remap.f.html">remap.f</a> already accepts? <em>Settled:</em> descriptive names, mapped one to one to YREC's for the variables in both, the mapping a table in the code (<a href="state.html">State</a>).</li>
+<li><strong>Values kept between calls.</strong> <em>[KC]</em> <strong>Where they live.</strong> <em>Settled:</em> in the <code>State</code> if they change later results, in a family's cache if it can rebuild them, in work arrays if they are scratch; a copy of a model run on must match the original byte for byte. <em>[Team]</em> Which of YREC's saved values (<code>SAVE</code>d locals, <code>DATA</code>-initialized state, cached tables) carry information from one step to the next, and so belong to the <code>State</code>, and which are caches a family can rebuild?</li>
+<li><em>[KC]</em> <strong>Speed:</strong> how slow may the Python be while it is developed (a model a minute? a track an hour?), and which families get Numba kernels first? <em>Settled:</em> as fast as possible; every family in Numba, and tables and models in NPY and NPZ (Performance, above).</li>
 </ol>
 
 </main></body></html>

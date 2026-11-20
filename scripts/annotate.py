@@ -2,7 +2,7 @@
 """Add type annotations to the Python translation, from YREC's Fortran declarations, and KC's blank lines around
 each function's docstring.
 
-    python3 scripts/annotate.py ../yrec/src ../pyrec/pyrec [--dry-run]
+    python3 scripts/annotate.py yrec/src pyrec/pyrec [--dry-run]
 
 For each function that translates a Fortran unit (getopac() for GETOPAC in getopac.f), each argument's type comes
 from the unit's declarations (REAL*8 and REAL: float; INTEGER: int; LOGICAL: bool; CHARACTER: str), or from

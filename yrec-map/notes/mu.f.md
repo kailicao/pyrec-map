@@ -4,7 +4,7 @@
 
 **How it fits.**
 - **Inputs:** $`T`$, $`P`$, $`\rho`$ (`D`), $`X`$, $`Z`$, and `BETA` (probably the ratio of gas to total pressure, as the name suggests); the envelope composition and its `AMUENV` from `COMP_MOD`; the gas constant `CGAS` from `CONSTANTS_MOD`.
-- **Who calls it:** the equation-of-state routine [OEQOS06](oeqos06.f.md#oeqos06) (at `rp_1` also `MEQOS`, `OEQOS` and `OEQOS01`, removed since `rp_1`).
+- **Who calls it:** the equation-of-state routine [OEQOS06](https://github.com/yreclab/yrec/blob/7be4133/src/oeqos06.f#L30-L132) (at `rp_1` also `MEQOS`, `OEQOS` and `OEQOS01`, removed since `rp_1`).
 - **Outputs:** `AMU`, `EMU`, `RMU`.
 - **Modules:** `COMP_MOD`, `CONSTANTS_MOD`. The unused `/CTLIM/`, `/CONST1/` and `/CCOUT2/` of `rp_1` are no longer declared.
 

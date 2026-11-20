@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Lint the Python translation with ruff, and save its findings for the site.
 
-    python3 scripts/python_lint.py ../pyrec yrec-map/ruff.json
+    python3 scripts/python_lint.py pyrec yrec-map/ruff.json
 
 Runs `ruff check` with pyrec's own settings (its pyproject.toml) and writes {file name: [[line, column,
 "CODE message"], ...]}, which codemap.py (--twin-warnings) marks on the Python's lines and lists, folded, on

@@ -1,10 +1,10 @@
 ## Explanation
 
-**Purpose.** `EEEOS06_MOD` holds workspace of the OPAL 2006 equation-of-state interpolation: the table values of one quantity being interpolated, and the $`X`$ values of the tables. It replaces `COMMON/EEEOS06/` (MHP via Claude, 10/20/26). The table dimensions `MX` = 5, `NT` = 197, `NR` = 169 are `PRIVATE` copies, as in [`AEOS06_MOD`](aeos06_mod.f.md#aeos06_mod).
+**Purpose.** `EEEOS06_MOD` holds workspace of the OPAL 2006 equation-of-state interpolation: the table values of one quantity being interpolated, and the $`X`$ values of the tables. It replaces `COMMON/EEEOS06/` (MHP via Claude, 10/20/26). The table dimensions `MX` = 5, `NT` = 197, `NR` = 169 are `PRIVATE` copies, as in [`AEOS06_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/aeos06_mod.f#L27-L52).
 
 **What its variables hold, who sets them, who reads them.**
 - `EPL(MX,NT,NR)`: for each $`X`$ index, the table values of the quantity being interpolated (`XZ(MIDX,IV,IT,IR)` of `AEOS06_MOD`), copied by [`ESAC06`](esac06.f.md#esac06) for each variable `IV` and read there in the interpolation.
-- `XX(MX)`: the $`X`$ values of the five tables, copied from `XA` by [`SETEOS06`](esac06.f.md#seteos06); read by `ESAC06` and by [`READCOEOS06`](readcoeos06.f.md#readcoeos06), which forms the inverse spacings `DFSX` from them.
+- `XX(MX)`: the $`X`$ values of the five tables, copied from `XA` by [`SETEOS06`](esac06.f.md#seteos06); read by `ESAC06` and by [`READCOEOS06`](https://github.com/yreclab/yrec/blob/7be4133/src/readcoeos06.f#L7-L163), which forms the inverse spacings `DFSX` from them.
 - [`T6RINTEOS06`](t6rinteos06.f.md#t6rinteos06) also uses the module but reads neither member.
 
 **Design.** A blanket `USE EEEOS06_MOD`. `XX` duplicates `XA`.

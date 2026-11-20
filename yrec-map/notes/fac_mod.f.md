@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `FAC_MOD` holds the range of valid gravities at each temperature of the two surface-pressure tables, and the interpolation indices of the last lookup, shared by [`SETUPS`](setups.f.md#setups), [`SURFP`](surfp.f.md#surfp) and [`KCSURFP`](kcsurfp.f.md#kcsurfp). It replaces `COMMON/FAC/` (MHP via Claude, 10/14/26). The table dimensions `NT` = 57 and `NTC` = 76 are `PRIVATE`, since the importing files declare their own.
+**Purpose.** `FAC_MOD` holds the range of valid gravities at each temperature of the two surface-pressure tables, and the interpolation indices of the last lookup, shared by [`SETUPS`](https://github.com/yreclab/yrec/blob/7be4133/src/setups.f#L16-L396), [`SURFP`](surfp.f.md#surfp), and [`KCSURFP`](kcsurfp.f.md#kcsurfp). It replaces `COMMON/FAC/` (MHP via Claude, 10/14/26). The table dimensions `NT` = 57 and `NTC` = 76 are `PRIVATE`, since the importing files declare their own.
 
 **What its variables hold, who sets them, who reads them.** All are `INTEGER*4`.
 - `IMIN(NT)`, `IMINMAX(NT)`: for each temperature of the surface-pressure table, the lowest and highest gravity index with a valid pressure (entries $`\le 0`$ are missing, −999), set by `SETUPS` when it reads the table ("G Somers 5/15"); read by `SURFP`. When no pressure is valid at a temperature, `IMIN` is the number of gravities, and SETUPS's comment expects the code to fail there.

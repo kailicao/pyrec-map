@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** Prepares the list of runs for the automatic calibration of a star to a given luminosity and effective temperature (or radius): 50 runs, 25 repetitions of a two-run pattern. The adjustment between repetitions is done in [`CHKSCAL`](chkscal.f.md#chkscal). It is the analogue, for any star, of [`SETCAL`](setcal.f.md#setcal) for the Sun.
+**Purpose.** Prepares the list of runs for the automatic calibration of a star to a given luminosity and effective temperature (or radius): 50 runs, 25 repetitions of a two-run pattern. The adjustment between repetitions is done in [`CHKSCAL`](chkscal.f.md#chkscal). It is the analogue, for any star, of [`SETCAL`](https://github.com/yreclab/yrec/blob/7be4133/src/setcal.f#L2-L103) for the Sun.
 
 **How it fits.**
 - **Who calls it:** the main program ([`main.f`](main.f.md)), when `LCALST` is true, before the loop over runs.

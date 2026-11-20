@@ -2,7 +2,7 @@
 the YREC case it starts from, as diffs in the site's style (the whole files are downloads from the page).
 
 Each .nml1 names its YREC case on its second line ("! From YREC <commit>, <path>..."). Run from the repository:
-    python3 scripts/namelist_viewer.py ../yrec bugs/namelists
+    python3 scripts/namelist_viewer.py yrec bugs/namelists
 then rebuild nothing: the pages link to the site's stylesheet and to the bug list (bugs/index.html)."""
 import difflib, html, re, sys
 from pathlib import Path

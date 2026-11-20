@@ -2,7 +2,7 @@
 """Check the Python translation's calls against the routines they call: what each call unpacks against what the
 routine returns, and how many arguments it passes against the routine's signature.
 
-    python3 scripts/check_returns.py ../pyrec/pyrec [--csv out.csv]
+    python3 scripts/check_returns.py pyrec/pyrec [--csv out.csv]
 
 Returns: for each function, its returns are the sizes of its `return` statements (a tuple's length, 1 for a single
 value, 0 for a bare `return` or none; returns of nested functions are not counted, except through `return

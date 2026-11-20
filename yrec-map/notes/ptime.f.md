@@ -3,7 +3,7 @@
 **Purpose.** Limits the time step by how much the structure changed from the previous model to this one. Its comment: the changes "in T, P, R, and L [must] be less than the user parameters ATIME(8)–ATIME(11) at any model point"; this criterion "dominates in the pre-main sequence, and this SR must be used (LPTIME=T) to perform pre-main sequence evolution."
 
 **How it fits.**
-- **Inputs:** the last step `DELTS`; the current model (`HL`, `HP`, `HR`, `HT`, `M`) and the previous one (`HLO`, `HPO`, `HRO`, `HTO` in `OLDMOD_MOD`); the limits `ATIME` in `NMLPAR_MOD` (set by [PARMIN](parmin.f.md#parmin), possibly through [REMAP](remap.f.md#remap)).
+- **Inputs:** the last step `DELTS`; the current model (`HL`, `HP`, `HR`, `HT`, `M`) and the previous one (`HLO`, `HPO`, `HRO`, `HTO` in `OLDMOD_MOD`); the limits `ATIME` in `NMLPAR_MOD` (set by [PARMIN](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489), possibly through [REMAP](https://github.com/yreclab/yrec/blob/7be4133/src/remap.f#L7-L297)).
 - **Who calls it:** [HTIMER](htimer.f.md#htimer), when `LPTIME`; otherwise HTIMER uses $`10^{20}`$.
 - **Output:** `PDELT`, the proposed step; HTIMER takes the smallest of its candidates.
 

@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `MASSCHG2_MOD` holds the quantities of the (experimental) thermal response of the convective envelope to accretion, shared by [`MASSLOSS`](massloss.f.md#massloss), [`MDOT`](mdot.f.md#mdot) and [`COEFFT`](coefft.f.md#coefft). It replaces `COMMON/MASSCHG2/` (MHP via Claude, 10/14/26). All members are `REAL*8`.
+**Purpose.** `MASSCHG2_MOD` holds the quantities of the (experimental) thermal response of the convective envelope to accretion, shared by [`MASSLOSS`](massloss.f.md#massloss), [`MDOT`](mdot.f.md#mdot), and [`COEFFT`](coefft.f.md#coefft). It replaces `COMMON/MASSCHG2/` (MHP via Claude, 10/14/26). All members are `REAL*8`.
 
 **What its variables hold, who sets them, who reads them.**
 - `SCEN`: the convective envelope's mass-averaged $`(\mathcal R/\mu)(\tfrac32\ln T - \ln\rho)`$ (an entropy per gram), computed by `MASSLOSS` and then set to 0 in both branches that follow; read by `MDOT`.

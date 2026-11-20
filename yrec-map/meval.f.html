@@ -2,7 +2,7 @@
 <header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ meval.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#bugs'>Suspected bugs, checked by running the code</a><ol><li><a href='#b1'>1. No point of evaluation within the data</a></li></ol></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-MEVAL'>MEVAL</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>meval.f</h1>
 <p class='muted'>265 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/meval.f'>on GitHub (7be4133)</a></p>
-<p><strong>Python version</strong>: <code>meval.py</code>, 201 lines, on the right (switch to Python above the code).</p>
+<p><strong>Python version</strong>: <code>meval.py</code>, 348 lines, on the right (switch to Python above the code).</p>
 <details class='vars' id='terms'><summary>Variables on this page (1)</summary><p><a href='../glossary.html#var-json' data-def='the maximum number of shells in a model, 5000 (a &lt;code&gt;PARAMETER&lt;/code&gt;, used by 144 files).'><code>json</code></a></p></details><h2 id='purpose'>Purpose</h2>
 <div class='notes'><p><code>MEVAL</code> evaluates a shape-preserving (osculatory) quadratic spline at a set of points: McAllister and Roulier's algorithm, "coded by S. L. Dodd and M. Roulier, N.C. State University" (its header). The spline passes through the data with given slopes and keeps the data's monotonicity and convexity.</p></div>
 <h2 id='how-it-fits'>How it fits</h2>
@@ -306,207 +306,354 @@
 <span class="line" id="L262"><span class="ln">262</span><span class='hc'>C</span></span>
 <span class="line" id="L263"><span class="ln">263</span><span class='hc'>C</span></span>
 <span class="line" id="L264"><span class="ln">264</span><span class='lt'>  230 </span><span class='lr'>  230 </span><span class='hk'>RETURN</span></span>
-<span class="line" id="L265"><span class="ln">265</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of meval.f (YREC development, 7be4133).&quot;&quot;&quot;</span></span>
-<span class="line" id="P2"><span class="ln">2</span></span>
-<span class="line" id="P3"><span class="ln">3</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> dimensions_mod  <span class='hc'># noqa: F401  (JSON, the declared size)</span></span>
-<span class="line" id="P4"><span class="ln">4</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
-<span class="line" id="P5"><span class="ln">5</span><span class='hk'>from</span> pyrec.cases <span class='hk'>import</span> cases</span>
-<span class="line" id="P6"><span class="ln">6</span><span class='hk'>from</span> pyrec.choose <span class='hk'>import</span> choose</span>
-<span class="line" id="P7"><span class="ln">7</span><span class='hk'>from</span> pyrec.search <span class='hk'>import</span> search</span>
-<span class="line" id="P8"><span class="ln">8</span><span class='hk'>from</span> pyrec.spline <span class='hk'>import</span> spline</span>
+<span class="line" id="L265"><span class="ln">265</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of meval.f (YREC development, 7be4133): the values of McAllister and Roulier&#x27;s shape-preserving</span></span>
+<span class="line" id="P2"><span class="ln">2</span><span class='hs'>quadratic spline at a run of points, for OSPLIN.</span></span>
+<span class="line" id="P3"><span class="ln">3</span></span>
+<span class="line" id="P4"><span class="ln">4</span><span class='hs'>Functions</span></span>
+<span class="line" id="P5"><span class="ln">5</span><span class='hs'>---------</span></span>
+<span class="line" id="P6"><span class="ln">6</span><span class='hs'>meval : The values at xval[1..nume] (the routine; its kernel when accel.USE_NUMBA).</span></span>
+<span class="line" id="P7"><span class="ln">7</span><span class='hs'>_meval_nb : meval&#x27;s Numba kernel, the same operations compiled, CHOOSE, CASES, SEARCH, and SPLINE through theirs</span></span>
+<span class="line" id="P8"><span class="ln">8</span><span class='hs'>    (called by osplin&#x27;s).</span></span>
 <span class="line" id="P9"><span class="ln">9</span></span>
-<span class="line" id="P10"><span class="ln">10</span></span>
-<span class="line" id="P11"><span class="ln">11</span><span class='hk'>def</span> meval(xval: np.ndarray, yval: np.ndarray, xtab: np.ndarray, ytab: np.ndarray, mtab: np.ndarray, num: <span class='hb'>int</span>, nume: <span class='hb'>int</span>,</span>
-<span class="line" id="P12"><span class="ln">12</span>          eps: <span class='hb'>float</span>, err: <span class='hb'>int</span>) -&gt; <span class='hb'>int</span>:</span>
-<span class="line" id="P13"><span class="ln">13</span>    <span class='hs'>&quot;&quot;&quot;Evaluate McAllister and Roulier&#x27;s shape-preserving quadratic spline.</span></span>
-<span class="line" id="P14"><span class="ln">14</span></span>
-<span class="line" id="P15"><span class="ln">15</span><span class='hs'>    Walks through the evaluation points ``xval`` and the data intervals</span></span>
-<span class="line" id="P16"><span class="ln">16</span><span class='hs'>    together: points equal to a data abscissa get the data value; for each</span></span>
-<span class="line" id="P17"><span class="ln">17</span><span class='hs'>    interval holding points, CHOOSE and CASES set the spline&#x27;s parameters</span></span>
-<span class="line" id="P18"><span class="ln">18</span><span class='hs'>    once and SPLINE evaluates it; points beyond the ends are extrapolated</span></span>
-<span class="line" id="P19"><span class="ln">19</span><span class='hs'>    with the end intervals&#x27; splines. Called only by OSPLIN.</span></span>
+<span class="line" id="P10"><span class="ln">10</span><span class='hs'>&quot;&quot;&quot;</span></span>
+<span class="line" id="P11"><span class="ln">11</span></span>
+<span class="line" id="P12"><span class="ln">12</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
+<span class="line" id="P13"><span class="ln">13</span></span>
+<span class="line" id="P14"><span class="ln">14</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> accel</span>
+<span class="line" id="P15"><span class="ln">15</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> dimensions_mod  <span class='hc'># noqa: F401  (JSON, the declared size)</span></span>
+<span class="line" id="P16"><span class="ln">16</span><span class='hk'>from</span> pyrec.cases <span class='hk'>import</span> _cases_nb, cases</span>
+<span class="line" id="P17"><span class="ln">17</span><span class='hk'>from</span> pyrec.choose <span class='hk'>import</span> _choose_nb, choose</span>
+<span class="line" id="P18"><span class="ln">18</span><span class='hk'>from</span> pyrec.search <span class='hk'>import</span> _search_nb, search</span>
+<span class="line" id="P19"><span class="ln">19</span><span class='hk'>from</span> pyrec.spline <span class='hk'>import</span> _spline_nb, spline</span>
 <span class="line" id="P20"><span class="ln">20</span></span>
-<span class="line" id="P21"><span class="ln">21</span><span class='hs'>    Translates: meval.f#MEVAL (7be4133)</span></span>
-<span class="line" id="P22"><span class="ln">22</span></span>
-<span class="line" id="P23"><span class="ln">23</span><span class='hs'>    Parameters</span></span>
-<span class="line" id="P24"><span class="ln">24</span><span class='hs'>    ----------</span></span>
-<span class="line" id="P25"><span class="ln">25</span><span class='hs'>    xval : ndarray</span></span>
-<span class="line" id="P26"><span class="ln">26</span><span class='hs'>        The points of evaluation, ``xval[1..nume]``, nondecreasing.</span></span>
-<span class="line" id="P27"><span class="ln">27</span><span class='hs'>    yval : ndarray</span></span>
-<span class="line" id="P28"><span class="ln">28</span><span class='hs'>        Set in place: the spline&#x27;s values at ``xval``.</span></span>
-<span class="line" id="P29"><span class="ln">29</span><span class='hs'>    xtab, ytab, mtab : ndarray</span></span>
-<span class="line" id="P30"><span class="ln">30</span><span class='hs'>        The data abscissae (increasing), ordinates and slopes,</span></span>
-<span class="line" id="P31"><span class="ln">31</span><span class='hs'>        indices 1..num.</span></span>
-<span class="line" id="P32"><span class="ln">32</span><span class='hs'>    num, nume : int</span></span>
-<span class="line" id="P33"><span class="ln">33</span><span class='hs'>        The number of data points and of points of evaluation.</span></span>
-<span class="line" id="P34"><span class="ln">34</span><span class='hs'>    eps : float</span></span>
-<span class="line" id="P35"><span class="ln">35</span><span class='hs'>        Relative tolerance passed to CHOOSE.</span></span>
-<span class="line" id="P36"><span class="ln">36</span><span class='hs'>    err : int</span></span>
-<span class="line" id="P37"><span class="ln">37</span><span class='hs'>        Output only (passed in with any value).</span></span>
-<span class="line" id="P38"><span class="ln">38</span></span>
-<span class="line" id="P39"><span class="ln">39</span><span class='hs'>    Returns</span></span>
-<span class="line" id="P40"><span class="ln">40</span><span class='hs'>    -------</span></span>
-<span class="line" id="P41"><span class="ln">41</span><span class='hs'>    err : int</span></span>
-<span class="line" id="P42"><span class="ln">42</span><span class='hs'>        0 normal; 1 extrapolation occurred; 2 ``xval`` not sorted (then</span></span>
-<span class="line" id="P43"><span class="ln">43</span><span class='hs'>        nothing is computed).</span></span>
-<span class="line" id="P44"><span class="ln">44</span></span>
-<span class="line" id="P45"><span class="ln">45</span><span class='hs'>    &quot;&quot;&quot;</span></span>
-<span class="line" id="P46"><span class="ln">46</span></span>
-<span class="line" id="P47"><span class="ln">47</span>    <span class='hc'># SAVE in the Fortran: every local is set before it is read within a</span></span>
-<span class="line" id="P48"><span class="ln">48</span>    <span class='hc'># call, so all are kept local here. The spline&#x27;s parameters start at</span></span>
-<span class="line" id="P49"><span class="ln">49</span>    <span class='hc'># zero; CASES returns those a case does not set as passed in, and</span></span>
-<span class="line" id="P50"><span class="ln">50</span>    <span class='hc'># SPLINE reads only those the case set.</span></span>
-<span class="line" id="P51"><span class="ln">51</span>    e1 = e2 = v1 = v2 = w1 = w2 = z1 = z2 = y1 = y2 = <span class='hn'>0.0</span></span>
-<span class="line" id="P52"><span class="ln">52</span></span>
-<span class="line" id="P53"><span class="ln">53</span>    <span class='hc'># <a class='fl' href='#L88-L90'>Fortran lines 88–90</a>.</span></span>
-<span class="line" id="P54"><span class="ln">54</span>    start = <span class='hn'>1</span></span>
-<span class="line" id="P55"><span class="ln">55</span>    end = nume</span>
-<span class="line" id="P56"><span class="ln">56</span>    err = <span class='hn'>0</span></span>
-<span class="line" id="P57"><span class="ln">57</span></span>
-<span class="line" id="P58"><span class="ln">58</span>    <span class='hc'># Determine if xval is nondecreasing (loop 10, <a class='fl' href='#L91-L99'>Fortran lines 91–99</a>).</span></span>
-<span class="line" id="P59"><span class="ln">59</span>    <span class='hk'>if</span> nume != <span class='hn'>1</span>:</span>
-<span class="line" id="P60"><span class="ln">60</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nume):</span>
-<span class="line" id="P61"><span class="ln">61</span>            <span class='hk'>if</span> xval[i + <span class='hn'>1</span>] &lt; xval[i]:</span>
-<span class="line" id="P62"><span class="ln">62</span>                <span class='hc'># Suspected bug (see OSPLIN&#x27;s page): OSPLIN does not check</span></span>
-<span class="line" id="P63"><span class="ln">63</span>                <span class='hc'># err, and yval is left as it was.</span></span>
-<span class="line" id="P64"><span class="ln">64</span>                err = <span class='hn'>2</span></span>
-<span class="line" id="P65"><span class="ln">65</span>                <span class='hk'>return</span> err  <span class='hc'># label 230</span></span>
+<span class="line" id="P21"><span class="ln">21</span></span>
+<span class="line" id="P22"><span class="ln">22</span><span class='hk'>def</span> meval(xval: np.ndarray, yval: np.ndarray, xtab: np.ndarray, ytab: np.ndarray, mtab: np.ndarray, num: <span class='hb'>int</span>, nume: <span class='hb'>int</span>,</span>
+<span class="line" id="P23"><span class="ln">23</span>          eps: <span class='hb'>float</span>, err: <span class='hb'>int</span>) -&gt; <span class='hb'>int</span>:</span>
+<span class="line" id="P24"><span class="ln">24</span>    <span class='hs'>&quot;&quot;&quot;Evaluate McAllister and Roulier&#x27;s shape-preserving quadratic spline.</span></span>
+<span class="line" id="P25"><span class="ln">25</span></span>
+<span class="line" id="P26"><span class="ln">26</span><span class='hs'>    Walks through the evaluation points ``xval`` and the data intervals</span></span>
+<span class="line" id="P27"><span class="ln">27</span><span class='hs'>    together: points equal to a data abscissa get the data value; for each</span></span>
+<span class="line" id="P28"><span class="ln">28</span><span class='hs'>    interval holding points, CHOOSE and CASES set the spline&#x27;s parameters</span></span>
+<span class="line" id="P29"><span class="ln">29</span><span class='hs'>    once and SPLINE evaluates it; points beyond the ends are extrapolated</span></span>
+<span class="line" id="P30"><span class="ln">30</span><span class='hs'>    with the end intervals&#x27; splines. Called only by OSPLIN.</span></span>
+<span class="line" id="P31"><span class="ln">31</span></span>
+<span class="line" id="P32"><span class="ln">32</span><span class='hs'>    Translates: meval.f#MEVAL (7be4133)</span></span>
+<span class="line" id="P33"><span class="ln">33</span></span>
+<span class="line" id="P34"><span class="ln">34</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P35"><span class="ln">35</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P36"><span class="ln">36</span><span class='hs'>    xval : np.ndarray, shape: `(JSON + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P37"><span class="ln">37</span><span class='hs'>        The points of evaluation, ``xval[1..nume]``, nondecreasing.</span></span>
+<span class="line" id="P38"><span class="ln">38</span><span class='hs'>    yval : np.ndarray, shape: `(JSON + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P39"><span class="ln">39</span><span class='hs'>        Set in place: the spline&#x27;s values at ``xval``.</span></span>
+<span class="line" id="P40"><span class="ln">40</span><span class='hs'>    xtab, ytab, mtab : np.ndarray, shape: `(JSON + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P41"><span class="ln">41</span><span class='hs'>        The data abscissae (increasing), ordinates and slopes,</span></span>
+<span class="line" id="P42"><span class="ln">42</span><span class='hs'>        indices 1..num.</span></span>
+<span class="line" id="P43"><span class="ln">43</span><span class='hs'>    num, nume : int</span></span>
+<span class="line" id="P44"><span class="ln">44</span><span class='hs'>        The number of data points and of points of evaluation.</span></span>
+<span class="line" id="P45"><span class="ln">45</span><span class='hs'>    eps : float</span></span>
+<span class="line" id="P46"><span class="ln">46</span><span class='hs'>        Relative tolerance passed to CHOOSE.</span></span>
+<span class="line" id="P47"><span class="ln">47</span><span class='hs'>    err : int</span></span>
+<span class="line" id="P48"><span class="ln">48</span><span class='hs'>        Output only (passed in with any value).</span></span>
+<span class="line" id="P49"><span class="ln">49</span></span>
+<span class="line" id="P50"><span class="ln">50</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P51"><span class="ln">51</span><span class='hs'>    -------</span></span>
+<span class="line" id="P52"><span class="ln">52</span><span class='hs'>    err : int</span></span>
+<span class="line" id="P53"><span class="ln">53</span><span class='hs'>        0 normal; 1 extrapolation occurred; 2 ``xval`` not sorted (then</span></span>
+<span class="line" id="P54"><span class="ln">54</span><span class='hs'>        nothing is computed).</span></span>
+<span class="line" id="P55"><span class="ln">55</span></span>
+<span class="line" id="P56"><span class="ln">56</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P57"><span class="ln">57</span>    <span class='hk'>if</span> accel.USE_NUMBA:</span>
+<span class="line" id="P58"><span class="ln">58</span>        <span class='hk'>return</span> _meval_nb(xval, yval, xtab, ytab, mtab, num, nume, eps, err)</span>
+<span class="line" id="P59"><span class="ln">59</span></span>
+<span class="line" id="P60"><span class="ln">60</span></span>
+<span class="line" id="P61"><span class="ln">61</span>    <span class='hc'># SAVE in the Fortran: every local is set before it is read within a</span></span>
+<span class="line" id="P62"><span class="ln">62</span>    <span class='hc'># call, so all are kept local here. The spline&#x27;s parameters start at</span></span>
+<span class="line" id="P63"><span class="ln">63</span>    <span class='hc'># zero; CASES returns those a case does not set as passed in, and</span></span>
+<span class="line" id="P64"><span class="ln">64</span>    <span class='hc'># SPLINE reads only those the case set.</span></span>
+<span class="line" id="P65"><span class="ln">65</span>    e1 = e2 = v1 = v2 = w1 = w2 = z1 = z2 = y1 = y2 = <span class='hn'>0.0</span></span>
 <span class="line" id="P66"><span class="ln">66</span></span>
-<span class="line" id="P67"><span class="ln">67</span>    <span class='hc'># Question (see the page): the Fortran&#x27;s comment here says points</span></span>
-<span class="line" id="P68"><span class="ln">68</span>    <span class='hc'># beyond the data get the end values; the code extrapolates instead.</span></span>
-<span class="line" id="P69"><span class="ln">69</span>    <span class='hc'># Points below the first data abscissa (label 20, loop 30, Fortran</span></span>
-<span class="line" id="P70"><span class="ln">70</span>    <span class='hc'># <a class='fl' href='#L107-L110'>lines 107–110</a>).</span></span>
-<span class="line" id="P71"><span class="ln">71</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nume + <span class='hn'>1</span>):</span>
-<span class="line" id="P72"><span class="ln">72</span>        <span class='hk'>if</span> xval[i] &gt;= xtab[<span class='hn'>1</span>]:</span>
-<span class="line" id="P73"><span class="ln">73</span>            <span class='hk'>break</span></span>
-<span class="line" id="P74"><span class="ln">74</span>        start = i + <span class='hn'>1</span></span>
-<span class="line" id="P75"><span class="ln">75</span></span>
-<span class="line" id="P76"><span class="ln">76</span>    <span class='hc'># Points above the last data abscissa (label 40, loop 50, Fortran</span></span>
-<span class="line" id="P77"><span class="ln">77</span>    <span class='hc'># <a class='fl' href='#L113-L121'>lines 113–121</a>).</span></span>
-<span class="line" id="P78"><span class="ln">78</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nume + <span class='hn'>1</span>):</span>
-<span class="line" id="P79"><span class="ln">79</span>        ind = nume + <span class='hn'>1</span> - i</span>
-<span class="line" id="P80"><span class="ln">80</span>        <span class='hk'>if</span> xval[ind] &lt;= xtab[num]:</span>
-<span class="line" id="P81"><span class="ln">81</span>            <span class='hk'>break</span></span>
-<span class="line" id="P82"><span class="ln">82</span>        end = ind - <span class='hn'>1</span></span>
-<span class="line" id="P83"><span class="ln">83</span></span>
-<span class="line" id="P84"><span class="ln">84</span>    <span class='hc'># Extrapolate below the first data point (label 60, Fortran lines</span></span>
-<span class="line" id="P85"><span class="ln">85</span>    <span class='hc'># 126–138).</span></span>
-<span class="line" id="P86"><span class="ln">86</span>    <span class='hk'>if</span> start != <span class='hn'>1</span>:</span>
-<span class="line" id="P87"><span class="ln">87</span>        err = <span class='hn'>1</span></span>
-<span class="line" id="P88"><span class="ln">88</span>        ncase = choose(xtab[<span class='hn'>1</span>], ytab[<span class='hn'>1</span>], mtab[<span class='hn'>1</span>], mtab[<span class='hn'>2</span>], xtab[<span class='hn'>2</span>],</span>
-<span class="line" id="P89"><span class="ln">89</span>                       ytab[<span class='hn'>2</span>], eps, <span class='hn'>0</span>)</span>
-<span class="line" id="P90"><span class="ln">90</span>        e1, e2, v1, v2, w1, w2, z1, z2, y1, y2 = cases(</span>
-<span class="line" id="P91"><span class="ln">91</span>            xtab[<span class='hn'>1</span>], ytab[<span class='hn'>1</span>], mtab[<span class='hn'>1</span>], mtab[<span class='hn'>2</span>], xtab[<span class='hn'>2</span>], ytab[<span class='hn'>2</span>],</span>
-<span class="line" id="P92"><span class="ln">92</span>            e1, e2, v1, v2, w1, w2, z1, z2, y1, y2, ncase)</span>
-<span class="line" id="P93"><span class="ln">93</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, start):  <span class='hc'># loop 70</span></span>
-<span class="line" id="P94"><span class="ln">94</span>            yval[i] = spline(xval[i], z1, z2, xtab[<span class='hn'>1</span>], ytab[<span class='hn'>1</span>], xtab[<span class='hn'>2</span>],</span>
-<span class="line" id="P95"><span class="ln">95</span>                             ytab[<span class='hn'>2</span>], y1, y2, e2, w2, v2, ncase)</span>
-<span class="line" id="P96"><span class="ln">96</span>        <span class='hk'>if</span> nume == <span class='hn'>1</span>:</span>
-<span class="line" id="P97"><span class="ln">97</span>            <span class='hk'>return</span> err</span>
-<span class="line" id="P98"><span class="ln">98</span></span>
-<span class="line" id="P99"><span class="ln">99</span>    <span class='hc'># Label 80 (<a class='fl' href='#L143-L146'>Fortran lines 143–146</a>).</span></span>
-<span class="line" id="P100"><span class="ln">100</span>    goto_200 = (nume == <span class='hn'>1</span>) <span class='hk'>and</span> (end != nume)</span>
-<span class="line" id="P101"><span class="ln">101</span>    <span class='hk'>if</span> <span class='hk'>not</span> goto_200:</span>
-<span class="line" id="P102"><span class="ln">102</span>        <span class='hc'># The interval of the first in-range point. Suspected bug (see</span></span>
-<span class="line" id="P103"><span class="ln">103</span>        <span class='hc'># the page): if every point lies below xtab[1], start is</span></span>
-<span class="line" id="P104"><span class="ln">104</span>        <span class='hc'># nume + 1 and the Fortran reads XVAL(NUME+1) here.</span></span>
-<span class="line" id="P105"><span class="ln">105</span>        lcn, fnd = search(xtab, num, xval[start], <span class='hn'>0</span>, <span class='hn'>0</span>)</span>
-<span class="line" id="P106"><span class="ln">106</span>        lcn1 = lcn + <span class='hn'>1</span></span>
-<span class="line" id="P107"><span class="ln">107</span></span>
-<span class="line" id="P108"><span class="ln">108</span>        <span class='hc'># Points equal to a data point take its value (label 90, Fortran</span></span>
-<span class="line" id="P109"><span class="ln">109</span>        <span class='hc'># <a class='fl' href='#L152-L178'>lines 152–178</a>).</span></span>
-<span class="line" id="P110"><span class="ln">110</span>        <span class='hk'>if</span> fnd != <span class='hn'>0</span>:</span>
-<span class="line" id="P111"><span class="ln">111</span>            <span class='hk'>while</span> <span class='hk'>True</span>:</span>
-<span class="line" id="P112"><span class="ln">112</span>                yval[start] = ytab[lcn]</span>
-<span class="line" id="P113"><span class="ln">113</span>                start1 = start</span>
-<span class="line" id="P114"><span class="ln">114</span>                start = start + <span class='hn'>1</span></span>
-<span class="line" id="P115"><span class="ln">115</span>                <span class='hk'>if</span> start &gt; nume:</span>
-<span class="line" id="P116"><span class="ln">116</span>                    <span class='hk'>return</span> err</span>
-<span class="line" id="P117"><span class="ln">117</span>                <span class='hk'>if</span> xval[start1] != xval[start]:</span>
-<span class="line" id="P118"><span class="ln">118</span>                    <span class='hk'>break</span></span>
-<span class="line" id="P119"><span class="ln">119</span>            <span class='hc'># Advance until a point lies strictly inside an interval</span></span>
-<span class="line" id="P120"><span class="ln">120</span>            <span class='hc'># (labels 100, 110, 120).</span></span>
-<span class="line" id="P121"><span class="ln">121</span>            <span class='hk'>while</span> xval[start] &gt;= xtab[lcn1]:  <span class='hc'># label 100</span></span>
-<span class="line" id="P122"><span class="ln">122</span>                <span class='hk'>if</span> xval[start] == xtab[lcn1]:</span>
-<span class="line" id="P123"><span class="ln">123</span>                    <span class='hk'>while</span> <span class='hk'>True</span>:  <span class='hc'># label 110</span></span>
-<span class="line" id="P124"><span class="ln">124</span>                        yval[start] = ytab[lcn1]</span>
-<span class="line" id="P125"><span class="ln">125</span>                        start1 = start</span>
-<span class="line" id="P126"><span class="ln">126</span>                        start = start + <span class='hn'>1</span></span>
-<span class="line" id="P127"><span class="ln">127</span>                        <span class='hk'>if</span> start &gt; nume:</span>
-<span class="line" id="P128"><span class="ln">128</span>                            <span class='hk'>return</span> err</span>
-<span class="line" id="P129"><span class="ln">129</span>                        <span class='hk'>if</span> xval[start] != xval[start1]:</span>
-<span class="line" id="P130"><span class="ln">130</span>                            <span class='hk'>break</span></span>
-<span class="line" id="P131"><span class="ln">131</span>                lcn = lcn1  <span class='hc'># label 120</span></span>
-<span class="line" id="P132"><span class="ln">132</span>                lcn1 = lcn1 + <span class='hn'>1</span></span>
-<span class="line" id="P133"><span class="ln">133</span></span>
-<span class="line" id="P134"><span class="ln">134</span>        <span class='hc'># The points within range of the data (label 130, Fortran lines</span></span>
-<span class="line" id="P135"><span class="ln">135</span>        <span class='hc'># 185–190). With extrapolation below, the parameters of interval 1</span></span>
-<span class="line" id="P136"><span class="ln">136</span>        <span class='hc'># are known.</span></span>
-<span class="line" id="P137"><span class="ln">137</span>        <span class='hk'>if</span> <span class='hk'>not</span> (lcn == <span class='hn'>1</span> <span class='hk'>and</span> err == <span class='hn'>1</span>):</span>
-<span class="line" id="P138"><span class="ln">138</span>            ncase = choose(xtab[lcn], ytab[lcn], mtab[lcn], mtab[lcn1],</span>
-<span class="line" id="P139"><span class="ln">139</span>                           xtab[lcn1], ytab[lcn1], eps, <span class='hn'>0</span>)</span>
-<span class="line" id="P140"><span class="ln">140</span>            e1, e2, v1, v2, w1, w2, z1, z2, y1, y2 = cases(</span>
-<span class="line" id="P141"><span class="ln">141</span>                xtab[lcn], ytab[lcn], mtab[lcn], mtab[lcn1],</span>
-<span class="line" id="P142"><span class="ln">142</span>                xtab[lcn1], ytab[lcn1],</span>
-<span class="line" id="P143"><span class="ln">143</span>                e1, e2, v1, v2, w1, w2, z1, z2, y1, y2, ncase)</span>
-<span class="line" id="P144"><span class="ln">144</span></span>
-<span class="line" id="P145"><span class="ln">145</span>        <span class='hc'># Label 140, loop 190 (<a class='fl' href='#L192-L237'>Fortran lines 192–237</a>).</span></span>
-<span class="line" id="P146"><span class="ln">146</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(start, end + <span class='hn'>1</span>):</span>
-<span class="line" id="P147"><span class="ln">147</span>            <span class='hk'>if</span> xval[i] &lt; xtab[lcn1]:</span>
-<span class="line" id="P148"><span class="ln">148</span>                <span class='hc'># label 150: the parameters of this interval are known.</span></span>
-<span class="line" id="P149"><span class="ln">149</span>                yval[i] = spline(xval[i], z1, z2, xtab[lcn], ytab[lcn],</span>
-<span class="line" id="P150"><span class="ln">150</span>                                 xtab[lcn1], ytab[lcn1], y1, y2, e2, w2,</span>
-<span class="line" id="P151"><span class="ln">151</span>                                 v2, ncase)</span>
-<span class="line" id="P152"><span class="ln">152</span>            <span class='hk'>elif</span> xval[i] == xtab[lcn1]:</span>
-<span class="line" id="P153"><span class="ln">153</span>                yval[i] = ytab[lcn1]  <span class='hc'># label 160</span></span>
-<span class="line" id="P154"><span class="ln">154</span>            <span class='hk'>else</span>:</span>
-<span class="line" id="P155"><span class="ln">155</span>                <span class='hk'>while</span> <span class='hk'>True</span>:</span>
-<span class="line" id="P156"><span class="ln">156</span>                    lcn = lcn1  <span class='hc'># label 170</span></span>
-<span class="line" id="P157"><span class="ln">157</span>                    lcn1 = lcn + <span class='hn'>1</span></span>
-<span class="line" id="P158"><span class="ln">158</span>                    <span class='hk'>if</span> xval[i] &lt; xtab[lcn1]:</span>
-<span class="line" id="P159"><span class="ln">159</span>                        <span class='hc'># label 180, then 150</span></span>
-<span class="line" id="P160"><span class="ln">160</span>                        ncase = choose(xtab[lcn], ytab[lcn], mtab[lcn],</span>
-<span class="line" id="P161"><span class="ln">161</span>                                       mtab[lcn1], xtab[lcn1], ytab[lcn1],</span>
-<span class="line" id="P162"><span class="ln">162</span>                                       eps, <span class='hn'>0</span>)</span>
-<span class="line" id="P163"><span class="ln">163</span>                        e1, e2, v1, v2, w1, w2, z1, z2, y1, y2 = cases(</span>
-<span class="line" id="P164"><span class="ln">164</span>                            xtab[lcn], ytab[lcn], mtab[lcn], mtab[lcn1],</span>
-<span class="line" id="P165"><span class="ln">165</span>                            xtab[lcn1], ytab[lcn1],</span>
-<span class="line" id="P166"><span class="ln">166</span>                            e1, e2, v1, v2, w1, w2, z1, z2, y1,</span>
-<span class="line" id="P167"><span class="ln">167</span>                            y2, ncase)</span>
-<span class="line" id="P168"><span class="ln">168</span>                        yval[i] = spline(xval[i], z1, z2, xtab[lcn],</span>
-<span class="line" id="P169"><span class="ln">169</span>                                         ytab[lcn], xtab[lcn1], ytab[lcn1],</span>
-<span class="line" id="P170"><span class="ln">170</span>                                         y1, y2, e2, w2, v2, ncase)</span>
-<span class="line" id="P171"><span class="ln">171</span>                        <span class='hk'>break</span></span>
-<span class="line" id="P172"><span class="ln">172</span>                    <span class='hk'>if</span> xval[i] == xtab[lcn1]:</span>
-<span class="line" id="P173"><span class="ln">173</span>                        yval[i] = ytab[lcn1]  <span class='hc'># label 160</span></span>
-<span class="line" id="P174"><span class="ln">174</span>                        <span class='hk'>break</span></span>
-<span class="line" id="P175"><span class="ln">175</span></span>
-<span class="line" id="P176"><span class="ln">176</span>        <span class='hc'># The points beyond the last data point (<a class='fl' href='#L242-L243'>Fortran lines 242–243</a>).</span></span>
-<span class="line" id="P177"><span class="ln">177</span>        <span class='hc'># Suspected bug (see the page): with every point above xtab[num],</span></span>
-<span class="line" id="P178"><span class="ln">178</span>        <span class='hc'># end is 0 and the Fortran reads XVAL(0).</span></span>
-<span class="line" id="P179"><span class="ln">179</span>        <span class='hk'>if</span> end == nume:</span>
-<span class="line" id="P180"><span class="ln">180</span>            <span class='hk'>return</span> err</span>
-<span class="line" id="P181"><span class="ln">181</span>        goto_200 = <span class='hk'>not</span> (lcn1 == num <span class='hk'>and</span> xval[end] != xtab[num])</span>
-<span class="line" id="P182"><span class="ln">182</span></span>
-<span class="line" id="P183"><span class="ln">183</span>    <span class='hc'># Label 200: extrapolation above the last data point (Fortran lines</span></span>
-<span class="line" id="P184"><span class="ln">184</span>    <span class='hc'># 249–255).</span></span>
-<span class="line" id="P185"><span class="ln">185</span>    <span class='hk'>if</span> goto_200:</span>
-<span class="line" id="P186"><span class="ln">186</span>        err = <span class='hn'>1</span></span>
-<span class="line" id="P187"><span class="ln">187</span>        num1 = <span class='hb'>max</span>(num - <span class='hn'>1</span>, <span class='hn'>1</span>)</span>
-<span class="line" id="P188"><span class="ln">188</span>        ncase = choose(xtab[num1], ytab[num1], mtab[num1], mtab[num],</span>
-<span class="line" id="P189"><span class="ln">189</span>                       xtab[num], ytab[num], eps, <span class='hn'>0</span>)</span>
-<span class="line" id="P190"><span class="ln">190</span>        e1, e2, v1, v2, w1, w2, z1, z2, y1, y2 = cases(</span>
-<span class="line" id="P191"><span class="ln">191</span>            xtab[num1], ytab[num1], mtab[num1], mtab[num], xtab[num],</span>
-<span class="line" id="P192"><span class="ln">192</span>            ytab[num], e1, e2, v1, v2, w1, w2, z1, z2, y1, y2,</span>
-<span class="line" id="P193"><span class="ln">193</span>            ncase)</span>
-<span class="line" id="P194"><span class="ln">194</span></span>
-<span class="line" id="P195"><span class="ln">195</span>    <span class='hc'># Label 210 (<a class='fl' href='#L256-L261'>Fortran lines 256–261</a>).</span></span>
-<span class="line" id="P196"><span class="ln">196</span>    end1 = end + <span class='hn'>1</span></span>
-<span class="line" id="P197"><span class="ln">197</span>    num1 = <span class='hb'>max</span>(num - <span class='hn'>1</span>, <span class='hn'>1</span>)</span>
-<span class="line" id="P198"><span class="ln">198</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(end1, nume + <span class='hn'>1</span>):  <span class='hc'># loop 220</span></span>
-<span class="line" id="P199"><span class="ln">199</span>        yval[i] = spline(xval[i], z1, z2, xtab[num1], ytab[num1],</span>
-<span class="line" id="P200"><span class="ln">200</span>                         xtab[num], ytab[num], y1, y2, e2, w2, v2, ncase)</span>
-<span class="line" id="P201"><span class="ln">201</span>    <span class='hk'>return</span> err</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
+<span class="line" id="P67"><span class="ln">67</span>    <span class='hc'># <a class='fl' href='#L88-L90'>Fortran lines 88–90</a>.</span></span>
+<span class="line" id="P68"><span class="ln">68</span>    start = <span class='hn'>1</span></span>
+<span class="line" id="P69"><span class="ln">69</span>    end = nume</span>
+<span class="line" id="P70"><span class="ln">70</span>    err = <span class='hn'>0</span></span>
+<span class="line" id="P71"><span class="ln">71</span></span>
+<span class="line" id="P72"><span class="ln">72</span>    <span class='hc'># Determine if xval is nondecreasing (loop 10, <a class='fl' href='#L91-L99'>Fortran lines 91–99</a>).</span></span>
+<span class="line" id="P73"><span class="ln">73</span>    <span class='hk'>if</span> nume != <span class='hn'>1</span>:</span>
+<span class="line" id="P74"><span class="ln">74</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nume):</span>
+<span class="line" id="P75"><span class="ln">75</span>            <span class='hk'>if</span> xval[i + <span class='hn'>1</span>] &lt; xval[i]:</span>
+<span class="line" id="P76"><span class="ln">76</span>                <span class='hc'># Suspected bug (see OSPLIN&#x27;s page): OSPLIN does not check</span></span>
+<span class="line" id="P77"><span class="ln">77</span>                <span class='hc'># err, and yval is left as it was.</span></span>
+<span class="line" id="P78"><span class="ln">78</span>                err = <span class='hn'>2</span></span>
+<span class="line" id="P79"><span class="ln">79</span>                <span class='hk'>return</span> err  <span class='hc'># label 230</span></span>
+<span class="line" id="P80"><span class="ln">80</span></span>
+<span class="line" id="P81"><span class="ln">81</span>    <span class='hc'># Question (see the page): the Fortran&#x27;s comment here says points</span></span>
+<span class="line" id="P82"><span class="ln">82</span>    <span class='hc'># beyond the data get the end values; the code extrapolates instead.</span></span>
+<span class="line" id="P83"><span class="ln">83</span>    <span class='hc'># Points below the first data abscissa (label 20, loop 30, Fortran</span></span>
+<span class="line" id="P84"><span class="ln">84</span>    <span class='hc'># <a class='fl' href='#L107-L110'>lines 107–110</a>).</span></span>
+<span class="line" id="P85"><span class="ln">85</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nume + <span class='hn'>1</span>):</span>
+<span class="line" id="P86"><span class="ln">86</span>        <span class='hk'>if</span> xval[i] &gt;= xtab[<span class='hn'>1</span>]:</span>
+<span class="line" id="P87"><span class="ln">87</span>            <span class='hk'>break</span></span>
+<span class="line" id="P88"><span class="ln">88</span>        start = i + <span class='hn'>1</span></span>
+<span class="line" id="P89"><span class="ln">89</span></span>
+<span class="line" id="P90"><span class="ln">90</span>    <span class='hc'># Points above the last data abscissa (label 40, loop 50, Fortran</span></span>
+<span class="line" id="P91"><span class="ln">91</span>    <span class='hc'># <a class='fl' href='#L113-L121'>lines 113–121</a>).</span></span>
+<span class="line" id="P92"><span class="ln">92</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nume + <span class='hn'>1</span>):</span>
+<span class="line" id="P93"><span class="ln">93</span>        ind = nume + <span class='hn'>1</span> - i</span>
+<span class="line" id="P94"><span class="ln">94</span>        <span class='hk'>if</span> xval[ind] &lt;= xtab[num]:</span>
+<span class="line" id="P95"><span class="ln">95</span>            <span class='hk'>break</span></span>
+<span class="line" id="P96"><span class="ln">96</span>        end = ind - <span class='hn'>1</span></span>
+<span class="line" id="P97"><span class="ln">97</span></span>
+<span class="line" id="P98"><span class="ln">98</span>    <span class='hc'># Extrapolate below the first data point (label 60, Fortran lines</span></span>
+<span class="line" id="P99"><span class="ln">99</span>    <span class='hc'># 126–138).</span></span>
+<span class="line" id="P100"><span class="ln">100</span>    <span class='hk'>if</span> start != <span class='hn'>1</span>:</span>
+<span class="line" id="P101"><span class="ln">101</span>        err = <span class='hn'>1</span></span>
+<span class="line" id="P102"><span class="ln">102</span>        ncase = choose(xtab[<span class='hn'>1</span>], ytab[<span class='hn'>1</span>], mtab[<span class='hn'>1</span>], mtab[<span class='hn'>2</span>], xtab[<span class='hn'>2</span>],</span>
+<span class="line" id="P103"><span class="ln">103</span>                       ytab[<span class='hn'>2</span>], eps, <span class='hn'>0</span>)</span>
+<span class="line" id="P104"><span class="ln">104</span>        e1, e2, v1, v2, w1, w2, z1, z2, y1, y2 = cases(</span>
+<span class="line" id="P105"><span class="ln">105</span>            xtab[<span class='hn'>1</span>], ytab[<span class='hn'>1</span>], mtab[<span class='hn'>1</span>], mtab[<span class='hn'>2</span>], xtab[<span class='hn'>2</span>], ytab[<span class='hn'>2</span>],</span>
+<span class="line" id="P106"><span class="ln">106</span>            e1, e2, v1, v2, w1, w2, z1, z2, y1, y2, ncase)</span>
+<span class="line" id="P107"><span class="ln">107</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, start):  <span class='hc'># loop 70</span></span>
+<span class="line" id="P108"><span class="ln">108</span>            yval[i] = spline(xval[i], z1, z2, xtab[<span class='hn'>1</span>], ytab[<span class='hn'>1</span>], xtab[<span class='hn'>2</span>],</span>
+<span class="line" id="P109"><span class="ln">109</span>                             ytab[<span class='hn'>2</span>], y1, y2, e2, w2, v2, ncase)</span>
+<span class="line" id="P110"><span class="ln">110</span>        <span class='hk'>if</span> nume == <span class='hn'>1</span>:</span>
+<span class="line" id="P111"><span class="ln">111</span>            <span class='hk'>return</span> err</span>
+<span class="line" id="P112"><span class="ln">112</span></span>
+<span class="line" id="P113"><span class="ln">113</span>    <span class='hc'># Label 80 (<a class='fl' href='#L143-L146'>Fortran lines 143–146</a>).</span></span>
+<span class="line" id="P114"><span class="ln">114</span>    goto_200 = (nume == <span class='hn'>1</span>) <span class='hk'>and</span> (end != nume)</span>
+<span class="line" id="P115"><span class="ln">115</span>    <span class='hk'>if</span> <span class='hk'>not</span> goto_200:</span>
+<span class="line" id="P116"><span class="ln">116</span>        <span class='hc'># The interval of the first in-range point. Suspected bug (see</span></span>
+<span class="line" id="P117"><span class="ln">117</span>        <span class='hc'># the page): if every point lies below xtab[1], start is</span></span>
+<span class="line" id="P118"><span class="ln">118</span>        <span class='hc'># nume + 1 and the Fortran reads XVAL(NUME+1) here.</span></span>
+<span class="line" id="P119"><span class="ln">119</span>        lcn, fnd = search(xtab, num, xval[start], <span class='hn'>0</span>, <span class='hn'>0</span>)</span>
+<span class="line" id="P120"><span class="ln">120</span>        lcn1 = lcn + <span class='hn'>1</span></span>
+<span class="line" id="P121"><span class="ln">121</span></span>
+<span class="line" id="P122"><span class="ln">122</span>        <span class='hc'># Points equal to a data point take its value (label 90, Fortran</span></span>
+<span class="line" id="P123"><span class="ln">123</span>        <span class='hc'># <a class='fl' href='#L152-L178'>lines 152–178</a>).</span></span>
+<span class="line" id="P124"><span class="ln">124</span>        <span class='hk'>if</span> fnd != <span class='hn'>0</span>:</span>
+<span class="line" id="P125"><span class="ln">125</span>            <span class='hk'>while</span> <span class='hk'>True</span>:</span>
+<span class="line" id="P126"><span class="ln">126</span>                yval[start] = ytab[lcn]</span>
+<span class="line" id="P127"><span class="ln">127</span>                start1 = start</span>
+<span class="line" id="P128"><span class="ln">128</span>                start = start + <span class='hn'>1</span></span>
+<span class="line" id="P129"><span class="ln">129</span>                <span class='hk'>if</span> start &gt; nume:</span>
+<span class="line" id="P130"><span class="ln">130</span>                    <span class='hk'>return</span> err</span>
+<span class="line" id="P131"><span class="ln">131</span>                <span class='hk'>if</span> xval[start1] != xval[start]:</span>
+<span class="line" id="P132"><span class="ln">132</span>                    <span class='hk'>break</span></span>
+<span class="line" id="P133"><span class="ln">133</span>            <span class='hc'># Advance until a point lies strictly inside an interval</span></span>
+<span class="line" id="P134"><span class="ln">134</span>            <span class='hc'># (labels 100, 110, 120).</span></span>
+<span class="line" id="P135"><span class="ln">135</span>            <span class='hk'>while</span> xval[start] &gt;= xtab[lcn1]:  <span class='hc'># label 100</span></span>
+<span class="line" id="P136"><span class="ln">136</span>                <span class='hk'>if</span> xval[start] == xtab[lcn1]:</span>
+<span class="line" id="P137"><span class="ln">137</span>                    <span class='hk'>while</span> <span class='hk'>True</span>:  <span class='hc'># label 110</span></span>
+<span class="line" id="P138"><span class="ln">138</span>                        yval[start] = ytab[lcn1]</span>
+<span class="line" id="P139"><span class="ln">139</span>                        start1 = start</span>
+<span class="line" id="P140"><span class="ln">140</span>                        start = start + <span class='hn'>1</span></span>
+<span class="line" id="P141"><span class="ln">141</span>                        <span class='hk'>if</span> start &gt; nume:</span>
+<span class="line" id="P142"><span class="ln">142</span>                            <span class='hk'>return</span> err</span>
+<span class="line" id="P143"><span class="ln">143</span>                        <span class='hk'>if</span> xval[start] != xval[start1]:</span>
+<span class="line" id="P144"><span class="ln">144</span>                            <span class='hk'>break</span></span>
+<span class="line" id="P145"><span class="ln">145</span>                lcn = lcn1  <span class='hc'># label 120</span></span>
+<span class="line" id="P146"><span class="ln">146</span>                lcn1 = lcn1 + <span class='hn'>1</span></span>
+<span class="line" id="P147"><span class="ln">147</span></span>
+<span class="line" id="P148"><span class="ln">148</span>        <span class='hc'># The points within range of the data (label 130, Fortran lines</span></span>
+<span class="line" id="P149"><span class="ln">149</span>        <span class='hc'># 185–190). With extrapolation below, the parameters of interval 1</span></span>
+<span class="line" id="P150"><span class="ln">150</span>        <span class='hc'># are known.</span></span>
+<span class="line" id="P151"><span class="ln">151</span>        <span class='hk'>if</span> <span class='hk'>not</span> (lcn == <span class='hn'>1</span> <span class='hk'>and</span> err == <span class='hn'>1</span>):</span>
+<span class="line" id="P152"><span class="ln">152</span>            ncase = choose(xtab[lcn], ytab[lcn], mtab[lcn], mtab[lcn1],</span>
+<span class="line" id="P153"><span class="ln">153</span>                           xtab[lcn1], ytab[lcn1], eps, <span class='hn'>0</span>)</span>
+<span class="line" id="P154"><span class="ln">154</span>            e1, e2, v1, v2, w1, w2, z1, z2, y1, y2 = cases(</span>
+<span class="line" id="P155"><span class="ln">155</span>                xtab[lcn], ytab[lcn], mtab[lcn], mtab[lcn1],</span>
+<span class="line" id="P156"><span class="ln">156</span>                xtab[lcn1], ytab[lcn1],</span>
+<span class="line" id="P157"><span class="ln">157</span>                e1, e2, v1, v2, w1, w2, z1, z2, y1, y2, ncase)</span>
+<span class="line" id="P158"><span class="ln">158</span></span>
+<span class="line" id="P159"><span class="ln">159</span>        <span class='hc'># Label 140, loop 190 (<a class='fl' href='#L192-L237'>Fortran lines 192–237</a>).</span></span>
+<span class="line" id="P160"><span class="ln">160</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(start, end + <span class='hn'>1</span>):</span>
+<span class="line" id="P161"><span class="ln">161</span>            <span class='hk'>if</span> xval[i] &lt; xtab[lcn1]:</span>
+<span class="line" id="P162"><span class="ln">162</span>                <span class='hc'># label 150: the parameters of this interval are known.</span></span>
+<span class="line" id="P163"><span class="ln">163</span>                yval[i] = spline(xval[i], z1, z2, xtab[lcn], ytab[lcn],</span>
+<span class="line" id="P164"><span class="ln">164</span>                                 xtab[lcn1], ytab[lcn1], y1, y2, e2, w2,</span>
+<span class="line" id="P165"><span class="ln">165</span>                                 v2, ncase)</span>
+<span class="line" id="P166"><span class="ln">166</span>            <span class='hk'>elif</span> xval[i] == xtab[lcn1]:</span>
+<span class="line" id="P167"><span class="ln">167</span>                yval[i] = ytab[lcn1]  <span class='hc'># label 160</span></span>
+<span class="line" id="P168"><span class="ln">168</span>            <span class='hk'>else</span>:</span>
+<span class="line" id="P169"><span class="ln">169</span>                <span class='hk'>while</span> <span class='hk'>True</span>:</span>
+<span class="line" id="P170"><span class="ln">170</span>                    lcn = lcn1  <span class='hc'># label 170</span></span>
+<span class="line" id="P171"><span class="ln">171</span>                    lcn1 = lcn + <span class='hn'>1</span></span>
+<span class="line" id="P172"><span class="ln">172</span>                    <span class='hk'>if</span> xval[i] &lt; xtab[lcn1]:</span>
+<span class="line" id="P173"><span class="ln">173</span>                        <span class='hc'># label 180, then 150</span></span>
+<span class="line" id="P174"><span class="ln">174</span>                        ncase = choose(xtab[lcn], ytab[lcn], mtab[lcn],</span>
+<span class="line" id="P175"><span class="ln">175</span>                                       mtab[lcn1], xtab[lcn1], ytab[lcn1],</span>
+<span class="line" id="P176"><span class="ln">176</span>                                       eps, <span class='hn'>0</span>)</span>
+<span class="line" id="P177"><span class="ln">177</span>                        e1, e2, v1, v2, w1, w2, z1, z2, y1, y2 = cases(</span>
+<span class="line" id="P178"><span class="ln">178</span>                            xtab[lcn], ytab[lcn], mtab[lcn], mtab[lcn1],</span>
+<span class="line" id="P179"><span class="ln">179</span>                            xtab[lcn1], ytab[lcn1],</span>
+<span class="line" id="P180"><span class="ln">180</span>                            e1, e2, v1, v2, w1, w2, z1, z2, y1,</span>
+<span class="line" id="P181"><span class="ln">181</span>                            y2, ncase)</span>
+<span class="line" id="P182"><span class="ln">182</span>                        yval[i] = spline(xval[i], z1, z2, xtab[lcn],</span>
+<span class="line" id="P183"><span class="ln">183</span>                                         ytab[lcn], xtab[lcn1], ytab[lcn1],</span>
+<span class="line" id="P184"><span class="ln">184</span>                                         y1, y2, e2, w2, v2, ncase)</span>
+<span class="line" id="P185"><span class="ln">185</span>                        <span class='hk'>break</span></span>
+<span class="line" id="P186"><span class="ln">186</span>                    <span class='hk'>if</span> xval[i] == xtab[lcn1]:</span>
+<span class="line" id="P187"><span class="ln">187</span>                        yval[i] = ytab[lcn1]  <span class='hc'># label 160</span></span>
+<span class="line" id="P188"><span class="ln">188</span>                        <span class='hk'>break</span></span>
+<span class="line" id="P189"><span class="ln">189</span></span>
+<span class="line" id="P190"><span class="ln">190</span>        <span class='hc'># The points beyond the last data point (<a class='fl' href='#L242-L243'>Fortran lines 242–243</a>).</span></span>
+<span class="line" id="P191"><span class="ln">191</span>        <span class='hc'># Suspected bug (see the page): with every point above xtab[num],</span></span>
+<span class="line" id="P192"><span class="ln">192</span>        <span class='hc'># end is 0 and the Fortran reads XVAL(0).</span></span>
+<span class="line" id="P193"><span class="ln">193</span>        <span class='hk'>if</span> end == nume:</span>
+<span class="line" id="P194"><span class="ln">194</span>            <span class='hk'>return</span> err</span>
+<span class="line" id="P195"><span class="ln">195</span>        goto_200 = <span class='hk'>not</span> (lcn1 == num <span class='hk'>and</span> xval[end] != xtab[num])</span>
+<span class="line" id="P196"><span class="ln">196</span></span>
+<span class="line" id="P197"><span class="ln">197</span>    <span class='hc'># Label 200: extrapolation above the last data point (Fortran lines</span></span>
+<span class="line" id="P198"><span class="ln">198</span>    <span class='hc'># 249–255).</span></span>
+<span class="line" id="P199"><span class="ln">199</span>    <span class='hk'>if</span> goto_200:</span>
+<span class="line" id="P200"><span class="ln">200</span>        err = <span class='hn'>1</span></span>
+<span class="line" id="P201"><span class="ln">201</span>        num1 = <span class='hb'>max</span>(num - <span class='hn'>1</span>, <span class='hn'>1</span>)</span>
+<span class="line" id="P202"><span class="ln">202</span>        ncase = choose(xtab[num1], ytab[num1], mtab[num1], mtab[num],</span>
+<span class="line" id="P203"><span class="ln">203</span>                       xtab[num], ytab[num], eps, <span class='hn'>0</span>)</span>
+<span class="line" id="P204"><span class="ln">204</span>        e1, e2, v1, v2, w1, w2, z1, z2, y1, y2 = cases(</span>
+<span class="line" id="P205"><span class="ln">205</span>            xtab[num1], ytab[num1], mtab[num1], mtab[num], xtab[num],</span>
+<span class="line" id="P206"><span class="ln">206</span>            ytab[num], e1, e2, v1, v2, w1, w2, z1, z2, y1, y2,</span>
+<span class="line" id="P207"><span class="ln">207</span>            ncase)</span>
+<span class="line" id="P208"><span class="ln">208</span></span>
+<span class="line" id="P209"><span class="ln">209</span>    <span class='hc'># Label 210 (<a class='fl' href='#L256-L261'>Fortran lines 256–261</a>).</span></span>
+<span class="line" id="P210"><span class="ln">210</span>    end1 = end + <span class='hn'>1</span></span>
+<span class="line" id="P211"><span class="ln">211</span>    num1 = <span class='hb'>max</span>(num - <span class='hn'>1</span>, <span class='hn'>1</span>)</span>
+<span class="line" id="P212"><span class="ln">212</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(end1, nume + <span class='hn'>1</span>):  <span class='hc'># loop 220</span></span>
+<span class="line" id="P213"><span class="ln">213</span>        yval[i] = spline(xval[i], z1, z2, xtab[num1], ytab[num1],</span>
+<span class="line" id="P214"><span class="ln">214</span>                         xtab[num], ytab[num], y1, y2, e2, w2, v2, ncase)</span>
+<span class="line" id="P215"><span class="ln">215</span>    <span class='hk'>return</span> err</span>
+<span class="line" id="P216"><span class="ln">216</span></span>
+<span class="line" id="P217"><span class="ln">217</span></span>
+<span class="line" id="P218"><span class="ln">218</span><span class='hc'># --- The Numba kernel (accel.py): the plain code&#x27;s operations, compiled ---------------------------------------------</span></span>
+<span class="line" id="P219"><span class="ln">219</span></span>
+<span class="line" id="P220"><span class="ln">220</span></span>
+<span class="line" id="P221"><span class="ln">221</span>@accel.njit(_nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P222"><span class="ln">222</span><span class='hk'>def</span> _meval_nb(xval: np.ndarray, yval: np.ndarray, xtab: np.ndarray, ytab: np.ndarray, mtab: np.ndarray, num: <span class='hb'>int</span>,</span>
+<span class="line" id="P223"><span class="ln">223</span>              nume: <span class='hb'>int</span>, eps: <span class='hb'>float</span>, err: <span class='hb'>int</span>) -&gt; <span class='hb'>int</span>:</span>
+<span class="line" id="P224"><span class="ln">224</span>    <span class='hs'>&quot;&quot;&quot;meval&#x27;s kernel: the same operations, compiled (README, Numba), the locals the plain code may leave unset</span></span>
+<span class="line" id="P225"><span class="ln">225</span><span class='hs'>    before their first use set to zero first (Numba types every path); callable from other kernels (osplin&#x27;s).</span></span>
+<span class="line" id="P226"><span class="ln">226</span><span class='hs'>    Arguments and returns as meval&#x27;s.&quot;&quot;&quot;</span></span>
+<span class="line" id="P227"><span class="ln">227</span>    ncase = <span class='hn'>0</span></span>
+<span class="line" id="P228"><span class="ln">228</span>    lcn = <span class='hn'>0</span></span>
+<span class="line" id="P229"><span class="ln">229</span>    lcn1 = <span class='hn'>0</span></span>
+<span class="line" id="P230"><span class="ln">230</span>    e1 = e2 = v1 = v2 = w1 = w2 = z1 = z2 = y1 = y2 = <span class='hn'>0.0</span></span>
+<span class="line" id="P231"><span class="ln">231</span>    start = <span class='hn'>1</span></span>
+<span class="line" id="P232"><span class="ln">232</span>    <span class='hc'># <a class='fl' href='#L88-L90'>Fortran lines 88–90</a>.</span></span>
+<span class="line" id="P233"><span class="ln">233</span>    end = nume</span>
+<span class="line" id="P234"><span class="ln">234</span>    err = <span class='hn'>0</span></span>
+<span class="line" id="P235"><span class="ln">235</span>    <span class='hc'># Determine if xval is nondecreasing (loop 10, <a class='fl' href='#L91-L99'>Fortran lines 91–99</a>).</span></span>
+<span class="line" id="P236"><span class="ln">236</span>    <span class='hk'>if</span> nume != <span class='hn'>1</span>:</span>
+<span class="line" id="P237"><span class="ln">237</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nume):</span>
+<span class="line" id="P238"><span class="ln">238</span>            <span class='hk'>if</span> xval[i + <span class='hn'>1</span>] &lt; xval[i]:</span>
+<span class="line" id="P239"><span class="ln">239</span>                err = <span class='hn'>2</span></span>
+<span class="line" id="P240"><span class="ln">240</span>                <span class='hk'>return</span> err  <span class='hc'># label 230</span></span>
+<span class="line" id="P241"><span class="ln">241</span>    <span class='hc'># Points below the first data abscissa (label 20, loop 30, <a class='fl' href='#L107-L110'>Fortran lines 107–110</a>).</span></span>
+<span class="line" id="P242"><span class="ln">242</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nume + <span class='hn'>1</span>):</span>
+<span class="line" id="P243"><span class="ln">243</span>        <span class='hk'>if</span> xval[i] &gt;= xtab[<span class='hn'>1</span>]:</span>
+<span class="line" id="P244"><span class="ln">244</span>            <span class='hk'>break</span></span>
+<span class="line" id="P245"><span class="ln">245</span>        start = i + <span class='hn'>1</span></span>
+<span class="line" id="P246"><span class="ln">246</span>    <span class='hc'># Points above the last data abscissa (label 40, loop 50, <a class='fl' href='#L113-L121'>Fortran lines 113–121</a>).</span></span>
+<span class="line" id="P247"><span class="ln">247</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nume + <span class='hn'>1</span>):</span>
+<span class="line" id="P248"><span class="ln">248</span>        ind = nume + <span class='hn'>1</span> - i</span>
+<span class="line" id="P249"><span class="ln">249</span>        <span class='hk'>if</span> xval[ind] &lt;= xtab[num]:</span>
+<span class="line" id="P250"><span class="ln">250</span>            <span class='hk'>break</span></span>
+<span class="line" id="P251"><span class="ln">251</span>        end = ind - <span class='hn'>1</span></span>
+<span class="line" id="P252"><span class="ln">252</span>    <span class='hc'># Extrapolate below the first data point (label 60, <a class='fl' href='#L126-L138'>Fortran lines 126–138</a>).</span></span>
+<span class="line" id="P253"><span class="ln">253</span>    <span class='hk'>if</span> start != <span class='hn'>1</span>:</span>
+<span class="line" id="P254"><span class="ln">254</span>        err = <span class='hn'>1</span></span>
+<span class="line" id="P255"><span class="ln">255</span>        ncase = _choose_nb(xtab[<span class='hn'>1</span>], ytab[<span class='hn'>1</span>], mtab[<span class='hn'>1</span>], mtab[<span class='hn'>2</span>], xtab[<span class='hn'>2</span>],</span>
+<span class="line" id="P256"><span class="ln">256</span>                           ytab[<span class='hn'>2</span>], eps, <span class='hn'>0</span>)</span>
+<span class="line" id="P257"><span class="ln">257</span>        e1, e2, v1, v2, w1, w2, z1, z2, y1, y2 = _cases_nb(</span>
+<span class="line" id="P258"><span class="ln">258</span>            xtab[<span class='hn'>1</span>], ytab[<span class='hn'>1</span>], mtab[<span class='hn'>1</span>], mtab[<span class='hn'>2</span>], xtab[<span class='hn'>2</span>], ytab[<span class='hn'>2</span>],</span>
+<span class="line" id="P259"><span class="ln">259</span>            e1, e2, v1, v2, w1, w2, z1, z2, y1, y2, ncase)</span>
+<span class="line" id="P260"><span class="ln">260</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, start):  <span class='hc'># loop 70</span></span>
+<span class="line" id="P261"><span class="ln">261</span>            yval[i] = _spline_nb(xval[i], z1, z2, xtab[<span class='hn'>1</span>], ytab[<span class='hn'>1</span>], xtab[<span class='hn'>2</span>],</span>
+<span class="line" id="P262"><span class="ln">262</span>                                 ytab[<span class='hn'>2</span>], y1, y2, e2, w2, v2, ncase)</span>
+<span class="line" id="P263"><span class="ln">263</span>        <span class='hk'>if</span> nume == <span class='hn'>1</span>:</span>
+<span class="line" id="P264"><span class="ln">264</span>            <span class='hk'>return</span> err</span>
+<span class="line" id="P265"><span class="ln">265</span>    <span class='hc'># Label 80 (<a class='fl' href='#L143-L146'>Fortran lines 143–146</a>).</span></span>
+<span class="line" id="P266"><span class="ln">266</span>    goto_200 = (nume == <span class='hn'>1</span>) <span class='hk'>and</span> (end != nume)</span>
+<span class="line" id="P267"><span class="ln">267</span>    <span class='hk'>if</span> <span class='hk'>not</span> goto_200:</span>
+<span class="line" id="P268"><span class="ln">268</span>        lcn, fnd = _search_nb(xtab, num, xval[start], <span class='hn'>0</span>, <span class='hn'>0</span>)</span>
+<span class="line" id="P269"><span class="ln">269</span>        lcn1 = lcn + <span class='hn'>1</span></span>
+<span class="line" id="P270"><span class="ln">270</span>        <span class='hc'># Points equal to a data point take its value (label 90, <a class='fl' href='#L152-L178'>Fortran lines 152–178</a>).</span></span>
+<span class="line" id="P271"><span class="ln">271</span>        <span class='hk'>if</span> fnd != <span class='hn'>0</span>:</span>
+<span class="line" id="P272"><span class="ln">272</span>            <span class='hk'>while</span> <span class='hk'>True</span>:</span>
+<span class="line" id="P273"><span class="ln">273</span>                yval[start] = ytab[lcn]</span>
+<span class="line" id="P274"><span class="ln">274</span>                start1 = start</span>
+<span class="line" id="P275"><span class="ln">275</span>                start = start + <span class='hn'>1</span></span>
+<span class="line" id="P276"><span class="ln">276</span>                <span class='hk'>if</span> start &gt; nume:</span>
+<span class="line" id="P277"><span class="ln">277</span>                    <span class='hk'>return</span> err</span>
+<span class="line" id="P278"><span class="ln">278</span>                <span class='hk'>if</span> xval[start1] != xval[start]:</span>
+<span class="line" id="P279"><span class="ln">279</span>                    <span class='hk'>break</span></span>
+<span class="line" id="P280"><span class="ln">280</span>            <span class='hk'>while</span> xval[start] &gt;= xtab[lcn1]:  <span class='hc'># label 100</span></span>
+<span class="line" id="P281"><span class="ln">281</span>                <span class='hk'>if</span> xval[start] == xtab[lcn1]:</span>
+<span class="line" id="P282"><span class="ln">282</span>                    <span class='hk'>while</span> <span class='hk'>True</span>:  <span class='hc'># label 110</span></span>
+<span class="line" id="P283"><span class="ln">283</span>                        yval[start] = ytab[lcn1]</span>
+<span class="line" id="P284"><span class="ln">284</span>                        start1 = start</span>
+<span class="line" id="P285"><span class="ln">285</span>                        start = start + <span class='hn'>1</span></span>
+<span class="line" id="P286"><span class="ln">286</span>                        <span class='hk'>if</span> start &gt; nume:</span>
+<span class="line" id="P287"><span class="ln">287</span>                            <span class='hk'>return</span> err</span>
+<span class="line" id="P288"><span class="ln">288</span>                        <span class='hk'>if</span> xval[start] != xval[start1]:</span>
+<span class="line" id="P289"><span class="ln">289</span>                            <span class='hk'>break</span></span>
+<span class="line" id="P290"><span class="ln">290</span>                lcn = lcn1  <span class='hc'># label 120</span></span>
+<span class="line" id="P291"><span class="ln">291</span>                lcn1 = lcn1 + <span class='hn'>1</span></span>
+<span class="line" id="P292"><span class="ln">292</span>        <span class='hc'># The points within range of the data (label 130, <a class='fl' href='#L185-L190'>Fortran lines 185–190</a>).</span></span>
+<span class="line" id="P293"><span class="ln">293</span>        <span class='hk'>if</span> <span class='hk'>not</span> (lcn == <span class='hn'>1</span> <span class='hk'>and</span> err == <span class='hn'>1</span>):</span>
+<span class="line" id="P294"><span class="ln">294</span>            ncase = _choose_nb(xtab[lcn], ytab[lcn], mtab[lcn], mtab[lcn1],</span>
+<span class="line" id="P295"><span class="ln">295</span>                               xtab[lcn1], ytab[lcn1], eps, <span class='hn'>0</span>)</span>
+<span class="line" id="P296"><span class="ln">296</span>            e1, e2, v1, v2, w1, w2, z1, z2, y1, y2 = _cases_nb(</span>
+<span class="line" id="P297"><span class="ln">297</span>                xtab[lcn], ytab[lcn], mtab[lcn], mtab[lcn1],</span>
+<span class="line" id="P298"><span class="ln">298</span>                xtab[lcn1], ytab[lcn1],</span>
+<span class="line" id="P299"><span class="ln">299</span>                e1, e2, v1, v2, w1, w2, z1, z2, y1, y2, ncase)</span>
+<span class="line" id="P300"><span class="ln">300</span>        <span class='hc'># Label 140, loop 190 (<a class='fl' href='#L192-L237'>Fortran lines 192–237</a>).</span></span>
+<span class="line" id="P301"><span class="ln">301</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(start, end + <span class='hn'>1</span>):</span>
+<span class="line" id="P302"><span class="ln">302</span>            <span class='hk'>if</span> xval[i] &lt; xtab[lcn1]:</span>
+<span class="line" id="P303"><span class="ln">303</span>                yval[i] = _spline_nb(xval[i], z1, z2, xtab[lcn], ytab[lcn],</span>
+<span class="line" id="P304"><span class="ln">304</span>                                     xtab[lcn1], ytab[lcn1], y1, y2, e2, w2,</span>
+<span class="line" id="P305"><span class="ln">305</span>                                     v2, ncase)</span>
+<span class="line" id="P306"><span class="ln">306</span>            <span class='hk'>elif</span> xval[i] == xtab[lcn1]:</span>
+<span class="line" id="P307"><span class="ln">307</span>                yval[i] = ytab[lcn1]  <span class='hc'># label 160</span></span>
+<span class="line" id="P308"><span class="ln">308</span>            <span class='hk'>else</span>:</span>
+<span class="line" id="P309"><span class="ln">309</span>                <span class='hk'>while</span> <span class='hk'>True</span>:</span>
+<span class="line" id="P310"><span class="ln">310</span>                    lcn = lcn1  <span class='hc'># label 170</span></span>
+<span class="line" id="P311"><span class="ln">311</span>                    lcn1 = lcn + <span class='hn'>1</span></span>
+<span class="line" id="P312"><span class="ln">312</span>                    <span class='hk'>if</span> xval[i] &lt; xtab[lcn1]:</span>
+<span class="line" id="P313"><span class="ln">313</span>                        ncase = _choose_nb(xtab[lcn], ytab[lcn], mtab[lcn],</span>
+<span class="line" id="P314"><span class="ln">314</span>                                           mtab[lcn1], xtab[lcn1], ytab[lcn1],</span>
+<span class="line" id="P315"><span class="ln">315</span>                                           eps, <span class='hn'>0</span>)</span>
+<span class="line" id="P316"><span class="ln">316</span>                        e1, e2, v1, v2, w1, w2, z1, z2, y1, y2 = _cases_nb(</span>
+<span class="line" id="P317"><span class="ln">317</span>                            xtab[lcn], ytab[lcn], mtab[lcn], mtab[lcn1],</span>
+<span class="line" id="P318"><span class="ln">318</span>                            xtab[lcn1], ytab[lcn1],</span>
+<span class="line" id="P319"><span class="ln">319</span>                            e1, e2, v1, v2, w1, w2, z1, z2, y1,</span>
+<span class="line" id="P320"><span class="ln">320</span>                            y2, ncase)</span>
+<span class="line" id="P321"><span class="ln">321</span>                        yval[i] = _spline_nb(xval[i], z1, z2, xtab[lcn],</span>
+<span class="line" id="P322"><span class="ln">322</span>                                             ytab[lcn], xtab[lcn1], ytab[lcn1],</span>
+<span class="line" id="P323"><span class="ln">323</span>                                             y1, y2, e2, w2, v2, ncase)</span>
+<span class="line" id="P324"><span class="ln">324</span>                        <span class='hk'>break</span></span>
+<span class="line" id="P325"><span class="ln">325</span>                    <span class='hk'>if</span> xval[i] == xtab[lcn1]:</span>
+<span class="line" id="P326"><span class="ln">326</span>                        yval[i] = ytab[lcn1]  <span class='hc'># label 160</span></span>
+<span class="line" id="P327"><span class="ln">327</span>                        <span class='hk'>break</span></span>
+<span class="line" id="P328"><span class="ln">328</span>        <span class='hc'># The points beyond the last data point (<a class='fl' href='#L242-L243'>Fortran lines 242–243</a>).</span></span>
+<span class="line" id="P329"><span class="ln">329</span>        <span class='hk'>if</span> end == nume:</span>
+<span class="line" id="P330"><span class="ln">330</span>            <span class='hk'>return</span> err</span>
+<span class="line" id="P331"><span class="ln">331</span>        goto_200 = <span class='hk'>not</span> (lcn1 == num <span class='hk'>and</span> xval[end] != xtab[num])</span>
+<span class="line" id="P332"><span class="ln">332</span>    <span class='hc'># Label 200: extrapolation above the last data point (<a class='fl' href='#L249-L255'>Fortran lines 249–255</a>).</span></span>
+<span class="line" id="P333"><span class="ln">333</span>    <span class='hk'>if</span> goto_200:</span>
+<span class="line" id="P334"><span class="ln">334</span>        err = <span class='hn'>1</span></span>
+<span class="line" id="P335"><span class="ln">335</span>        num1 = <span class='hb'>max</span>(num - <span class='hn'>1</span>, <span class='hn'>1</span>)</span>
+<span class="line" id="P336"><span class="ln">336</span>        ncase = _choose_nb(xtab[num1], ytab[num1], mtab[num1], mtab[num],</span>
+<span class="line" id="P337"><span class="ln">337</span>                           xtab[num], ytab[num], eps, <span class='hn'>0</span>)</span>
+<span class="line" id="P338"><span class="ln">338</span>        e1, e2, v1, v2, w1, w2, z1, z2, y1, y2 = _cases_nb(</span>
+<span class="line" id="P339"><span class="ln">339</span>            xtab[num1], ytab[num1], mtab[num1], mtab[num], xtab[num],</span>
+<span class="line" id="P340"><span class="ln">340</span>            ytab[num], e1, e2, v1, v2, w1, w2, z1, z2, y1, y2,</span>
+<span class="line" id="P341"><span class="ln">341</span>            ncase)</span>
+<span class="line" id="P342"><span class="ln">342</span>    <span class='hc'># Label 210 (<a class='fl' href='#L256-L261'>Fortran lines 256–261</a>).</span></span>
+<span class="line" id="P343"><span class="ln">343</span>    end1 = end + <span class='hn'>1</span></span>
+<span class="line" id="P344"><span class="ln">344</span>    num1 = <span class='hb'>max</span>(num - <span class='hn'>1</span>, <span class='hn'>1</span>)</span>
+<span class="line" id="P345"><span class="ln">345</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(end1, nume + <span class='hn'>1</span>):  <span class='hc'># loop 220</span></span>
+<span class="line" id="P346"><span class="ln">346</span>        yval[i] = _spline_nb(xval[i], z1, z2, xtab[num1], ytab[num1],</span>
+<span class="line" id="P347"><span class="ln">347</span>                             xtab[num], ytab[num], y1, y2, e2, w2, v2, ncase)</span>
+<span class="line" id="P348"><span class="ln">348</span>    <span class='hk'>return</span> err</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
 function st(){try{return localStorage.getItem('pm-toc')}catch(e){return null}}function sv(v){try{localStorage.setItem('pm-toc',v)}catch(e){}}
 var b=nav.querySelector('.toc-toggle');function set(h){page.classList.toggle('toc-hidden',h);b.textContent=h?'show':'hide';}
 set(st()==='hidden');b.addEventListener('click',function(){var h=!page.classList.contains('toc-hidden');set(h);sv(h?'hidden':'shown');});

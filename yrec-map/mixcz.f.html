@@ -2,7 +2,8 @@
 <header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ mixcz.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#bugs'>Suspected bugs, checked by running the code</a><ol><li><a href='#b1'>1. The sentinel LCZ(M+1) is written past the model</a></li><li><a href='#b2'>2. Helium is not recomputed after the clean-up</a></li></ol></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-MIXCZ'>MIXCZ</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>mixcz.f</h1>
 <p class='muted'>248 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/mixcz.f'>on GitHub (7be4133)</a></p>
-<p><strong>Python version</strong>: <code>mixcz.py</code>, 95 lines, on the right (switch to Python above the code).</p>
+<p><strong>Python version</strong>: <code>mixcz.py</code>, 189 lines, on the right (switch to Python above the code).</p>
+<p><strong>Object-oriented version</strong>: wrapped by the <a href='../pyrec-map/families.html#convection'><code>convection</code></a> family, its default <code>Convection</code>: <code>Convection.mix_zones</code> (<a href='#def-MIXCZ'>MIXCZ</a>).</p>
 <details class='vars' id='terms'><summary>Variables on this page (3)</summary><p><a href='../glossary.html#var-json' data-def='the maximum number of shells in a model, 5000 (a &lt;code&gt;PARAMETER&lt;/code&gt;, used by 144 files).'><code>json</code></a>, <a href='../glossary.html#var-lexcom' data-def='follow the extended composition, 15 species (with D, $^6\mathrm{Li}$, $^7\mathrm{Li}$, $^9\mathrm{Be}$) instead of 11; default &lt;code&gt;.FALSE.&lt;/code&gt;; read by 17 routines. &lt;em&gt;Name:&lt;/em&gt; EXtended COMposition.'><code>lexcom</code></a>, <a href='../glossary.html#var-zenvm' data-def='the envelope&#x27;s $Z$ other than the CNO-cycle elements (STARIN&#x27;s comment); set in &lt;code&gt;STARIN&lt;/code&gt;, read by &lt;a href=&quot;#def-MIXCZ&quot;&gt;&lt;code&gt;MIXCZ&lt;/code&gt;&lt;/a&gt;.'><code>zenvm</code></a></p></details><h2 id='purpose'>Purpose</h2>
 <div class='notes'><p>Homogenizes the composition of every convection zone (mass-weighted mean over the zone), then applies light clean-ups to the composition.</p></div>
 <h2 id='how-it-fits'>How it fits</h2>
@@ -307,100 +308,194 @@
 <span class="line" id="L246"><span class="ln">246</span></span>
 <span class="line" id="L247"><span class="ln">247</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>RETURN</span></span>
 <span class="line" id="L248"><span class="ln">248</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of mixcz.f (YREC 7be4133): every convection zone</span></span>
-<span class="line" id="P2"><span class="ln">2</span><span class='hs'>homogenized, then light clean-ups of the composition.&quot;&quot;&quot;</span></span>
+<span class="line" id="P2"><span class="ln">2</span><span class='hs'>homogenized, then light clean-ups of the composition.</span></span>
 <span class="line" id="P3"><span class="ln">3</span></span>
-<span class="line" id="P4"><span class="ln">4</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
-<span class="line" id="P5"><span class="ln">5</span></span>
-<span class="line" id="P6"><span class="ln">6</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> comp_mod</span>
-<span class="line" id="P7"><span class="ln">7</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> nmlpar_mod</span>
-<span class="line" id="P8"><span class="ln">8</span></span>
-<span class="line" id="P9"><span class="ln">9</span><span class='hc'># The Fortran&#x27;s local arrays (SAVE): up to 12 zones as pairs (first, last</span></span>
-<span class="line" id="P10"><span class="ln">10</span><span class='hc'># shell) in mxzone[1..24], and the sums.</span></span>
-<span class="line" id="P11"><span class="ln">11</span>mxzone = np.zeros(<span class='hn'>25</span>, dtype=<span class='hb'>int</span>)</span>
-<span class="line" id="P12"><span class="ln">12</span>xsum = np.zeros(<span class='hn'>16</span>)</span>
+<span class="line" id="P4"><span class="ln">4</span><span class='hs'>Functions</span></span>
+<span class="line" id="P5"><span class="ln">5</span><span class='hs'>---------</span></span>
+<span class="line" id="P6"><span class="ln">6</span><span class='hs'>mixcz_find_zones : The convection zones as pairs (first, last shell) (loop 11).</span></span>
+<span class="line" id="P7"><span class="ln">7</span><span class='hs'>mixcz_zones_mean : Each zone mixed to its mass-weighted mean composition (loop 100).</span></span>
+<span class="line" id="P8"><span class="ln">8</span><span class='hs'>mixcz_clean : X floored at 0, Z capped at 1 - X, O16 floored (loop 140).</span></span>
+<span class="line" id="P9"><span class="ln">9</span><span class='hs'>mixcz : The routine.</span></span>
+<span class="line" id="P10"><span class="ln">10</span></span>
+<span class="line" id="P11"><span class="ln">11</span><span class='hs'>Each utility has its kernel (`_&lt;name&gt;_nb`), compiled from the same source; `mixcz` runs the kernels when</span></span>
+<span class="line" id="P12"><span class="ln">12</span><span class='hs'>accel.USE_NUMBA (Nov 15, 2026: its loops in plain Python took about 0.8 s of the solar run).</span></span>
 <span class="line" id="P13"><span class="ln">13</span></span>
-<span class="line" id="P14"><span class="ln">14</span></span>
-<span class="line" id="P15"><span class="ln">15</span><span class='hk'>def</span> mixcz(hcomp: np.ndarray, hs2: np.ndarray, lcz: np.ndarray, m: <span class='hb'>int</span>) -&gt; <span class='hk'>None</span>:</span>
-<span class="line" id="P16"><span class="ln">16</span>    <span class='hs'>&quot;&quot;&quot;Mix each convection zone to its mass-weighted mean composition</span></span>
-<span class="line" id="P17"><span class="ln">17</span><span class='hs'>    (species 1..11, or 1..15 with LEXCOM), then at every shell floor X at</span></span>
-<span class="line" id="P18"><span class="ln">18</span><span class='hs'>    zero, cap Z at 1 - X and floor O16 (row 9) at 0.99e-3 (Z - ZENVM).</span></span>
-<span class="line" id="P19"><span class="ln">19</span></span>
-<span class="line" id="P20"><span class="ln">20</span><span class='hs'>    Translates: mixcz.f#MIXCZ (7be4133)</span></span>
-<span class="line" id="P21"><span class="ln">21</span></span>
-<span class="line" id="P22"><span class="ln">22</span><span class='hs'>    Arguments: the model hcomp[k, j], the shell masses hs2 and the</span></span>
-<span class="line" id="P23"><span class="ln">23</span><span class='hs'>    convective flags lcz, with m shells (arrays with index 0 unused; lcz</span></span>
-<span class="line" id="P24"><span class="ln">24</span><span class='hs'>    needs room for the sentinel lcz[m + 1]).</span></span>
+<span class="line" id="P14"><span class="ln">14</span><span class='hs'>Constants</span></span>
+<span class="line" id="P15"><span class="ln">15</span><span class='hs'>---------</span></span>
+<span class="line" id="P16"><span class="ln">16</span><span class='hs'>NZONE_PAIRS : The length of MXZONE (12 zones, two entries each).</span></span>
+<span class="line" id="P17"><span class="ln">17</span><span class='hs'>IEND_STANDARD, IEND_EXCOM : The species mixed, without and with LEXCOM.</span></span>
+<span class="line" id="P18"><span class="ln">18</span></span>
+<span class="line" id="P19"><span class="ln">19</span><span class='hs'>Variables</span></span>
+<span class="line" id="P20"><span class="ln">20</span><span class='hs'>---------</span></span>
+<span class="line" id="P21"><span class="ln">21</span><span class='hs'>mxzone : np.ndarray, shape: `(25,)`, dtype: ``int``</span></span>
+<span class="line" id="P22"><span class="ln">22</span><span class='hs'>    The Fortran&#x27;s MXZONE (SAVE), index 0 unused.</span></span>
+<span class="line" id="P23"><span class="ln">23</span><span class='hs'>xsum : np.ndarray, shape: `(16,)`, dtype: ``float64``</span></span>
+<span class="line" id="P24"><span class="ln">24</span><span class='hs'>    The Fortran&#x27;s XSUM (SAVE), index 0 unused.</span></span>
 <span class="line" id="P25"><span class="ln">25</span></span>
-<span class="line" id="P26"><span class="ln">26</span><span class='hs'>    Sets in place: hcomp, and lcz[m + 1] = False. Returns nothing.</span></span>
+<span class="line" id="P26"><span class="ln">26</span><span class='hs'>&quot;&quot;&quot;</span></span>
 <span class="line" id="P27"><span class="ln">27</span></span>
-<span class="line" id="P28"><span class="ln">28</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P28"><span class="ln">28</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
 <span class="line" id="P29"><span class="ln">29</span></span>
-<span class="line" id="P30"><span class="ln">30</span>    <span class='hc'># The standard convection zones (<a class='fl' href='#L62-L85'>Fortran lines 62–85</a>).</span></span>
-<span class="line" id="P31"><span class="ln">31</span>    j = <span class='hn'>1</span></span>
-<span class="line" id="P32"><span class="ln">32</span>    lcc = <span class='hk'>False</span></span>
-<span class="line" id="P33"><span class="ln">33</span>    mp1 = m + <span class='hn'>1</span></span>
-<span class="line" id="P34"><span class="ln">34</span>    <span class='hc'># Suspected bug (see the page): the sentinel is written past the model.</span></span>
-<span class="line" id="P35"><span class="ln">35</span>    lcz[mp1] = <span class='hk'>False</span></span>
-<span class="line" id="P36"><span class="ln">36</span>    i1 = <span class='hn'>0</span></span>
-<span class="line" id="P37"><span class="ln">37</span>    full = <span class='hk'>False</span></span>
-<span class="line" id="P38"><span class="ln">38</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, mp1 + <span class='hn'>1</span>):                          <span class='hc'># loop 11</span></span>
-<span class="line" id="P39"><span class="ln">39</span>        <span class='hk'>if</span> lcz[i]:</span>
-<span class="line" id="P40"><span class="ln">40</span>            <span class='hk'>if</span> <span class='hk'>not</span> lcc:</span>
-<span class="line" id="P41"><span class="ln">41</span>                <span class='hc'># Start of a convection zone.</span></span>
-<span class="line" id="P42"><span class="ln">42</span>                lcc = <span class='hk'>True</span></span>
-<span class="line" id="P43"><span class="ln">43</span>                i1 = i</span>
-<span class="line" id="P44"><span class="ln">44</span>        <span class='hk'>elif</span> lcc:</span>
-<span class="line" id="P45"><span class="ln">45</span>            <span class='hc'># End of a convection zone (label 10).</span></span>
-<span class="line" id="P46"><span class="ln">46</span>            lcc = <span class='hk'>False</span></span>
-<span class="line" id="P47"><span class="ln">47</span>            mxzone[j] = i1</span>
-<span class="line" id="P48"><span class="ln">48</span>            mxzone[j + <span class='hn'>1</span>] = i - <span class='hn'>1</span></span>
-<span class="line" id="P49"><span class="ln">49</span>            j = j + <span class='hn'>2</span></span>
-<span class="line" id="P50"><span class="ln">50</span>            <span class='hc'># More than 12 zones are ignored, without a message.</span></span>
-<span class="line" id="P51"><span class="ln">51</span>            <span class='hk'>if</span> j &gt;= <span class='hn'>24</span>:</span>
-<span class="line" id="P52"><span class="ln">52</span>                full = <span class='hk'>True</span></span>
-<span class="line" id="P53"><span class="ln">53</span>                <span class='hk'>break</span>                                    <span class='hc'># GOTO 12</span></span>
-<span class="line" id="P54"><span class="ln">54</span>    <span class='hk'>if</span> <span class='hk'>not</span> full:</span>
-<span class="line" id="P55"><span class="ln">55</span>        mxzone[j] = <span class='hn'>0</span></span>
-<span class="line" id="P56"><span class="ln">56</span></span>
-<span class="line" id="P57"><span class="ln">57</span>    <span class='hc'># label 12. The species mixed (<a class='fl' href='#L86-L87'>Fortran lines 86–87</a>).</span></span>
-<span class="line" id="P58"><span class="ln">58</span>    iend = <span class='hn'>11</span></span>
-<span class="line" id="P59"><span class="ln">59</span>    <span class='hk'>if</span> nmlpar_mod.lexcom:</span>
-<span class="line" id="P60"><span class="ln">60</span>        iend = <span class='hn'>15</span></span>
-<span class="line" id="P61"><span class="ln">61</span></span>
-<span class="line" id="P62"><span class="ln">62</span>    <span class='hc'># Mix all convective zones (<a class='fl' href='#L88-L116'>Fortran lines 88–116</a>).</span></span>
-<span class="line" id="P63"><span class="ln">63</span>    <span class='hk'>for</span> j <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, <span class='hn'>25</span>, <span class='hn'>2</span>):                            <span class='hc'># loop 100</span></span>
-<span class="line" id="P64"><span class="ln">64</span>        <span class='hk'>if</span> mxzone[j] &lt;= <span class='hn'>0</span>:</span>
-<span class="line" id="P65"><span class="ln">65</span>            <span class='hk'>break</span>                                        <span class='hc'># GOTO 110</span></span>
-<span class="line" id="P66"><span class="ln">66</span>        i1 = mxzone[j]</span>
-<span class="line" id="P67"><span class="ln">67</span>        i2 = <span class='hb'>min</span>(m, mxzone[j + <span class='hn'>1</span>])</span>
-<span class="line" id="P68"><span class="ln">68</span>        <span class='hc'># One shell is enough only at the centre.</span></span>
-<span class="line" id="P69"><span class="ln">69</span>        <span class='hk'>if</span> i1 != <span class='hn'>1</span> <span class='hk'>and</span> i1 &gt;= i2:</span>
-<span class="line" id="P70"><span class="ln">70</span>            <span class='hk'>continue</span></span>
-<span class="line" id="P71"><span class="ln">71</span>        wtsum = <span class='hn'>0.0</span></span>
-<span class="line" id="P72"><span class="ln">72</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, iend + <span class='hn'>1</span>):</span>
-<span class="line" id="P73"><span class="ln">73</span>            xsum[i] = <span class='hn'>0.0</span></span>
-<span class="line" id="P74"><span class="ln">74</span>        <span class='hk'>for</span> jj <span class='hk'>in</span> <span class='hb'>range</span>(i1, i2 + <span class='hn'>1</span>):</span>
-<span class="line" id="P75"><span class="ln">75</span>            wtsum = wtsum + hs2[jj]</span>
-<span class="line" id="P76"><span class="ln">76</span>            <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, iend + <span class='hn'>1</span>):</span>
-<span class="line" id="P77"><span class="ln">77</span>                xsum[i] = xsum[i] + hcomp[i, jj] * hs2[jj]</span>
-<span class="line" id="P78"><span class="ln">78</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, iend + <span class='hn'>1</span>):</span>
-<span class="line" id="P79"><span class="ln">79</span>            xsum[i] = xsum[i] / wtsum</span>
-<span class="line" id="P80"><span class="ln">80</span>        <span class='hk'>for</span> jj <span class='hk'>in</span> <span class='hb'>range</span>(i1, i2 + <span class='hn'>1</span>):</span>
-<span class="line" id="P81"><span class="ln">81</span>            <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, iend + <span class='hn'>1</span>):</span>
-<span class="line" id="P82"><span class="ln">82</span>                hcomp[i, jj] = xsum[i]</span>
-<span class="line" id="P83"><span class="ln">83</span></span>
-<span class="line" id="P84"><span class="ln">84</span>    <span class='hc'># label 110: renormalize the composition if necessary (Fortran lines</span></span>
-<span class="line" id="P85"><span class="ln">85</span>    <span class='hc'># 117–122).</span></span>
-<span class="line" id="P86"><span class="ln">86</span>    <span class='hc'># Question (see the page): Y is not recomputed after these.</span></span>
-<span class="line" id="P87"><span class="ln">87</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, m + <span class='hn'>1</span>):                            <span class='hc'># loop 140</span></span>
-<span class="line" id="P88"><span class="ln">88</span>        hcomp[<span class='hn'>1</span>, i] = <span class='hb'>max</span>(hcomp[<span class='hn'>1</span>, i], <span class='hn'>0.0</span>)</span>
-<span class="line" id="P89"><span class="ln">89</span>        hcomp[<span class='hn'>3</span>, i] = <span class='hb'>min</span>(hcomp[<span class='hn'>3</span>, i], <span class='hn'>1.0</span> - hcomp[<span class='hn'>1</span>, i])</span>
-<span class="line" id="P90"><span class="ln">90</span>        <span class='hc'># Question (see the page): the oxygen floor.</span></span>
-<span class="line" id="P91"><span class="ln">91</span>        hcomp[<span class='hn'>9</span>, i] = <span class='hb'>max</span>(hcomp[<span class='hn'>9</span>, i],</span>
-<span class="line" id="P92"><span class="ln">92</span>                          <span class='hn'>0.99e-3</span> * (hcomp[<span class='hn'>3</span>, i] - comp_mod.zenvm))</span>
-<span class="line" id="P93"><span class="ln">93</span></span>
-<span class="line" id="P94"><span class="ln">94</span>    <span class='hc'># The convective turnover time is not computed here: it comes from</span></span>
-<span class="line" id="P95"><span class="ln">95</span>    <span class='hc'># OVRTRN_MOD (G. Somers 3/17) (<a class='fl' href='#L124-L245'>Fortran lines 124–245</a>, commented out).</span></span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
+<span class="line" id="P30"><span class="ln">30</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> accel</span>
+<span class="line" id="P31"><span class="ln">31</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> comp_mod</span>
+<span class="line" id="P32"><span class="ln">32</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> nmlpar_mod</span>
+<span class="line" id="P33"><span class="ln">33</span></span>
+<span class="line" id="P34"><span class="ln">34</span><span class='hc'># <a class='fl' href='#L86-L87'>Fortran lines 86–87</a>, and MXZONE&#x27;s declared size.</span></span>
+<span class="line" id="P35"><span class="ln">35</span>NZONE_PAIRS = <span class='hn'>24</span></span>
+<span class="line" id="P36"><span class="ln">36</span>IEND_STANDARD = <span class='hn'>11</span></span>
+<span class="line" id="P37"><span class="ln">37</span>IEND_EXCOM = <span class='hn'>15</span></span>
+<span class="line" id="P38"><span class="ln">38</span></span>
+<span class="line" id="P39"><span class="ln">39</span><span class='hc'># The Fortran&#x27;s local arrays (SAVE): up to 12 zones as pairs (first, last</span></span>
+<span class="line" id="P40"><span class="ln">40</span><span class='hc'># shell) in mxzone[1..24], and the sums.</span></span>
+<span class="line" id="P41"><span class="ln">41</span>mxzone = np.zeros(NZONE_PAIRS + <span class='hn'>1</span>, dtype=<span class='hb'>int</span>)</span>
+<span class="line" id="P42"><span class="ln">42</span>xsum = np.zeros(<span class='hn'>16</span>)</span>
+<span class="line" id="P43"><span class="ln">43</span></span>
+<span class="line" id="P44"><span class="ln">44</span></span>
+<span class="line" id="P45"><span class="ln">45</span><span class='hk'>def</span> mixcz_find_zones(lcz: np.ndarray, m: <span class='hb'>int</span>, mxzone: np.ndarray) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P46"><span class="ln">46</span>    <span class='hs'>&quot;&quot;&quot;The convection zones, as pairs (first, last shell), ended by a 0 unless 12 were found (loop 11, Fortran</span></span>
+<span class="line" id="P47"><span class="ln">47</span><span class='hs'>    lines 62–85).</span></span>
+<span class="line" id="P48"><span class="ln">48</span></span>
+<span class="line" id="P49"><span class="ln">49</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P50"><span class="ln">50</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P51"><span class="ln">51</span><span class='hs'>    lcz : np.ndarray, shape: `(JSON + 2,)`, dtype: ``bool``</span></span>
+<span class="line" id="P52"><span class="ln">52</span><span class='hs'>        The convective flags of shells 1..m; lcz[m + 1] is set False (the sentinel, written past the model).</span></span>
+<span class="line" id="P53"><span class="ln">53</span><span class='hs'>    m : int</span></span>
+<span class="line" id="P54"><span class="ln">54</span><span class='hs'>        The number of shells.</span></span>
+<span class="line" id="P55"><span class="ln">55</span><span class='hs'>    mxzone : np.ndarray, shape: `(25,)`, dtype: ``int``</span></span>
+<span class="line" id="P56"><span class="ln">56</span><span class='hs'>        The zones, set in place: mxzone[j], mxzone[j + 1] for j = 1, 3, ...</span></span>
+<span class="line" id="P57"><span class="ln">57</span></span>
+<span class="line" id="P58"><span class="ln">58</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P59"><span class="ln">59</span>    j = <span class='hn'>1</span></span>
+<span class="line" id="P60"><span class="ln">60</span>    lcc = <span class='hk'>False</span></span>
+<span class="line" id="P61"><span class="ln">61</span>    mp1 = m + <span class='hn'>1</span></span>
+<span class="line" id="P62"><span class="ln">62</span>    <span class='hc'># Suspected bug (see the page): the sentinel is written past the model.</span></span>
+<span class="line" id="P63"><span class="ln">63</span>    lcz[mp1] = <span class='hk'>False</span></span>
+<span class="line" id="P64"><span class="ln">64</span>    i1 = <span class='hn'>0</span></span>
+<span class="line" id="P65"><span class="ln">65</span>    full = <span class='hk'>False</span></span>
+<span class="line" id="P66"><span class="ln">66</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, mp1 + <span class='hn'>1</span>):                          <span class='hc'># loop 11</span></span>
+<span class="line" id="P67"><span class="ln">67</span>        <span class='hk'>if</span> lcz[i]:</span>
+<span class="line" id="P68"><span class="ln">68</span>            <span class='hk'>if</span> <span class='hk'>not</span> lcc:</span>
+<span class="line" id="P69"><span class="ln">69</span>                <span class='hc'># Start of a convection zone.</span></span>
+<span class="line" id="P70"><span class="ln">70</span>                lcc = <span class='hk'>True</span></span>
+<span class="line" id="P71"><span class="ln">71</span>                i1 = i</span>
+<span class="line" id="P72"><span class="ln">72</span>        <span class='hk'>elif</span> lcc:</span>
+<span class="line" id="P73"><span class="ln">73</span>            <span class='hc'># End of a convection zone (label 10).</span></span>
+<span class="line" id="P74"><span class="ln">74</span>            lcc = <span class='hk'>False</span></span>
+<span class="line" id="P75"><span class="ln">75</span>            mxzone[j] = i1</span>
+<span class="line" id="P76"><span class="ln">76</span>            mxzone[j + <span class='hn'>1</span>] = i - <span class='hn'>1</span></span>
+<span class="line" id="P77"><span class="ln">77</span>            j = j + <span class='hn'>2</span></span>
+<span class="line" id="P78"><span class="ln">78</span>            <span class='hc'># More than 12 zones are ignored, without a message.</span></span>
+<span class="line" id="P79"><span class="ln">79</span>            <span class='hk'>if</span> j &gt;= NZONE_PAIRS:</span>
+<span class="line" id="P80"><span class="ln">80</span>                full = <span class='hk'>True</span></span>
+<span class="line" id="P81"><span class="ln">81</span>                <span class='hk'>break</span>                                    <span class='hc'># GOTO 12</span></span>
+<span class="line" id="P82"><span class="ln">82</span>    <span class='hk'>if</span> <span class='hk'>not</span> full:</span>
+<span class="line" id="P83"><span class="ln">83</span>        mxzone[j] = <span class='hn'>0</span></span>
+<span class="line" id="P84"><span class="ln">84</span></span>
+<span class="line" id="P85"><span class="ln">85</span></span>
+<span class="line" id="P86"><span class="ln">86</span><span class='hk'>def</span> mixcz_zones_mean(hcomp: np.ndarray, hs2: np.ndarray, mxzone: np.ndarray, m: <span class='hb'>int</span>, iend: <span class='hb'>int</span>,</span>
+<span class="line" id="P87"><span class="ln">87</span>                     xsum: np.ndarray) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P88"><span class="ln">88</span>    <span class='hs'>&quot;&quot;&quot;Mix each convection zone to its mass-weighted mean, species 1..iend (loop 100, Fortran lines 88–116).</span></span>
+<span class="line" id="P89"><span class="ln">89</span></span>
+<span class="line" id="P90"><span class="ln">90</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P91"><span class="ln">91</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P92"><span class="ln">92</span><span class='hs'>    hcomp : np.ndarray, shape: `(16, JSON + 1)`, dtype: ``float64``</span></span>
+<span class="line" id="P93"><span class="ln">93</span><span class='hs'>        The abundances, set in place over each zone.</span></span>
+<span class="line" id="P94"><span class="ln">94</span><span class='hs'>    hs2 : np.ndarray, shape: `(JSON + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P95"><span class="ln">95</span><span class='hs'>        The shell masses.</span></span>
+<span class="line" id="P96"><span class="ln">96</span><span class='hs'>    mxzone : np.ndarray, shape: `(25,)`, dtype: ``int``</span></span>
+<span class="line" id="P97"><span class="ln">97</span><span class='hs'>        The zones (from mixcz_find_zones).</span></span>
+<span class="line" id="P98"><span class="ln">98</span><span class='hs'>    m, iend : int</span></span>
+<span class="line" id="P99"><span class="ln">99</span><span class='hs'>        The numbers of shells and of species mixed.</span></span>
+<span class="line" id="P100"><span class="ln">100</span><span class='hs'>    xsum : np.ndarray, shape: `(16,)`, dtype: ``float64``</span></span>
+<span class="line" id="P101"><span class="ln">101</span><span class='hs'>        Work array (the SAVE&#x27;d XSUM), set in place.</span></span>
+<span class="line" id="P102"><span class="ln">102</span></span>
+<span class="line" id="P103"><span class="ln">103</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P104"><span class="ln">104</span>    <span class='hk'>for</span> j <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, NZONE_PAIRS + <span class='hn'>1</span>, <span class='hn'>2</span>):               <span class='hc'># loop 100</span></span>
+<span class="line" id="P105"><span class="ln">105</span>        <span class='hk'>if</span> mxzone[j] &lt;= <span class='hn'>0</span>:</span>
+<span class="line" id="P106"><span class="ln">106</span>            <span class='hk'>break</span>                                        <span class='hc'># GOTO 110</span></span>
+<span class="line" id="P107"><span class="ln">107</span>        i1 = mxzone[j]</span>
+<span class="line" id="P108"><span class="ln">108</span>        i2 = <span class='hb'>min</span>(m, mxzone[j + <span class='hn'>1</span>])</span>
+<span class="line" id="P109"><span class="ln">109</span>        <span class='hc'># One shell is enough only at the centre.</span></span>
+<span class="line" id="P110"><span class="ln">110</span>        <span class='hk'>if</span> i1 != <span class='hn'>1</span> <span class='hk'>and</span> i1 &gt;= i2:</span>
+<span class="line" id="P111"><span class="ln">111</span>            <span class='hk'>continue</span></span>
+<span class="line" id="P112"><span class="ln">112</span>        wtsum = <span class='hn'>0.0</span></span>
+<span class="line" id="P113"><span class="ln">113</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, iend + <span class='hn'>1</span>):</span>
+<span class="line" id="P114"><span class="ln">114</span>            xsum[i] = <span class='hn'>0.0</span></span>
+<span class="line" id="P115"><span class="ln">115</span>        <span class='hk'>for</span> jj <span class='hk'>in</span> <span class='hb'>range</span>(i1, i2 + <span class='hn'>1</span>):</span>
+<span class="line" id="P116"><span class="ln">116</span>            wtsum = wtsum + hs2[jj]</span>
+<span class="line" id="P117"><span class="ln">117</span>            <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, iend + <span class='hn'>1</span>):</span>
+<span class="line" id="P118"><span class="ln">118</span>                xsum[i] = xsum[i] + hcomp[i, jj] * hs2[jj]</span>
+<span class="line" id="P119"><span class="ln">119</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, iend + <span class='hn'>1</span>):</span>
+<span class="line" id="P120"><span class="ln">120</span>            xsum[i] = xsum[i] / wtsum</span>
+<span class="line" id="P121"><span class="ln">121</span>        <span class='hk'>for</span> jj <span class='hk'>in</span> <span class='hb'>range</span>(i1, i2 + <span class='hn'>1</span>):</span>
+<span class="line" id="P122"><span class="ln">122</span>            <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, iend + <span class='hn'>1</span>):</span>
+<span class="line" id="P123"><span class="ln">123</span>                hcomp[i, jj] = xsum[i]</span>
+<span class="line" id="P124"><span class="ln">124</span></span>
+<span class="line" id="P125"><span class="ln">125</span></span>
+<span class="line" id="P126"><span class="ln">126</span><span class='hk'>def</span> mixcz_clean(hcomp: np.ndarray, m: <span class='hb'>int</span>, zenvm: <span class='hb'>float</span>) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P127"><span class="ln">127</span>    <span class='hs'>&quot;&quot;&quot;At every shell, floor X at 0, cap Z at 1 - X, and floor O16 (row 9) at 0.99e-3 (Z - ZENVM) (loop 140,</span></span>
+<span class="line" id="P128"><span class="ln">128</span><span class='hs'>    Fortran lines 117–122).</span></span>
+<span class="line" id="P129"><span class="ln">129</span></span>
+<span class="line" id="P130"><span class="ln">130</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P131"><span class="ln">131</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P132"><span class="ln">132</span><span class='hs'>    hcomp : np.ndarray, shape: `(16, JSON + 1)`, dtype: ``float64``</span></span>
+<span class="line" id="P133"><span class="ln">133</span><span class='hs'>        The abundances, set in place for shells 1..m.</span></span>
+<span class="line" id="P134"><span class="ln">134</span><span class='hs'>    m : int</span></span>
+<span class="line" id="P135"><span class="ln">135</span><span class='hs'>        The number of shells.</span></span>
+<span class="line" id="P136"><span class="ln">136</span><span class='hs'>    zenvm : float</span></span>
+<span class="line" id="P137"><span class="ln">137</span><span class='hs'>        COMP_MOD&#x27;s ZENVM.</span></span>
+<span class="line" id="P138"><span class="ln">138</span></span>
+<span class="line" id="P139"><span class="ln">139</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P140"><span class="ln">140</span>    <span class='hc'># Question (see the page): Y is not recomputed after these.</span></span>
+<span class="line" id="P141"><span class="ln">141</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, m + <span class='hn'>1</span>):                            <span class='hc'># loop 140</span></span>
+<span class="line" id="P142"><span class="ln">142</span>        hcomp[<span class='hn'>1</span>, i] = <span class='hb'>max</span>(hcomp[<span class='hn'>1</span>, i], <span class='hn'>0.0</span>)</span>
+<span class="line" id="P143"><span class="ln">143</span>        hcomp[<span class='hn'>3</span>, i] = <span class='hb'>min</span>(hcomp[<span class='hn'>3</span>, i], <span class='hn'>1.0</span> - hcomp[<span class='hn'>1</span>, i])</span>
+<span class="line" id="P144"><span class="ln">144</span>        <span class='hc'># Question (see the page): the oxygen floor.</span></span>
+<span class="line" id="P145"><span class="ln">145</span>        hcomp[<span class='hn'>9</span>, i] = <span class='hb'>max</span>(hcomp[<span class='hn'>9</span>, i], <span class='hn'>0.99e-3</span> * (hcomp[<span class='hn'>3</span>, i] - zenvm))</span>
+<span class="line" id="P146"><span class="ln">146</span></span>
+<span class="line" id="P147"><span class="ln">147</span></span>
+<span class="line" id="P148"><span class="ln">148</span>_mixcz_find_zones_nb = accel.njit(mixcz_find_zones)</span>
+<span class="line" id="P149"><span class="ln">149</span>_mixcz_zones_mean_nb = accel.njit(mixcz_zones_mean)</span>
+<span class="line" id="P150"><span class="ln">150</span>_mixcz_clean_nb = accel.njit(mixcz_clean)</span>
+<span class="line" id="P151"><span class="ln">151</span></span>
+<span class="line" id="P152"><span class="ln">152</span></span>
+<span class="line" id="P153"><span class="ln">153</span><span class='hk'>def</span> mixcz(hcomp: np.ndarray, hs2: np.ndarray, lcz: np.ndarray, m: <span class='hb'>int</span>) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P154"><span class="ln">154</span>    <span class='hs'>&quot;&quot;&quot;Mix each convection zone to its mass-weighted mean composition</span></span>
+<span class="line" id="P155"><span class="ln">155</span><span class='hs'>    (species 1..11, or 1..15 with LEXCOM), then at every shell floor X at</span></span>
+<span class="line" id="P156"><span class="ln">156</span><span class='hs'>    zero, cap Z at 1 - X and floor O16 (row 9) at 0.99e-3 (Z - ZENVM).</span></span>
+<span class="line" id="P157"><span class="ln">157</span></span>
+<span class="line" id="P158"><span class="ln">158</span><span class='hs'>    Translates: mixcz.f#MIXCZ (7be4133)</span></span>
+<span class="line" id="P159"><span class="ln">159</span></span>
+<span class="line" id="P160"><span class="ln">160</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P161"><span class="ln">161</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P162"><span class="ln">162</span><span class='hs'>    hcomp : np.ndarray, shape: `(16, JSON + 1)`, dtype: ``float64``</span></span>
+<span class="line" id="P163"><span class="ln">163</span><span class='hs'>        The model&#x27;s abundances, set in place.</span></span>
+<span class="line" id="P164"><span class="ln">164</span><span class='hs'>    hs2 : np.ndarray, shape: `(JSON + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P165"><span class="ln">165</span><span class='hs'>        The shell masses.</span></span>
+<span class="line" id="P166"><span class="ln">166</span><span class='hs'>    lcz : np.ndarray, shape: `(JSON + 2,)`, dtype: ``bool``</span></span>
+<span class="line" id="P167"><span class="ln">167</span><span class='hs'>        The convective flags; lcz[m + 1] is set False (the sentinel).</span></span>
+<span class="line" id="P168"><span class="ln">168</span><span class='hs'>    m : int</span></span>
+<span class="line" id="P169"><span class="ln">169</span><span class='hs'>        The number of shells.</span></span>
+<span class="line" id="P170"><span class="ln">170</span></span>
+<span class="line" id="P171"><span class="ln">171</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P172"><span class="ln">172</span>    numba = accel.USE_NUMBA</span>
+<span class="line" id="P173"><span class="ln">173</span></span>
+<span class="line" id="P174"><span class="ln">174</span>    <span class='hc'># The standard convection zones (<a class='fl' href='#L62-L85'>Fortran lines 62–85</a>).</span></span>
+<span class="line" id="P175"><span class="ln">175</span>    (_mixcz_find_zones_nb <span class='hk'>if</span> numba <span class='hk'>else</span> mixcz_find_zones)(lcz, m, mxzone)</span>
+<span class="line" id="P176"><span class="ln">176</span></span>
+<span class="line" id="P177"><span class="ln">177</span>    <span class='hc'># label 12. The species mixed (<a class='fl' href='#L86-L87'>Fortran lines 86–87</a>).</span></span>
+<span class="line" id="P178"><span class="ln">178</span>    iend = IEND_STANDARD</span>
+<span class="line" id="P179"><span class="ln">179</span>    <span class='hk'>if</span> nmlpar_mod.lexcom:</span>
+<span class="line" id="P180"><span class="ln">180</span>        iend = IEND_EXCOM</span>
+<span class="line" id="P181"><span class="ln">181</span></span>
+<span class="line" id="P182"><span class="ln">182</span>    <span class='hc'># Mix all convective zones (<a class='fl' href='#L88-L116'>Fortran lines 88–116</a>).</span></span>
+<span class="line" id="P183"><span class="ln">183</span>    (_mixcz_zones_mean_nb <span class='hk'>if</span> numba <span class='hk'>else</span> mixcz_zones_mean)(hcomp, hs2, mxzone, m, iend, xsum)</span>
+<span class="line" id="P184"><span class="ln">184</span></span>
+<span class="line" id="P185"><span class="ln">185</span>    <span class='hc'># label 110: renormalize the composition if necessary (<a class='fl' href='#L117-L122'>Fortran lines 117–122</a>).</span></span>
+<span class="line" id="P186"><span class="ln">186</span>    (_mixcz_clean_nb <span class='hk'>if</span> numba <span class='hk'>else</span> mixcz_clean)(hcomp, m, comp_mod.zenvm)</span>
+<span class="line" id="P187"><span class="ln">187</span></span>
+<span class="line" id="P188"><span class="ln">188</span>    <span class='hc'># The convective turnover time is not computed here: it comes from</span></span>
+<span class="line" id="P189"><span class="ln">189</span>    <span class='hc'># OVRTRN_MOD (G. Somers 3/17) (<a class='fl' href='#L124-L245'>Fortran lines 124–245</a>, commented out).</span></span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
 function st(){try{return localStorage.getItem('pm-toc')}catch(e){return null}}function sv(v){try{localStorage.setItem('pm-toc',v)}catch(e){}}
 var b=nav.querySelector('.toc-toggle');function set(h){page.classList.toggle('toc-hidden',h);b.textContent=h?'show':'hide';}
 set(st()==='hidden');b.addEventListener('click',function(){var h=!page.classList.contains('toc-hidden');set(h);sv(h?'hidden':'shown');});

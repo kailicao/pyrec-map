@@ -4,7 +4,7 @@
 
 **How it fits.**
 - **Inputs:** the end points $`(p_1,p_2)`$, $`(q_1,q_2)`$, the end slopes $`m_1`$, $`m_2`$, and a tolerance `EPS`.
-- **Who calls it:** [MEVAL](meval.f.md#meval) (itself called by [OSPLIN](osplin.f.md#osplin)), which then calls [CASES](cases.f.md#cases) with the result.
+- **Who calls it:** [MEVAL](meval.f.md#meval) (itself called by [OSPLIN](https://github.com/yreclab/yrec/blob/7be4133/src/osplin.f#L12-L50)), which then calls [CASES](cases.f.md#cases) with the result.
 - **Output:** `NCASE`, 1 to 4.
 
 **The method.** With the chord's slope $`s = (q_2 - p_2)/(q_1 - p_1)`$ ([line 52](https://github.com/yreclab/yrec/blob/7be4133/src/choose.f#L52)):

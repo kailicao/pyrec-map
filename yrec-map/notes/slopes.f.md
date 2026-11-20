@@ -2,7 +2,7 @@
 
 **Purpose.** Computes the derivative at each node for the shape-preserving quadratic splines of McAllister and Roulier (coded by S. L. Dodd and M. Roulier, N.C. State University). Its comment: "the slopes provided will insure that an osculatory quadratic spline will have one additional knot between two adjacent points of interpolation. Convexity and monotonicity are preserved wherever these conditions are compatible with the data."
 
-**How it fits.** Called by [`OSPLIN`](osplin.f.md#osplin) before [`MEVAL`](meval.f.md#meval) evaluates the spline (with [`SEARCH`](search.f.md#search)). It contains a second routine, [`SAFEDIVIDE`](#safedivide), added by KC. No COMMON blocks.
+**How it fits.** Called by [`OSPLIN`](https://github.com/yreclab/yrec/blob/7be4133/src/osplin.f#L12-L50) before [`MEVAL`](meval.f.md#meval) evaluates the spline (with [`SEARCH`](https://github.com/yreclab/yrec/blob/7be4133/src/search.f#L4-L92)). It contains a second routine, [`SAFEDIVIDE`](#safedivide), added by KC. No COMMON blocks.
 
 **The method.** At each interior node $`i`$, with the slopes $`m_1`$, $`m_2`$ of the chords to its two neighbors:
 - if $`m_1 m_2 \le 0`$ (a local extremum or a flat chord), the derivative is 0;

@@ -2,7 +2,7 @@
 <header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ quadeos06.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-QUADEOS06'>QUADEOS06</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>quadeos06.f</h1>
 <p class='muted'>42 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/quadeos06.f'>on GitHub (7be4133)</a></p>
-<p><strong>Python version</strong>: <code>quadeos06.py</code>, 39 lines, on the right (switch to Python above the code).</p>
+<p><strong>Python version</strong>: <code>quadeos06.py</code>, 110 lines, on the right (switch to Python above the code).</p>
 <h2 id='purpose'>Purpose</h2>
 <div class='notes'><p>Quadratic interpolation through three points for the 2006 OPAL equation of state; a copy of <code>QUAD</code> and <code>QUADEOS01</code> (both removed since <code>rp_1</code>) under its own name, with its own cache.</p></div>
 <h2 id='how-it-fits'>How it fits</h2>
@@ -61,45 +61,116 @@
 <span class="line" id="L39"><span class="ln">39</span><span class='lt'>      </span><span class='lr'>      </span>c1=yy(<span class='hn'>1</span>)-xx(<span class='hn'>1</span>)*c2-xx1sq(i)*c3</span>
 <span class="line" id="L40"><span class="ln">40</span><span class='lt'>      </span><span class='lr'>      </span>quadeos06=c1+x*(c2+x*c3)</span>
 <span class="line" id="L41"><span class="ln">41</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>return</span></span>
-<span class="line" id="L42"><span class="ln">42</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>end</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of quadeos06.f (YREC 7be4133): quadratic interpolation</span></span>
-<span class="line" id="P2"><span class="ln">2</span><span class='hs'>through three points, for the 2006 OPAL equation of state.&quot;&quot;&quot;</span></span>
+<span class="line" id="L42"><span class="ln">42</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>end</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of quadeos06.f (YREC 7be4133): quadratic interpolation through three points, for the 2006 OPAL</span></span>
+<span class="line" id="P2"><span class="ln">2</span><span class='hs'>equation of state.</span></span>
 <span class="line" id="P3"><span class="ln">3</span></span>
-<span class="line" id="P4"><span class="ln">4</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
-<span class="line" id="P5"><span class="ln">5</span></span>
-<span class="line" id="P6"><span class="ln">6</span><span class='hc'># The cache of abscissa factors, slots 1..30 (SAVE).</span></span>
-<span class="line" id="P7"><span class="ln">7</span>xx12 = np.zeros(<span class='hn'>31</span>)</span>
-<span class="line" id="P8"><span class="ln">8</span>xx13 = np.zeros(<span class='hn'>31</span>)</span>
-<span class="line" id="P9"><span class="ln">9</span>xx23 = np.zeros(<span class='hn'>31</span>)</span>
-<span class="line" id="P10"><span class="ln">10</span>xx1sq = np.zeros(<span class='hn'>31</span>)</span>
-<span class="line" id="P11"><span class="ln">11</span>xx1pxx2 = np.zeros(<span class='hn'>31</span>)</span>
-<span class="line" id="P12"><span class="ln">12</span></span>
+<span class="line" id="P4"><span class="ln">4</span><span class='hs'>Functions</span></span>
+<span class="line" id="P5"><span class="ln">5</span><span class='hs'>---------</span></span>
+<span class="line" id="P6"><span class="ln">6</span><span class='hs'>quadeos06 : The value at x of the quadratic through three points, with the abscissa factors cached by slot.</span></span>
+<span class="line" id="P7"><span class="ln">7</span></span>
+<span class="line" id="P8"><span class="ln">8</span><span class='hs'>The routine&#x27;s kernel is `_quadeos06_nb`, which the other EOS kernels (esac06, t6rinteos06) call directly.</span></span>
+<span class="line" id="P9"><span class="ln">9</span></span>
+<span class="line" id="P10"><span class="ln">10</span><span class='hs'>The kernel is compiled without Numba&#x27;s reference counting (`_nrt=False`): It allocates nothing, and the</span></span>
+<span class="line" id="P11"><span class="ln">11</span><span class='hs'>count&#x27;s atomic increment and decrement of each array passed at each call was most of the OPAL kernels&#x27; gap to</span></span>
+<span class="line" id="P12"><span class="ln">12</span><span class='hs'>gfortran&#x27;s code (measured Nov 15, 2026).</span></span>
 <span class="line" id="P13"><span class="ln">13</span></span>
-<span class="line" id="P14"><span class="ln">14</span><span class='hk'>def</span> quadeos06(ic: <span class='hb'>int</span>, i: <span class='hb'>int</span>, x: <span class='hb'>float</span>, y1: <span class='hb'>float</span>, y2: <span class='hb'>float</span>, y3: <span class='hb'>float</span>, x1: <span class='hb'>float</span>, x2: <span class='hb'>float</span>, x3: <span class='hb'>float</span>) -&gt; <span class='hb'>float</span>:</span>
-<span class="line" id="P15"><span class="ln">15</span>    <span class='hs'>&quot;&quot;&quot;The value at x of the quadratic through (x1, y1), (x2, y2),</span></span>
-<span class="line" id="P16"><span class="ln">16</span><span class='hs'>    (x3, y3). With ic = 0 the abscissa factors are computed and cached in</span></span>
-<span class="line" id="P17"><span class="ln">17</span><span class='hs'>    slot i; otherwise slot i is reused.</span></span>
-<span class="line" id="P18"><span class="ln">18</span></span>
-<span class="line" id="P19"><span class="ln">19</span><span class='hs'>    Translates: quadeos06.f#QUADEOS06 (7be4133)</span></span>
-<span class="line" id="P20"><span class="ln">20</span></span>
-<span class="line" id="P21"><span class="ln">21</span><span class='hs'>    Returns the interpolated value.</span></span>
-<span class="line" id="P22"><span class="ln">22</span></span>
-<span class="line" id="P23"><span class="ln">23</span><span class='hs'>    &quot;&quot;&quot;</span></span>
-<span class="line" id="P24"><span class="ln">24</span></span>
-<span class="line" id="P25"><span class="ln">25</span>    <span class='hc'># The abscissa factors, computed or reused (<a class='fl' href='#L22-L34'>Fortran lines 22–34</a>).</span></span>
-<span class="line" id="P26"><span class="ln">26</span>    <span class='hk'>if</span> ic == <span class='hn'>0</span>:</span>
-<span class="line" id="P27"><span class="ln">27</span>        xx12[i] = <span class='hn'>1.0</span> / (x1 - x2)</span>
-<span class="line" id="P28"><span class="ln">28</span>        xx13[i] = <span class='hn'>1.0</span> / (x1 - x3)</span>
-<span class="line" id="P29"><span class="ln">29</span>        xx23[i] = <span class='hn'>1.0</span> / (x2 - x3)</span>
-<span class="line" id="P30"><span class="ln">30</span>        xx1sq[i] = x1 * x1</span>
-<span class="line" id="P31"><span class="ln">31</span>        xx1pxx2[i] = x1 + x2</span>
+<span class="line" id="P14"><span class="ln">14</span><span class='hs'>Module variables</span></span>
+<span class="line" id="P15"><span class="ln">15</span><span class='hs'>----------------</span></span>
+<span class="line" id="P16"><span class="ln">16</span><span class='hs'>xx12, xx13, xx23, xx1sq, xx1pxx2 : The cache of abscissa factors, slots 1..NSLOT (SAVE&#x27;d locals).</span></span>
+<span class="line" id="P17"><span class="ln">17</span></span>
+<span class="line" id="P18"><span class="ln">18</span><span class='hs'>&quot;&quot;&quot;</span></span>
+<span class="line" id="P19"><span class="ln">19</span></span>
+<span class="line" id="P20"><span class="ln">20</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
+<span class="line" id="P21"><span class="ln">21</span></span>
+<span class="line" id="P22"><span class="ln">22</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> accel</span>
+<span class="line" id="P23"><span class="ln">23</span></span>
+<span class="line" id="P24"><span class="ln">24</span>NSLOT = <span class='hn'>30</span>  <span class='hc'># The Fortran&#x27;s cache dimension (slots 1..30; index 0 unused).</span></span>
+<span class="line" id="P25"><span class="ln">25</span></span>
+<span class="line" id="P26"><span class="ln">26</span><span class='hc'># The cache of abscissa factors (SAVE) (<a class='fl' href='#L18-L21'>Fortran lines 18–21</a>).</span></span>
+<span class="line" id="P27"><span class="ln">27</span>xx12 = np.zeros(NSLOT + <span class='hn'>1</span>)</span>
+<span class="line" id="P28"><span class="ln">28</span>xx13 = np.zeros(NSLOT + <span class='hn'>1</span>)</span>
+<span class="line" id="P29"><span class="ln">29</span>xx23 = np.zeros(NSLOT + <span class='hn'>1</span>)</span>
+<span class="line" id="P30"><span class="ln">30</span>xx1sq = np.zeros(NSLOT + <span class='hn'>1</span>)</span>
+<span class="line" id="P31"><span class="ln">31</span>xx1pxx2 = np.zeros(NSLOT + <span class='hn'>1</span>)</span>
 <span class="line" id="P32"><span class="ln">32</span></span>
-<span class="line" id="P33"><span class="ln">33</span>    <span class='hc'># The coefficients and the value (<a class='fl' href='#L35-L40'>Fortran lines 35–40</a>).</span></span>
-<span class="line" id="P34"><span class="ln">34</span>    c3 = (y1 - y2) * xx12[i]</span>
-<span class="line" id="P35"><span class="ln">35</span>    c3 = c3 - (y2 - y3) * xx23[i]</span>
-<span class="line" id="P36"><span class="ln">36</span>    c3 = c3 * xx13[i]</span>
-<span class="line" id="P37"><span class="ln">37</span>    c2 = (y1 - y2) * xx12[i] - xx1pxx2[i] * c3</span>
-<span class="line" id="P38"><span class="ln">38</span>    c1 = y1 - x1 * c2 - xx1sq[i] * c3</span>
-<span class="line" id="P39"><span class="ln">39</span>    <span class='hk'>return</span> c1 + x * (c2 + x * c3)</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
+<span class="line" id="P33"><span class="ln">33</span></span>
+<span class="line" id="P34"><span class="ln">34</span><span class='hk'>def</span> quadeos06(ic: <span class='hb'>int</span>, i: <span class='hb'>int</span>, x: <span class='hb'>float</span>, y1: <span class='hb'>float</span>, y2: <span class='hb'>float</span>, y3: <span class='hb'>float</span>, x1: <span class='hb'>float</span>, x2: <span class='hb'>float</span>, x3: <span class='hb'>float</span>) -&gt; <span class='hb'>float</span>:</span>
+<span class="line" id="P35"><span class="ln">35</span>    <span class='hs'>&quot;&quot;&quot;The value at x of the quadratic through (x1, y1), (x2, y2), (x3, y3).</span></span>
+<span class="line" id="P36"><span class="ln">36</span></span>
+<span class="line" id="P37"><span class="ln">37</span><span class='hs'>    With ic = 0 the abscissa factors are computed and cached in slot i; otherwise slot i is reused.</span></span>
+<span class="line" id="P38"><span class="ln">38</span></span>
+<span class="line" id="P39"><span class="ln">39</span><span class='hs'>    Translates: quadeos06.f#QUADEOS06 (7be4133)</span></span>
+<span class="line" id="P40"><span class="ln">40</span></span>
+<span class="line" id="P41"><span class="ln">41</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P42"><span class="ln">42</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P43"><span class="ln">43</span><span class='hs'>    ic : int</span></span>
+<span class="line" id="P44"><span class="ln">44</span><span class='hs'>        0 to compute and cache the abscissa factors, else to reuse slot i.</span></span>
+<span class="line" id="P45"><span class="ln">45</span><span class='hs'>    i : int</span></span>
+<span class="line" id="P46"><span class="ln">46</span><span class='hs'>        The cache slot, 1..NSLOT.</span></span>
+<span class="line" id="P47"><span class="ln">47</span><span class='hs'>    x : float</span></span>
+<span class="line" id="P48"><span class="ln">48</span><span class='hs'>        Where the quadratic is evaluated.</span></span>
+<span class="line" id="P49"><span class="ln">49</span><span class='hs'>    y1, y2, y3 : float</span></span>
+<span class="line" id="P50"><span class="ln">50</span><span class='hs'>        The ordinates.</span></span>
+<span class="line" id="P51"><span class="ln">51</span><span class='hs'>    x1, x2, x3 : float</span></span>
+<span class="line" id="P52"><span class="ln">52</span><span class='hs'>        The abscissas (read only when ic = 0).</span></span>
+<span class="line" id="P53"><span class="ln">53</span></span>
+<span class="line" id="P54"><span class="ln">54</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P55"><span class="ln">55</span><span class='hs'>    -------</span></span>
+<span class="line" id="P56"><span class="ln">56</span><span class='hs'>    float</span></span>
+<span class="line" id="P57"><span class="ln">57</span><span class='hs'>        The interpolated value.</span></span>
+<span class="line" id="P58"><span class="ln">58</span></span>
+<span class="line" id="P59"><span class="ln">59</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P60"><span class="ln">60</span>    <span class='hc'># The abscissa factors, computed or reused (<a class='fl' href='#L22-L34'>Fortran lines 22–34</a>).</span></span>
+<span class="line" id="P61"><span class="ln">61</span>    <span class='hk'>if</span> ic == <span class='hn'>0</span>:</span>
+<span class="line" id="P62"><span class="ln">62</span>        xx12[i] = <span class='hn'>1.0</span> / (x1 - x2)</span>
+<span class="line" id="P63"><span class="ln">63</span>        xx13[i] = <span class='hn'>1.0</span> / (x1 - x3)</span>
+<span class="line" id="P64"><span class="ln">64</span>        xx23[i] = <span class='hn'>1.0</span> / (x2 - x3)</span>
+<span class="line" id="P65"><span class="ln">65</span>        xx1sq[i] = x1 * x1</span>
+<span class="line" id="P66"><span class="ln">66</span>        xx1pxx2[i] = x1 + x2</span>
+<span class="line" id="P67"><span class="ln">67</span></span>
+<span class="line" id="P68"><span class="ln">68</span>    <span class='hc'># The coefficients and the value (<a class='fl' href='#L35-L40'>Fortran lines 35–40</a>).</span></span>
+<span class="line" id="P69"><span class="ln">69</span>    c3 = (y1 - y2) * xx12[i]</span>
+<span class="line" id="P70"><span class="ln">70</span>    c3 = c3 - (y2 - y3) * xx23[i]</span>
+<span class="line" id="P71"><span class="ln">71</span>    c3 = c3 * xx13[i]</span>
+<span class="line" id="P72"><span class="ln">72</span>    c2 = (y1 - y2) * xx12[i] - xx1pxx2[i] * c3</span>
+<span class="line" id="P73"><span class="ln">73</span>    c1 = y1 - x1 * c2 - xx1sq[i] * c3</span>
+<span class="line" id="P74"><span class="ln">74</span>    <span class='hk'>return</span> c1 + x * (c2 + x * c3)</span>
+<span class="line" id="P75"><span class="ln">75</span></span>
+<span class="line" id="P76"><span class="ln">76</span></span>
+<span class="line" id="P77"><span class="ln">77</span>@accel.njit(_nrt=<span class='hk'>False</span>, inline=<span class='hs'>&#x27;</span><span class='hs'>always</span><span class='hs'>&#x27;</span>)</span>
+<span class="line" id="P78"><span class="ln">78</span><span class='hk'>def</span> _quadeos06_nb(ic: <span class='hb'>int</span>, i: <span class='hb'>int</span>, x: <span class='hb'>float</span>, y1: <span class='hb'>float</span>, y2: <span class='hb'>float</span>, y3: <span class='hb'>float</span>, x1: <span class='hb'>float</span>, x2: <span class='hb'>float</span>, x3: <span class='hb'>float</span>,</span>
+<span class="line" id="P79"><span class="ln">79</span>                  xx12: np.ndarray, xx13: np.ndarray, xx23: np.ndarray, xx1sq: np.ndarray,</span>
+<span class="line" id="P80"><span class="ln">80</span>                  xx1pxx2: np.ndarray) -&gt; <span class='hb'>float</span>:</span>
+<span class="line" id="P81"><span class="ln">81</span>    <span class='hs'>&quot;&quot;&quot;The Numba kernel of quadeos06, called by the other EOS kernels: the same operations, with the cache passed in.</span></span>
+<span class="line" id="P82"><span class="ln">82</span></span>
+<span class="line" id="P83"><span class="ln">83</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P84"><span class="ln">84</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P85"><span class="ln">85</span><span class='hs'>    ic, i, x, y1, y2, y3, x1, x2, x3 : int or float</span></span>
+<span class="line" id="P86"><span class="ln">86</span><span class='hs'>        As for quadeos06.</span></span>
+<span class="line" id="P87"><span class="ln">87</span><span class='hs'>    xx12, xx13, xx23, xx1sq, xx1pxx2 : np.ndarray, shape: `(NSLOT + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P88"><span class="ln">88</span><span class='hs'>        This module&#x27;s cache, changed in place when ic = 0.</span></span>
+<span class="line" id="P89"><span class="ln">89</span></span>
+<span class="line" id="P90"><span class="ln">90</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P91"><span class="ln">91</span><span class='hs'>    -------</span></span>
+<span class="line" id="P92"><span class="ln">92</span><span class='hs'>    float</span></span>
+<span class="line" id="P93"><span class="ln">93</span><span class='hs'>        The interpolated value.</span></span>
+<span class="line" id="P94"><span class="ln">94</span></span>
+<span class="line" id="P95"><span class="ln">95</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P96"><span class="ln">96</span>    <span class='hc'># The abscissa factors (<a class='fl' href='#L22-L34'>Fortran lines 22–34</a>).</span></span>
+<span class="line" id="P97"><span class="ln">97</span>    <span class='hk'>if</span> ic == <span class='hn'>0</span>:</span>
+<span class="line" id="P98"><span class="ln">98</span>        xx12[i] = <span class='hn'>1.0</span> / (x1 - x2)</span>
+<span class="line" id="P99"><span class="ln">99</span>        xx13[i] = <span class='hn'>1.0</span> / (x1 - x3)</span>
+<span class="line" id="P100"><span class="ln">100</span>        xx23[i] = <span class='hn'>1.0</span> / (x2 - x3)</span>
+<span class="line" id="P101"><span class="ln">101</span>        xx1sq[i] = x1 * x1</span>
+<span class="line" id="P102"><span class="ln">102</span>        xx1pxx2[i] = x1 + x2</span>
+<span class="line" id="P103"><span class="ln">103</span></span>
+<span class="line" id="P104"><span class="ln">104</span>    <span class='hc'># The coefficients and the value (<a class='fl' href='#L35-L40'>Fortran lines 35–40</a>).</span></span>
+<span class="line" id="P105"><span class="ln">105</span>    c3 = (y1 - y2) * xx12[i]</span>
+<span class="line" id="P106"><span class="ln">106</span>    c3 = c3 - (y2 - y3) * xx23[i]</span>
+<span class="line" id="P107"><span class="ln">107</span>    c3 = c3 * xx13[i]</span>
+<span class="line" id="P108"><span class="ln">108</span>    c2 = (y1 - y2) * xx12[i] - xx1pxx2[i] * c3</span>
+<span class="line" id="P109"><span class="ln">109</span>    c1 = y1 - x1 * c2 - xx1sq[i] * c3</span>
+<span class="line" id="P110"><span class="ln">110</span>    <span class='hk'>return</span> c1 + x * (c2 + x * c3)</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
 function st(){try{return localStorage.getItem('pm-toc')}catch(e){return null}}function sv(v){try{localStorage.setItem('pm-toc',v)}catch(e){}}
 var b=nav.querySelector('.toc-toggle');function set(h){page.classList.toggle('toc-hidden',h);b.textContent=h?'show':'hide';}
 set(st()==='hidden');b.addEventListener('click',function(){var h=!page.classList.contains('toc-hidden');set(h);sv(h?'hidden':'shown');});

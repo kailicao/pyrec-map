@@ -2,7 +2,7 @@
 
 **Purpose.** `HRA` evaluates a polynomial fit to the temperature–optical-depth relation of the Harvard Reference Atmosphere: it takes $`\tau`$ and returns $`\log_{10} T`$.
 
-**How it fits.** Called by [`ENVINT`](envint.f.md#envint), [`QATM`](qatm.f.md#qatm) and [`SETUPS`](setups.f.md#setups), where the run uses this $`T(\tau)`$ relation for the atmosphere. `SETUPS` stores `HRAS` = `HRA(2/3)` (in [`ATMOS_MOD`](atmos_mod.f.md#atmos_mod), formerly COMMON `ATMOS`), and `ENVINT` and `QATM` use $`\log T = \log T_\mathrm{eff} + \mathrm{HRA}(\tau) - \texttt{HRAS}`$, so the relation is normalised to $`T = T_\mathrm{eff}`$ at $`\tau = 2/3`$. No modules, no calls.
+**How it fits.** Called by [`ENVINT`](envint.f.md#envint), [`QATM`](https://github.com/yreclab/yrec/blob/7be4133/src/qatm.f#L6-L125) and [`SETUPS`](https://github.com/yreclab/yrec/blob/7be4133/src/setups.f#L16-L396), where the run uses this $`T(\tau)`$ relation for the atmosphere. `SETUPS` stores `HRAS` = `HRA(2/3)` (in [`ATMOS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/atmos_mod.f#L19-L26), formerly COMMON `ATMOS`), and `ENVINT` and `QATM` use $`\log T = \log T_\mathrm{eff} + \mathrm{HRA}(\tau) - \texttt{HRAS}`$, so the relation is normalised to $`T = T_\mathrm{eff}`$ at $`\tau = 2/3`$. No modules, no calls.
 
 **The method.** With $`t = \log_{10}\tau`$,
 

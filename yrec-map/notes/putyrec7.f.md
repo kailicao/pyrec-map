@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** Writes a stellar model in the older "YREC7" text format (LLP 4/16/03), which YREC can still read as a starting model. [PUTMODEL2](putmodel2.f.md#putmodel2) writes the newer "MODEL2" format.
+**Purpose.** Writes a stellar model in the older "YREC7" text format (LLP 4/16/03), which YREC can still read as a starting model. [PUTMODEL2](https://github.com/yreclab/yrec/blob/7be4133/src/putmodel2.f#L7-L131) writes the newer "MODEL2" format.
 
 **How it fits.**
 - **Inputs:** the model and its global quantities, as arguments (as for `PUTMODEL2`, without the physics labels). The comments "Last two lines are MODEL2 add-ons" ([line 31](https://github.com/yreclab/yrec/blob/7be4133/src/putyrec7.f#L31)) and "Any error messages go to LU ISHORT" ([line 51](https://github.com/yreclab/yrec/blob/7be4133/src/putyrec7.f#L51)) describe the argument list before `ISHORT` and the MODEL2 add-ons were removed from it ([lines 9–10](https://github.com/yreclab/yrec/blob/7be4133/src/putyrec7.f#L9-L10); [lines 28–29](https://github.com/yreclab/yrec/blob/7be4133/src/putyrec7.f#L28-L29)).

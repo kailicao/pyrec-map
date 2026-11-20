@@ -2,7 +2,7 @@
 <header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ condopacp.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#design'>Design</a></li><li><a href='#documentation'>From YREC&#x27;s documentation</a></li><li><a href='#bugs'>Suspected bugs, checked by running the code</a><ol><li><a href='#b1'>1. A point on the table&#x27;s last temperature or density stops the run</a></li></ol></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-CONDOPACP'>CONDOPACP</a></li><li><a href='#def-CINTERP3'>CINTERP3</a></li><li><a href='#def-HUNT'>HUNT</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>condopacp.f</h1>
 <p class='muted'>277 lines · 3 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/condopacp.f'>on GitHub (7be4133)</a></p>
-<p><strong>Python version</strong>: <code>condopacp.py</code>, 268 lines, on the right (switch to Python above the code).</p>
+<p><strong>Python version</strong>: <code>condopacp.py</code>, 508 lines, on the right (switch to Python above the code).</p>
 <details class='vars' id='terms'><summary>Variables on this page (1)</summary><p><a href='../glossary.html#var-icondopacp' data-def='unit 75, the Potekhin conductive opacities, read by &lt;a href=&quot;#def-CONDOPACP&quot;&gt;&lt;code&gt;CONDOPACP&lt;/code&gt;&lt;/a&gt;; declared &lt;code&gt;IcondOpacP&lt;/code&gt;. &lt;em&gt;Name:&lt;/em&gt; I, CONDuctive OPACities, Potekhin.'><code>icondopacp</code></a></p></details><h2 id='purpose'>Purpose</h2>
 <div class='notes'><p>This file interpolates the electron thermal conductivity in the table of A. Y. Potekhin (<code>condall.d</code>; Potekhin, Baiko, Haensel and Yakovlev <a href="https://ui.adsabs.harvard.edu/abs/1999A%26A...346..345P">1999</a>, A&amp;A 346, 345, and Potekhin <a href="https://ui.adsabs.harvard.edu/abs/1999A%26A...351..787P">1999</a>, A&amp;A 351, 787, per its header), for one ion charge $Z_\mathrm{ion}$, temperature and density. It is Potekhin's published routine (version 23.05.99), with small changes for YREC.</p></div>
 <h2 id='how-it-fits'>How it fits</h2>
@@ -354,273 +354,513 @@ and likewise $v&#x27;_1$; quadratic at the table's first and last intervals. Ret
 <span class="line" id="L275"><span class="ln">275</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>endif</span></span>
 <span class="line" id="L276"><span class="ln">276</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>go</span><span class='hk'>to</span> <span class='hn'>3</span></span>
 <span class="line" id="L277"><span class="ln">277</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>end</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of condopacp.f (YREC 7be4133): the electron thermal</span></span>
-<span class="line" id="P2"><span class="ln">2</span><span class='hs'>conductivity interpolated in A. Y. Potekhin&#x27;s table (condall.d).&quot;&quot;&quot;</span></span>
+<span class="line" id="P2"><span class="ln">2</span><span class='hs'>conductivity interpolated in A. Y. Potekhin&#x27;s table (condall.d).</span></span>
 <span class="line" id="P3"><span class="ln">3</span></span>
-<span class="line" id="P4"><span class="ln">4</span><span class='hk'>import</span> math</span>
-<span class="line" id="P5"><span class="ln">5</span></span>
-<span class="line" id="P6"><span class="ln">6</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
-<span class="line" id="P7"><span class="ln">7</span></span>
-<span class="line" id="P8"><span class="ln">8</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> iounits_mod</span>
-<span class="line" id="P9"><span class="ln">9</span></span>
-<span class="line" id="P10"><span class="ln">10</span><span class='hc'># The table&#x27;s dimensions; they must match the file.</span></span>
-<span class="line" id="P11"><span class="ln">11</span>MAXT = <span class='hn'>19</span></span>
-<span class="line" id="P12"><span class="ln">12</span>MAXR = <span class='hn'>64</span></span>
-<span class="line" id="P13"><span class="ln">13</span>MAXZ = <span class='hn'>15</span></span>
+<span class="line" id="P4"><span class="ln">4</span><span class='hs'>Functions</span></span>
+<span class="line" id="P5"><span class="ln">5</span><span class='hs'>---------</span></span>
+<span class="line" id="P6"><span class="ln">6</span><span class='hs'>condopacp : log10 K and its derivatives at (Z_ion, T, rho), reading the table at the first call (the routine).</span></span>
+<span class="line" id="P7"><span class="ln">7</span><span class='hs'>condopacp_in_rho : The cubic in log rho at one temperature and charge of the table (Fortran lines 114–148).</span></span>
+<span class="line" id="P8"><span class="ln">8</span><span class='hs'>cinterp3 : CINTERP3, the cubic (quadratic at the ends) through four points.</span></span>
+<span class="line" id="P9"><span class="ln">9</span><span class='hs'>hunt : HUNT, Numerical Recipes&#x27; bracketing search.</span></span>
+<span class="line" id="P10"><span class="ln">10</span><span class='hs'>_read_values : A list-directed READ of n numbers.</span></span>
+<span class="line" id="P11"><span class="ln">11</span><span class='hs'>_condopacp_nb, _condopacp_in_rho_nb, _cinterp3_nb, _hunt_nb : The kernels; getopac&#x27;s calls _condopacp_nb directly.</span></span>
+<span class="line" id="P12"><span class="ln">12</span></span>
+<span class="line" id="P13"><span class="ln">13</span><span class='hs'>&quot;&quot;&quot;</span></span>
 <span class="line" id="P14"><span class="ln">14</span></span>
-<span class="line" id="P15"><span class="ln">15</span><span class='hc'># Locals kept between calls (SAVE, DATA): the table, read at the first</span></span>
-<span class="line" id="P16"><span class="ln">16</span><span class='hc'># call, and the last indices found, HUNT&#x27;s first guesses at the next call.</span></span>
-<span class="line" id="P17"><span class="ln">17</span>at = np.zeros(MAXT + <span class='hn'>1</span>)</span>
-<span class="line" id="P18"><span class="ln">18</span>ar = np.zeros(MAXR + <span class='hn'>1</span>)</span>
-<span class="line" id="P19"><span class="ln">19</span>az = np.zeros(MAXZ + <span class='hn'>1</span>)</span>
-<span class="line" id="P20"><span class="ln">20</span>akap = np.zeros((MAXT + <span class='hn'>1</span>, MAXR + <span class='hn'>1</span>, MAXZ + <span class='hn'>1</span>))</span>
-<span class="line" id="P21"><span class="ln">21</span>krun = -<span class='hn'>1</span></span>
-<span class="line" id="P22"><span class="ln">22</span>iz = <span class='hn'>0</span></span>
-<span class="line" id="P23"><span class="ln">23</span>it = <span class='hn'>0</span></span>
-<span class="line" id="P24"><span class="ln">24</span>ir = <span class='hn'>0</span></span>
-<span class="line" id="P25"><span class="ln">25</span></span>
-<span class="line" id="P26"><span class="ln">26</span></span>
-<span class="line" id="P27"><span class="ln">27</span><span class='hk'>def</span> _read_values(unit, n):</span>
-<span class="line" id="P28"><span class="ln">28</span>    <span class='hs'>&quot;&quot;&quot;A list-directed READ of n numbers: records are read until n values</span></span>
-<span class="line" id="P29"><span class="ln">29</span><span class='hs'>    are found.&quot;&quot;&quot;</span></span>
-<span class="line" id="P30"><span class="ln">30</span></span>
-<span class="line" id="P31"><span class="ln">31</span>    vals = []</span>
-<span class="line" id="P32"><span class="ln">32</span>    <span class='hk'>while</span> <span class='hb'>len</span>(vals) &lt; n:</span>
-<span class="line" id="P33"><span class="ln">33</span>        rec = iounits_mod.read(unit)</span>
-<span class="line" id="P34"><span class="ln">34</span>        vals.extend(<span class='hb'>float</span>(v.replace(<span class='hs'>&#x27;</span><span class='hs'>D</span><span class='hs'>&#x27;</span>, <span class='hs'>&#x27;</span><span class='hs'>E</span><span class='hs'>&#x27;</span>).replace(<span class='hs'>&#x27;</span><span class='hs'>d</span><span class='hs'>&#x27;</span>, <span class='hs'>&#x27;</span><span class='hs'>e</span><span class='hs'>&#x27;</span>))</span>
-<span class="line" id="P35"><span class="ln">35</span>                    <span class='hk'>for</span> v <span class='hk'>in</span> rec.replace(<span class='hs'>&#x27;</span><span class='hs'>,</span><span class='hs'>&#x27;</span>, <span class='hs'>&#x27;</span> <span class='hs'>&#x27;</span>).split())</span>
-<span class="line" id="P36"><span class="ln">36</span>    <span class='hk'>return</span> vals[:n]</span>
-<span class="line" id="P37"><span class="ln">37</span></span>
-<span class="line" id="P38"><span class="ln">38</span></span>
-<span class="line" id="P39"><span class="ln">39</span><span class='hk'>def</span> condopacp(zion: <span class='hb'>float</span>, tlg: <span class='hb'>float</span>, rlg: <span class='hb'>float</span>, ck: <span class='hb'>float</span>, drk: <span class='hb'>float</span>, dtk: <span class='hb'>float</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>]:</span>
-<span class="line" id="P40"><span class="ln">40</span>    <span class='hs'>&quot;&quot;&quot;Interpolate log10 of the electron thermal conductivity, and its</span></span>
-<span class="line" id="P41"><span class="ln">41</span><span class='hs'>    derivatives in log rho and log T, in Potekhin&#x27;s table: cubic in</span></span>
-<span class="line" id="P42"><span class="ln">42</span><span class='hs'>    log rho and log T, linear in log Z_ion. Reads the table at the first</span></span>
-<span class="line" id="P43"><span class="ln">43</span><span class='hs'>    call.</span></span>
+<span class="line" id="P15"><span class="ln">15</span><span class='hk'>import</span> math</span>
+<span class="line" id="P16"><span class="ln">16</span></span>
+<span class="line" id="P17"><span class="ln">17</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
+<span class="line" id="P18"><span class="ln">18</span></span>
+<span class="line" id="P19"><span class="ln">19</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> accel</span>
+<span class="line" id="P20"><span class="ln">20</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> iounits_mod</span>
+<span class="line" id="P21"><span class="ln">21</span></span>
+<span class="line" id="P22"><span class="ln">22</span><span class='hc'># The table&#x27;s dimensions; they must match the file.</span></span>
+<span class="line" id="P23"><span class="ln">23</span>MAXT = <span class='hn'>19</span></span>
+<span class="line" id="P24"><span class="ln">24</span>MAXR = <span class='hn'>64</span></span>
+<span class="line" id="P25"><span class="ln">25</span>MAXZ = <span class='hn'>15</span></span>
+<span class="line" id="P26"><span class="ln">26</span>KRUN_READ = <span class='hn'>12345</span>  <span class='hc'># KRUN&#x27;s value once the table is read (<a class='fl' href='#L72'>Fortran lines 72</a> and 86; read by its callers too).</span></span>
+<span class="line" id="P27"><span class="ln">27</span></span>
+<span class="line" id="P28"><span class="ln">28</span><span class='hc'># Locals kept between calls (SAVE, DATA): the table, read at the first</span></span>
+<span class="line" id="P29"><span class="ln">29</span><span class='hc'># call, and the last indices found, HUNT&#x27;s first guesses at the next call.</span></span>
+<span class="line" id="P30"><span class="ln">30</span>at = np.zeros(MAXT + <span class='hn'>1</span>)</span>
+<span class="line" id="P31"><span class="ln">31</span>ar = np.zeros(MAXR + <span class='hn'>1</span>)</span>
+<span class="line" id="P32"><span class="ln">32</span>az = np.zeros(MAXZ + <span class='hn'>1</span>)</span>
+<span class="line" id="P33"><span class="ln">33</span>akap = np.zeros((MAXT + <span class='hn'>1</span>, MAXR + <span class='hn'>1</span>, MAXZ + <span class='hn'>1</span>))</span>
+<span class="line" id="P34"><span class="ln">34</span>krun = -<span class='hn'>1</span></span>
+<span class="line" id="P35"><span class="ln">35</span>iz = <span class='hn'>0</span></span>
+<span class="line" id="P36"><span class="ln">36</span>it = <span class='hn'>0</span></span>
+<span class="line" id="P37"><span class="ln">37</span>ir = <span class='hn'>0</span></span>
+<span class="line" id="P38"><span class="ln">38</span>_guess = np.zeros(<span class='hn'>3</span>, dtype=np.int64)   <span class='hc'># the kernel&#x27;s copy of the three, reused at each call</span></span>
+<span class="line" id="P39"><span class="ln">39</span></span>
+<span class="line" id="P40"><span class="ln">40</span></span>
+<span class="line" id="P41"><span class="ln">41</span><span class='hk'>def</span> _read_values(unit: <span class='hb'>int</span>, n: <span class='hb'>int</span>) -&gt; <span class='hb'>list</span>:</span>
+<span class="line" id="P42"><span class="ln">42</span>    <span class='hs'>&quot;&quot;&quot;A list-directed READ of n numbers: records are read until n values</span></span>
+<span class="line" id="P43"><span class="ln">43</span><span class='hs'>    are found.</span></span>
 <span class="line" id="P44"><span class="ln">44</span></span>
-<span class="line" id="P45"><span class="ln">45</span><span class='hs'>    Translates: condopacp.f#CONDOPACP (7be4133)</span></span>
-<span class="line" id="P46"><span class="ln">46</span></span>
-<span class="line" id="P47"><span class="ln">47</span><span class='hs'>    Arguments: zion, the ion charge; tlg, log T (K); rlg, log rho</span></span>
-<span class="line" id="P48"><span class="ln">48</span><span class='hs'>    (g/cm^3); ck, drk, dtk, passed in (with any value).</span></span>
-<span class="line" id="P49"><span class="ln">49</span></span>
-<span class="line" id="P50"><span class="ln">50</span><span class='hs'>    Returns (ck, drk, dtk): log10 K (cgs), d log K / d log rho and</span></span>
-<span class="line" id="P51"><span class="ln">51</span><span class='hs'>    d log K / d log T.</span></span>
-<span class="line" id="P52"><span class="ln">52</span></span>
-<span class="line" id="P53"><span class="ln">53</span><span class='hs'>    &quot;&quot;&quot;</span></span>
-<span class="line" id="P54"><span class="ln">54</span></span>
-<span class="line" id="P55"><span class="ln">55</span>    <span class='hk'>global</span> krun, iz, it, ir</span>
+<span class="line" id="P45"><span class="ln">45</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P46"><span class="ln">46</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P47"><span class="ln">47</span><span class='hs'>    unit : int</span></span>
+<span class="line" id="P48"><span class="ln">48</span><span class='hs'>        The Fortran unit.</span></span>
+<span class="line" id="P49"><span class="ln">49</span><span class='hs'>    n : int</span></span>
+<span class="line" id="P50"><span class="ln">50</span><span class='hs'>        The number of values.</span></span>
+<span class="line" id="P51"><span class="ln">51</span></span>
+<span class="line" id="P52"><span class="ln">52</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P53"><span class="ln">53</span><span class='hs'>    -------</span></span>
+<span class="line" id="P54"><span class="ln">54</span><span class='hs'>    list of float</span></span>
+<span class="line" id="P55"><span class="ln">55</span><span class='hs'>        The n values.</span></span>
 <span class="line" id="P56"><span class="ln">56</span></span>
-<span class="line" id="P57"><span class="ln">57</span>    <span class='hc'># Read the table at the first call; the file is opened by PARMIN (<a class='fl' href='#L72-L86'>Fortran lines 72–86</a>).</span></span>
-<span class="line" id="P58"><span class="ln">58</span>    <span class='hk'>if</span> krun != <span class='hn'>12345</span>:</span>
-<span class="line" id="P59"><span class="ln">59</span>        ip = iounits_mod.icondopacp</span>
-<span class="line" id="P60"><span class="ln">60</span>        iounits_mod.read(ip)  <span class='hc'># skip the first line</span></span>
-<span class="line" id="P61"><span class="ln">61</span>        <span class='hk'>for</span> iz <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, MAXZ + <span class='hn'>1</span>):</span>
-<span class="line" id="P62"><span class="ln">62</span>            vals = _read_values(ip, <span class='hn'>1</span> + MAXT)</span>
-<span class="line" id="P63"><span class="ln">63</span>            z = vals[<span class='hn'>0</span>]</span>
-<span class="line" id="P64"><span class="ln">64</span>            <span class='hk'>for</span> it <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, MAXT + <span class='hn'>1</span>):</span>
-<span class="line" id="P65"><span class="ln">65</span>                at[it] = vals[it]</span>
-<span class="line" id="P66"><span class="ln">66</span>            az[iz] = math.log10(z)</span>
-<span class="line" id="P67"><span class="ln">67</span>            <span class='hk'>for</span> ir <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, MAXR + <span class='hn'>1</span>):</span>
-<span class="line" id="P68"><span class="ln">68</span>                vals = _read_values(ip, <span class='hn'>1</span> + MAXT)</span>
-<span class="line" id="P69"><span class="ln">69</span>                ar[ir] = vals[<span class='hn'>0</span>]</span>
-<span class="line" id="P70"><span class="ln">70</span>                <span class='hk'>for</span> it <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, MAXT + <span class='hn'>1</span>):</span>
-<span class="line" id="P71"><span class="ln">71</span>                    akap[it, ir, iz] = vals[it]</span>
-<span class="line" id="P72"><span class="ln">72</span>        iounits_mod.close(ip)</span>
-<span class="line" id="P73"><span class="ln">73</span>        krun = <span class='hn'>12345</span></span>
+<span class="line" id="P57"><span class="ln">57</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P58"><span class="ln">58</span></span>
+<span class="line" id="P59"><span class="ln">59</span>    vals = []</span>
+<span class="line" id="P60"><span class="ln">60</span>    <span class='hk'>while</span> <span class='hb'>len</span>(vals) &lt; n:</span>
+<span class="line" id="P61"><span class="ln">61</span>        rec = iounits_mod.read(unit)</span>
+<span class="line" id="P62"><span class="ln">62</span>        vals.extend(<span class='hb'>float</span>(v.replace(<span class='hs'>&#x27;</span><span class='hs'>D</span><span class='hs'>&#x27;</span>, <span class='hs'>&#x27;</span><span class='hs'>E</span><span class='hs'>&#x27;</span>).replace(<span class='hs'>&#x27;</span><span class='hs'>d</span><span class='hs'>&#x27;</span>, <span class='hs'>&#x27;</span><span class='hs'>e</span><span class='hs'>&#x27;</span>))</span>
+<span class="line" id="P63"><span class="ln">63</span>                    <span class='hk'>for</span> v <span class='hk'>in</span> rec.replace(<span class='hs'>&#x27;</span><span class='hs'>,</span><span class='hs'>&#x27;</span>, <span class='hs'>&#x27;</span> <span class='hs'>&#x27;</span>).split())</span>
+<span class="line" id="P64"><span class="ln">64</span>    <span class='hk'>return</span> vals[:n]</span>
+<span class="line" id="P65"><span class="ln">65</span></span>
+<span class="line" id="P66"><span class="ln">66</span></span>
+<span class="line" id="P67"><span class="ln">67</span><span class='hk'>def</span> condopacp(zion: <span class='hb'>float</span>, tlg: <span class='hb'>float</span>, rlg: <span class='hb'>float</span>, ck: <span class='hb'>float</span>, drk: <span class='hb'>float</span>, dtk: <span class='hb'>float</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>]:</span>
+<span class="line" id="P68"><span class="ln">68</span>    <span class='hs'>&quot;&quot;&quot;Interpolate log10 of the electron thermal conductivity, and its</span></span>
+<span class="line" id="P69"><span class="ln">69</span><span class='hs'>    derivatives in log rho and log T, in Potekhin&#x27;s table: cubic in</span></span>
+<span class="line" id="P70"><span class="ln">70</span><span class='hs'>    log rho and log T, linear in log Z_ion. Reads the table at the first</span></span>
+<span class="line" id="P71"><span class="ln">71</span><span class='hs'>    call.</span></span>
+<span class="line" id="P72"><span class="ln">72</span></span>
+<span class="line" id="P73"><span class="ln">73</span><span class='hs'>    Translates: condopacp.f#CONDOPACP (7be4133)</span></span>
 <span class="line" id="P74"><span class="ln">74</span></span>
-<span class="line" id="P75"><span class="ln">75</span>        <span class='hc'># The middle of the table, HUNT&#x27;s first guesses: INT(MAXZ/2.)+1, the same as</span></span>
-<span class="line" id="P76"><span class="ln">76</span>        <span class='hc'># MAXZ/2+1, KC 2025-05-30 (<a class='fl' href='#L87-L93'>Fortran lines 87–93</a>).</span></span>
-<span class="line" id="P77"><span class="ln">77</span>        iz = <span class='hb'>int</span>(MAXZ / <span class='hn'>2.0</span>) + <span class='hn'>1</span></span>
-<span class="line" id="P78"><span class="ln">78</span>        it = <span class='hb'>int</span>(MAXT / <span class='hn'>2.0</span>) + <span class='hn'>1</span></span>
-<span class="line" id="P79"><span class="ln">79</span>        ir = <span class='hb'>int</span>(MAXR / <span class='hn'>2.0</span>) + <span class='hn'>1</span></span>
-<span class="line" id="P80"><span class="ln">80</span></span>
-<span class="line" id="P81"><span class="ln">81</span>    <span class='hc'># The charge in its grid (<a class='fl' href='#L96-L98'>Fortran lines 96–98</a>).</span></span>
-<span class="line" id="P82"><span class="ln">82</span>    zlg = math.log10(zion)</span>
-<span class="line" id="P83"><span class="ln">83</span>    iz = <a href="#def-HUNT" title="HUNT in condopacp.f">hunt</a>(az, MAXZ, zlg, iz)</span>
-<span class="line" id="P84"><span class="ln">84</span>    <span class='hk'>if</span> iz == <span class='hn'>0</span> <span class='hk'>or</span> iz == MAXZ:</span>
-<span class="line" id="P85"><span class="ln">85</span>        <span class='hk'>raise</span> SystemExit(<span class='hs'>&#x27;</span><span class='hs'>CONINTER: Z out of range</span><span class='hs'>&#x27;</span>)</span>
-<span class="line" id="P86"><span class="ln">86</span></span>
-<span class="line" id="P87"><span class="ln">87</span>    <span class='hc'># The temperature in its grid (<a class='fl' href='#L99-L106'>Fortran lines 99–106</a>).</span></span>
-<span class="line" id="P88"><span class="ln">88</span>    it = <a href="#def-HUNT" title="HUNT in condopacp.f">hunt</a>(at, MAXT, tlg, it)</span>
-<span class="line" id="P89"><span class="ln">89</span>    <span class='hc'># Suspected bug (see the page): a point exactly at the last grid value</span></span>
-<span class="line" id="P90"><span class="ln">90</span>    <span class='hc'># (log T = 9) also stops here.</span></span>
-<span class="line" id="P91"><span class="ln">91</span>    <span class='hk'>if</span> it == <span class='hn'>0</span> <span class='hk'>or</span> it == MAXT:</span>
-<span class="line" id="P92"><span class="ln">92</span>        <span class='hc'># A debugging leftover: the Z grid is printed before stopping.</span></span>
-<span class="line" id="P93"><span class="ln">93</span>        <span class='hb'>print</span>(*az[<span class='hn'>1</span>:])</span>
-<span class="line" id="P94"><span class="ln">94</span>        <span class='hb'>print</span>(MAXZ, tlg, iz)</span>
-<span class="line" id="P95"><span class="ln">95</span>        <span class='hk'>raise</span> SystemExit(<span class='hs'>&#x27;</span><span class='hs'>CONINTER: T out of range</span><span class='hs'>&#x27;</span>)</span>
-<span class="line" id="P96"><span class="ln">96</span></span>
-<span class="line" id="P97"><span class="ln">97</span>    <span class='hc'># The density in its grid (<a class='fl' href='#L108-L109'>Fortran lines 108–109</a>).</span></span>
-<span class="line" id="P98"><span class="ln">98</span>    ir = <a href="#def-HUNT" title="HUNT in condopacp.f">hunt</a>(ar, MAXR, rlg, ir)</span>
-<span class="line" id="P99"><span class="ln">99</span>    <span class='hc'># Suspected bug (see the page): a point exactly at the last grid value</span></span>
-<span class="line" id="P100"><span class="ln">100</span>    <span class='hc'># (log rho = 9.75) also stops here.</span></span>
-<span class="line" id="P101"><span class="ln">101</span>    <span class='hk'>if</span> ir == <span class='hn'>0</span> <span class='hk'>or</span> ir == MAXR:</span>
-<span class="line" id="P102"><span class="ln">102</span>        <span class='hk'>raise</span> SystemExit(<span class='hs'>&#x27;</span><span class='hs'>CONINTER: rho out of range</span><span class='hs'>&#x27;</span>)</span>
-<span class="line" id="P103"><span class="ln">103</span></span>
-<span class="line" id="P104"><span class="ln">104</span>    <span class='hc'># The neighbors used for the cubics (<a class='fl' href='#L110-L113'>Fortran lines 110–113</a>).</span></span>
-<span class="line" id="P105"><span class="ln">105</span>    itm = <span class='hb'>max</span>(<span class='hn'>1</span>, it - <span class='hn'>1</span>)</span>
-<span class="line" id="P106"><span class="ln">106</span>    itp = <span class='hb'>min</span>(MAXT, it + <span class='hn'>2</span>)</span>
-<span class="line" id="P107"><span class="ln">107</span>    irm = <span class='hb'>max</span>(<span class='hn'>1</span>, ir - <span class='hn'>1</span>)</span>
-<span class="line" id="P108"><span class="ln">108</span>    irp = <span class='hb'>min</span>(MAXR, ir + <span class='hn'>2</span>)</span>
-<span class="line" id="P109"><span class="ln">109</span></span>
-<span class="line" id="P110"><span class="ln">110</span>    <span class='hc'># Cubic interpolation in log rho, at the 4 temperatures ITM, IT,</span></span>
-<span class="line" id="P111"><span class="ln">111</span>    <span class='hc'># IT+1, ITP and the 2 charges IZ, IZ+1 (<a class='fl' href='#L114-L148'>Fortran lines 114–148</a>).</span></span>
-<span class="line" id="P112"><span class="ln">112</span>    <span class='hk'>def</span> in_rho(jt, jz):</span>
-<span class="line" id="P113"><span class="ln">113</span>        vf, df, d2, xr = <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">cinterp3</a>(ar[irm], ar[ir], ar[ir + <span class='hn'>1</span>], ar[irp],</span>
-<span class="line" id="P114"><span class="ln">114</span>                                  rlg, ir, MAXR, akap[jt, irm, jz],</span>
-<span class="line" id="P115"><span class="ln">115</span>                                  akap[jt, ir, jz], akap[jt, ir + <span class='hn'>1</span>, jz],</span>
-<span class="line" id="P116"><span class="ln">116</span>                                  akap[jt, irp, jz], <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
-<span class="line" id="P117"><span class="ln">117</span>        <span class='hk'>return</span> vf, df, d2</span>
-<span class="line" id="P118"><span class="ln">118</span></span>
-<span class="line" id="P119"><span class="ln">119</span>    cktmz0, drktmz0, dr2ktmz0 = in_rho(itm, iz)</span>
-<span class="line" id="P120"><span class="ln">120</span>    ckt0z0, drkt0z0, dr2kt0z0 = in_rho(it, iz)</span>
-<span class="line" id="P121"><span class="ln">121</span>    ckt1z0, drkt1z0, dr2kt1z0 = in_rho(it + <span class='hn'>1</span>, iz)</span>
-<span class="line" id="P122"><span class="ln">122</span>    cktpz0, drktpz0, dr2ktpz0 = in_rho(itp, iz)</span>
-<span class="line" id="P123"><span class="ln">123</span>    cktmz1, drktmz1, dr2ktmz1 = in_rho(itm, iz + <span class='hn'>1</span>)</span>
-<span class="line" id="P124"><span class="ln">124</span>    ckt0z1, drkt0z1, dr2kt0z1 = in_rho(it, iz + <span class='hn'>1</span>)</span>
-<span class="line" id="P125"><span class="ln">125</span>    ckt1z1, drkt1z1, dr2kt1z1 = in_rho(it + <span class='hn'>1</span>, iz + <span class='hn'>1</span>)</span>
-<span class="line" id="P126"><span class="ln">126</span>    cktpz1, drktpz1, dr2ktpz1 = in_rho(itp, iz + <span class='hn'>1</span>)</span>
+<span class="line" id="P75"><span class="ln">75</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P76"><span class="ln">76</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P77"><span class="ln">77</span><span class='hs'>    zion : float</span></span>
+<span class="line" id="P78"><span class="ln">78</span><span class='hs'>        The ion charge.</span></span>
+<span class="line" id="P79"><span class="ln">79</span><span class='hs'>    tlg, rlg : float</span></span>
+<span class="line" id="P80"><span class="ln">80</span><span class='hs'>        log10 T (K) and log10 rho (g/cm^3).</span></span>
+<span class="line" id="P81"><span class="ln">81</span><span class='hs'>    ck, drk, dtk : float</span></span>
+<span class="line" id="P82"><span class="ln">82</span><span class='hs'>        Output only (passed in with any value).</span></span>
+<span class="line" id="P83"><span class="ln">83</span></span>
+<span class="line" id="P84"><span class="ln">84</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P85"><span class="ln">85</span><span class='hs'>    -------</span></span>
+<span class="line" id="P86"><span class="ln">86</span><span class='hs'>    ck, drk, dtk : float</span></span>
+<span class="line" id="P87"><span class="ln">87</span><span class='hs'>        log10 K (cgs), d log K / d log rho, and d log K / d log T.</span></span>
+<span class="line" id="P88"><span class="ln">88</span></span>
+<span class="line" id="P89"><span class="ln">89</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P90"><span class="ln">90</span></span>
+<span class="line" id="P91"><span class="ln">91</span>    <span class='hk'>global</span> krun, iz, it, ir</span>
+<span class="line" id="P92"><span class="ln">92</span></span>
+<span class="line" id="P93"><span class="ln">93</span>    <span class='hc'># Read the table at the first call; the file is opened by PARMIN (<a class='fl' href='#L72-L86'>Fortran lines 72–86</a>).</span></span>
+<span class="line" id="P94"><span class="ln">94</span>    <span class='hk'>if</span> krun != KRUN_READ:</span>
+<span class="line" id="P95"><span class="ln">95</span>        ip = iounits_mod.icondopacp</span>
+<span class="line" id="P96"><span class="ln">96</span>        iounits_mod.read(ip)  <span class='hc'># skip the first line</span></span>
+<span class="line" id="P97"><span class="ln">97</span>        <span class='hk'>for</span> iz <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, MAXZ + <span class='hn'>1</span>):</span>
+<span class="line" id="P98"><span class="ln">98</span>            vals = _read_values(ip, <span class='hn'>1</span> + MAXT)</span>
+<span class="line" id="P99"><span class="ln">99</span>            z = vals[<span class='hn'>0</span>]</span>
+<span class="line" id="P100"><span class="ln">100</span>            <span class='hk'>for</span> it <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, MAXT + <span class='hn'>1</span>):</span>
+<span class="line" id="P101"><span class="ln">101</span>                at[it] = vals[it]</span>
+<span class="line" id="P102"><span class="ln">102</span>            az[iz] = math.log10(z)</span>
+<span class="line" id="P103"><span class="ln">103</span>            <span class='hk'>for</span> ir <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, MAXR + <span class='hn'>1</span>):</span>
+<span class="line" id="P104"><span class="ln">104</span>                vals = _read_values(ip, <span class='hn'>1</span> + MAXT)</span>
+<span class="line" id="P105"><span class="ln">105</span>                ar[ir] = vals[<span class='hn'>0</span>]</span>
+<span class="line" id="P106"><span class="ln">106</span>                <span class='hk'>for</span> it <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, MAXT + <span class='hn'>1</span>):</span>
+<span class="line" id="P107"><span class="ln">107</span>                    akap[it, ir, iz] = vals[it]</span>
+<span class="line" id="P108"><span class="ln">108</span>        iounits_mod.close(ip)</span>
+<span class="line" id="P109"><span class="ln">109</span>        krun = KRUN_READ</span>
+<span class="line" id="P110"><span class="ln">110</span></span>
+<span class="line" id="P111"><span class="ln">111</span>        <span class='hc'># The middle of the table, HUNT&#x27;s first guesses: INT(MAXZ/2.)+1, the same as</span></span>
+<span class="line" id="P112"><span class="ln">112</span>        <span class='hc'># MAXZ/2+1, KC 2025-05-30 (<a class='fl' href='#L87-L93'>Fortran lines 87–93</a>).</span></span>
+<span class="line" id="P113"><span class="ln">113</span>        iz = <span class='hb'>int</span>(MAXZ / <span class='hn'>2.0</span>) + <span class='hn'>1</span></span>
+<span class="line" id="P114"><span class="ln">114</span>        it = <span class='hb'>int</span>(MAXT / <span class='hn'>2.0</span>) + <span class='hn'>1</span></span>
+<span class="line" id="P115"><span class="ln">115</span>        ir = <span class='hb'>int</span>(MAXR / <span class='hn'>2.0</span>) + <span class='hn'>1</span></span>
+<span class="line" id="P116"><span class="ln">116</span></span>
+<span class="line" id="P117"><span class="ln">117</span>    <span class='hc'># The Numba kernel (accel.py), with the table and HUNT&#x27;s guesses passed in; a stop is left to the plain code.</span></span>
+<span class="line" id="P118"><span class="ln">118</span>    <span class='hk'>if</span> accel.USE_NUMBA:</span>
+<span class="line" id="P119"><span class="ln">119</span>        guess = _guess</span>
+<span class="line" id="P120"><span class="ln">120</span>        guess[<span class='hn'>0</span>] = iz</span>
+<span class="line" id="P121"><span class="ln">121</span>        guess[<span class='hn'>1</span>] = it</span>
+<span class="line" id="P122"><span class="ln">122</span>        guess[<span class='hn'>2</span>] = ir</span>
+<span class="line" id="P123"><span class="ln">123</span>        ck, drk, dtk, status = _condopacp_nb(zion, tlg, rlg, at, ar, az, akap, guess)</span>
+<span class="line" id="P124"><span class="ln">124</span>        <span class='hk'>if</span> status == <span class='hn'>0</span>:</span>
+<span class="line" id="P125"><span class="ln">125</span>            iz, it, ir = guess.tolist()</span>
+<span class="line" id="P126"><span class="ln">126</span>            <span class='hk'>return</span> ck, drk, dtk</span>
 <span class="line" id="P127"><span class="ln">127</span></span>
-<span class="line" id="P128"><span class="ln">128</span>    <span class='hc'># Linear interpolation in log Z (<a class='fl' href='#L149-L163'>Fortran lines 149–163</a>).</span></span>
-<span class="line" id="P129"><span class="ln">129</span>    xz1 = (zlg - az[iz]) / (az[iz + <span class='hn'>1</span>] - az[iz])</span>
-<span class="line" id="P130"><span class="ln">130</span>    xz0 = <span class='hn'>1.0</span> - xz1</span>
-<span class="line" id="P131"><span class="ln">131</span>    cktm = xz0 * cktmz0 + xz1 * cktmz1</span>
-<span class="line" id="P132"><span class="ln">132</span>    drktm = xz0 * drktmz0 + xz1 * drktmz1</span>
-<span class="line" id="P133"><span class="ln">133</span>    dr2ktm = xz0 * dr2ktmz0 + xz1 * dr2ktmz1  <span class='hc'># noqa: F841  (unused in the Fortran too)</span></span>
-<span class="line" id="P134"><span class="ln">134</span>    ckt0 = xz0 * ckt0z0 + xz1 * ckt0z1</span>
-<span class="line" id="P135"><span class="ln">135</span>    drkt0 = xz0 * drkt0z0 + xz1 * drkt0z1</span>
-<span class="line" id="P136"><span class="ln">136</span>    dr2kt0 = xz0 * dr2kt0z0 + xz1 * dr2kt0z1  <span class='hc'># noqa: F841  (unused in the Fortran too)</span></span>
-<span class="line" id="P137"><span class="ln">137</span>    ckt1 = xz0 * ckt1z0 + xz1 * ckt1z1</span>
-<span class="line" id="P138"><span class="ln">138</span>    drkt1 = xz0 * drkt1z0 + xz1 * drkt1z1</span>
-<span class="line" id="P139"><span class="ln">139</span>    dr2kt1 = xz0 * dr2kt1z0 + xz1 * dr2kt1z1  <span class='hc'># noqa: F841  (unused in the Fortran too)</span></span>
-<span class="line" id="P140"><span class="ln">140</span>    cktp = xz0 * cktpz0 + xz1 * cktpz1</span>
-<span class="line" id="P141"><span class="ln">141</span>    drktp = xz0 * drktpz0 + xz1 * drktpz1</span>
-<span class="line" id="P142"><span class="ln">142</span>    dr2ktp = xz0 * dr2ktpz0 + xz1 * dr2ktpz1  <span class='hc'># noqa: F841  (unused in the Fortran too)</span></span>
+<span class="line" id="P128"><span class="ln">128</span>    <span class='hc'># The charge in its grid (<a class='fl' href='#L96-L98'>Fortran lines 96–98</a>).</span></span>
+<span class="line" id="P129"><span class="ln">129</span>    zlg = math.log10(zion)</span>
+<span class="line" id="P130"><span class="ln">130</span>    iz = <a href="#def-HUNT" title="HUNT in condopacp.f">hunt</a>(az, MAXZ, zlg, iz)</span>
+<span class="line" id="P131"><span class="ln">131</span>    <span class='hk'>if</span> iz == <span class='hn'>0</span> <span class='hk'>or</span> iz == MAXZ:</span>
+<span class="line" id="P132"><span class="ln">132</span>        <span class='hk'>raise</span> SystemExit(<span class='hs'>&#x27;</span><span class='hs'>CONINTER: Z out of range</span><span class='hs'>&#x27;</span>)</span>
+<span class="line" id="P133"><span class="ln">133</span></span>
+<span class="line" id="P134"><span class="ln">134</span>    <span class='hc'># The temperature in its grid (<a class='fl' href='#L99-L106'>Fortran lines 99–106</a>).</span></span>
+<span class="line" id="P135"><span class="ln">135</span>    it = <a href="#def-HUNT" title="HUNT in condopacp.f">hunt</a>(at, MAXT, tlg, it)</span>
+<span class="line" id="P136"><span class="ln">136</span>    <span class='hc'># Suspected bug (see the page): a point exactly at the last grid value</span></span>
+<span class="line" id="P137"><span class="ln">137</span>    <span class='hc'># (log T = 9) also stops here.</span></span>
+<span class="line" id="P138"><span class="ln">138</span>    <span class='hk'>if</span> it == <span class='hn'>0</span> <span class='hk'>or</span> it == MAXT:</span>
+<span class="line" id="P139"><span class="ln">139</span>        <span class='hc'># A debugging leftover: the Z grid is printed before stopping.</span></span>
+<span class="line" id="P140"><span class="ln">140</span>        <span class='hb'>print</span>(*az[<span class='hn'>1</span>:])</span>
+<span class="line" id="P141"><span class="ln">141</span>        <span class='hb'>print</span>(MAXZ, tlg, iz)</span>
+<span class="line" id="P142"><span class="ln">142</span>        <span class='hk'>raise</span> SystemExit(<span class='hs'>&#x27;</span><span class='hs'>CONINTER: T out of range</span><span class='hs'>&#x27;</span>)</span>
 <span class="line" id="P143"><span class="ln">143</span></span>
-<span class="line" id="P144"><span class="ln">144</span>    <span class='hc'># Cubic interpolation in log T: of log K (giving d log K / d log T),</span></span>
-<span class="line" id="P145"><span class="ln">145</span>    <span class='hc'># and of d log K / d log rho (<a class='fl' href='#L164-L170'>Fortran lines 164–170</a>).</span></span>
-<span class="line" id="P146"><span class="ln">146</span>    ck, dtk, dt2k, xt = <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">cinterp3</a>(at[itm], at[it], at[it + <span class='hn'>1</span>], at[itp], tlg,</span>
-<span class="line" id="P147"><span class="ln">147</span>                                 it, MAXT, cktm, ckt0, ckt1, cktp,</span>
-<span class="line" id="P148"><span class="ln">148</span>                                 <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
-<span class="line" id="P149"><span class="ln">149</span>    drk, drtk, drt2k, xt = <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">cinterp3</a>(at[itm], at[it], at[it + <span class='hn'>1</span>], at[itp],</span>
-<span class="line" id="P150"><span class="ln">150</span>                                    tlg, it, MAXT, drktm, drkt0, drkt1,</span>
-<span class="line" id="P151"><span class="ln">151</span>                                    drktp, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
-<span class="line" id="P152"><span class="ln">152</span>    <span class='hk'>return</span> ck, drk, dtk</span>
-<span class="line" id="P153"><span class="ln">153</span></span>
-<span class="line" id="P154"><span class="ln">154</span></span>
-<span class="line" id="P155"><span class="ln">155</span><span class='hk'>def</span> cinterp3(zm: <span class='hb'>float</span>, z0: <span class='hb'>float</span>, z1: <span class='hb'>float</span>, zp: <span class='hb'>float</span>, z: <span class='hb'>float</span>, n0: <span class='hb'>int</span>, mxnv: <span class='hb'>int</span>, vm: <span class='hb'>float</span>, v0: <span class='hb'>float</span>, v1: <span class='hb'>float</span>,</span>
-<span class="line" id="P156"><span class="ln">156</span>             vp: <span class='hb'>float</span>, vf: <span class='hb'>float</span>, df: <span class='hb'>float</span>, d2: <span class='hb'>float</span>, xh: <span class='hb'>float</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>]:</span>
-<span class="line" id="P157"><span class="ln">157</span>    <span class='hs'>&quot;&quot;&quot;Interpolate at z on [z0, z1] from 4 tabulated points: a cubic</span></span>
-<span class="line" id="P158"><span class="ln">158</span><span class='hs'>    Hermite polynomial with end slopes from the neighboring secants, and</span></span>
-<span class="line" id="P159"><span class="ln">159</span><span class='hs'>    quadratic on the table&#x27;s first and last intervals.</span></span>
-<span class="line" id="P160"><span class="ln">160</span></span>
-<span class="line" id="P161"><span class="ln">161</span><span class='hs'>    Translates: condopacp.f#CINTERP3 (7be4133)</span></span>
-<span class="line" id="P162"><span class="ln">162</span></span>
-<span class="line" id="P163"><span class="ln">163</span><span class='hs'>    Arguments: zm, z0, z1, zp and vm, v0, v1, vp, the 4 points; z; n0, the</span></span>
-<span class="line" id="P164"><span class="ln">164</span><span class='hs'>    index of z0 in the table; mxnv, the table&#x27;s length; vf, df, d2, xh,</span></span>
-<span class="line" id="P165"><span class="ln">165</span><span class='hs'>    passed in (with any value).</span></span>
-<span class="line" id="P166"><span class="ln">166</span></span>
-<span class="line" id="P167"><span class="ln">167</span><span class='hs'>    Returns (vf, df, d2, xh): the value, the first and the second</span></span>
-<span class="line" id="P168"><span class="ln">168</span><span class='hs'>    derivative, and the fraction of the way from z0 to z1.</span></span>
-<span class="line" id="P169"><span class="ln">169</span></span>
-<span class="line" id="P170"><span class="ln">170</span><span class='hs'>    &quot;&quot;&quot;</span></span>
-<span class="line" id="P171"><span class="ln">171</span>    <span class='hc'># The interval checked (<a class='fl' href='#L189'>Fortran line 189</a>).</span></span>
-<span class="line" id="P172"><span class="ln">172</span>    <span class='hk'>if</span> n0 &lt;= <span class='hn'>0</span> <span class='hk'>or</span> n0 &gt;= mxnv:</span>
-<span class="line" id="P173"><span class="ln">173</span>        <span class='hk'>raise</span> SystemExit(<span class='hs'>&#x27;</span><span class='hs'>CINTERP: N0 out of range</span><span class='hs'>&#x27;</span>)</span>
-<span class="line" id="P174"><span class="ln">174</span></span>
-<span class="line" id="P175"><span class="ln">175</span>    <span class='hc'># The position in the interval (<a class='fl' href='#L190-L192'>Fortran lines 190–192</a>).</span></span>
-<span class="line" id="P176"><span class="ln">176</span>    x = z - z0</span>
-<span class="line" id="P177"><span class="ln">177</span>    h = z1 - z0  <span class='hc'># the basic interval</span></span>
-<span class="line" id="P178"><span class="ln">178</span>    xh = x / h</span>
-<span class="line" id="P179"><span class="ln">179</span></span>
-<span class="line" id="P180"><span class="ln">180</span>    <span class='hc'># The slopes at the two ends, where there is a neighbor (<a class='fl' href='#L193-L202'>Fortran lines 193–202</a>).</span></span>
-<span class="line" id="P181"><span class="ln">181</span>    <span class='hk'>if</span> n0 &gt; <span class='hn'>1</span>:</span>
-<span class="line" id="P182"><span class="ln">182</span>        hm = z0 - zm  <span class='hc'># the left adjoining interval</span></span>
-<span class="line" id="P183"><span class="ln">183</span>        v01 = (((v1 - v0) / h ** <span class='hn'>2</span> + (v0 - vm) / hm ** <span class='hn'>2</span>)</span>
-<span class="line" id="P184"><span class="ln">184</span>               / (<span class='hn'>1.0</span> / h + <span class='hn'>1.0</span> / hm))  <span class='hc'># the left derivative</span></span>
-<span class="line" id="P185"><span class="ln">185</span>    <span class='hk'>if</span> n0 &lt; mxnv - <span class='hn'>1</span>:</span>
-<span class="line" id="P186"><span class="ln">186</span>        hp = zp - z1  <span class='hc'># the right adjoining interval</span></span>
-<span class="line" id="P187"><span class="ln">187</span>        v11 = (((v1 - v0) / h ** <span class='hn'>2</span> + (vp - v1) / hp ** <span class='hn'>2</span>)</span>
-<span class="line" id="P188"><span class="ln">188</span>               / (<span class='hn'>1.0</span> / h + <span class='hn'>1.0</span> / hp))  <span class='hc'># the right derivative</span></span>
-<span class="line" id="P189"><span class="ln">189</span></span>
-<span class="line" id="P190"><span class="ln">190</span>    <span class='hk'>if</span> n0 &gt; <span class='hn'>1</span> <span class='hk'>and</span> n0 &lt; mxnv - <span class='hn'>1</span>:</span>
-<span class="line" id="P191"><span class="ln">191</span>        <span class='hc'># Cubic interpolation (<a class='fl' href='#L203-L210'>Fortran lines 203–210</a>).</span></span>
-<span class="line" id="P192"><span class="ln">192</span>        c2 = <span class='hn'>3.0</span> * (v1 - v0) - h * (v11 + <span class='hn'>2.0</span> * v01)</span>
-<span class="line" id="P193"><span class="ln">193</span>        c3 = h * (v01 + v11) - <span class='hn'>2.0</span> * (v1 - v0)</span>
-<span class="line" id="P194"><span class="ln">194</span>        vf = v0 + v01 * x + c2 * xh ** <span class='hn'>2</span> + c3 * xh ** <span class='hn'>3</span></span>
-<span class="line" id="P195"><span class="ln">195</span>        df = v01 + (<span class='hn'>2.0</span> * c2 * xh + <span class='hn'>3.0</span> * c3 * xh ** <span class='hn'>2</span>) / h</span>
-<span class="line" id="P196"><span class="ln">196</span>        d2 = (<span class='hn'>2.0</span> * c2 + <span class='hn'>6.0</span> * c3 * xh) / h ** <span class='hn'>2</span></span>
-<span class="line" id="P197"><span class="ln">197</span>        <span class='hk'>return</span> vf, df, d2, xh  <span class='hc'># GOTO 10</span></span>
-<span class="line" id="P198"><span class="ln">198</span></span>
-<span class="line" id="P199"><span class="ln">199</span>    <span class='hk'>if</span> n0 == <span class='hn'>1</span>:</span>
-<span class="line" id="P200"><span class="ln">200</span>        <span class='hc'># Quadratic interpolation, first interval (<a class='fl' href='#L211-L215'>Fortran lines 211–215</a>).</span></span>
-<span class="line" id="P201"><span class="ln">201</span>        c2 = v0 - v1 + v11 * h</span>
-<span class="line" id="P202"><span class="ln">202</span>        vf = v1 - v11 * (h - x) + c2 * (<span class='hn'>1.0</span> - xh) ** <span class='hn'>2</span></span>
-<span class="line" id="P203"><span class="ln">203</span>        df = v11 - <span class='hn'>2.0</span> * c2 * (<span class='hn'>1.0</span> - xh) / h</span>
-<span class="line" id="P204"><span class="ln">204</span>        d2 = <span class='hn'>2.0</span> * c2 / h ** <span class='hn'>2</span></span>
-<span class="line" id="P205"><span class="ln">205</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P206"><span class="ln">206</span>        <span class='hc'># Quadratic interpolation, last interval, N0 = MXNV-1 (<a class='fl' href='#L216-L221'>Fortran lines 216–221</a>).</span></span>
-<span class="line" id="P207"><span class="ln">207</span>        c2 = v1 - v0 - v01 * h</span>
-<span class="line" id="P208"><span class="ln">208</span>        vf = v0 + v01 * x + c2 * xh ** <span class='hn'>2</span></span>
-<span class="line" id="P209"><span class="ln">209</span>        df = v01 + <span class='hn'>2.0</span> * c2 * xh / h</span>
-<span class="line" id="P210"><span class="ln">210</span>        d2 = <span class='hn'>2.0</span> * c2 / h ** <span class='hn'>2</span></span>
-<span class="line" id="P211"><span class="ln">211</span>    <span class='hk'>return</span> vf, df, d2, xh</span>
+<span class="line" id="P144"><span class="ln">144</span>    <span class='hc'># The density in its grid (<a class='fl' href='#L108-L109'>Fortran lines 108–109</a>).</span></span>
+<span class="line" id="P145"><span class="ln">145</span>    ir = <a href="#def-HUNT" title="HUNT in condopacp.f">hunt</a>(ar, MAXR, rlg, ir)</span>
+<span class="line" id="P146"><span class="ln">146</span>    <span class='hc'># Suspected bug (see the page): a point exactly at the last grid value</span></span>
+<span class="line" id="P147"><span class="ln">147</span>    <span class='hc'># (log rho = 9.75) also stops here.</span></span>
+<span class="line" id="P148"><span class="ln">148</span>    <span class='hk'>if</span> ir == <span class='hn'>0</span> <span class='hk'>or</span> ir == MAXR:</span>
+<span class="line" id="P149"><span class="ln">149</span>        <span class='hk'>raise</span> SystemExit(<span class='hs'>&#x27;</span><span class='hs'>CONINTER: rho out of range</span><span class='hs'>&#x27;</span>)</span>
+<span class="line" id="P150"><span class="ln">150</span></span>
+<span class="line" id="P151"><span class="ln">151</span>    <span class='hc'># The neighbors used for the cubics (<a class='fl' href='#L110-L113'>Fortran lines 110–113</a>).</span></span>
+<span class="line" id="P152"><span class="ln">152</span>    itm = <span class='hb'>max</span>(<span class='hn'>1</span>, it - <span class='hn'>1</span>)</span>
+<span class="line" id="P153"><span class="ln">153</span>    itp = <span class='hb'>min</span>(MAXT, it + <span class='hn'>2</span>)</span>
+<span class="line" id="P154"><span class="ln">154</span>    irm = <span class='hb'>max</span>(<span class='hn'>1</span>, ir - <span class='hn'>1</span>)</span>
+<span class="line" id="P155"><span class="ln">155</span>    irp = <span class='hb'>min</span>(MAXR, ir + <span class='hn'>2</span>)</span>
+<span class="line" id="P156"><span class="ln">156</span></span>
+<span class="line" id="P157"><span class="ln">157</span>    <span class='hc'># Cubic interpolation in log rho, at the 4 temperatures ITM, IT,</span></span>
+<span class="line" id="P158"><span class="ln">158</span>    <span class='hc'># IT+1, ITP and the 2 charges IZ, IZ+1 (<a class='fl' href='#L114-L148'>Fortran lines 114–148</a>).</span></span>
+<span class="line" id="P159"><span class="ln">159</span>    cktmz0, drktmz0, dr2ktmz0 = condopacp_in_rho(ar, akap, irm, ir, irp, rlg, itm, iz)</span>
+<span class="line" id="P160"><span class="ln">160</span>    ckt0z0, drkt0z0, dr2kt0z0 = condopacp_in_rho(ar, akap, irm, ir, irp, rlg, it, iz)</span>
+<span class="line" id="P161"><span class="ln">161</span>    ckt1z0, drkt1z0, dr2kt1z0 = condopacp_in_rho(ar, akap, irm, ir, irp, rlg, it + <span class='hn'>1</span>, iz)</span>
+<span class="line" id="P162"><span class="ln">162</span>    cktpz0, drktpz0, dr2ktpz0 = condopacp_in_rho(ar, akap, irm, ir, irp, rlg, itp, iz)</span>
+<span class="line" id="P163"><span class="ln">163</span>    cktmz1, drktmz1, dr2ktmz1 = condopacp_in_rho(ar, akap, irm, ir, irp, rlg, itm, iz + <span class='hn'>1</span>)</span>
+<span class="line" id="P164"><span class="ln">164</span>    ckt0z1, drkt0z1, dr2kt0z1 = condopacp_in_rho(ar, akap, irm, ir, irp, rlg, it, iz + <span class='hn'>1</span>)</span>
+<span class="line" id="P165"><span class="ln">165</span>    ckt1z1, drkt1z1, dr2kt1z1 = condopacp_in_rho(ar, akap, irm, ir, irp, rlg, it + <span class='hn'>1</span>, iz + <span class='hn'>1</span>)</span>
+<span class="line" id="P166"><span class="ln">166</span>    cktpz1, drktpz1, dr2ktpz1 = condopacp_in_rho(ar, akap, irm, ir, irp, rlg, itp, iz + <span class='hn'>1</span>)</span>
+<span class="line" id="P167"><span class="ln">167</span></span>
+<span class="line" id="P168"><span class="ln">168</span>    <span class='hc'># Linear interpolation in log Z (<a class='fl' href='#L149-L163'>Fortran lines 149–163</a>).</span></span>
+<span class="line" id="P169"><span class="ln">169</span>    xz1 = (zlg - az[iz]) / (az[iz + <span class='hn'>1</span>] - az[iz])</span>
+<span class="line" id="P170"><span class="ln">170</span>    xz0 = <span class='hn'>1.0</span> - xz1</span>
+<span class="line" id="P171"><span class="ln">171</span>    cktm = xz0 * cktmz0 + xz1 * cktmz1</span>
+<span class="line" id="P172"><span class="ln">172</span>    drktm = xz0 * drktmz0 + xz1 * drktmz1</span>
+<span class="line" id="P173"><span class="ln">173</span>    dr2ktm = xz0 * dr2ktmz0 + xz1 * dr2ktmz1  <span class='hc'># noqa: F841  (unused in the Fortran too)</span></span>
+<span class="line" id="P174"><span class="ln">174</span>    ckt0 = xz0 * ckt0z0 + xz1 * ckt0z1</span>
+<span class="line" id="P175"><span class="ln">175</span>    drkt0 = xz0 * drkt0z0 + xz1 * drkt0z1</span>
+<span class="line" id="P176"><span class="ln">176</span>    dr2kt0 = xz0 * dr2kt0z0 + xz1 * dr2kt0z1  <span class='hc'># noqa: F841  (unused in the Fortran too)</span></span>
+<span class="line" id="P177"><span class="ln">177</span>    ckt1 = xz0 * ckt1z0 + xz1 * ckt1z1</span>
+<span class="line" id="P178"><span class="ln">178</span>    drkt1 = xz0 * drkt1z0 + xz1 * drkt1z1</span>
+<span class="line" id="P179"><span class="ln">179</span>    dr2kt1 = xz0 * dr2kt1z0 + xz1 * dr2kt1z1  <span class='hc'># noqa: F841  (unused in the Fortran too)</span></span>
+<span class="line" id="P180"><span class="ln">180</span>    cktp = xz0 * cktpz0 + xz1 * cktpz1</span>
+<span class="line" id="P181"><span class="ln">181</span>    drktp = xz0 * drktpz0 + xz1 * drktpz1</span>
+<span class="line" id="P182"><span class="ln">182</span>    dr2ktp = xz0 * dr2ktpz0 + xz1 * dr2ktpz1  <span class='hc'># noqa: F841  (unused in the Fortran too)</span></span>
+<span class="line" id="P183"><span class="ln">183</span></span>
+<span class="line" id="P184"><span class="ln">184</span>    <span class='hc'># Cubic interpolation in log T: of log K (giving d log K / d log T),</span></span>
+<span class="line" id="P185"><span class="ln">185</span>    <span class='hc'># and of d log K / d log rho (<a class='fl' href='#L164-L170'>Fortran lines 164–170</a>).</span></span>
+<span class="line" id="P186"><span class="ln">186</span>    ck, dtk, dt2k, xt = <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">cinterp3</a>(at[itm], at[it], at[it + <span class='hn'>1</span>], at[itp], tlg,</span>
+<span class="line" id="P187"><span class="ln">187</span>                                 it, MAXT, cktm, ckt0, ckt1, cktp,</span>
+<span class="line" id="P188"><span class="ln">188</span>                                 <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
+<span class="line" id="P189"><span class="ln">189</span>    drk, drtk, drt2k, xt = <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">cinterp3</a>(at[itm], at[it], at[it + <span class='hn'>1</span>], at[itp],</span>
+<span class="line" id="P190"><span class="ln">190</span>                                    tlg, it, MAXT, drktm, drkt0, drkt1,</span>
+<span class="line" id="P191"><span class="ln">191</span>                                    drktp, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
+<span class="line" id="P192"><span class="ln">192</span>    <span class='hk'>return</span> ck, drk, dtk</span>
+<span class="line" id="P193"><span class="ln">193</span></span>
+<span class="line" id="P194"><span class="ln">194</span></span>
+<span class="line" id="P195"><span class="ln">195</span><span class='hk'>def</span> condopacp_in_rho(ar: np.ndarray, akap: np.ndarray, irm: <span class='hb'>int</span>, ir: <span class='hb'>int</span>, irp: <span class='hb'>int</span>, rlg: <span class='hb'>float</span>, jt: <span class='hb'>int</span>,</span>
+<span class="line" id="P196"><span class="ln">196</span>                     jz: <span class='hb'>int</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>]:</span>
+<span class="line" id="P197"><span class="ln">197</span>    <span class='hs'>&quot;&quot;&quot;The cubic in log rho through the table&#x27;s points IRM, IR, IR+1, IRP, at temperature JT and charge JZ (one of</span></span>
+<span class="line" id="P198"><span class="ln">198</span><span class='hs'>    the eight CINTERP3 calls of Fortran lines 114–148).</span></span>
+<span class="line" id="P199"><span class="ln">199</span></span>
+<span class="line" id="P200"><span class="ln">200</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P201"><span class="ln">201</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P202"><span class="ln">202</span><span class='hs'>    ar : np.ndarray, shape: `(MAXR + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P203"><span class="ln">203</span><span class='hs'>        The table&#x27;s log rho grid.</span></span>
+<span class="line" id="P204"><span class="ln">204</span><span class='hs'>    akap : np.ndarray, shape: `(MAXT + 1, MAXR + 1, MAXZ + 1)`, dtype: ``float64``</span></span>
+<span class="line" id="P205"><span class="ln">205</span><span class='hs'>        The table&#x27;s log K.</span></span>
+<span class="line" id="P206"><span class="ln">206</span><span class='hs'>    irm, ir, irp : int</span></span>
+<span class="line" id="P207"><span class="ln">207</span><span class='hs'>        The density points (IRM = max(1, IR-1), IRP = min(MAXR, IR+2)).</span></span>
+<span class="line" id="P208"><span class="ln">208</span><span class='hs'>    rlg : float</span></span>
+<span class="line" id="P209"><span class="ln">209</span><span class='hs'>        log10 rho (g/cm^3).</span></span>
+<span class="line" id="P210"><span class="ln">210</span><span class='hs'>    jt, jz : int</span></span>
+<span class="line" id="P211"><span class="ln">211</span><span class='hs'>        The temperature and charge points.</span></span>
 <span class="line" id="P212"><span class="ln">212</span></span>
-<span class="line" id="P213"><span class="ln">213</span></span>
-<span class="line" id="P214"><span class="ln">214</span><span class='hk'>def</span> hunt(xx: np.ndarray, n: <span class='hb'>int</span>, x: <span class='hb'>float</span>, jlo: <span class='hb'>int</span>) -&gt; <span class='hb'>int</span>:</span>
-<span class="line" id="P215"><span class="ln">215</span>    <span class='hs'>&quot;&quot;&quot;Numerical Recipes&#x27; HUNT: find jlo with x between xx[jlo] and</span></span>
-<span class="line" id="P216"><span class="ln">216</span><span class='hs'>    xx[jlo+1] in a monotonic table, starting from the guess jlo and</span></span>
-<span class="line" id="P217"><span class="ln">217</span><span class='hs'>    doubling the step before bisecting.</span></span>
-<span class="line" id="P218"><span class="ln">218</span></span>
-<span class="line" id="P219"><span class="ln">219</span><span class='hs'>    Translates: condopacp.f#HUNT (7be4133)</span></span>
-<span class="line" id="P220"><span class="ln">220</span></span>
-<span class="line" id="P221"><span class="ln">221</span><span class='hs'>    Arguments: xx[1..n], the table; n; x; jlo, the first guess.</span></span>
+<span class="line" id="P213"><span class="ln">213</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P214"><span class="ln">214</span><span class='hs'>    -------</span></span>
+<span class="line" id="P215"><span class="ln">215</span><span class='hs'>    vf, df, d2 : float</span></span>
+<span class="line" id="P216"><span class="ln">216</span><span class='hs'>        log K, its first and second derivatives in log rho.</span></span>
+<span class="line" id="P217"><span class="ln">217</span></span>
+<span class="line" id="P218"><span class="ln">218</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P219"><span class="ln">219</span>    vf, df, d2, xr = <a href="#def-CINTERP3" title="CINTERP3 in condopacp.f">cinterp3</a>(ar[irm], ar[ir], ar[ir + <span class='hn'>1</span>], ar[irp], rlg, ir, MAXR, akap[jt, irm, jz],</span>
+<span class="line" id="P220"><span class="ln">220</span>                              akap[jt, ir, jz], akap[jt, ir + <span class='hn'>1</span>, jz], akap[jt, irp, jz], <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
+<span class="line" id="P221"><span class="ln">221</span>    <span class='hk'>return</span> vf, df, d2</span>
 <span class="line" id="P222"><span class="ln">222</span></span>
-<span class="line" id="P223"><span class="ln">223</span><span class='hs'>    Returns jlo: 0 or n outside the table (n also for x equal to xx[n]).</span></span>
-<span class="line" id="P224"><span class="ln">224</span></span>
-<span class="line" id="P225"><span class="ln">225</span><span class='hs'>    &quot;&quot;&quot;</span></span>
-<span class="line" id="P226"><span class="ln">226</span>    <span class='hc'># The table&#x27;s order (<a class='fl' href='#L241'>Fortran line 241</a>).</span></span>
-<span class="line" id="P227"><span class="ln">227</span>    ascnd = xx[n] &gt; xx[<span class='hn'>1</span>]  <span class='hc'># True if ascending</span></span>
-<span class="line" id="P228"><span class="ln">228</span></span>
-<span class="line" id="P229"><span class="ln">229</span>    <span class='hk'>if</span> jlo &lt;= <span class='hn'>0</span> <span class='hk'>or</span> jlo &gt; n:</span>
-<span class="line" id="P230"><span class="ln">230</span>        <span class='hc'># The guess is not useful: go to bisection (<a class='fl' href='#L242-L246'>Fortran lines 242–246</a>).</span></span>
-<span class="line" id="P231"><span class="ln">231</span>        jlo = <span class='hn'>0</span></span>
-<span class="line" id="P232"><span class="ln">232</span>        jhi = n + <span class='hn'>1</span></span>
-<span class="line" id="P233"><span class="ln">233</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P234"><span class="ln">234</span>        inc = <span class='hn'>1</span></span>
-<span class="line" id="P235"><span class="ln">235</span>        <span class='hk'>if</span> (x &gt;= xx[jlo]) == ascnd:</span>
-<span class="line" id="P236"><span class="ln">236</span>            <span class='hc'># Hunt up, label 1 (<a class='fl' href='#L247-L256'>Fortran lines 247–256</a>).</span></span>
-<span class="line" id="P237"><span class="ln">237</span>            <span class='hk'>while</span> <span class='hk'>True</span>:</span>
-<span class="line" id="P238"><span class="ln">238</span>                jhi = jlo + inc</span>
-<span class="line" id="P239"><span class="ln">239</span>                <span class='hk'>if</span> jhi &gt; n:</span>
-<span class="line" id="P240"><span class="ln">240</span>                    jhi = n + <span class='hn'>1</span>  <span class='hc'># off the end of the table</span></span>
-<span class="line" id="P241"><span class="ln">241</span>                    <span class='hk'>break</span></span>
-<span class="line" id="P242"><span class="ln">242</span>                <span class='hk'>elif</span> (x &gt;= xx[jhi]) == ascnd:</span>
-<span class="line" id="P243"><span class="ln">243</span>                    jlo = jhi</span>
-<span class="line" id="P244"><span class="ln">244</span>                    inc = inc + inc</span>
-<span class="line" id="P245"><span class="ln">245</span>                    <span class='hk'>continue</span></span>
-<span class="line" id="P246"><span class="ln">246</span>                <span class='hk'>break</span></span>
-<span class="line" id="P247"><span class="ln">247</span>        <span class='hk'>else</span>:</span>
-<span class="line" id="P248"><span class="ln">248</span>            <span class='hc'># Hunt down, label 2 (<a class='fl' href='#L257-L267'>Fortran lines 257–267</a>).</span></span>
-<span class="line" id="P249"><span class="ln">249</span>            jhi = jlo</span>
-<span class="line" id="P250"><span class="ln">250</span>            <span class='hk'>while</span> <span class='hk'>True</span>:</span>
-<span class="line" id="P251"><span class="ln">251</span>                jlo = jhi - inc</span>
-<span class="line" id="P252"><span class="ln">252</span>                <span class='hk'>if</span> jlo &lt; <span class='hn'>1</span>:</span>
-<span class="line" id="P253"><span class="ln">253</span>                    jlo = <span class='hn'>0</span>  <span class='hc'># off the end of the table</span></span>
-<span class="line" id="P254"><span class="ln">254</span>                    <span class='hk'>break</span></span>
-<span class="line" id="P255"><span class="ln">255</span>                <span class='hk'>elif</span> (x &lt; xx[jlo]) == ascnd:</span>
-<span class="line" id="P256"><span class="ln">256</span>                    jhi = jlo</span>
-<span class="line" id="P257"><span class="ln">257</span>                    inc = inc + inc</span>
-<span class="line" id="P258"><span class="ln">258</span>                    <span class='hk'>continue</span></span>
-<span class="line" id="P259"><span class="ln">259</span>                <span class='hk'>break</span></span>
-<span class="line" id="P260"><span class="ln">260</span></span>
-<span class="line" id="P261"><span class="ln">261</span>    <span class='hc'># Bisection, label 3 (<a class='fl' href='#L268-L276'>Fortran lines 268–276</a>).</span></span>
-<span class="line" id="P262"><span class="ln">262</span>    <span class='hk'>while</span> jhi - jlo != <span class='hn'>1</span>:</span>
-<span class="line" id="P263"><span class="ln">263</span>        jm = (jhi + jlo) // <span class='hn'>2</span></span>
-<span class="line" id="P264"><span class="ln">264</span>        <span class='hk'>if</span> (x &gt;= xx[jm]) == ascnd:</span>
-<span class="line" id="P265"><span class="ln">265</span>            jlo = jm</span>
-<span class="line" id="P266"><span class="ln">266</span>        <span class='hk'>else</span>:</span>
-<span class="line" id="P267"><span class="ln">267</span>            jhi = jm</span>
-<span class="line" id="P268"><span class="ln">268</span>    <span class='hk'>return</span> jlo</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
+<span class="line" id="P223"><span class="ln">223</span></span>
+<span class="line" id="P224"><span class="ln">224</span><span class='hk'>def</span> cinterp3(zm: <span class='hb'>float</span>, z0: <span class='hb'>float</span>, z1: <span class='hb'>float</span>, zp: <span class='hb'>float</span>, z: <span class='hb'>float</span>, n0: <span class='hb'>int</span>, mxnv: <span class='hb'>int</span>, vm: <span class='hb'>float</span>, v0: <span class='hb'>float</span>, v1: <span class='hb'>float</span>,</span>
+<span class="line" id="P225"><span class="ln">225</span>             vp: <span class='hb'>float</span>, vf: <span class='hb'>float</span>, df: <span class='hb'>float</span>, d2: <span class='hb'>float</span>, xh: <span class='hb'>float</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>]:</span>
+<span class="line" id="P226"><span class="ln">226</span>    <span class='hs'>&quot;&quot;&quot;Interpolate at z on [z0, z1] from 4 tabulated points: a cubic</span></span>
+<span class="line" id="P227"><span class="ln">227</span><span class='hs'>    Hermite polynomial with end slopes from the neighboring secants, and</span></span>
+<span class="line" id="P228"><span class="ln">228</span><span class='hs'>    quadratic on the table&#x27;s first and last intervals.</span></span>
+<span class="line" id="P229"><span class="ln">229</span></span>
+<span class="line" id="P230"><span class="ln">230</span><span class='hs'>    Translates: condopacp.f#CINTERP3 (7be4133)</span></span>
+<span class="line" id="P231"><span class="ln">231</span></span>
+<span class="line" id="P232"><span class="ln">232</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P233"><span class="ln">233</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P234"><span class="ln">234</span><span class='hs'>    zm, z0, z1, zp : float</span></span>
+<span class="line" id="P235"><span class="ln">235</span><span class='hs'>        The four abscissae (z0 and z1 bracket z).</span></span>
+<span class="line" id="P236"><span class="ln">236</span><span class='hs'>    z : float</span></span>
+<span class="line" id="P237"><span class="ln">237</span><span class='hs'>        The point of interpolation.</span></span>
+<span class="line" id="P238"><span class="ln">238</span><span class='hs'>    n0 : int</span></span>
+<span class="line" id="P239"><span class="ln">239</span><span class='hs'>        The index of z0 in the table.</span></span>
+<span class="line" id="P240"><span class="ln">240</span><span class='hs'>    mxnv : int</span></span>
+<span class="line" id="P241"><span class="ln">241</span><span class='hs'>        The table&#x27;s length.</span></span>
+<span class="line" id="P242"><span class="ln">242</span><span class='hs'>    vm, v0, v1, vp : float</span></span>
+<span class="line" id="P243"><span class="ln">243</span><span class='hs'>        The values at the four abscissae.</span></span>
+<span class="line" id="P244"><span class="ln">244</span><span class='hs'>    vf, df, d2, xh : float</span></span>
+<span class="line" id="P245"><span class="ln">245</span><span class='hs'>        Output only (passed in with any value).</span></span>
+<span class="line" id="P246"><span class="ln">246</span></span>
+<span class="line" id="P247"><span class="ln">247</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P248"><span class="ln">248</span><span class='hs'>    -------</span></span>
+<span class="line" id="P249"><span class="ln">249</span><span class='hs'>    vf, df, d2, xh : float</span></span>
+<span class="line" id="P250"><span class="ln">250</span><span class='hs'>        The value, the first and the second derivative, and the fraction</span></span>
+<span class="line" id="P251"><span class="ln">251</span><span class='hs'>        of the way from z0 to z1.</span></span>
+<span class="line" id="P252"><span class="ln">252</span></span>
+<span class="line" id="P253"><span class="ln">253</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P254"><span class="ln">254</span>    <span class='hc'># The interval checked (<a class='fl' href='#L189'>Fortran line 189</a>).</span></span>
+<span class="line" id="P255"><span class="ln">255</span>    <span class='hk'>if</span> n0 &lt;= <span class='hn'>0</span> <span class='hk'>or</span> n0 &gt;= mxnv:</span>
+<span class="line" id="P256"><span class="ln">256</span>        <span class='hk'>raise</span> SystemExit(<span class='hs'>&#x27;</span><span class='hs'>CINTERP: N0 out of range</span><span class='hs'>&#x27;</span>)</span>
+<span class="line" id="P257"><span class="ln">257</span>    <span class='hk'>if</span> accel.USE_NUMBA:</span>
+<span class="line" id="P258"><span class="ln">258</span>        <span class='hk'>return</span> _cinterp3_nb(zm, z0, z1, zp, z, n0, mxnv, vm, v0, v1, vp)</span>
+<span class="line" id="P259"><span class="ln">259</span></span>
+<span class="line" id="P260"><span class="ln">260</span>    <span class='hc'># The position in the interval (<a class='fl' href='#L190-L192'>Fortran lines 190–192</a>).</span></span>
+<span class="line" id="P261"><span class="ln">261</span>    x = z - z0</span>
+<span class="line" id="P262"><span class="ln">262</span>    h = z1 - z0  <span class='hc'># the basic interval</span></span>
+<span class="line" id="P263"><span class="ln">263</span>    xh = x / h</span>
+<span class="line" id="P264"><span class="ln">264</span></span>
+<span class="line" id="P265"><span class="ln">265</span>    <span class='hc'># The slopes at the two ends, where there is a neighbor (<a class='fl' href='#L193-L202'>Fortran lines 193–202</a>).</span></span>
+<span class="line" id="P266"><span class="ln">266</span>    <span class='hk'>if</span> n0 &gt; <span class='hn'>1</span>:</span>
+<span class="line" id="P267"><span class="ln">267</span>        hm = z0 - zm  <span class='hc'># the left adjoining interval</span></span>
+<span class="line" id="P268"><span class="ln">268</span>        v01 = (((v1 - v0) / (h * h) + (v0 - vm) / (hm * hm))</span>
+<span class="line" id="P269"><span class="ln">269</span>               / (<span class='hn'>1.0</span> / h + <span class='hn'>1.0</span> / hm))  <span class='hc'># the left derivative</span></span>
+<span class="line" id="P270"><span class="ln">270</span>    <span class='hk'>if</span> n0 &lt; mxnv - <span class='hn'>1</span>:</span>
+<span class="line" id="P271"><span class="ln">271</span>        hp = zp - z1  <span class='hc'># the right adjoining interval</span></span>
+<span class="line" id="P272"><span class="ln">272</span>        v11 = (((v1 - v0) / (h * h) + (vp - v1) / (hp * hp))</span>
+<span class="line" id="P273"><span class="ln">273</span>               / (<span class='hn'>1.0</span> / h + <span class='hn'>1.0</span> / hp))  <span class='hc'># the right derivative</span></span>
+<span class="line" id="P274"><span class="ln">274</span></span>
+<span class="line" id="P275"><span class="ln">275</span>    <span class='hk'>if</span> n0 &gt; <span class='hn'>1</span> <span class='hk'>and</span> n0 &lt; mxnv - <span class='hn'>1</span>:</span>
+<span class="line" id="P276"><span class="ln">276</span>        <span class='hc'># Cubic interpolation (<a class='fl' href='#L203-L210'>Fortran lines 203–210</a>).</span></span>
+<span class="line" id="P277"><span class="ln">277</span>        c2 = <span class='hn'>3.0</span> * (v1 - v0) - h * (v11 + <span class='hn'>2.0</span> * v01)</span>
+<span class="line" id="P278"><span class="ln">278</span>        c3 = h * (v01 + v11) - <span class='hn'>2.0</span> * (v1 - v0)</span>
+<span class="line" id="P279"><span class="ln">279</span>        vf = v0 + v01 * x + c2 * (xh * xh) + c3 * (xh * xh * xh)</span>
+<span class="line" id="P280"><span class="ln">280</span>        df = v01 + (<span class='hn'>2.0</span> * c2 * xh + <span class='hn'>3.0</span> * c3 * (xh * xh)) / h</span>
+<span class="line" id="P281"><span class="ln">281</span>        d2 = (<span class='hn'>2.0</span> * c2 + <span class='hn'>6.0</span> * c3 * xh) / (h * h)</span>
+<span class="line" id="P282"><span class="ln">282</span>        <span class='hk'>return</span> vf, df, d2, xh  <span class='hc'># GOTO 10</span></span>
+<span class="line" id="P283"><span class="ln">283</span></span>
+<span class="line" id="P284"><span class="ln">284</span>    <span class='hk'>if</span> n0 == <span class='hn'>1</span>:</span>
+<span class="line" id="P285"><span class="ln">285</span>        <span class='hc'># Quadratic interpolation, first interval (<a class='fl' href='#L211-L215'>Fortran lines 211–215</a>).</span></span>
+<span class="line" id="P286"><span class="ln">286</span>        c2 = v0 - v1 + v11 * h</span>
+<span class="line" id="P287"><span class="ln">287</span>        vf = v1 - v11 * (h - x) + c2 * ((<span class='hn'>1.0</span> - xh) * (<span class='hn'>1.0</span> - xh))</span>
+<span class="line" id="P288"><span class="ln">288</span>        df = v11 - <span class='hn'>2.0</span> * c2 * (<span class='hn'>1.0</span> - xh) / h</span>
+<span class="line" id="P289"><span class="ln">289</span>        d2 = <span class='hn'>2.0</span> * c2 / (h * h)</span>
+<span class="line" id="P290"><span class="ln">290</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P291"><span class="ln">291</span>        <span class='hc'># Quadratic interpolation, last interval, N0 = MXNV-1 (<a class='fl' href='#L216-L221'>Fortran lines 216–221</a>).</span></span>
+<span class="line" id="P292"><span class="ln">292</span>        c2 = v1 - v0 - v01 * h</span>
+<span class="line" id="P293"><span class="ln">293</span>        vf = v0 + v01 * x + c2 * (xh * xh)</span>
+<span class="line" id="P294"><span class="ln">294</span>        df = v01 + <span class='hn'>2.0</span> * c2 * xh / h</span>
+<span class="line" id="P295"><span class="ln">295</span>        d2 = <span class='hn'>2.0</span> * c2 / (h * h)</span>
+<span class="line" id="P296"><span class="ln">296</span>    <span class='hk'>return</span> vf, df, d2, xh</span>
+<span class="line" id="P297"><span class="ln">297</span></span>
+<span class="line" id="P298"><span class="ln">298</span></span>
+<span class="line" id="P299"><span class="ln">299</span><span class='hk'>def</span> hunt(xx: np.ndarray, n: <span class='hb'>int</span>, x: <span class='hb'>float</span>, jlo: <span class='hb'>int</span>) -&gt; <span class='hb'>int</span>:</span>
+<span class="line" id="P300"><span class="ln">300</span>    <span class='hs'>&quot;&quot;&quot;Numerical Recipes&#x27; HUNT: find jlo with x between xx[jlo] and</span></span>
+<span class="line" id="P301"><span class="ln">301</span><span class='hs'>    xx[jlo+1] in a monotonic table, starting from the guess jlo and</span></span>
+<span class="line" id="P302"><span class="ln">302</span><span class='hs'>    doubling the step before bisecting.</span></span>
+<span class="line" id="P303"><span class="ln">303</span></span>
+<span class="line" id="P304"><span class="ln">304</span><span class='hs'>    Translates: condopacp.f#HUNT (7be4133)</span></span>
+<span class="line" id="P305"><span class="ln">305</span></span>
+<span class="line" id="P306"><span class="ln">306</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P307"><span class="ln">307</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P308"><span class="ln">308</span><span class='hs'>    xx : np.ndarray, shape: `(n + 1,)` at least, dtype: ``float64``</span></span>
+<span class="line" id="P309"><span class="ln">309</span><span class='hs'>        The table xx[1..n], monotonic (index 0 unused).</span></span>
+<span class="line" id="P310"><span class="ln">310</span><span class='hs'>    n : int</span></span>
+<span class="line" id="P311"><span class="ln">311</span><span class='hs'>        The table&#x27;s length.</span></span>
+<span class="line" id="P312"><span class="ln">312</span><span class='hs'>    x : float</span></span>
+<span class="line" id="P313"><span class="ln">313</span><span class='hs'>        The value to bracket.</span></span>
+<span class="line" id="P314"><span class="ln">314</span><span class='hs'>    jlo : int</span></span>
+<span class="line" id="P315"><span class="ln">315</span><span class='hs'>        The first guess.</span></span>
+<span class="line" id="P316"><span class="ln">316</span></span>
+<span class="line" id="P317"><span class="ln">317</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P318"><span class="ln">318</span><span class='hs'>    -------</span></span>
+<span class="line" id="P319"><span class="ln">319</span><span class='hs'>    int</span></span>
+<span class="line" id="P320"><span class="ln">320</span><span class='hs'>        jlo: 0 or n outside the table (n also for x equal to xx[n]).</span></span>
+<span class="line" id="P321"><span class="ln">321</span></span>
+<span class="line" id="P322"><span class="ln">322</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P323"><span class="ln">323</span>    <span class='hk'>if</span> accel.USE_NUMBA:</span>
+<span class="line" id="P324"><span class="ln">324</span>        <span class='hk'>return</span> _hunt_nb(xx, n, x, jlo)</span>
+<span class="line" id="P325"><span class="ln">325</span></span>
+<span class="line" id="P326"><span class="ln">326</span>    <span class='hc'># The table&#x27;s order (<a class='fl' href='#L241'>Fortran line 241</a>).</span></span>
+<span class="line" id="P327"><span class="ln">327</span>    ascnd = xx[n] &gt; xx[<span class='hn'>1</span>]  <span class='hc'># True if ascending</span></span>
+<span class="line" id="P328"><span class="ln">328</span></span>
+<span class="line" id="P329"><span class="ln">329</span>    <span class='hk'>if</span> jlo &lt;= <span class='hn'>0</span> <span class='hk'>or</span> jlo &gt; n:</span>
+<span class="line" id="P330"><span class="ln">330</span>        <span class='hc'># The guess is not useful: go to bisection (<a class='fl' href='#L242-L246'>Fortran lines 242–246</a>).</span></span>
+<span class="line" id="P331"><span class="ln">331</span>        jlo = <span class='hn'>0</span></span>
+<span class="line" id="P332"><span class="ln">332</span>        jhi = n + <span class='hn'>1</span></span>
+<span class="line" id="P333"><span class="ln">333</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P334"><span class="ln">334</span>        inc = <span class='hn'>1</span></span>
+<span class="line" id="P335"><span class="ln">335</span>        <span class='hk'>if</span> (x &gt;= xx[jlo]) == ascnd:</span>
+<span class="line" id="P336"><span class="ln">336</span>            <span class='hc'># Hunt up, label 1 (<a class='fl' href='#L247-L256'>Fortran lines 247–256</a>).</span></span>
+<span class="line" id="P337"><span class="ln">337</span>            <span class='hk'>while</span> <span class='hk'>True</span>:</span>
+<span class="line" id="P338"><span class="ln">338</span>                jhi = jlo + inc</span>
+<span class="line" id="P339"><span class="ln">339</span>                <span class='hk'>if</span> jhi &gt; n:</span>
+<span class="line" id="P340"><span class="ln">340</span>                    jhi = n + <span class='hn'>1</span>  <span class='hc'># off the end of the table</span></span>
+<span class="line" id="P341"><span class="ln">341</span>                    <span class='hk'>break</span></span>
+<span class="line" id="P342"><span class="ln">342</span>                <span class='hk'>elif</span> (x &gt;= xx[jhi]) == ascnd:</span>
+<span class="line" id="P343"><span class="ln">343</span>                    jlo = jhi</span>
+<span class="line" id="P344"><span class="ln">344</span>                    inc = inc + inc</span>
+<span class="line" id="P345"><span class="ln">345</span>                    <span class='hk'>continue</span></span>
+<span class="line" id="P346"><span class="ln">346</span>                <span class='hk'>break</span></span>
+<span class="line" id="P347"><span class="ln">347</span>        <span class='hk'>else</span>:</span>
+<span class="line" id="P348"><span class="ln">348</span>            <span class='hc'># Hunt down, label 2 (<a class='fl' href='#L257-L267'>Fortran lines 257–267</a>).</span></span>
+<span class="line" id="P349"><span class="ln">349</span>            jhi = jlo</span>
+<span class="line" id="P350"><span class="ln">350</span>            <span class='hk'>while</span> <span class='hk'>True</span>:</span>
+<span class="line" id="P351"><span class="ln">351</span>                jlo = jhi - inc</span>
+<span class="line" id="P352"><span class="ln">352</span>                <span class='hk'>if</span> jlo &lt; <span class='hn'>1</span>:</span>
+<span class="line" id="P353"><span class="ln">353</span>                    jlo = <span class='hn'>0</span>  <span class='hc'># off the end of the table</span></span>
+<span class="line" id="P354"><span class="ln">354</span>                    <span class='hk'>break</span></span>
+<span class="line" id="P355"><span class="ln">355</span>                <span class='hk'>elif</span> (x &lt; xx[jlo]) == ascnd:</span>
+<span class="line" id="P356"><span class="ln">356</span>                    jhi = jlo</span>
+<span class="line" id="P357"><span class="ln">357</span>                    inc = inc + inc</span>
+<span class="line" id="P358"><span class="ln">358</span>                    <span class='hk'>continue</span></span>
+<span class="line" id="P359"><span class="ln">359</span>                <span class='hk'>break</span></span>
+<span class="line" id="P360"><span class="ln">360</span></span>
+<span class="line" id="P361"><span class="ln">361</span>    <span class='hc'># Bisection, label 3 (<a class='fl' href='#L268-L276'>Fortran lines 268–276</a>).</span></span>
+<span class="line" id="P362"><span class="ln">362</span>    <span class='hk'>while</span> jhi - jlo != <span class='hn'>1</span>:</span>
+<span class="line" id="P363"><span class="ln">363</span>        jm = (jhi + jlo) // <span class='hn'>2</span></span>
+<span class="line" id="P364"><span class="ln">364</span>        <span class='hk'>if</span> (x &gt;= xx[jm]) == ascnd:</span>
+<span class="line" id="P365"><span class="ln">365</span>            jlo = jm</span>
+<span class="line" id="P366"><span class="ln">366</span>        <span class='hk'>else</span>:</span>
+<span class="line" id="P367"><span class="ln">367</span>            jhi = jm</span>
+<span class="line" id="P368"><span class="ln">368</span>    <span class='hk'>return</span> jlo</span>
+<span class="line" id="P369"><span class="ln">369</span></span>
+<span class="line" id="P370"><span class="ln">370</span></span>
+<span class="line" id="P371"><span class="ln">371</span><span class='hc'># --- The Numba kernels (accel.py) -----------------------------------------------------------------------------------</span></span>
+<span class="line" id="P372"><span class="ln">372</span><span class='hc'>#</span></span>
+<span class="line" id="P373"><span class="ln">373</span><span class='hc'># The plain code above is the reference; the kernels repeat its statements, in its order, for Numba. condopacp&#x27;s</span></span>
+<span class="line" id="P374"><span class="ln">374</span><span class='hc'># kernel takes the table (at, ar, az, akap: locals the Fortran SAVEs, module-level here) and HUNT&#x27;s three guesses</span></span>
+<span class="line" id="P375"><span class="ln">375</span><span class='hc'># (guess: iz, it, ir, changed in place) as arguments, and returns a status: 0, or 1-3 for the stops (Z, T, rho out of</span></span>
+<span class="line" id="P376"><span class="ln">376</span><span class='hc'># range), left to the plain code, which prints and stops as the Fortran does. getopac&#x27;s kernel calls it directly.</span></span>
+<span class="line" id="P377"><span class="ln">377</span></span>
+<span class="line" id="P378"><span class="ln">378</span>@accel.njit(_nrt=<span class='hk'>False</span>, inline=<span class='hs'>&#x27;</span><span class='hs'>always</span><span class='hs'>&#x27;</span>)</span>
+<span class="line" id="P379"><span class="ln">379</span><span class='hk'>def</span> _cinterp3_nb(zm: <span class='hb'>float</span>, z0: <span class='hb'>float</span>, z1: <span class='hb'>float</span>, zp: <span class='hb'>float</span>, z: <span class='hb'>float</span>, n0: <span class='hb'>int</span>, mxnv: <span class='hb'>int</span>, vm: <span class='hb'>float</span>, v0: <span class='hb'>float</span>,</span>
+<span class="line" id="P380"><span class="ln">380</span>                 v1: <span class='hb'>float</span>, vp: <span class='hb'>float</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>]:</span>
+<span class="line" id="P381"><span class="ln">381</span>    <span class='hs'>&quot;&quot;&quot;cinterp3 for 1 &lt;= n0 &lt; mxnv (the caller checks): (vf, df, d2, xh) (Fortran lines 190–221).&quot;&quot;&quot;</span></span>
+<span class="line" id="P382"><span class="ln">382</span>    x = z - z0</span>
+<span class="line" id="P383"><span class="ln">383</span>    h = z1 - z0</span>
+<span class="line" id="P384"><span class="ln">384</span>    xh = x / h</span>
+<span class="line" id="P385"><span class="ln">385</span>    v01 = <span class='hn'>0.0</span></span>
+<span class="line" id="P386"><span class="ln">386</span>    v11 = <span class='hn'>0.0</span></span>
+<span class="line" id="P387"><span class="ln">387</span>    <span class='hk'>if</span> n0 &gt; <span class='hn'>1</span>:</span>
+<span class="line" id="P388"><span class="ln">388</span>        hm = z0 - zm</span>
+<span class="line" id="P389"><span class="ln">389</span>        v01 = (((v1 - v0) / (h * h) + (v0 - vm) / (hm * hm))</span>
+<span class="line" id="P390"><span class="ln">390</span>               / (<span class='hn'>1.0</span> / h + <span class='hn'>1.0</span> / hm))</span>
+<span class="line" id="P391"><span class="ln">391</span>    <span class='hk'>if</span> n0 &lt; mxnv - <span class='hn'>1</span>:</span>
+<span class="line" id="P392"><span class="ln">392</span>        hp = zp - z1</span>
+<span class="line" id="P393"><span class="ln">393</span>        v11 = (((v1 - v0) / (h * h) + (vp - v1) / (hp * hp))</span>
+<span class="line" id="P394"><span class="ln">394</span>               / (<span class='hn'>1.0</span> / h + <span class='hn'>1.0</span> / hp))</span>
+<span class="line" id="P395"><span class="ln">395</span>    <span class='hk'>if</span> n0 &gt; <span class='hn'>1</span> <span class='hk'>and</span> n0 &lt; mxnv - <span class='hn'>1</span>:</span>
+<span class="line" id="P396"><span class="ln">396</span>        c2 = <span class='hn'>3.0</span> * (v1 - v0) - h * (v11 + <span class='hn'>2.0</span> * v01)</span>
+<span class="line" id="P397"><span class="ln">397</span>        c3 = h * (v01 + v11) - <span class='hn'>2.0</span> * (v1 - v0)</span>
+<span class="line" id="P398"><span class="ln">398</span>        vf = v0 + v01 * x + c2 * (xh * xh) + c3 * (xh * xh * xh)</span>
+<span class="line" id="P399"><span class="ln">399</span>        df = v01 + (<span class='hn'>2.0</span> * c2 * xh + <span class='hn'>3.0</span> * c3 * (xh * xh)) / h</span>
+<span class="line" id="P400"><span class="ln">400</span>        d2 = (<span class='hn'>2.0</span> * c2 + <span class='hn'>6.0</span> * c3 * xh) / (h * h)</span>
+<span class="line" id="P401"><span class="ln">401</span>        <span class='hk'>return</span> vf, df, d2, xh</span>
+<span class="line" id="P402"><span class="ln">402</span>    <span class='hk'>if</span> n0 == <span class='hn'>1</span>:</span>
+<span class="line" id="P403"><span class="ln">403</span>        c2 = v0 - v1 + v11 * h</span>
+<span class="line" id="P404"><span class="ln">404</span>        vf = v1 - v11 * (h - x) + c2 * ((<span class='hn'>1.0</span> - xh) * (<span class='hn'>1.0</span> - xh))</span>
+<span class="line" id="P405"><span class="ln">405</span>        df = v11 - <span class='hn'>2.0</span> * c2 * (<span class='hn'>1.0</span> - xh) / h</span>
+<span class="line" id="P406"><span class="ln">406</span>        d2 = <span class='hn'>2.0</span> * c2 / (h * h)</span>
+<span class="line" id="P407"><span class="ln">407</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P408"><span class="ln">408</span>        c2 = v1 - v0 - v01 * h</span>
+<span class="line" id="P409"><span class="ln">409</span>        vf = v0 + v01 * x + c2 * (xh * xh)</span>
+<span class="line" id="P410"><span class="ln">410</span>        df = v01 + <span class='hn'>2.0</span> * c2 * xh / h</span>
+<span class="line" id="P411"><span class="ln">411</span>        d2 = <span class='hn'>2.0</span> * c2 / (h * h)</span>
+<span class="line" id="P412"><span class="ln">412</span>    <span class='hk'>return</span> vf, df, d2, xh</span>
+<span class="line" id="P413"><span class="ln">413</span></span>
+<span class="line" id="P414"><span class="ln">414</span></span>
+<span class="line" id="P415"><span class="ln">415</span>@accel.njit(_nrt=<span class='hk'>False</span>, inline=<span class='hs'>&#x27;</span><span class='hs'>always</span><span class='hs'>&#x27;</span>)</span>
+<span class="line" id="P416"><span class="ln">416</span><span class='hk'>def</span> _hunt_nb(xx: np.ndarray, n: <span class='hb'>int</span>, x: <span class='hb'>float</span>, jlo: <span class='hb'>int</span>) -&gt; <span class='hb'>int</span>:</span>
+<span class="line" id="P417"><span class="ln">417</span>    <span class='hs'>&quot;&quot;&quot;hunt&#x27;s kernel: the new jlo (Fortran lines 241–276).&quot;&quot;&quot;</span></span>
+<span class="line" id="P418"><span class="ln">418</span>    ascnd = xx[n] &gt; xx[<span class='hn'>1</span>]</span>
+<span class="line" id="P419"><span class="ln">419</span>    <span class='hk'>if</span> jlo &lt;= <span class='hn'>0</span> <span class='hk'>or</span> jlo &gt; n:</span>
+<span class="line" id="P420"><span class="ln">420</span>        jlo = <span class='hn'>0</span></span>
+<span class="line" id="P421"><span class="ln">421</span>        jhi = n + <span class='hn'>1</span></span>
+<span class="line" id="P422"><span class="ln">422</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P423"><span class="ln">423</span>        inc = <span class='hn'>1</span></span>
+<span class="line" id="P424"><span class="ln">424</span>        <span class='hk'>if</span> (x &gt;= xx[jlo]) == ascnd:</span>
+<span class="line" id="P425"><span class="ln">425</span>            <span class='hk'>while</span> <span class='hk'>True</span>:</span>
+<span class="line" id="P426"><span class="ln">426</span>                jhi = jlo + inc</span>
+<span class="line" id="P427"><span class="ln">427</span>                <span class='hk'>if</span> jhi &gt; n:</span>
+<span class="line" id="P428"><span class="ln">428</span>                    jhi = n + <span class='hn'>1</span></span>
+<span class="line" id="P429"><span class="ln">429</span>                    <span class='hk'>break</span></span>
+<span class="line" id="P430"><span class="ln">430</span>                <span class='hk'>elif</span> (x &gt;= xx[jhi]) == ascnd:</span>
+<span class="line" id="P431"><span class="ln">431</span>                    jlo = jhi</span>
+<span class="line" id="P432"><span class="ln">432</span>                    inc = inc + inc</span>
+<span class="line" id="P433"><span class="ln">433</span>                    <span class='hk'>continue</span></span>
+<span class="line" id="P434"><span class="ln">434</span>                <span class='hk'>break</span></span>
+<span class="line" id="P435"><span class="ln">435</span>        <span class='hk'>else</span>:</span>
+<span class="line" id="P436"><span class="ln">436</span>            jhi = jlo</span>
+<span class="line" id="P437"><span class="ln">437</span>            <span class='hk'>while</span> <span class='hk'>True</span>:</span>
+<span class="line" id="P438"><span class="ln">438</span>                jlo = jhi - inc</span>
+<span class="line" id="P439"><span class="ln">439</span>                <span class='hk'>if</span> jlo &lt; <span class='hn'>1</span>:</span>
+<span class="line" id="P440"><span class="ln">440</span>                    jlo = <span class='hn'>0</span></span>
+<span class="line" id="P441"><span class="ln">441</span>                    <span class='hk'>break</span></span>
+<span class="line" id="P442"><span class="ln">442</span>                <span class='hk'>elif</span> (x &lt; xx[jlo]) == ascnd:</span>
+<span class="line" id="P443"><span class="ln">443</span>                    jhi = jlo</span>
+<span class="line" id="P444"><span class="ln">444</span>                    inc = inc + inc</span>
+<span class="line" id="P445"><span class="ln">445</span>                    <span class='hk'>continue</span></span>
+<span class="line" id="P446"><span class="ln">446</span>                <span class='hk'>break</span></span>
+<span class="line" id="P447"><span class="ln">447</span>    <span class='hk'>while</span> jhi - jlo != <span class='hn'>1</span>:</span>
+<span class="line" id="P448"><span class="ln">448</span>        jm = (jhi + jlo) // <span class='hn'>2</span></span>
+<span class="line" id="P449"><span class="ln">449</span>        <span class='hk'>if</span> (x &gt;= xx[jm]) == ascnd:</span>
+<span class="line" id="P450"><span class="ln">450</span>            jlo = jm</span>
+<span class="line" id="P451"><span class="ln">451</span>        <span class='hk'>else</span>:</span>
+<span class="line" id="P452"><span class="ln">452</span>            jhi = jm</span>
+<span class="line" id="P453"><span class="ln">453</span>    <span class='hk'>return</span> jlo</span>
+<span class="line" id="P454"><span class="ln">454</span></span>
+<span class="line" id="P455"><span class="ln">455</span></span>
+<span class="line" id="P456"><span class="ln">456</span>@accel.njit(_nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P457"><span class="ln">457</span><span class='hk'>def</span> _condopacp_in_rho_nb(ar: np.ndarray, akap: np.ndarray, irm: <span class='hb'>int</span>, ir: <span class='hb'>int</span>, irp: <span class='hb'>int</span>, rlg: <span class='hb'>float</span>, jt: <span class='hb'>int</span>,</span>
+<span class="line" id="P458"><span class="ln">458</span>                         jz: <span class='hb'>int</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>]:</span>
+<span class="line" id="P459"><span class="ln">459</span>    <span class='hs'>&quot;&quot;&quot;condopacp_in_rho&#x27;s kernel (calling cinterp3&#x27;s): (vf, df, d2).&quot;&quot;&quot;</span></span>
+<span class="line" id="P460"><span class="ln">460</span>    vf, df, d2, xr = _cinterp3_nb(ar[irm], ar[ir], ar[ir + <span class='hn'>1</span>], ar[irp], rlg, ir, MAXR, akap[jt, irm, jz],</span>
+<span class="line" id="P461"><span class="ln">461</span>                                  akap[jt, ir, jz], akap[jt, ir + <span class='hn'>1</span>, jz], akap[jt, irp, jz])</span>
+<span class="line" id="P462"><span class="ln">462</span>    <span class='hk'>return</span> vf, df, d2</span>
+<span class="line" id="P463"><span class="ln">463</span></span>
+<span class="line" id="P464"><span class="ln">464</span></span>
+<span class="line" id="P465"><span class="ln">465</span>@accel.njit(_nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P466"><span class="ln">466</span><span class='hk'>def</span> _condopacp_nb(zion: <span class='hb'>float</span>, tlg: <span class='hb'>float</span>, rlg: <span class='hb'>float</span>, at: np.ndarray, ar: np.ndarray, az: np.ndarray,</span>
+<span class="line" id="P467"><span class="ln">467</span>                  akap: np.ndarray, guess: np.ndarray) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>int</span>]:</span>
+<span class="line" id="P468"><span class="ln">468</span>    <span class='hs'>&quot;&quot;&quot;condopacp after the table is read (Fortran lines 96–170): (ck, drk, dtk, status), status 0 or 1-3 for the</span></span>
+<span class="line" id="P469"><span class="ln">469</span><span class='hs'>    stops (Z, T, rho out of range); guess (iz, it, ir) changed in place.&quot;&quot;&quot;</span></span>
+<span class="line" id="P470"><span class="ln">470</span>    zlg = math.log10(zion)</span>
+<span class="line" id="P471"><span class="ln">471</span>    iz = _hunt_nb(az, MAXZ, zlg, guess[<span class='hn'>0</span>])</span>
+<span class="line" id="P472"><span class="ln">472</span>    guess[<span class='hn'>0</span>] = iz</span>
+<span class="line" id="P473"><span class="ln">473</span>    <span class='hk'>if</span> iz == <span class='hn'>0</span> <span class='hk'>or</span> iz == MAXZ:</span>
+<span class="line" id="P474"><span class="ln">474</span>        <span class='hk'>return</span> <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>1</span></span>
+<span class="line" id="P475"><span class="ln">475</span>    it = _hunt_nb(at, MAXT, tlg, guess[<span class='hn'>1</span>])</span>
+<span class="line" id="P476"><span class="ln">476</span>    guess[<span class='hn'>1</span>] = it</span>
+<span class="line" id="P477"><span class="ln">477</span>    <span class='hk'>if</span> it == <span class='hn'>0</span> <span class='hk'>or</span> it == MAXT:</span>
+<span class="line" id="P478"><span class="ln">478</span>        <span class='hk'>return</span> <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>2</span></span>
+<span class="line" id="P479"><span class="ln">479</span>    ir = _hunt_nb(ar, MAXR, rlg, guess[<span class='hn'>2</span>])</span>
+<span class="line" id="P480"><span class="ln">480</span>    guess[<span class='hn'>2</span>] = ir</span>
+<span class="line" id="P481"><span class="ln">481</span>    <span class='hk'>if</span> ir == <span class='hn'>0</span> <span class='hk'>or</span> ir == MAXR:</span>
+<span class="line" id="P482"><span class="ln">482</span>        <span class='hk'>return</span> <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>3</span></span>
+<span class="line" id="P483"><span class="ln">483</span>    itm = <span class='hb'>max</span>(<span class='hn'>1</span>, it - <span class='hn'>1</span>)</span>
+<span class="line" id="P484"><span class="ln">484</span>    itp = <span class='hb'>min</span>(MAXT, it + <span class='hn'>2</span>)</span>
+<span class="line" id="P485"><span class="ln">485</span>    irm = <span class='hb'>max</span>(<span class='hn'>1</span>, ir - <span class='hn'>1</span>)</span>
+<span class="line" id="P486"><span class="ln">486</span>    irp = <span class='hb'>min</span>(MAXR, ir + <span class='hn'>2</span>)</span>
+<span class="line" id="P487"><span class="ln">487</span>    cktmz0, drktmz0, dr2ktmz0 = _condopacp_in_rho_nb(ar, akap, irm, ir, irp, rlg, itm, iz)</span>
+<span class="line" id="P488"><span class="ln">488</span>    ckt0z0, drkt0z0, dr2kt0z0 = _condopacp_in_rho_nb(ar, akap, irm, ir, irp, rlg, it, iz)</span>
+<span class="line" id="P489"><span class="ln">489</span>    ckt1z0, drkt1z0, dr2kt1z0 = _condopacp_in_rho_nb(ar, akap, irm, ir, irp, rlg, it + <span class='hn'>1</span>, iz)</span>
+<span class="line" id="P490"><span class="ln">490</span>    cktpz0, drktpz0, dr2ktpz0 = _condopacp_in_rho_nb(ar, akap, irm, ir, irp, rlg, itp, iz)</span>
+<span class="line" id="P491"><span class="ln">491</span>    cktmz1, drktmz1, dr2ktmz1 = _condopacp_in_rho_nb(ar, akap, irm, ir, irp, rlg, itm, iz + <span class='hn'>1</span>)</span>
+<span class="line" id="P492"><span class="ln">492</span>    ckt0z1, drkt0z1, dr2kt0z1 = _condopacp_in_rho_nb(ar, akap, irm, ir, irp, rlg, it, iz + <span class='hn'>1</span>)</span>
+<span class="line" id="P493"><span class="ln">493</span>    ckt1z1, drkt1z1, dr2kt1z1 = _condopacp_in_rho_nb(ar, akap, irm, ir, irp, rlg, it + <span class='hn'>1</span>, iz + <span class='hn'>1</span>)</span>
+<span class="line" id="P494"><span class="ln">494</span>    cktpz1, drktpz1, dr2ktpz1 = _condopacp_in_rho_nb(ar, akap, irm, ir, irp, rlg, itp, iz + <span class='hn'>1</span>)</span>
+<span class="line" id="P495"><span class="ln">495</span>    xz1 = (zlg - az[iz]) / (az[iz + <span class='hn'>1</span>] - az[iz])</span>
+<span class="line" id="P496"><span class="ln">496</span>    xz0 = <span class='hn'>1.0</span> - xz1</span>
+<span class="line" id="P497"><span class="ln">497</span>    cktm = xz0 * cktmz0 + xz1 * cktmz1</span>
+<span class="line" id="P498"><span class="ln">498</span>    drktm = xz0 * drktmz0 + xz1 * drktmz1</span>
+<span class="line" id="P499"><span class="ln">499</span>    ckt0 = xz0 * ckt0z0 + xz1 * ckt0z1</span>
+<span class="line" id="P500"><span class="ln">500</span>    drkt0 = xz0 * drkt0z0 + xz1 * drkt0z1</span>
+<span class="line" id="P501"><span class="ln">501</span>    ckt1 = xz0 * ckt1z0 + xz1 * ckt1z1</span>
+<span class="line" id="P502"><span class="ln">502</span>    drkt1 = xz0 * drkt1z0 + xz1 * drkt1z1</span>
+<span class="line" id="P503"><span class="ln">503</span>    cktp = xz0 * cktpz0 + xz1 * cktpz1</span>
+<span class="line" id="P504"><span class="ln">504</span>    drktp = xz0 * drktpz0 + xz1 * drktpz1</span>
+<span class="line" id="P505"><span class="ln">505</span>    ck, dtk, dt2k, xt = _cinterp3_nb(at[itm], at[it], at[it + <span class='hn'>1</span>], at[itp], tlg, it, MAXT, cktm, ckt0, ckt1, cktp)</span>
+<span class="line" id="P506"><span class="ln">506</span>    drk, drtk, drt2k, xt = _cinterp3_nb(at[itm], at[it], at[it + <span class='hn'>1</span>], at[itp], tlg, it, MAXT, drktm, drkt0, drkt1,</span>
+<span class="line" id="P507"><span class="ln">507</span>                                        drktp)</span>
+<span class="line" id="P508"><span class="ln">508</span>    <span class='hk'>return</span> ck, drk, dtk, <span class='hn'>0</span></span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
 function st(){try{return localStorage.getItem('pm-toc')}catch(e){return null}}function sv(v){try{localStorage.setItem('pm-toc',v)}catch(e){}}
 var b=nav.querySelector('.toc-toggle');function set(h){page.classList.toggle('toc-hidden',h);b.textContent=h?'show':'hide';}
 set(st()==='hidden');b.addEventListener('click',function(){var h=!page.classList.contains('toc-hidden');set(h);sv(h?'hidden':'shown');});

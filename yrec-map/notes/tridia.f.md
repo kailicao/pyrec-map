@@ -4,9 +4,9 @@
 
 **How it fits.**
 - **Inputs:** `TRIDI_MOD`, filled by [DCOEFT](dcoeft.f.md#dcoeft) just before the call: the three diagonals `A`, `B`, `C`, the right-hand side `D` (by `DCOEFT`'s comment, the angular velocities at the start of the time step, the outermost one already reduced by the wind), and `GAMA(N)`, the wind term at the surface. `GAMA` is also the elimination's work array (loop 1 sets `GAMA(2..N)`, [line 29](https://github.com/yreclab/yrec/blob/7be4133/src/tridia.f#L29)), so TRIDIA reads the wind term first ([line 22](https://github.com/yreclab/yrec/blob/7be4133/src/tridia.f#L22)). The argument `EI` holds the points' moments of inertia (by `SECULR`'s use, probably).
-- **Who calls it:** only [SECULR](seculr.f.md#seculr).
+- **Who calls it:** only [SECULR](https://github.com/yreclab/yrec/blob/7be4133/src/seculr.f#L6-L532).
 - **Outputs:** `U` in `TRIDI_MOD`, the angular velocities at the end of the step; `DJ`, the change of angular momentum at each point; and `SUMDJ`, their sum. `SECULR` passes `DJ` to [EQ2MOD](eq2mod.f.md#eq2mod) to return to the model's grid.
-- **Modules:** `TRIDI_MOD` (formerly `COMMON/TRIDI/`), shared with `DCOEFT`, [CCOEFT](ccoeft.f.md#ccoeft), [CTRIDI](ctridi.f.md#ctridi), [GETQUA](getqua.f.md#getqua) and [MIXCOM](mixcom.f.md#mixcom).
+- **Modules:** `TRIDI_MOD` (formerly `COMMON/TRIDI/`), shared with `DCOEFT`, [CCOEFT](ccoeft.f.md#ccoeft), [CTRIDI](ctridi.f.md#ctridi), [GETQUA](getqua.f.md#getqua) and [MIXCOM](https://github.com/yreclab/yrec/blob/7be4133/src/mixcom.f#L2-L203).
 
 **The method.** Forward elimination and back substitution for $`a_j u_{j-1} + b_j u_j + c_j u_{j+1} = d_j`$; then
 ```math

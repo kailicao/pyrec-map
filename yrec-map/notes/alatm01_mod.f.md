@@ -4,10 +4,10 @@
 
 **What its variables hold, who sets them, who reads them.** All are set by [`ALFILEIN`](alfilein.f.md#alfilein), which reads the table file:
 - `TEFFLs(NTA)`, `GLs(NGA)`: the grid in $`\log T_\mathrm{eff}`$ and $`\log g`$, with their sizes `nTEFF`, `nGL`.
-- `FeHs(NGA)`, `ALPHAs(NGA)`, with `nFeH`, `nALPHA`: the metallicities and $`\alpha`$-enhancements found in the file, used only within `ALFILEIN` to choose the table.
+- `FeHs(NGA)`, `ALPHAs(NGA)`, with `nFeH`, `nALPHA`: the metallicities and $`\alpha`$-enhancements found in the file, collected and sorted within `ALFILEIN` and read nowhere else; the table is chosen by the namelist's `ALATM_FeH` and `ALATM_Alpha`.
 - `PLs`, `P100Ls`, `T100Ls` (`NTA` $`\times`$ `NGA`): $`\log P`$ where $`T = T_\mathrm{eff}`$, and $`\log P`$ and $`\log T`$ at $`\tau = 100`$ (for the option `LALTPTau100`).
 - `LOldNextGen`: the file's format, set and not read elsewhere.
 
-Read by [`ALTABINIT`](altabinit.f.md#altabinit) (the table's limits), [`ALPRINT`](alprint.f.md#alprint) and [`ALSURFP`](alsurfp.f.md#alsurfp) (the interpolation).
+Read by [`ALTABINIT`](altabinit.f.md#altabinit) (the table's limits), [`ALPRINT`](alprint.f.md#alprint), and [`ALSURFP`](alsurfp.f.md#alsurfp) (the interpolation).
 
 **Changed since `rp_1`.** New file: `COMMON/ALATM01/` as a module.

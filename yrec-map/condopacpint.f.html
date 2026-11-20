@@ -2,7 +2,7 @@
 <header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ condopacpint.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#bugs'>Suspected bugs, checked by running the code</a><ol><li><a href='#b1'>1. The mixture&#x27;s derivatives are multiplied by \log K</a></li><li><a href='#b2'>2. The temperature derivative is taken from the density derivatives</a></li><li><a href='#b3'>3. A sign in the extrapolation below \log\rho = -6</a></li><li><a href='#b4'>4. The step of the extrapolation is reversed</a></li></ol></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-CONDOPACPINT'>CONDOPACPINT</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>condopacpint.f</h1>
 <p class='muted'>109 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/condopacpint.f'>on GitHub (7be4133)</a></p>
-<p><strong>Python version</strong>: <code>condopacpint.py</code>, 103 lines, on the right (switch to Python above the code).</p>
+<p><strong>Python version</strong>: <code>condopacpint.py</code>, 230 lines, on the right (switch to Python above the code).</p>
 <h2 id='purpose'>Purpose</h2>
 <div class='notes'><p>This file computes the conductive opacity for a mixture of hydrogen, helium and metals from Potekhin's conductivity tables ("based on Chris Burke's conductive opacity code," LLP 5/31/04). <a href="../yrec-map/getopac.f.html#def-GETOPAC">GETOPAC</a> then adds it to the radiative opacity in harmonic sum.</p></div>
 <h2 id='how-it-fits'>How it fits</h2>
@@ -216,108 +216,235 @@
 <span class="line" id="L107"><span class="ln">107</span></span>
 <span class="line" id="L108"><span class="ln">108</span></span>
 <span class="line" id="L109"><span class="ln">109</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of condopacpint.f (YREC 7be4133): the conductive opacity</span></span>
-<span class="line" id="P2"><span class="ln">2</span><span class='hs'>of an H/He/metal mixture from Potekhin&#x27;s conductivities.&quot;&quot;&quot;</span></span>
+<span class="line" id="P2"><span class="ln">2</span><span class='hs'>of an H/He/metal mixture from Potekhin&#x27;s conductivities.</span></span>
 <span class="line" id="P3"><span class="ln">3</span></span>
-<span class="line" id="P4"><span class="ln">4</span><span class='hk'>import</span> math</span>
-<span class="line" id="P5"><span class="ln">5</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
-<span class="line" id="P6"><span class="ln">6</span></span>
-<span class="line" id="P7"><span class="ln">7</span><span class='hk'>from</span> pyrec.condopacp <span class='hk'>import</span> condopacp</span>
-<span class="line" id="P8"><span class="ln">8</span></span>
-<span class="line" id="P9"><span class="ln">9</span><span class='hc'># DATA: the atomic masses of H1, He4 and the metals (taken as oxygen).</span></span>
-<span class="line" id="P10"><span class="ln">10</span>AH1 = <span class='hn'>1.008</span></span>
-<span class="line" id="P11"><span class="ln">11</span>AHE4 = <span class='hn'>4.004</span></span>
-<span class="line" id="P12"><span class="ln">12</span>AOX = <span class='hn'>16.0</span></span>
+<span class="line" id="P4"><span class="ln">4</span><span class='hs'>Functions</span></span>
+<span class="line" id="P5"><span class="ln">5</span><span class='hs'>---------</span></span>
+<span class="line" id="P6"><span class="ln">6</span><span class='hs'>condopacpint_weights : The ionized number fractions of H, He, and the metals (Fortran lines 24–41).</span></span>
+<span class="line" id="P7"><span class="ln">7</span><span class='hs'>condopacpint : The routine (its Numba kernel when accel.USE_NUMBA and condopacp&#x27;s table is read).</span></span>
+<span class="line" id="P8"><span class="ln">8</span><span class='hs'>_condopacpint_nb : The kernel; getopac&#x27;s kernel calls it directly.</span></span>
+<span class="line" id="P9"><span class="ln">9</span></span>
+<span class="line" id="P10"><span class="ln">10</span><span class='hs'>&quot;&quot;&quot;</span></span>
+<span class="line" id="P11"><span class="ln">11</span></span>
+<span class="line" id="P12"><span class="ln">12</span><span class='hk'>import</span> math</span>
 <span class="line" id="P13"><span class="ln">13</span></span>
-<span class="line" id="P14"><span class="ln">14</span></span>
-<span class="line" id="P15"><span class="ln">15</span><span class='hk'>def</span> condopacpint(dl: <span class='hb'>float</span>, tl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, oc: <span class='hb'>float</span>, ocl: <span class='hb'>float</span>, qodc: <span class='hb'>float</span>, qotc: <span class='hb'>float</span>,</span>
-<span class="line" id="P16"><span class="ln">16</span>                 fxion: np.ndarray, lcondo: <span class='hb'>bool</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>bool</span>]:</span>
-<span class="line" id="P17"><span class="ln">17</span>    <span class='hs'>&quot;&quot;&quot;The conductive opacity of a mixture: Potekhin&#x27;s conductivities for</span></span>
-<span class="line" id="P18"><span class="ln">18</span><span class='hs'>    Z_ion = 1, 2 and 8, summed harmonically with weights by ionized number</span></span>
-<span class="line" id="P19"><span class="ln">19</span><span class='hs'>    fraction, then kappa = 16 sigma T^3 / (3 rho K); extrapolated linearly</span></span>
-<span class="line" id="P20"><span class="ln">20</span><span class='hs'>    below log rho = -6.</span></span>
-<span class="line" id="P21"><span class="ln">21</span></span>
-<span class="line" id="P22"><span class="ln">22</span><span class='hs'>    Translates: condopacpint.f#CONDOPACPINT (7be4133)</span></span>
-<span class="line" id="P23"><span class="ln">23</span></span>
-<span class="line" id="P24"><span class="ln">24</span><span class='hs'>    Arguments: dl, log rho; tl, log T; x, z, the mass fractions of H and</span></span>
-<span class="line" id="P25"><span class="ln">25</span><span class='hs'>    metals; fxion[1..3], the ionization fractions (H+, He+, He2+); oc,</span></span>
-<span class="line" id="P26"><span class="ln">26</span><span class='hs'>    ocl, qodc, qotc, lcondo, passed in (with any value).</span></span>
-<span class="line" id="P27"><span class="ln">27</span></span>
-<span class="line" id="P28"><span class="ln">28</span><span class='hs'>    Returns (oc, ocl, qodc, qotc, lcondo): the opacity and its log, its</span></span>
-<span class="line" id="P29"><span class="ln">29</span><span class='hs'>    derivatives in log rho and log T, and True if computed (otherwise oc</span></span>
-<span class="line" id="P30"><span class="ln">30</span><span class='hs'>    is 10**9.9998, with qodc = qotc = oc).</span></span>
+<span class="line" id="P14"><span class="ln">14</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
+<span class="line" id="P15"><span class="ln">15</span></span>
+<span class="line" id="P16"><span class="ln">16</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> accel</span>
+<span class="line" id="P17"><span class="ln">17</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> condopacp <span class='hk'>as</span> _cm</span>
+<span class="line" id="P18"><span class="ln">18</span><span class='hk'>from</span> pyrec.condopacp <span class='hk'>import</span> _condopacp_nb, condopacp</span>
+<span class="line" id="P19"><span class="ln">19</span></span>
+<span class="line" id="P20"><span class="ln">20</span><span class='hc'># DATA: the atomic masses of H1, He4 and the metals (taken as oxygen).</span></span>
+<span class="line" id="P21"><span class="ln">21</span>AH1 = <span class='hn'>1.008</span></span>
+<span class="line" id="P22"><span class="ln">22</span>AHE4 = <span class='hn'>4.004</span></span>
+<span class="line" id="P23"><span class="ln">23</span>AOX = <span class='hn'>16.0</span></span>
+<span class="line" id="P24"><span class="ln">24</span>OCL_NONE = <span class='hn'>9.9998</span>  <span class='hc'># log10 of the opacity standing for &quot;no conduction&quot; (9.9998D0, <a class='fl' href='#L47'>Fortran line 47</a>).</span></span>
+<span class="line" id="P25"><span class="ln">25</span>TL_MIN, TL_MAX = <span class='hn'>3.0</span>, <span class='hn'>9.0</span>  <span class='hc'># The table&#x27;s range in log T (K) (3.0D0, 9.0D0, <a class='fl' href='#L53'>line 53</a>).</span></span>
+<span class="line" id="P26"><span class="ln">26</span>DL_MAX = <span class='hn'>9.75</span>  <span class='hc'># The table&#x27;s top in log rho (g/cm^3) (9.75D0, <a class='fl' href='#L53'>line 53</a>).</span></span>
+<span class="line" id="P27"><span class="ln">27</span>DL_MIN = -<span class='hn'>6.0</span>  <span class='hc'># The table&#x27;s bottom in log rho; below it, an extrapolation (-6.0D0, <a class='fl' href='#L54'>lines 54</a> and 82).</span></span>
+<span class="line" id="P28"><span class="ln">28</span></span>
+<span class="line" id="P29"><span class="ln">29</span></span>
+<span class="line" id="P30"><span class="ln">30</span><span class='hc'># --- Utilities (each routine its own copies) --------------------------------------------------------------------</span></span>
 <span class="line" id="P31"><span class="ln">31</span></span>
-<span class="line" id="P32"><span class="ln">32</span><span class='hs'>    &quot;&quot;&quot;</span></span>
-<span class="line" id="P33"><span class="ln">33</span>    <span class='hc'># The number fractions of H1, He4 and the metals (<a class='fl' href='#L24-L28'>Fortran lines 24–28</a>).</span></span>
-<span class="line" id="P34"><span class="ln">34</span>    y = <span class='hn'>1.0</span> - x - z</span>
-<span class="line" id="P35"><span class="ln">35</span>    wth1base = (x / AH1) / (x / AH1 + y / AHE4 + z / AOX)</span>
-<span class="line" id="P36"><span class="ln">36</span>    wthe4base = (y / AHE4) / (x / AH1 + y / AHE4 + z / AOX)</span>
-<span class="line" id="P37"><span class="ln">37</span>    wtoxbase = (z / AOX) / (x / AH1 + y / AHE4 + z / AOX)</span>
-<span class="line" id="P38"><span class="ln">38</span></span>
-<span class="line" id="P39"><span class="ln">39</span>    <span class='hc'># Weighted by ionization; the metals taken as fully ionized (<a class='fl' href='#L30-L41'>Fortran lines 30–41</a>).</span></span>
-<span class="line" id="P40"><span class="ln">40</span>    <span class='hc'># Question (see the page): (f1 + 2 f2)/2 for helium.</span></span>
-<span class="line" id="P41"><span class="ln">41</span>    <span class='hc'># Question (see the page): all metals as oxygen, fully ionized.</span></span>
-<span class="line" id="P42"><span class="ln">42</span>    wth1 = wth1base * fxion[<span class='hn'>1</span>]</span>
-<span class="line" id="P43"><span class="ln">43</span>    wthe4 = wthe4base * (fxion[<span class='hn'>2</span>] + <span class='hn'>2.0</span> * fxion[<span class='hn'>3</span>]) / <span class='hn'>2.0</span></span>
-<span class="line" id="P44"><span class="ln">44</span>    wtox = wtoxbase</span>
-<span class="line" id="P45"><span class="ln">45</span></span>
-<span class="line" id="P46"><span class="ln">46</span>    <span class='hc'># No significant conductive opacity, to begin with (<a class='fl' href='#L43-L50'>Fortran lines 43–50</a>).</span></span>
-<span class="line" id="P47"><span class="ln">47</span>    lcondo = <span class='hk'>False</span></span>
-<span class="line" id="P48"><span class="ln">48</span>    ocl = <span class='hn'>9.9998</span></span>
-<span class="line" id="P49"><span class="ln">49</span>    oc = <span class='hn'>10.0</span> ** ocl</span>
-<span class="line" id="P50"><span class="ln">50</span>    qodc = oc</span>
-<span class="line" id="P51"><span class="ln">51</span>    qotc = oc</span>
-<span class="line" id="P52"><span class="ln">52</span></span>
-<span class="line" id="P53"><span class="ln">53</span>    <span class='hc'># Within the table&#x27;s range (<a class='fl' href='#L52-L54'>Fortran lines 52–54</a>).</span></span>
-<span class="line" id="P54"><span class="ln">54</span>    rl = dl - <span class='hn'>3.0</span> * (tl - <span class='hn'>6.0</span>)</span>
-<span class="line" id="P55"><span class="ln">55</span>    <span class='hk'>if</span> tl &gt;= <span class='hn'>3.0</span> <span class='hk'>and</span> tl &lt;= <span class='hn'>9.0</span> <span class='hk'>and</span> dl &lt;= <span class='hn'>9.75</span>:</span>
-<span class="line" id="P56"><span class="ln">56</span>        <span class='hk'>if</span> dl &gt;= -<span class='hn'>6.0</span>:</span>
-<span class="line" id="P57"><span class="ln">57</span>            <span class='hc'># The three pure compositions from the table (<a class='fl' href='#L55-L58'>Fortran lines 55–58</a>).</span></span>
-<span class="line" id="P58"><span class="ln">58</span>            condxl, qodcx, qotcx = condopacp(<span class='hn'>1.0</span>, tl, dl, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
-<span class="line" id="P59"><span class="ln">59</span>            condyl, qodcy, qotcy = condopacp(<span class='hn'>2.0</span>, tl, dl, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
-<span class="line" id="P60"><span class="ln">60</span>            condzl, qodcz, qotcz = condopacp(<span class='hn'>8.0</span>, tl, dl, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
+<span class="line" id="P32"><span class="ln">32</span></span>
+<span class="line" id="P33"><span class="ln">33</span><span class='hk'>def</span> condopacpint_weights(x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, fxion: np.ndarray) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>]:</span>
+<span class="line" id="P34"><span class="ln">34</span>    <span class='hs'>&quot;&quot;&quot;The number fractions of H1, He4, and the metals (as oxygen), weighted by their ionization (Fortran lines</span></span>
+<span class="line" id="P35"><span class="ln">35</span><span class='hs'>    24–41).</span></span>
+<span class="line" id="P36"><span class="ln">36</span></span>
+<span class="line" id="P37"><span class="ln">37</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P38"><span class="ln">38</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P39"><span class="ln">39</span><span class='hs'>    x, z : float</span></span>
+<span class="line" id="P40"><span class="ln">40</span><span class='hs'>        The mass fractions of hydrogen and the metals.</span></span>
+<span class="line" id="P41"><span class="ln">41</span><span class='hs'>    fxion : np.ndarray, shape: `(4,)`, dtype: ``float64``</span></span>
+<span class="line" id="P42"><span class="ln">42</span><span class='hs'>        The ionization fractions H+, He+, He2+ in fxion[1..3] (index 0 unused).</span></span>
+<span class="line" id="P43"><span class="ln">43</span></span>
+<span class="line" id="P44"><span class="ln">44</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P45"><span class="ln">45</span><span class='hs'>    -------</span></span>
+<span class="line" id="P46"><span class="ln">46</span><span class='hs'>    wth1, wthe4, wtox : float</span></span>
+<span class="line" id="P47"><span class="ln">47</span><span class='hs'>        The weights of Z_ion = 1, 2, and 8 in the harmonic sum.</span></span>
+<span class="line" id="P48"><span class="ln">48</span></span>
+<span class="line" id="P49"><span class="ln">49</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P50"><span class="ln">50</span>    y = <span class='hn'>1.0</span> - x - z</span>
+<span class="line" id="P51"><span class="ln">51</span>    wth1base = (x / AH1) / (x / AH1 + y / AHE4 + z / AOX)</span>
+<span class="line" id="P52"><span class="ln">52</span>    wthe4base = (y / AHE4) / (x / AH1 + y / AHE4 + z / AOX)</span>
+<span class="line" id="P53"><span class="ln">53</span>    wtoxbase = (z / AOX) / (x / AH1 + y / AHE4 + z / AOX)</span>
+<span class="line" id="P54"><span class="ln">54</span>    <span class='hc'># Question (see the page): (f1 + 2 f2)/2 for helium.</span></span>
+<span class="line" id="P55"><span class="ln">55</span>    <span class='hc'># Question (see the page): all metals as oxygen, fully ionized.</span></span>
+<span class="line" id="P56"><span class="ln">56</span>    wth1 = wth1base * fxion[<span class='hn'>1</span>]</span>
+<span class="line" id="P57"><span class="ln">57</span>    wthe4 = wthe4base * (fxion[<span class='hn'>2</span>] + <span class='hn'>2.0</span> * fxion[<span class='hn'>3</span>]) / <span class='hn'>2.0</span></span>
+<span class="line" id="P58"><span class="ln">58</span>    wtox = wtoxbase</span>
+<span class="line" id="P59"><span class="ln">59</span>    <span class='hk'>return</span> wth1, wthe4, wtox</span>
+<span class="line" id="P60"><span class="ln">60</span></span>
 <span class="line" id="P61"><span class="ln">61</span></span>
-<span class="line" id="P62"><span class="ln">62</span>            <span class='hc'># Their harmonic sum, log K (<a class='fl' href='#L60-L66'>Fortran lines 60–66</a>).</span></span>
-<span class="line" id="P63"><span class="ln">63</span>            condx = <span class='hn'>10.0</span> ** (-condxl)</span>
-<span class="line" id="P64"><span class="ln">64</span>            condy = <span class='hn'>10.0</span> ** (-condyl)</span>
-<span class="line" id="P65"><span class="ln">65</span>            condz = <span class='hn'>10.0</span> ** (-condzl)</span>
-<span class="line" id="P66"><span class="ln">66</span>            condl = -math.log10(wth1 * condx + wthe4 * condy + wtox * condz)</span>
-<span class="line" id="P67"><span class="ln">67</span></span>
-<span class="line" id="P68"><span class="ln">68</span>            <span class='hc'># The mixture&#x27;s derivatives (<a class='fl' href='#L68-L74'>Fortran lines 68–74</a>).</span></span>
-<span class="line" id="P69"><span class="ln">69</span>            <span class='hc'># Suspected bug (see the page): the factor condl (log K).</span></span>
-<span class="line" id="P70"><span class="ln">70</span>            qodc = condl * (wth1 * qodcx + wthe4 * qodcy + wtox * qodcz)</span>
-<span class="line" id="P71"><span class="ln">71</span>            <span class='hc'># Suspected bug (see the page): the density derivatives again.</span></span>
-<span class="line" id="P72"><span class="ln">72</span>            qotc = condl * (wth1 * qodcx + wthe4 * qodcy + wtox * qodcz)</span>
+<span class="line" id="P62"><span class="ln">62</span>_condopacpint_weights_nb = accel.njit(condopacpint_weights, _nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P63"><span class="ln">63</span></span>
+<span class="line" id="P64"><span class="ln">64</span></span>
+<span class="line" id="P65"><span class="ln">65</span><span class='hk'>def</span> condopacpint(dl: <span class='hb'>float</span>, tl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, oc: <span class='hb'>float</span>, ocl: <span class='hb'>float</span>, qodc: <span class='hb'>float</span>, qotc: <span class='hb'>float</span>,</span>
+<span class="line" id="P66"><span class="ln">66</span>                 fxion: np.ndarray, lcondo: <span class='hb'>bool</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>bool</span>]:</span>
+<span class="line" id="P67"><span class="ln">67</span>    <span class='hs'>&quot;&quot;&quot;The conductive opacity of a mixture: Potekhin&#x27;s conductivities for</span></span>
+<span class="line" id="P68"><span class="ln">68</span><span class='hs'>    Z_ion = 1, 2 and 8, summed harmonically with weights by ionized number</span></span>
+<span class="line" id="P69"><span class="ln">69</span><span class='hs'>    fraction, then kappa = 16 sigma T^3 / (3 rho K); extrapolated linearly</span></span>
+<span class="line" id="P70"><span class="ln">70</span><span class='hs'>    below log rho = -6.</span></span>
+<span class="line" id="P71"><span class="ln">71</span></span>
+<span class="line" id="P72"><span class="ln">72</span><span class='hs'>    Translates: condopacpint.f#CONDOPACPINT (7be4133)</span></span>
 <span class="line" id="P73"><span class="ln">73</span></span>
-<span class="line" id="P74"><span class="ln">74</span>            <span class='hc'># The conductive opacity (<a class='fl' href='#L76-L80'>Fortran lines 76–80</a>).</span></span>
-<span class="line" id="P75"><span class="ln">75</span>            ocl = -<span class='hn'>3.5194</span> + <span class='hn'>3.0</span> * tl - dl - condl</span>
-<span class="line" id="P76"><span class="ln">76</span>            qodc = -<span class='hn'>1.0</span> - qodc</span>
-<span class="line" id="P77"><span class="ln">77</span>            qotc = <span class='hn'>3.0</span> - qotc</span>
-<span class="line" id="P78"><span class="ln">78</span>            lcondo = <span class='hk'>True</span></span>
-<span class="line" id="P79"><span class="ln">79</span>            oc = <span class='hn'>10.0</span> ** ocl</span>
-<span class="line" id="P80"><span class="ln">80</span></span>
-<span class="line" id="P81"><span class="ln">81</span>        <span class='hk'>if</span> dl &lt; -<span class='hn'>6.0</span> <span class='hk'>and</span> rl &gt;= <span class='hn'>0.0</span>:</span>
-<span class="line" id="P82"><span class="ln">82</span>            <span class='hc'># Extrapolate from log rho = -6: the table there (<a class='fl' href='#L82-L86'>Fortran lines 82–86</a>).</span></span>
-<span class="line" id="P83"><span class="ln">83</span>            condxl, qodc, qotc = condopacp(<span class='hn'>1.0</span>, tl, -<span class='hn'>6.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
-<span class="line" id="P84"><span class="ln">84</span>            condyl, crap, crap2 = condopacp(<span class='hn'>2.0</span>, tl, -<span class='hn'>6.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
-<span class="line" id="P85"><span class="ln">85</span>            condzl, crap, crap2 = condopacp(<span class='hn'>8.0</span>, tl, -<span class='hn'>6.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
+<span class="line" id="P74"><span class="ln">74</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P75"><span class="ln">75</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P76"><span class="ln">76</span><span class='hs'>    dl, tl : float</span></span>
+<span class="line" id="P77"><span class="ln">77</span><span class='hs'>        log10 rho (g/cm^3) and log10 T (K).</span></span>
+<span class="line" id="P78"><span class="ln">78</span><span class='hs'>    x, z : float</span></span>
+<span class="line" id="P79"><span class="ln">79</span><span class='hs'>        The mass fractions of hydrogen and the metals.</span></span>
+<span class="line" id="P80"><span class="ln">80</span><span class='hs'>    oc, ocl, qodc, qotc : float</span></span>
+<span class="line" id="P81"><span class="ln">81</span><span class='hs'>        Output only (passed in with any value).</span></span>
+<span class="line" id="P82"><span class="ln">82</span><span class='hs'>    fxion : np.ndarray, shape: `(4,)`, dtype: ``float64``</span></span>
+<span class="line" id="P83"><span class="ln">83</span><span class='hs'>        The ionization fractions H+, He+, He2+ in fxion[1..3].</span></span>
+<span class="line" id="P84"><span class="ln">84</span><span class='hs'>    lcondo : bool</span></span>
+<span class="line" id="P85"><span class="ln">85</span><span class='hs'>        Output only.</span></span>
 <span class="line" id="P86"><span class="ln">86</span></span>
-<span class="line" id="P87"><span class="ln">87</span>            <span class='hc'># Their harmonic sum (<a class='fl' href='#L88-L92'>Fortran lines 88–92</a>).</span></span>
-<span class="line" id="P88"><span class="ln">88</span>            condx = <span class='hn'>10.0</span> ** (-condxl)</span>
-<span class="line" id="P89"><span class="ln">89</span>            condy = <span class='hn'>10.0</span> ** (-condyl)</span>
-<span class="line" id="P90"><span class="ln">90</span>            condz = <span class='hn'>10.0</span> ** (-condzl)</span>
-<span class="line" id="P91"><span class="ln">91</span>            <span class='hc'># Suspected bug (see the page): no minus sign here, unlike above.</span></span>
-<span class="line" id="P92"><span class="ln">92</span>            condl = math.log10(wth1 * condx + wthe4 * condy + wtox * condz)</span>
-<span class="line" id="P93"><span class="ln">93</span></span>
-<span class="line" id="P94"><span class="ln">94</span>            <span class='hc'># The opacity at log rho = -6, extrapolated to dl (<a class='fl' href='#L96-L101'>Fortran lines 96–101</a>).</span></span>
-<span class="line" id="P95"><span class="ln">95</span>            ocl = -<span class='hn'>3.5194</span> + <span class='hn'>3.0</span> * tl + <span class='hn'>6.0</span> - condl</span>
-<span class="line" id="P96"><span class="ln">96</span>            qodc = -<span class='hn'>1.0</span> - qodc</span>
-<span class="line" id="P97"><span class="ln">97</span>            qotc = <span class='hn'>3.0</span> - qotc</span>
-<span class="line" id="P98"><span class="ln">98</span>            <span class='hc'># Suspected bug (see the page): the step (-6 - dl) is reversed.</span></span>
-<span class="line" id="P99"><span class="ln">99</span>            ocl = ocl + qodc * (-<span class='hn'>6.0</span> - dl)</span>
-<span class="line" id="P100"><span class="ln">100</span>            oc = <span class='hn'>10.0</span> ** ocl</span>
-<span class="line" id="P101"><span class="ln">101</span>            lcondo = <span class='hk'>True</span></span>
-<span class="line" id="P102"><span class="ln">102</span></span>
-<span class="line" id="P103"><span class="ln">103</span>    <span class='hk'>return</span> oc, ocl, qodc, qotc, lcondo</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
+<span class="line" id="P87"><span class="ln">87</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P88"><span class="ln">88</span><span class='hs'>    -------</span></span>
+<span class="line" id="P89"><span class="ln">89</span><span class='hs'>    oc, ocl, qodc, qotc : float</span></span>
+<span class="line" id="P90"><span class="ln">90</span><span class='hs'>        The opacity, its log10, and its derivatives in log rho and log T</span></span>
+<span class="line" id="P91"><span class="ln">91</span><span class='hs'>        (without conduction: oc = 10**OCL_NONE, qodc = qotc = oc).</span></span>
+<span class="line" id="P92"><span class="ln">92</span><span class='hs'>    lcondo : bool</span></span>
+<span class="line" id="P93"><span class="ln">93</span><span class='hs'>        True if the conductive opacity was computed.</span></span>
+<span class="line" id="P94"><span class="ln">94</span></span>
+<span class="line" id="P95"><span class="ln">95</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P96"><span class="ln">96</span>    <span class='hc'># The Numba kernel (accel.py), once condopacp&#x27;s table is read; a stop in condopacp is left to the plain code.</span></span>
+<span class="line" id="P97"><span class="ln">97</span>    <span class='hk'>if</span> accel.USE_NUMBA <span class='hk'>and</span> _cm.krun == _cm.KRUN_READ:</span>
+<span class="line" id="P98"><span class="ln">98</span>        guess = _cm._guess</span>
+<span class="line" id="P99"><span class="ln">99</span>        guess[<span class='hn'>0</span>] = _cm.iz</span>
+<span class="line" id="P100"><span class="ln">100</span>        guess[<span class='hn'>1</span>] = _cm.it</span>
+<span class="line" id="P101"><span class="ln">101</span>        guess[<span class='hn'>2</span>] = _cm.ir</span>
+<span class="line" id="P102"><span class="ln">102</span>        oc, ocl, qodc, qotc, lcondo, status = _condopacpint_nb(dl, tl, x, z, fxion, _cm.at, _cm.ar, _cm.az,</span>
+<span class="line" id="P103"><span class="ln">103</span>                                                               _cm.akap, guess)</span>
+<span class="line" id="P104"><span class="ln">104</span>        _cm.iz, _cm.it, _cm.ir = guess.tolist()</span>
+<span class="line" id="P105"><span class="ln">105</span>        <span class='hk'>if</span> status == <span class='hn'>0</span>:</span>
+<span class="line" id="P106"><span class="ln">106</span>            <span class='hk'>return</span> oc, ocl, qodc, qotc, lcondo</span>
+<span class="line" id="P107"><span class="ln">107</span></span>
+<span class="line" id="P108"><span class="ln">108</span>    <span class='hc'># The number fractions of H1, He4 and the metals, weighted by ionization; the metals taken as fully ionized</span></span>
+<span class="line" id="P109"><span class="ln">109</span>    <span class='hc'># (<a class='fl' href='#L24-L41'>Fortran lines 24–41</a>).</span></span>
+<span class="line" id="P110"><span class="ln">110</span>    wth1, wthe4, wtox = condopacpint_weights(x, z, fxion)</span>
+<span class="line" id="P111"><span class="ln">111</span></span>
+<span class="line" id="P112"><span class="ln">112</span>    <span class='hc'># No significant conductive opacity, to begin with (<a class='fl' href='#L43-L50'>Fortran lines 43–50</a>).</span></span>
+<span class="line" id="P113"><span class="ln">113</span>    lcondo = <span class='hk'>False</span></span>
+<span class="line" id="P114"><span class="ln">114</span>    ocl = OCL_NONE</span>
+<span class="line" id="P115"><span class="ln">115</span>    oc = <span class='hn'>10.0</span> ** ocl</span>
+<span class="line" id="P116"><span class="ln">116</span>    qodc = oc</span>
+<span class="line" id="P117"><span class="ln">117</span>    qotc = oc</span>
+<span class="line" id="P118"><span class="ln">118</span></span>
+<span class="line" id="P119"><span class="ln">119</span>    <span class='hc'># Within the table&#x27;s range (<a class='fl' href='#L52-L54'>Fortran lines 52–54</a>).</span></span>
+<span class="line" id="P120"><span class="ln">120</span>    rl = dl - <span class='hn'>3.0</span> * (tl - <span class='hn'>6.0</span>)</span>
+<span class="line" id="P121"><span class="ln">121</span>    <span class='hk'>if</span> tl &gt;= TL_MIN <span class='hk'>and</span> tl &lt;= TL_MAX <span class='hk'>and</span> dl &lt;= DL_MAX:</span>
+<span class="line" id="P122"><span class="ln">122</span>        <span class='hk'>if</span> dl &gt;= DL_MIN:</span>
+<span class="line" id="P123"><span class="ln">123</span>            <span class='hc'># The three pure compositions from the table (<a class='fl' href='#L55-L58'>Fortran lines 55–58</a>).</span></span>
+<span class="line" id="P124"><span class="ln">124</span>            condxl, qodcx, qotcx = condopacp(<span class='hn'>1.0</span>, tl, dl, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
+<span class="line" id="P125"><span class="ln">125</span>            condyl, qodcy, qotcy = condopacp(<span class='hn'>2.0</span>, tl, dl, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
+<span class="line" id="P126"><span class="ln">126</span>            condzl, qodcz, qotcz = condopacp(<span class='hn'>8.0</span>, tl, dl, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
+<span class="line" id="P127"><span class="ln">127</span></span>
+<span class="line" id="P128"><span class="ln">128</span>            <span class='hc'># Their harmonic sum, log K (<a class='fl' href='#L60-L66'>Fortran lines 60–66</a>).</span></span>
+<span class="line" id="P129"><span class="ln">129</span>            condx = <span class='hn'>10.0</span> ** (-condxl)</span>
+<span class="line" id="P130"><span class="ln">130</span>            condy = <span class='hn'>10.0</span> ** (-condyl)</span>
+<span class="line" id="P131"><span class="ln">131</span>            condz = <span class='hn'>10.0</span> ** (-condzl)</span>
+<span class="line" id="P132"><span class="ln">132</span>            condl = -math.log10(wth1 * condx + wthe4 * condy + wtox * condz)</span>
+<span class="line" id="P133"><span class="ln">133</span></span>
+<span class="line" id="P134"><span class="ln">134</span>            <span class='hc'># The mixture&#x27;s derivatives (<a class='fl' href='#L68-L74'>Fortran lines 68–74</a>).</span></span>
+<span class="line" id="P135"><span class="ln">135</span>            <span class='hc'># Suspected bug (see the page): the factor condl (log K).</span></span>
+<span class="line" id="P136"><span class="ln">136</span>            qodc = condl * (wth1 * qodcx + wthe4 * qodcy + wtox * qodcz)</span>
+<span class="line" id="P137"><span class="ln">137</span>            <span class='hc'># Suspected bug (see the page): the density derivatives again.</span></span>
+<span class="line" id="P138"><span class="ln">138</span>            qotc = condl * (wth1 * qodcx + wthe4 * qodcy + wtox * qodcz)</span>
+<span class="line" id="P139"><span class="ln">139</span></span>
+<span class="line" id="P140"><span class="ln">140</span>            <span class='hc'># The conductive opacity (<a class='fl' href='#L76-L80'>Fortran lines 76–80</a>).</span></span>
+<span class="line" id="P141"><span class="ln">141</span>            ocl = -<span class='hn'>3.5194</span> + <span class='hn'>3.0</span> * tl - dl - condl</span>
+<span class="line" id="P142"><span class="ln">142</span>            qodc = -<span class='hn'>1.0</span> - qodc</span>
+<span class="line" id="P143"><span class="ln">143</span>            qotc = <span class='hn'>3.0</span> - qotc</span>
+<span class="line" id="P144"><span class="ln">144</span>            lcondo = <span class='hk'>True</span></span>
+<span class="line" id="P145"><span class="ln">145</span>            oc = <span class='hn'>10.0</span> ** ocl</span>
+<span class="line" id="P146"><span class="ln">146</span></span>
+<span class="line" id="P147"><span class="ln">147</span>        <span class='hk'>if</span> dl &lt; DL_MIN <span class='hk'>and</span> rl &gt;= <span class='hn'>0.0</span>:</span>
+<span class="line" id="P148"><span class="ln">148</span>            <span class='hc'># Extrapolate from log rho = -6: the table there (<a class='fl' href='#L82-L86'>Fortran lines 82–86</a>).</span></span>
+<span class="line" id="P149"><span class="ln">149</span>            condxl, qodc, qotc = condopacp(<span class='hn'>1.0</span>, tl, -<span class='hn'>6.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
+<span class="line" id="P150"><span class="ln">150</span>            condyl, crap, crap2 = condopacp(<span class='hn'>2.0</span>, tl, -<span class='hn'>6.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
+<span class="line" id="P151"><span class="ln">151</span>            condzl, crap, crap2 = condopacp(<span class='hn'>8.0</span>, tl, -<span class='hn'>6.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>, <span class='hn'>0.0</span>)</span>
+<span class="line" id="P152"><span class="ln">152</span></span>
+<span class="line" id="P153"><span class="ln">153</span>            <span class='hc'># Their harmonic sum (<a class='fl' href='#L88-L92'>Fortran lines 88–92</a>).</span></span>
+<span class="line" id="P154"><span class="ln">154</span>            condx = <span class='hn'>10.0</span> ** (-condxl)</span>
+<span class="line" id="P155"><span class="ln">155</span>            condy = <span class='hn'>10.0</span> ** (-condyl)</span>
+<span class="line" id="P156"><span class="ln">156</span>            condz = <span class='hn'>10.0</span> ** (-condzl)</span>
+<span class="line" id="P157"><span class="ln">157</span>            <span class='hc'># Suspected bug (see the page): no minus sign here, unlike above.</span></span>
+<span class="line" id="P158"><span class="ln">158</span>            condl = math.log10(wth1 * condx + wthe4 * condy + wtox * condz)</span>
+<span class="line" id="P159"><span class="ln">159</span></span>
+<span class="line" id="P160"><span class="ln">160</span>            <span class='hc'># The opacity at log rho = -6, extrapolated to dl (<a class='fl' href='#L96-L101'>Fortran lines 96–101</a>).</span></span>
+<span class="line" id="P161"><span class="ln">161</span>            ocl = -<span class='hn'>3.5194</span> + <span class='hn'>3.0</span> * tl + <span class='hn'>6.0</span> - condl</span>
+<span class="line" id="P162"><span class="ln">162</span>            qodc = -<span class='hn'>1.0</span> - qodc</span>
+<span class="line" id="P163"><span class="ln">163</span>            qotc = <span class='hn'>3.0</span> - qotc</span>
+<span class="line" id="P164"><span class="ln">164</span>            <span class='hc'># Suspected bug (see the page): the step (-6 - dl) is reversed.</span></span>
+<span class="line" id="P165"><span class="ln">165</span>            ocl = ocl + qodc * (-<span class='hn'>6.0</span> - dl)</span>
+<span class="line" id="P166"><span class="ln">166</span>            oc = <span class='hn'>10.0</span> ** ocl</span>
+<span class="line" id="P167"><span class="ln">167</span>            lcondo = <span class='hk'>True</span></span>
+<span class="line" id="P168"><span class="ln">168</span></span>
+<span class="line" id="P169"><span class="ln">169</span>    <span class='hk'>return</span> oc, ocl, qodc, qotc, lcondo</span>
+<span class="line" id="P170"><span class="ln">170</span></span>
+<span class="line" id="P171"><span class="ln">171</span></span>
+<span class="line" id="P172"><span class="ln">172</span><span class='hc'># --- The Numba kernel (accel.py) -----------------------------------------------------------------------------------</span></span>
+<span class="line" id="P173"><span class="ln">173</span><span class='hc'># The statements above, with condopacp&#x27;s table and HUNT&#x27;s guesses passed in; status 0, or condopacp&#x27;s (1-3: a stop).</span></span>
+<span class="line" id="P174"><span class="ln">174</span></span>
+<span class="line" id="P175"><span class="ln">175</span>@accel.njit(_nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P176"><span class="ln">176</span><span class='hk'>def</span> _condopacpint_nb(dl: <span class='hb'>float</span>, tl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, fxion: np.ndarray, at: np.ndarray, ar: np.ndarray,</span>
+<span class="line" id="P177"><span class="ln">177</span>                     az: np.ndarray, akap: np.ndarray, guess: np.ndarray) -&gt; <span class='hb'>tuple</span>:</span>
+<span class="line" id="P178"><span class="ln">178</span>    <span class='hs'>&quot;&quot;&quot;condopacpint&#x27;s kernel (Fortran lines 24–101): condopacp&#x27;s table (at, ar, az, akap) and HUNT&#x27;s guesses</span></span>
+<span class="line" id="P179"><span class="ln">179</span><span class='hs'>    (IZ, IT, IR in guess, changed in place) passed in; returns (oc, ocl, qodc, qotc, lcondo, status), status 0 or</span></span>
+<span class="line" id="P180"><span class="ln">180</span><span class='hs'>    condopacp&#x27;s stop (1-3).&quot;&quot;&quot;</span></span>
+<span class="line" id="P181"><span class="ln">181</span>    wth1, wthe4, wtox = _condopacpint_weights_nb(x, z, fxion)</span>
+<span class="line" id="P182"><span class="ln">182</span>    lcondo = <span class='hk'>False</span></span>
+<span class="line" id="P183"><span class="ln">183</span>    ocl = OCL_NONE</span>
+<span class="line" id="P184"><span class="ln">184</span>    oc = <span class='hn'>10.0</span> ** ocl</span>
+<span class="line" id="P185"><span class="ln">185</span>    qodc = oc</span>
+<span class="line" id="P186"><span class="ln">186</span>    qotc = oc</span>
+<span class="line" id="P187"><span class="ln">187</span>    rl = dl - <span class='hn'>3.0</span> * (tl - <span class='hn'>6.0</span>)</span>
+<span class="line" id="P188"><span class="ln">188</span>    <span class='hk'>if</span> tl &gt;= TL_MIN <span class='hk'>and</span> tl &lt;= TL_MAX <span class='hk'>and</span> dl &lt;= DL_MAX:</span>
+<span class="line" id="P189"><span class="ln">189</span>        <span class='hk'>if</span> dl &gt;= DL_MIN:</span>
+<span class="line" id="P190"><span class="ln">190</span>            condxl, qodcx, qotcx, st = _condopacp_nb(<span class='hn'>1.0</span>, tl, dl, at, ar, az, akap, guess)</span>
+<span class="line" id="P191"><span class="ln">191</span>            <span class='hk'>if</span> st != <span class='hn'>0</span>:</span>
+<span class="line" id="P192"><span class="ln">192</span>                <span class='hk'>return</span> oc, ocl, qodc, qotc, lcondo, st</span>
+<span class="line" id="P193"><span class="ln">193</span>            condyl, qodcy, qotcy, st = _condopacp_nb(<span class='hn'>2.0</span>, tl, dl, at, ar, az, akap, guess)</span>
+<span class="line" id="P194"><span class="ln">194</span>            <span class='hk'>if</span> st != <span class='hn'>0</span>:</span>
+<span class="line" id="P195"><span class="ln">195</span>                <span class='hk'>return</span> oc, ocl, qodc, qotc, lcondo, st</span>
+<span class="line" id="P196"><span class="ln">196</span>            condzl, qodcz, qotcz, st = _condopacp_nb(<span class='hn'>8.0</span>, tl, dl, at, ar, az, akap, guess)</span>
+<span class="line" id="P197"><span class="ln">197</span>            <span class='hk'>if</span> st != <span class='hn'>0</span>:</span>
+<span class="line" id="P198"><span class="ln">198</span>                <span class='hk'>return</span> oc, ocl, qodc, qotc, lcondo, st</span>
+<span class="line" id="P199"><span class="ln">199</span>            condx = <span class='hn'>10.0</span> ** (-condxl)</span>
+<span class="line" id="P200"><span class="ln">200</span>            condy = <span class='hn'>10.0</span> ** (-condyl)</span>
+<span class="line" id="P201"><span class="ln">201</span>            condz = <span class='hn'>10.0</span> ** (-condzl)</span>
+<span class="line" id="P202"><span class="ln">202</span>            condl = -math.log10(wth1 * condx + wthe4 * condy + wtox * condz)</span>
+<span class="line" id="P203"><span class="ln">203</span>            qodc = condl * (wth1 * qodcx + wthe4 * qodcy + wtox * qodcz)</span>
+<span class="line" id="P204"><span class="ln">204</span>            qotc = condl * (wth1 * qodcx + wthe4 * qodcy + wtox * qodcz)</span>
+<span class="line" id="P205"><span class="ln">205</span>            ocl = -<span class='hn'>3.5194</span> + <span class='hn'>3.0</span> * tl - dl - condl</span>
+<span class="line" id="P206"><span class="ln">206</span>            qodc = -<span class='hn'>1.0</span> - qodc</span>
+<span class="line" id="P207"><span class="ln">207</span>            qotc = <span class='hn'>3.0</span> - qotc</span>
+<span class="line" id="P208"><span class="ln">208</span>            lcondo = <span class='hk'>True</span></span>
+<span class="line" id="P209"><span class="ln">209</span>            oc = <span class='hn'>10.0</span> ** ocl</span>
+<span class="line" id="P210"><span class="ln">210</span>        <span class='hk'>if</span> dl &lt; DL_MIN <span class='hk'>and</span> rl &gt;= <span class='hn'>0.0</span>:</span>
+<span class="line" id="P211"><span class="ln">211</span>            condxl, qodc, qotc, st = _condopacp_nb(<span class='hn'>1.0</span>, tl, -<span class='hn'>6.0</span>, at, ar, az, akap, guess)</span>
+<span class="line" id="P212"><span class="ln">212</span>            <span class='hk'>if</span> st != <span class='hn'>0</span>:</span>
+<span class="line" id="P213"><span class="ln">213</span>                <span class='hk'>return</span> oc, ocl, qodc, qotc, lcondo, st</span>
+<span class="line" id="P214"><span class="ln">214</span>            condyl, crap, crap2, st = _condopacp_nb(<span class='hn'>2.0</span>, tl, -<span class='hn'>6.0</span>, at, ar, az, akap, guess)</span>
+<span class="line" id="P215"><span class="ln">215</span>            <span class='hk'>if</span> st != <span class='hn'>0</span>:</span>
+<span class="line" id="P216"><span class="ln">216</span>                <span class='hk'>return</span> oc, ocl, qodc, qotc, lcondo, st</span>
+<span class="line" id="P217"><span class="ln">217</span>            condzl, crap, crap2, st = _condopacp_nb(<span class='hn'>8.0</span>, tl, -<span class='hn'>6.0</span>, at, ar, az, akap, guess)</span>
+<span class="line" id="P218"><span class="ln">218</span>            <span class='hk'>if</span> st != <span class='hn'>0</span>:</span>
+<span class="line" id="P219"><span class="ln">219</span>                <span class='hk'>return</span> oc, ocl, qodc, qotc, lcondo, st</span>
+<span class="line" id="P220"><span class="ln">220</span>            condx = <span class='hn'>10.0</span> ** (-condxl)</span>
+<span class="line" id="P221"><span class="ln">221</span>            condy = <span class='hn'>10.0</span> ** (-condyl)</span>
+<span class="line" id="P222"><span class="ln">222</span>            condz = <span class='hn'>10.0</span> ** (-condzl)</span>
+<span class="line" id="P223"><span class="ln">223</span>            condl = math.log10(wth1 * condx + wthe4 * condy + wtox * condz)</span>
+<span class="line" id="P224"><span class="ln">224</span>            ocl = -<span class='hn'>3.5194</span> + <span class='hn'>3.0</span> * tl + <span class='hn'>6.0</span> - condl</span>
+<span class="line" id="P225"><span class="ln">225</span>            qodc = -<span class='hn'>1.0</span> - qodc</span>
+<span class="line" id="P226"><span class="ln">226</span>            qotc = <span class='hn'>3.0</span> - qotc</span>
+<span class="line" id="P227"><span class="ln">227</span>            ocl = ocl + qodc * (-<span class='hn'>6.0</span> - dl)</span>
+<span class="line" id="P228"><span class="ln">228</span>            oc = <span class='hn'>10.0</span> ** ocl</span>
+<span class="line" id="P229"><span class="ln">229</span>            lcondo = <span class='hk'>True</span></span>
+<span class="line" id="P230"><span class="ln">230</span>    <span class='hk'>return</span> oc, ocl, qodc, qotc, lcondo, <span class='hn'>0</span></span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
 function st(){try{return localStorage.getItem('pm-toc')}catch(e){return null}}function sv(v){try{localStorage.setItem('pm-toc',v)}catch(e){}}
 var b=nav.querySelector('.toc-toggle');function set(h){page.classList.toggle('toc-hidden',h);b.textContent=h?'show':'hide';}
 set(st()==='hidden');b.addEventListener('click',function(){var h=!page.classList.contains('toc-hidden');set(h);sv(h?'hidden':'shown');});

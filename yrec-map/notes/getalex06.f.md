@@ -1,13 +1,13 @@
 ## Explanation
 
-**Purpose.** `GETALEX06` returns the low-temperature (molecular) opacity from the low-temperature opacities of Ferguson et al. ([2005](https://ui.adsabs.harvard.edu/abs/2005ApJ...623..585F)), called ALEX06 in the code ([`READALEX06`](readalex06.f.md#readalex06); "Alexander low T opacities," per its header, MHP 3/09) for a given $`\rho`$, $`T`$, $`X`$, $`Z`$, with its logarithmic derivatives.
+**Purpose.** `GETALEX06` returns the low-temperature (molecular) opacity from the low-temperature opacities of Ferguson et al. ([2005](https://ui.adsabs.harvard.edu/abs/2005ApJ...623..585F)), called ALEX06 in the code ([`READALEX06`](https://github.com/yreclab/yrec/blob/7be4133/src/readalex06.f#L18-L141); "Alexander low T opacities," per its header, MHP 3/09) for a given $`\rho`$, $`T`$, $`X`$, $`Z`$, with its logarithmic derivatives.
 
 **How it fits.**
 - **Who calls it:** only [GETOPAC](getopac.f.md#getopac), when $`\log T \le`$ `TMOLMAX` and `LALEX06` is set.
 - **Inputs:** `DL`, `TL` ($`\log\rho`$, $`\log T`$), `X`, `Z`.
 - **What it calls:** [ALEX06TAB](alex06tab.f.md#alex06tab), which builds a table for the current $`X`$, $`Z`$ from the full set, and [INTERP](interp.f.md#interp) (four-point Lagrange weights and derivative weights).
 - **Outputs:** `O` ($`\kappa`$, $`\mathrm{cm^2\,g^{-1}}`$), `OL` ($`\log\kappa`$), `QOD` $`=\partial\log\kappa/\partial\log\rho|_T`$, `QOT` $`=\partial\log\kappa/\partial\log T|_\rho`$.
-- **Modules:** [`GALOT06_MOD`](galot06_mod.f.md#galot06_mod) (the grids `TGR06`, `R0GR06`, `XXG06`, `ZZG06`) and [`ALOT06_MOD`](alot06_mod.f.md#alot06_mod) (the table `CAPALEX06` at the composition `XE`, `ZE`, and the last indices `IT`, `ID`), shared with `ALEX06TAB` and [READALEX06](readalex06.f.md#readalex06); $`\ln 10`$ from [`CONSTANTS_MOD`](constants_mod.f.md#constants_mod).
+- **Modules:** [`GALOT06_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/galot06_mod.f#L29-L51) (the grids `TGR06`, `R0GR06`, `XXG06`, `ZZG06`) and [`ALOT06_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/alot06_mod.f#L29-L44) (the table `CAPALEX06` at the composition `XE`, `ZE`, and the last indices `IT`, `ID`), shared with `ALEX06TAB` and [READALEX06](https://github.com/yreclab/yrec/blob/7be4133/src/readalex06.f#L18-L141); $`\ln 10`$ from [`CONSTANTS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/constants_mod.f#L37-L75).
 
 **The method.**
 1. If $`X`$ or $`Z`$ differs from the stored `XE`, `ZE` by more than $`10^{-8}`$, rebuild the table with `ALEX06TAB` ([lines 26–33](https://github.com/yreclab/yrec/blob/7be4133/src/getalex06.f#L26-L33)).

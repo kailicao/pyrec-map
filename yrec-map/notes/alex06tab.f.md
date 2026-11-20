@@ -1,9 +1,9 @@
 ## Explanation
 
-**Purpose.** This file builds the table of the low-temperature opacities of Ferguson et al. ([2005](https://ui.adsabs.harvard.edu/abs/2005ApJ...623..585F)), called ALEX06 in the code (read by [READALEX06](readalex06.f.md#readalex06)), for one composition $`(X, Z)`$, by interpolating between the stored tables of the grid in $`X`$ and $`Z`$. The result is a single table of opacity against $`\log T`$ and $`\log R`$ that [GETALEX06](getalex06.f.md#getalex06) then interpolates in.
+**Purpose.** This file builds the table of the low-temperature opacities of Ferguson et al. ([2005](https://ui.adsabs.harvard.edu/abs/2005ApJ...623..585F)), called ALEX06 in the code (read by [READALEX06](https://github.com/yreclab/yrec/blob/7be4133/src/readalex06.f#L18-L141)), for one composition $`(X, Z)`$, by interpolating between the stored tables of the grid in $`X`$ and $`Z`$. The result is a single table of opacity against $`\log T`$ and $`\log R`$ that [GETALEX06](getalex06.f.md#getalex06) then interpolates in.
 
 **How it fits.**
-- **Inputs:** the full set of tables, `CAPTALEX06` in `ALOT06ALL_MOD`, read once by [READALEX06](readalex06.f.md#readalex06), and the grid values `XXG06`, `ZZG06` in `GALOT06_MOD` (initialized there); the requested composition `XE`, `ZE` in `ALOT06_MOD`.
+- **Inputs:** the full set of tables, `CAPTALEX06` in `ALOT06ALL_MOD`, read once by [READALEX06](https://github.com/yreclab/yrec/blob/7be4133/src/readalex06.f#L18-L141), and the grid values `XXG06`, `ZZG06` in `GALOT06_MOD` (initialized there); the requested composition `XE`, `ZE` in `ALOT06_MOD`.
 - **Who calls it:** only [GETALEX06](getalex06.f.md#getalex06), whenever the $`X`$ or $`Z`$ of the point differs from the composition of the current table by more than $`10^{-8}`$. GETALEX06 sets `XE`, `ZE` before the call.
 - **What it calls:** [INTRP2](intrp2.f.md#intrp2), 4-point Lagrange weights.
 - **Output:** `CAPALEX06(NUMT,NUMD)` in `ALOT06_MOD`, read by GETALEX06. It also sets the index `IX` in `ALOT06_MOD`.

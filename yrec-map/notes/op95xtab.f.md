@@ -1,10 +1,10 @@
 ## Explanation
 
-**Purpose.** Builds the OPAL95 opacity table at one fixed hydrogen abundance (the surface $`X`$), from the table at the model's $`Z`$ (MHP 7/98). The result is what [OP952D](op952d.f.md#op952d) interpolates, for the outer layers, where $`X`$ and $`Z`$ are those of the surface.
+**Purpose.** Builds the OPAL95 opacity table at one fixed hydrogen abundance (the surface $`X`$), from the table at the model's $`Z`$ (MHP 7/98). The result is what [OP952D](https://github.com/yreclab/yrec/blob/7be4133/src/op952d.f#L6-L76) interpolates, for the outer layers, where $`X`$ and $`Z`$ are those of the surface.
 
 **How it fits.**
-- **Inputs:** the desired $`X`$ (the envelope's, `XENV`); the table at the model's $`Z`$, `CAPPA` and `ZTAB` in `LLOT95_MOD` (from [OP95ZTAB](op95ztab.f.md#op95ztab)); the $`X`$ grid `XXG` in `LLOT95A_MOD`.
-- **Who calls it:** [SETUPOPAC](setupopac.f.md#setupopac) (at start-up) and [SURFOPAC](surfopac.f.md#surfopac) (which rebuilds the surface tables for a new envelope $`X`$, `XENV`).
+- **Inputs:** the desired $`X`$ (the envelope's, `XENV`); the table at the model's $`Z`$, `CAPPA` and `ZTAB` in `LLOT95_MOD` (from [OP95ZTAB](https://github.com/yreclab/yrec/blob/7be4133/src/op95ztab.f#L6-L126)); the $`X`$ grid `XXG` in `LLOT95A_MOD`.
+- **Who calls it:** [SETUPOPAC](https://github.com/yreclab/yrec/blob/7be4133/src/setupopac.f#L14-L95) (at start-up) and [SURFOPAC](surfopac.f.md#surfopac) (which rebuilds the surface tables for a new envelope $`X`$, `XENV`).
 - **What it calls:** [INTRP2](intrp2.f.md#intrp2), four-point Lagrange weights.
 - **Output:** `CAPPAE(70,19)` and `XOP95` (the table's $`X`$, formerly `XTAB`) in `LLOT95E_MOD`, read by `OP952D` and [GETOPAL95](getopal95.f.md#getopal95) (which uses this table when the point's $`X`$ is within $`10^{-4}`$ of `XOP95`).
 
@@ -12,7 +12,7 @@
 ```math
 \log\kappa_\mathrm{E}(T, R) = \sum_{k=1}^4 b_k\,\log\kappa(X_k, T, R).
 ```
-For $`X \le 0.8`$, or $`Z \le 0.04`$ (where all ten $`X`$ tables exist), the four nearest tables. For $`0.04 \lt{} Z \lt{} 0.1`$, tables 6, 7, 8 and 10 (table 9, $`X = 0.95`$, is missing). For $`Z \ge 0.1`$, tables 6–9: This branch is unused? since [OP95ZTAB](op95ztab.f.md#op95ztab) stops the run for any $`Z \gt{} 0.08`$; if it were reached, it would read table 9, which `OP95ZTAB` does not fill at that $`Z`$, where [GETOPAL95](getopal95.f.md#getopal95) uses tables 5–8 (settled from the code, Nov 9, 2026: [lines 66–71](https://github.com/yreclab/yrec/blob/7be4133/src/op95xtab.f#L66-L71); [op95ztab.f, lines 41–46](https://github.com/yreclab/yrec/blob/7be4133/src/op95ztab.f#L41-L46), [op95ztab.f, lines 68–70](https://github.com/yreclab/yrec/blob/7be4133/src/op95ztab.f#L68-L70); [getopal95.f, lines 292–296](https://github.com/yreclab/yrec/blob/7be4133/src/getopal95.f#L292-L296)).
+For $`X \le 0.8`$, or $`Z \le 0.04`$ (where all ten $`X`$ tables exist), the four nearest tables. For $`0.04 \lt{} Z \lt{} 0.1`$, tables 6, 7, 8 and 10 (table 9, $`X = 0.95`$, is missing). For $`Z \ge 0.1`$, tables 6–9: This branch is unused? since [OP95ZTAB](https://github.com/yreclab/yrec/blob/7be4133/src/op95ztab.f#L6-L126) stops the run for any $`Z \gt{} 0.08`$; if it were reached, it would read table 9, which `OP95ZTAB` does not fill at that $`Z`$, where [GETOPAL95](getopal95.f.md#getopal95) uses tables 5–8 (settled from the code, Nov 9, 2026: [lines 66–71](https://github.com/yreclab/yrec/blob/7be4133/src/op95xtab.f#L66-L71); [op95ztab.f, lines 41–46](https://github.com/yreclab/yrec/blob/7be4133/src/op95ztab.f#L41-L46), [op95ztab.f, lines 68–70](https://github.com/yreclab/yrec/blob/7be4133/src/op95ztab.f#L68-L70); [getopal95.f, lines 292–296](https://github.com/yreclab/yrec/blob/7be4133/src/getopal95.f#L292-L296)).
 
 > **Question** ([line 75](https://github.com/yreclab/yrec/blob/7be4133/src/op95xtab.f#L75), [lines 85–95](https://github.com/yreclab/yrec/blob/7be4133/src/op95xtab.f#L85-L95)). **The sentinel `IDX = 11`.** The value marks the "6, 7, 8, 10" case for the index selection below; a named flag would be clearer.
 
@@ -22,7 +22,7 @@ For $`X \le 0.8`$, or $`Z \le 0.04`$ (where all ten $`X`$ tables exist), the fou
 
 ## Bugs, by priority
 
-1. **(never occurred)** **Table 9 at $`Z = 0.04`$.** ([lines 53–65](https://github.com/yreclab/yrec/blob/7be4133/src/op95xtab.f#L53-L65); [op95ztab.f, lines 68–70](https://github.com/yreclab/yrec/blob/7be4133/src/op95ztab.f#L68-L70)) This routine treats exactly $`Z = 0.04`$ as "low Z" (`ZTAB.LE.0.04D0`, all ten tables), while [OP95ZTAB](op95ztab.f.md#op95ztab) skips table 9 ($`X = 0.95`$) for `Z.GE.0.04D0`, and [GETOPAL95](getopal95.f.md#getopal95) avoids it for `ZTAB.GE.0.04D0` ([getopal95.f, lines 283–290](https://github.com/yreclab/yrec/blob/7be4133/src/getopal95.f#L283-L290)). So with `ZOPAL951` = 0.04 exactly and a surface $`X`$ above 0.8, the interpolation here uses a table 9 that holds zeros (or the values of an earlier `OP95ZTAB` call at a lower $`Z`$). Only for that exact $`Z`$ and a surface $`X`$ above 0.8.
+1. **(never occurred)** **Table 9 at $`Z = 0.04`$.** ([lines 53–65](https://github.com/yreclab/yrec/blob/7be4133/src/op95xtab.f#L53-L65); [op95ztab.f, lines 68–70](https://github.com/yreclab/yrec/blob/7be4133/src/op95ztab.f#L68-L70)) This routine treats exactly $`Z = 0.04`$ as "low Z" (`ZTAB.LE.0.04D0`, all ten tables), while [OP95ZTAB](https://github.com/yreclab/yrec/blob/7be4133/src/op95ztab.f#L6-L126) skips table 9 ($`X = 0.95`$) for `Z.GE.0.04D0`, and [GETOPAL95](getopal95.f.md#getopal95) avoids it for `ZTAB.GE.0.04D0` ([getopal95.f, lines 283–290](https://github.com/yreclab/yrec/blob/7be4133/src/getopal95.f#L283-L290)). So with `ZOPAL951` = 0.04 exactly and a surface $`X`$ above 0.8, the interpolation here uses a table 9 that holds zeros (or the values of an earlier `OP95ZTAB` call at a lower $`Z`$). Only for that exact $`Z`$ and a surface $`X`$ above 0.8.
 
     **A possible fix:**
 

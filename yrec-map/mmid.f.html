@@ -2,7 +2,7 @@
 <header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ mmid.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#design'>Design</a></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-MMID'>MMID</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>mmid.f</h1>
 <p class='muted'>55 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/mmid.f'>on GitHub (7be4133)</a></p>
-<p><strong>Python version</strong>: <code>mmid.py</code>, 72 lines, on the right (switch to Python above the code).</p>
+<p><strong>Python version</strong>: <code>mmid.py</code>, 168 lines, on the right (switch to Python above the code).</p>
 <h2 id='purpose'>Purpose</h2>
 <div class='notes'><p>The modified midpoint method of Numerical Recipes ("this SR from Numerical Recipes, p.562"): it advances three variables $y$ from $x$ to $x + H$ in $n$ substeps. It is the inner step of the Bulirsch–Stoer integrator <a href="../yrec-map/bsstep.f.html#def-BSSTEP">BSSTEP</a>, which <a href="../yrec-map/envint.f.html#def-ENVINT">ENVINT</a> uses to integrate the envelope.</p></div>
 <h2 id='how-it-fits'>How it fits</h2>
@@ -82,77 +82,173 @@ $$z_{m+1} = z_{m-1} + 2h\,f(x + m h, z_m),\quad m = 1,\dots,n-1,\qquad y(x+H) \a
 <span class="line" id="L53"><span class="ln">53</span><span class='lt'>   40 </span><span class='lr'>   40 </span><span class='hk'>CONTINUE</span></span>
 <span class="line" id="L54"><span class="ln">54</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>RETURN</span></span>
 <span class="line" id="L55"><span class="ln">55</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of mmid.f (YREC 7be4133): the modified midpoint step of</span></span>
-<span class="line" id="P2"><span class="ln">2</span><span class='hs'>Numerical Recipes, the inner step of BSSTEP.&quot;&quot;&quot;</span></span>
+<span class="line" id="P2"><span class="ln">2</span><span class='hs'>Numerical Recipes, the inner step of BSSTEP.</span></span>
 <span class="line" id="P3"><span class="ln">3</span></span>
-<span class="line" id="P4"><span class="ln">4</span><span class='hk'>from</span> collections.abc <span class='hk'>import</span> Callable</span>
-<span class="line" id="P5"><span class="ln">5</span></span>
-<span class="line" id="P6"><span class="ln">6</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
+<span class="line" id="P4"><span class="ln">4</span><span class='hs'>Functions</span></span>
+<span class="line" id="P5"><span class="ln">5</span><span class='hs'>---------</span></span>
+<span class="line" id="P6"><span class="ln">6</span><span class='hs'>mmid : The routine, plain (the derivative routine passed as a function).</span></span>
 <span class="line" id="P7"><span class="ln">7</span></span>
-<span class="line" id="P8"><span class="ln">8</span><span class='hc'># The Fortran&#x27;s local arrays, kept by SAVE (<a class='fl' href='#L19'>Fortran line 19</a>).</span></span>
-<span class="line" id="P9"><span class="ln">9</span>ym = np.zeros(<span class='hn'>4</span>)</span>
-<span class="line" id="P10"><span class="ln">10</span>yn = np.zeros(<span class='hn'>4</span>)</span>
-<span class="line" id="P11"><span class="ln">11</span></span>
+<span class="line" id="P8"><span class="ln">8</span><span class='hs'>The kernels, links of the envelope&#x27;s chain (bsstep.py): `_mmid_k` (the routine, resumable after a stopped derivative</span></span>
+<span class="line" id="P9"><span class="ln">9</span><span class='hs'>call) and `_deriv_k` (DERIV: qatm&#x27;s or qenv&#x27;s kernel, by a flag).</span></span>
+<span class="line" id="P10"><span class="ln">10</span></span>
+<span class="line" id="P11"><span class="ln">11</span><span class='hs'>&quot;&quot;&quot;</span></span>
 <span class="line" id="P12"><span class="ln">12</span></span>
-<span class="line" id="P13"><span class="ln">13</span><span class='hk'>def</span> _call_deriv(deriv, x0, y, dydx, b, fpl, ftl, gl, latmo, lderiv, locond,</span>
-<span class="line" id="P14"><span class="ln">14</span>                lsave, rl, teffl, x, z, kount, ksaha):</span>
-<span class="line" id="P15"><span class="ln">15</span>    <span class='hc'># DERIV is QENV, which returns (rl, kenv, ksaha), or QATM, which returns</span></span>
-<span class="line" id="P16"><span class="ln">16</span>    <span class='hc'># (katm, ksaha); the Fortran passes RL, KOUNT and KSAHA by reference.</span></span>
-<span class="line" id="P17"><span class="ln">17</span>    result = deriv(x0, y, dydx, b, fpl, ftl, gl, latmo, lderiv, locond,</span>
-<span class="line" id="P18"><span class="ln">18</span>                   lsave, rl, teffl, x, z, kount, ksaha)</span>
-<span class="line" id="P19"><span class="ln">19</span>    <span class='hk'>if</span> <span class='hb'>len</span>(result) == <span class='hn'>3</span>:</span>
-<span class="line" id="P20"><span class="ln">20</span>        rl, kount, ksaha = result</span>
-<span class="line" id="P21"><span class="ln">21</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P22"><span class="ln">22</span>        kount, ksaha = result</span>
-<span class="line" id="P23"><span class="ln">23</span>    <span class='hk'>return</span> rl, kount, ksaha</span>
-<span class="line" id="P24"><span class="ln">24</span></span>
+<span class="line" id="P13"><span class="ln">13</span><span class='hk'>from</span> collections.abc <span class='hk'>import</span> Callable</span>
+<span class="line" id="P14"><span class="ln">14</span></span>
+<span class="line" id="P15"><span class="ln">15</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
+<span class="line" id="P16"><span class="ln">16</span></span>
+<span class="line" id="P17"><span class="ln">17</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> accel</span>
+<span class="line" id="P18"><span class="ln">18</span><span class='hk'>from</span> pyrec.qatm <span class='hk'>import</span> _qatm_k <span class='hk'>as</span> atmosphere_point  <span class='hc'># OOP atmosphere: the chain&#x27;s integrands (families.py)</span></span>
+<span class="line" id="P19"><span class="ln">19</span><span class='hk'>from</span> pyrec.qenv <span class='hk'>import</span> STAGE_DONE</span>
+<span class="line" id="P20"><span class="ln">20</span><span class='hk'>from</span> pyrec.qenv <span class='hk'>import</span> _qenv_k <span class='hk'>as</span> envelope_point  <span class='hc'># OOP atmosphere</span></span>
+<span class="line" id="P21"><span class="ln">21</span></span>
+<span class="line" id="P22"><span class="ln">22</span><span class='hc'># The Fortran&#x27;s local arrays, kept by SAVE (<a class='fl' href='#L19'>Fortran line 19</a>).</span></span>
+<span class="line" id="P23"><span class="ln">23</span>ym = np.zeros(<span class='hn'>4</span>)</span>
+<span class="line" id="P24"><span class="ln">24</span>yn = np.zeros(<span class='hn'>4</span>)</span>
 <span class="line" id="P25"><span class="ln">25</span></span>
-<span class="line" id="P26"><span class="ln">26</span><span class='hk'>def</span> mmid(y: np.ndarray, dydx: np.ndarray, nvar: <span class='hb'>int</span>, xs: <span class='hb'>float</span>, htot: <span class='hb'>float</span>, nstep: <span class='hb'>int</span>, yout: np.ndarray,</span>
-<span class="line" id="P27"><span class="ln">27</span>         deriv: Callable, b: <span class='hb'>float</span>, fpl: <span class='hb'>float</span>, ftl: <span class='hb'>float</span>, gl: <span class='hb'>float</span>, latmo: <span class='hb'>bool</span>, lderiv: <span class='hb'>bool</span>, locond: <span class='hb'>bool</span>,</span>
-<span class="line" id="P28"><span class="ln">28</span>         lsave: <span class='hb'>bool</span>, rl: <span class='hb'>float</span>, teffl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, kount: <span class='hb'>int</span>, ksaha: <span class='hb'>int</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>int</span>, <span class='hb'>int</span>]:</span>
-<span class="line" id="P29"><span class="ln">29</span>    <span class='hs'>&quot;&quot;&quot;Advance y from xs to xs + htot in nstep substeps by the modified</span></span>
-<span class="line" id="P30"><span class="ln">30</span><span class='hs'>    midpoint method; the result goes to yout.</span></span>
-<span class="line" id="P31"><span class="ln">31</span></span>
-<span class="line" id="P32"><span class="ln">32</span><span class='hs'>    Translates: mmid.f#MMID (7be4133)</span></span>
-<span class="line" id="P33"><span class="ln">33</span></span>
-<span class="line" id="P34"><span class="ln">34</span><span class='hs'>    Arguments: y and dydx at xs (three variables, index 0 unused; nvar of</span></span>
-<span class="line" id="P35"><span class="ln">35</span><span class='hs'>    them used); the step htot and the number of substeps nstep; yout, set</span></span>
-<span class="line" id="P36"><span class="ln">36</span><span class='hs'>    in place; deriv, the derivative routine (qenv or qatm); the arguments</span></span>
-<span class="line" id="P37"><span class="ln">37</span><span class='hs'>    from b to ksaha are only passed on to deriv.</span></span>
+<span class="line" id="P26"><span class="ln">26</span></span>
+<span class="line" id="P27"><span class="ln">27</span><span class='hk'>def</span> _call_deriv(deriv, x0, y, dydx, b, fpl, ftl, gl, latmo, lderiv, locond,</span>
+<span class="line" id="P28"><span class="ln">28</span>                lsave, rl, teffl, x, z, kount, ksaha):</span>
+<span class="line" id="P29"><span class="ln">29</span>    <span class='hc'># DERIV is QENV, which returns (rl, kenv, ksaha), or QATM, which returns</span></span>
+<span class="line" id="P30"><span class="ln">30</span>    <span class='hc'># (katm, ksaha); the Fortran passes RL, KOUNT and KSAHA by reference.</span></span>
+<span class="line" id="P31"><span class="ln">31</span>    result = deriv(x0, y, dydx, b, fpl, ftl, gl, latmo, lderiv, locond,</span>
+<span class="line" id="P32"><span class="ln">32</span>                   lsave, rl, teffl, x, z, kount, ksaha)</span>
+<span class="line" id="P33"><span class="ln">33</span>    <span class='hk'>if</span> <span class='hb'>len</span>(result) == <span class='hn'>3</span>:</span>
+<span class="line" id="P34"><span class="ln">34</span>        rl, kount, ksaha = result</span>
+<span class="line" id="P35"><span class="ln">35</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P36"><span class="ln">36</span>        kount, ksaha = result</span>
+<span class="line" id="P37"><span class="ln">37</span>    <span class='hk'>return</span> rl, kount, ksaha</span>
 <span class="line" id="P38"><span class="ln">38</span></span>
-<span class="line" id="P39"><span class="ln">39</span><span class='hs'>    Returns (rl, kount, ksaha), as deriv leaves them.</span></span>
-<span class="line" id="P40"><span class="ln">40</span></span>
-<span class="line" id="P41"><span class="ln">41</span><span class='hs'>    &quot;&quot;&quot;</span></span>
-<span class="line" id="P42"><span class="ln">42</span></span>
-<span class="line" id="P43"><span class="ln">43</span>    <span class='hc'># The substep (<a class='fl' href='#L28'>Fortran line 28</a>).</span></span>
-<span class="line" id="P44"><span class="ln">44</span>    h = htot / <span class='hb'>float</span>(nstep)</span>
+<span class="line" id="P39"><span class="ln">39</span></span>
+<span class="line" id="P40"><span class="ln">40</span><span class='hk'>def</span> mmid(y: np.ndarray, dydx: np.ndarray, nvar: <span class='hb'>int</span>, xs: <span class='hb'>float</span>, htot: <span class='hb'>float</span>, nstep: <span class='hb'>int</span>, yout: np.ndarray,</span>
+<span class="line" id="P41"><span class="ln">41</span>         deriv: Callable, b: <span class='hb'>float</span>, fpl: <span class='hb'>float</span>, ftl: <span class='hb'>float</span>, gl: <span class='hb'>float</span>, latmo: <span class='hb'>bool</span>, lderiv: <span class='hb'>bool</span>, locond: <span class='hb'>bool</span>,</span>
+<span class="line" id="P42"><span class="ln">42</span>         lsave: <span class='hb'>bool</span>, rl: <span class='hb'>float</span>, teffl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, kount: <span class='hb'>int</span>, ksaha: <span class='hb'>int</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>int</span>, <span class='hb'>int</span>]:</span>
+<span class="line" id="P43"><span class="ln">43</span>    <span class='hs'>&quot;&quot;&quot;Advance y from xs to xs + htot in nstep substeps by the modified</span></span>
+<span class="line" id="P44"><span class="ln">44</span><span class='hs'>    midpoint method; the result goes to yout.</span></span>
 <span class="line" id="P45"><span class="ln">45</span></span>
-<span class="line" id="P46"><span class="ln">46</span>    <span class='hc'># First step (<a class='fl' href='#L29-L34'>Fortran lines 29–34</a>).</span></span>
-<span class="line" id="P47"><span class="ln">47</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nvar + <span class='hn'>1</span>):                         <span class='hc'># loop 10</span></span>
-<span class="line" id="P48"><span class="ln">48</span>        ym[i] = y[i]</span>
-<span class="line" id="P49"><span class="ln">49</span>        yn[i] = y[i] + dydx[i] * h</span>
-<span class="line" id="P50"><span class="ln">50</span>    x0 = xs + h</span>
-<span class="line" id="P51"><span class="ln">51</span></span>
-<span class="line" id="P52"><span class="ln">52</span>    <span class='hc'># yout holds the derivatives in between (<a class='fl' href='#L35-L38'>Fortran lines 35–38</a>).</span></span>
-<span class="line" id="P53"><span class="ln">53</span>    rl, kount, ksaha = _call_deriv(deriv, x0, yn, yout, b, fpl, ftl, gl,</span>
-<span class="line" id="P54"><span class="ln">54</span>                                   latmo, lderiv, locond, lsave, rl, teffl,</span>
-<span class="line" id="P55"><span class="ln">55</span>                                   x, z, kount, ksaha)</span>
-<span class="line" id="P56"><span class="ln">56</span>    h2 = <span class='hn'>2.0</span> * h</span>
-<span class="line" id="P57"><span class="ln">57</span></span>
-<span class="line" id="P58"><span class="ln">58</span>    <span class='hc'># General step (<a class='fl' href='#L39-L49'>Fortran lines 39–49</a>).</span></span>
-<span class="line" id="P59"><span class="ln">59</span>    <span class='hk'>for</span> n <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>2</span>, nstep + <span class='hn'>1</span>):                        <span class='hc'># loop 30</span></span>
-<span class="line" id="P60"><span class="ln">60</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nvar + <span class='hn'>1</span>):</span>
-<span class="line" id="P61"><span class="ln">61</span>            swap = ym[i] + h2 * yout[i]</span>
-<span class="line" id="P62"><span class="ln">62</span>            ym[i] = yn[i]</span>
-<span class="line" id="P63"><span class="ln">63</span>            yn[i] = swap</span>
-<span class="line" id="P64"><span class="ln">64</span>        x0 = x0 + h</span>
-<span class="line" id="P65"><span class="ln">65</span>        rl, kount, ksaha = _call_deriv(deriv, x0, yn, yout, b, fpl, ftl, gl,</span>
-<span class="line" id="P66"><span class="ln">66</span>                                       latmo, lderiv, locond, lsave, rl,</span>
-<span class="line" id="P67"><span class="ln">67</span>                                       teffl, x, z, kount, ksaha)</span>
-<span class="line" id="P68"><span class="ln">68</span></span>
-<span class="line" id="P69"><span class="ln">69</span>    <span class='hc'># Last step (<a class='fl' href='#L50-L54'>Fortran lines 50–54</a>).</span></span>
-<span class="line" id="P70"><span class="ln">70</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nvar + <span class='hn'>1</span>):                         <span class='hc'># loop 40</span></span>
-<span class="line" id="P71"><span class="ln">71</span>        yout[i] = <span class='hn'>0.5</span> * (ym[i] + yn[i] + h * yout[i])</span>
-<span class="line" id="P72"><span class="ln">72</span>    <span class='hk'>return</span> rl, kount, ksaha</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
+<span class="line" id="P46"><span class="ln">46</span><span class='hs'>    Translates: mmid.f#MMID (7be4133)</span></span>
+<span class="line" id="P47"><span class="ln">47</span></span>
+<span class="line" id="P48"><span class="ln">48</span><span class='hs'>    Arguments: y and dydx at xs (three variables, index 0 unused; nvar of</span></span>
+<span class="line" id="P49"><span class="ln">49</span><span class='hs'>    them used); the step htot and the number of substeps nstep; yout, set</span></span>
+<span class="line" id="P50"><span class="ln">50</span><span class='hs'>    in place; deriv, the derivative routine (qenv or qatm); the arguments</span></span>
+<span class="line" id="P51"><span class="ln">51</span><span class='hs'>    from b to ksaha are only passed on to deriv.</span></span>
+<span class="line" id="P52"><span class="ln">52</span></span>
+<span class="line" id="P53"><span class="ln">53</span><span class='hs'>    Returns (rl, kount, ksaha), as deriv leaves them.</span></span>
+<span class="line" id="P54"><span class="ln">54</span></span>
+<span class="line" id="P55"><span class="ln">55</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P56"><span class="ln">56</span></span>
+<span class="line" id="P57"><span class="ln">57</span>    <span class='hc'># The substep (<a class='fl' href='#L28'>Fortran line 28</a>).</span></span>
+<span class="line" id="P58"><span class="ln">58</span>    h = htot / <span class='hb'>float</span>(nstep)</span>
+<span class="line" id="P59"><span class="ln">59</span></span>
+<span class="line" id="P60"><span class="ln">60</span>    <span class='hc'># First step (<a class='fl' href='#L29-L34'>Fortran lines 29–34</a>).</span></span>
+<span class="line" id="P61"><span class="ln">61</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nvar + <span class='hn'>1</span>):                         <span class='hc'># loop 10</span></span>
+<span class="line" id="P62"><span class="ln">62</span>        ym[i] = y[i]</span>
+<span class="line" id="P63"><span class="ln">63</span>        yn[i] = y[i] + dydx[i] * h</span>
+<span class="line" id="P64"><span class="ln">64</span>    x0 = xs + h</span>
+<span class="line" id="P65"><span class="ln">65</span></span>
+<span class="line" id="P66"><span class="ln">66</span>    <span class='hc'># yout holds the derivatives in between (<a class='fl' href='#L35-L38'>Fortran lines 35–38</a>).</span></span>
+<span class="line" id="P67"><span class="ln">67</span>    rl, kount, ksaha = _call_deriv(deriv, x0, yn, yout, b, fpl, ftl, gl,</span>
+<span class="line" id="P68"><span class="ln">68</span>                                   latmo, lderiv, locond, lsave, rl, teffl,</span>
+<span class="line" id="P69"><span class="ln">69</span>                                   x, z, kount, ksaha)</span>
+<span class="line" id="P70"><span class="ln">70</span>    h2 = <span class='hn'>2.0</span> * h</span>
+<span class="line" id="P71"><span class="ln">71</span></span>
+<span class="line" id="P72"><span class="ln">72</span>    <span class='hc'># General step (<a class='fl' href='#L39-L49'>Fortran lines 39–49</a>).</span></span>
+<span class="line" id="P73"><span class="ln">73</span>    <span class='hk'>for</span> n <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>2</span>, nstep + <span class='hn'>1</span>):                        <span class='hc'># loop 30</span></span>
+<span class="line" id="P74"><span class="ln">74</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nvar + <span class='hn'>1</span>):</span>
+<span class="line" id="P75"><span class="ln">75</span>            swap = ym[i] + h2 * yout[i]</span>
+<span class="line" id="P76"><span class="ln">76</span>            ym[i] = yn[i]</span>
+<span class="line" id="P77"><span class="ln">77</span>            yn[i] = swap</span>
+<span class="line" id="P78"><span class="ln">78</span>        x0 = x0 + h</span>
+<span class="line" id="P79"><span class="ln">79</span>        rl, kount, ksaha = _call_deriv(deriv, x0, yn, yout, b, fpl, ftl, gl,</span>
+<span class="line" id="P80"><span class="ln">80</span>                                       latmo, lderiv, locond, lsave, rl,</span>
+<span class="line" id="P81"><span class="ln">81</span>                                       teffl, x, z, kount, ksaha)</span>
+<span class="line" id="P82"><span class="ln">82</span></span>
+<span class="line" id="P83"><span class="ln">83</span>    <span class='hc'># Last step (<a class='fl' href='#L50-L54'>Fortran lines 50–54</a>).</span></span>
+<span class="line" id="P84"><span class="ln">84</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nvar + <span class='hn'>1</span>):                         <span class='hc'># loop 40</span></span>
+<span class="line" id="P85"><span class="ln">85</span>        yout[i] = <span class='hn'>0.5</span> * (ym[i] + yn[i] + h * yout[i])</span>
+<span class="line" id="P86"><span class="ln">86</span>    <span class='hk'>return</span> rl, kount, ksaha</span>
+<span class="line" id="P87"><span class="ln">87</span></span>
+<span class="line" id="P88"><span class="ln">88</span></span>
+<span class="line" id="P89"><span class="ln">89</span><span class='hc'># --- The Numba kernel, a link of the envelope&#x27;s chain (see qenv.py and bsstep.py) -----------------------------------</span></span>
+<span class="line" id="P90"><span class="ln">90</span><span class='hc'>#</span></span>
+<span class="line" id="P91"><span class="ln">91</span><span class='hc'># The derivative routine is a flag, `which` (0 qatm, 1 qenv: Numba does not pass functions cheaply), and _deriv_k</span></span>
+<span class="line" id="P92"><span class="ln">92</span><span class='hc'># calls its kernel. _mmid_k can stop at a derivative call the kernel does not cover (its stage) and be resumed after</span></span>
+<span class="line" id="P93"><span class="ln">93</span><span class='hc'># the plain code has done that call: `after` is the number of derivative calls already done (0 to start), and sx</span></span>
+<span class="line" id="P94"><span class="ln">94</span><span class='hc'># keeps X0 and, at a stop, the number of the call stopped at.</span></span>
+<span class="line" id="P95"><span class="ln">95</span></span>
+<span class="line" id="P96"><span class="ln">96</span></span>
+<span class="line" id="P97"><span class="ln">97</span>@accel.njit(_nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P98"><span class="ln">98</span><span class='hk'>def</span> _deriv_k(which: <span class='hb'>int</span>, x0: <span class='hb'>float</span>, y: np.ndarray, dydx: np.ndarray, b: <span class='hb'>float</span>, fpl: <span class='hb'>float</span>, ftl: <span class='hb'>float</span>, gl: <span class='hb'>float</span>,</span>
+<span class="line" id="P99"><span class="ln">99</span>             latmo: <span class='hb'>bool</span>, lderiv: <span class='hb'>bool</span>, lsave: <span class='hb'>bool</span>, teffl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, cf: np.ndarray, ci: np.ndarray,</span>
+<span class="line" id="P100"><span class="ln">100</span>             ctx: <span class='hb'>tuple</span>) -&gt; <span class='hb'>int</span>:</span>
+<span class="line" id="P101"><span class="ln">101</span>    <span class='hs'>&quot;&quot;&quot;DERIV(X0, Y, DYDX, ...): qatm&#x27;s kernel (which = 0) or qenv&#x27;s (1); returns its stage (qenv.py).&quot;&quot;&quot;</span></span>
+<span class="line" id="P102"><span class="ln">102</span>    <span class='hk'>if</span> which == <span class='hn'>0</span>:</span>
+<span class="line" id="P103"><span class="ln">103</span>        <span class='hk'>return</span> atmosphere_point(x0, y, dydx, fpl, gl, latmo, lderiv, lsave, teffl, x, z, cf, ci, ctx)  <span class='hc'># OOP atmosphere</span></span>
+<span class="line" id="P104"><span class="ln">104</span>    <span class='hk'>return</span> envelope_point(x0, y, dydx, b, fpl, ftl, latmo, lderiv, lsave, teffl, x, z, cf, ci, ctx)  <span class='hc'># OOP atmosphere</span></span>
+<span class="line" id="P105"><span class="ln">105</span></span>
+<span class="line" id="P106"><span class="ln">106</span></span>
+<span class="line" id="P107"><span class="ln">107</span>@accel.njit(_nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P108"><span class="ln">108</span><span class='hk'>def</span> _mmid_k(after: <span class='hb'>int</span>, y: np.ndarray, dydx: np.ndarray, nvar: <span class='hb'>int</span>, xs: <span class='hb'>float</span>, htot: <span class='hb'>float</span>, nstep: <span class='hb'>int</span>,</span>
+<span class="line" id="P109"><span class="ln">109</span>            yout: np.ndarray, ym: np.ndarray, yn: np.ndarray, sx: np.ndarray, which: <span class='hb'>int</span>, b: <span class='hb'>float</span>, fpl: <span class='hb'>float</span>,</span>
+<span class="line" id="P110"><span class="ln">110</span>            ftl: <span class='hb'>float</span>, gl: <span class='hb'>float</span>, latmo: <span class='hb'>bool</span>, lderiv: <span class='hb'>bool</span>, lsave: <span class='hb'>bool</span>, teffl: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>,</span>
+<span class="line" id="P111"><span class="ln">111</span>            cf: np.ndarray, ci: np.ndarray, ctx: <span class='hb'>tuple</span>) -&gt; <span class='hb'>int</span>:</span>
+<span class="line" id="P112"><span class="ln">112</span>    <span class='hs'>&quot;&quot;&quot;mmid&#x27;s operations, from derivative call `after` + 1.</span></span>
+<span class="line" id="P113"><span class="ln">113</span></span>
+<span class="line" id="P114"><span class="ln">114</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P115"><span class="ln">115</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P116"><span class="ln">116</span><span class='hs'>    after : int</span></span>
+<span class="line" id="P117"><span class="ln">117</span><span class='hs'>        The derivative calls already done (0 to start; k to resume after the plain code did call k).</span></span>
+<span class="line" id="P118"><span class="ln">118</span><span class='hs'>    y, dydx : np.ndarray, shape: `(4,)`, dtype: ``float``</span></span>
+<span class="line" id="P119"><span class="ln">119</span><span class='hs'>        As mmid&#x27;s (index 0 unused).</span></span>
+<span class="line" id="P120"><span class="ln">120</span><span class='hs'>    nvar, xs, htot, nstep</span></span>
+<span class="line" id="P121"><span class="ln">121</span><span class='hs'>        As mmid&#x27;s.</span></span>
+<span class="line" id="P122"><span class="ln">122</span><span class='hs'>    yout : np.ndarray, shape: `(4,)`, dtype: ``float``</span></span>
+<span class="line" id="P123"><span class="ln">123</span><span class='hs'>        Set: the result (in between, the derivatives).</span></span>
+<span class="line" id="P124"><span class="ln">124</span><span class='hs'>    ym, yn : np.ndarray, shape: `(4,)`, dtype: ``float``</span></span>
+<span class="line" id="P125"><span class="ln">125</span><span class='hs'>        mmid&#x27;s SAVE&#x27;d work arrays (the module&#x27;s), kept between a stop and the resumption.</span></span>
+<span class="line" id="P126"><span class="ln">126</span><span class='hs'>    sx : np.ndarray, shape: `(2,)`, dtype: ``float``</span></span>
+<span class="line" id="P127"><span class="ln">127</span><span class='hs'>        X0 of the last derivative call, and at a stop the number of the call stopped at.</span></span>
+<span class="line" id="P128"><span class="ln">128</span><span class='hs'>    which, b ... ctx</span></span>
+<span class="line" id="P129"><span class="ln">129</span><span class='hs'>        The derivative&#x27;s flag and arguments (_deriv_k).</span></span>
+<span class="line" id="P130"><span class="ln">130</span></span>
+<span class="line" id="P131"><span class="ln">131</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P132"><span class="ln">132</span><span class='hs'>    -------</span></span>
+<span class="line" id="P133"><span class="ln">133</span><span class='hs'>    int</span></span>
+<span class="line" id="P134"><span class="ln">134</span><span class='hs'>        STAGE_DONE, or the stage of the derivative call it stopped at (its X0 in sx[0], its Y in yn, its DYDX to go</span></span>
+<span class="line" id="P135"><span class="ln">135</span><span class='hs'>        to yout).</span></span>
+<span class="line" id="P136"><span class="ln">136</span></span>
+<span class="line" id="P137"><span class="ln">137</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P138"><span class="ln">138</span>    <span class='hc'># The substep, and the first step (<a class='fl' href='#L28-L38'>Fortran lines 28–38</a>).</span></span>
+<span class="line" id="P139"><span class="ln">139</span>    h = htot / <span class='hb'>float</span>(nstep)</span>
+<span class="line" id="P140"><span class="ln">140</span>    <span class='hk'>if</span> after == <span class='hn'>0</span>:</span>
+<span class="line" id="P141"><span class="ln">141</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nvar + <span class='hn'>1</span>):</span>
+<span class="line" id="P142"><span class="ln">142</span>            ym[i] = y[i]</span>
+<span class="line" id="P143"><span class="ln">143</span>            yn[i] = y[i] + dydx[i] * h</span>
+<span class="line" id="P144"><span class="ln">144</span>        x0 = xs + h</span>
+<span class="line" id="P145"><span class="ln">145</span>        sx[<span class='hn'>0</span>] = x0</span>
+<span class="line" id="P146"><span class="ln">146</span>        stage = _deriv_k(which, x0, yn, yout, b, fpl, ftl, gl, latmo, lderiv, lsave, teffl, x, z, cf, ci, ctx)</span>
+<span class="line" id="P147"><span class="ln">147</span>        <span class='hk'>if</span> stage != STAGE_DONE:</span>
+<span class="line" id="P148"><span class="ln">148</span>            sx[<span class='hn'>1</span>] = <span class='hn'>1</span></span>
+<span class="line" id="P149"><span class="ln">149</span>            <span class='hk'>return</span> stage</span>
+<span class="line" id="P150"><span class="ln">150</span>        after = <span class='hn'>1</span></span>
+<span class="line" id="P151"><span class="ln">151</span>    <span class='hc'># The general step, from the call after `after` (<a class='fl' href='#L39-L49'>Fortran lines 39–49</a>).</span></span>
+<span class="line" id="P152"><span class="ln">152</span>    x0 = sx[<span class='hn'>0</span>]</span>
+<span class="line" id="P153"><span class="ln">153</span>    h2 = <span class='hn'>2.0</span> * h</span>
+<span class="line" id="P154"><span class="ln">154</span>    <span class='hk'>for</span> n <span class='hk'>in</span> <span class='hb'>range</span>(after + <span class='hn'>1</span>, nstep + <span class='hn'>1</span>):</span>
+<span class="line" id="P155"><span class="ln">155</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nvar + <span class='hn'>1</span>):</span>
+<span class="line" id="P156"><span class="ln">156</span>            swap = ym[i] + h2 * yout[i]</span>
+<span class="line" id="P157"><span class="ln">157</span>            ym[i] = yn[i]</span>
+<span class="line" id="P158"><span class="ln">158</span>            yn[i] = swap</span>
+<span class="line" id="P159"><span class="ln">159</span>        x0 = x0 + h</span>
+<span class="line" id="P160"><span class="ln">160</span>        sx[<span class='hn'>0</span>] = x0</span>
+<span class="line" id="P161"><span class="ln">161</span>        stage = _deriv_k(which, x0, yn, yout, b, fpl, ftl, gl, latmo, lderiv, lsave, teffl, x, z, cf, ci, ctx)</span>
+<span class="line" id="P162"><span class="ln">162</span>        <span class='hk'>if</span> stage != STAGE_DONE:</span>
+<span class="line" id="P163"><span class="ln">163</span>            sx[<span class='hn'>1</span>] = n</span>
+<span class="line" id="P164"><span class="ln">164</span>            <span class='hk'>return</span> stage</span>
+<span class="line" id="P165"><span class="ln">165</span>    <span class='hc'># The last step (<a class='fl' href='#L50-L54'>Fortran lines 50–54</a>).</span></span>
+<span class="line" id="P166"><span class="ln">166</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, nvar + <span class='hn'>1</span>):</span>
+<span class="line" id="P167"><span class="ln">167</span>        yout[i] = <span class='hn'>0.5</span> * (ym[i] + yn[i] + h * yout[i])</span>
+<span class="line" id="P168"><span class="ln">168</span>    <span class='hk'>return</span> STAGE_DONE</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
 function st(){try{return localStorage.getItem('pm-toc')}catch(e){return null}}function sv(v){try{localStorage.setItem('pm-toc',v)}catch(e){}}
 var b=nav.querySelector('.toc-toggle');function set(h){page.classList.toggle('toc-hidden',h);b.textContent=h?'show':'hide';}
 set(st()==='hidden');b.addEventListener('click',function(){var h=!page.classList.contains('toc-hidden');set(h);sv(h?'hidden':'shown');});

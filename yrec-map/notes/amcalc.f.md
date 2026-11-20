@@ -3,10 +3,10 @@
 **Purpose.** This file computes the structure-dependent factor of the magnetic-braking torque, "according to the Matt et al. ([2012](https://ui.adsabs.harvard.edu/abs/2012ApJ...754L..26M)) formulation" (comment by G. Somers, 6/16). The factor scales the angular-momentum loss of the wind with the star's mass, radius, luminosity, photospheric pressure and, optionally, its convective overturn time.
 
 **How it fits.**
-- **Inputs:** the arguments `SMASS` (the star's mass in solar masses: [MDOT](mdot.f.md#mdot) updates it as `SMASS + DELM/CMSUN`, and COWIND's header says "stellar mass (solar units)"), `BL` ($`\log L/L_\odot`$) and `TEFFL` ($`\log T_\mathrm{eff}`$); the exponents `EXM`, `EXR`, `EXL`, `EXPR`, `EXTAU`, the solar normalizations `PMMSOLP` and `PMMSOLTAU` and the switch `LROSSBY`, all namelist parameters in [NMLPAR_MOD](nmlpar_mod.f.md#nmlpar_mod) (set in [PARMIN](parmin.f.md#parmin)); the photospheric pressure `PPHOT`, `PPHOT0`, the overturn time `TAUCZ`, `TAUCZ0` and `FRACSTEP` in [OVRTRN_MOD](ovrtrn_mod.f.md#ovrtrn_mod).
-- **Who calls it:** [MWIND](mwind.f.md#mwind) and [MCOWIND](mcowind.f.md#mcowind).
+- **Inputs:** the arguments `SMASS` (the star's mass in solar masses: [MDOT](mdot.f.md#mdot) updates it as `SMASS + DELM/CMSUN`, and COWIND's header says "stellar mass (solar units)"), `BL` ($`\log L/L_\odot`$) and `TEFFL` ($`\log T_\mathrm{eff}`$); the exponents `EXM`, `EXR`, `EXL`, `EXPR`, `EXTAU`, the solar normalizations `PMMSOLP` and `PMMSOLTAU` and the switch `LROSSBY`, all namelist parameters in [NMLPAR_MOD](https://github.com/yreclab/yrec/blob/7be4133/src/nmlpar_mod.f#L32-L279) (set in [PARMIN](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489)); the photospheric pressure `PPHOT`, `PPHOT0`, the overturn time `TAUCZ`, `TAUCZ0` and `FRACSTEP` in [OVRTRN_MOD](https://github.com/yreclab/yrec/blob/7be4133/src/ovrtrn_mod.f#L19-L30).
+- **Who calls it:** [MWIND](https://github.com/yreclab/yrec/blob/7be4133/src/mwind.f#L3-L218) and [MCOWIND](mcowind.f.md#mcowind).
 - **Output:** the argument `STRUCTFACTOR`, which MWIND and MCOWIND multiply with `CONSTFACTOR` and the time step to get the spin-down.
-- **Modules:** [CONSTANTS_MOD](constants_mod.f.md#constants_mod) (`CLSUNL`, `C4PIL`, `CSIGL`, `CLN`, `CRSUN`), [NMLPAR_MOD](nmlpar_mod.f.md#nmlpar_mod) and [OVRTRN_MOD](ovrtrn_mod.f.md#ovrtrn_mod).
+- **Modules:** [CONSTANTS_MOD](https://github.com/yreclab/yrec/blob/7be4133/src/constants_mod.f#L37-L75) (`CLSUNL`, `C4PIL`, `CSIGL`, `CLN`, `CRSUN`), [NMLPAR_MOD](https://github.com/yreclab/yrec/blob/7be4133/src/nmlpar_mod.f#L32-L279) and [OVRTRN_MOD](https://github.com/yreclab/yrec/blob/7be4133/src/ovrtrn_mod.f#L19-L30).
 
 **The method.**
 1. The radius from the Stefan–Boltzmann law, in cgs units:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check the notes' links to lines of the code when the site moves to a later commit.
 
-    python3 scripts/check_lines.py ../yrec OLD NEW [--fix]
+    python3 scripts/check_lines.py yrec OLD NEW [--fix]
 
 The notes cite lines as links to the code on GitHub, [lines 120–130](https://github.com/yreclab/yrec/blob/<ref>/src/
 main.f#L120-L130), the form the build writes so that the notes read on GitHub, or in the generator's form [[#L120]],

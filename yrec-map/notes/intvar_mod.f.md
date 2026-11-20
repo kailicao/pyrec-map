@@ -1,6 +1,6 @@
 ## Explanation
 
-**Purpose.** `INTVAR_MOD` holds the structure variables at the interfaces between shells (the midpoints in radius), for the rotation routines, shared by [`SETUPV`](setupv.f.md#setupv), [`VCIRC`](vcirc.f.md#vcirc), [`GETFC`](getfc.f.md#getfc) and [`SECULR`](seculr.f.md#seculr). It replaces `COMMON/INTVAR/` (MHP via Claude, 10/14/26); `JSON` comes from [`DIMENSIONS_MOD`](dimensions_mod.f.md#dimensions_mod). All members are arrays of `JSON`.
+**Purpose.** `INTVAR_MOD` holds the structure variables at the interfaces between shells (the midpoints in radius), for the rotation routines, shared by [`SETUPV`](https://github.com/yreclab/yrec/blob/7be4133/src/setupv.f#L3-L467), [`VCIRC`](vcirc.f.md#vcirc), [`GETFC`](getfc.f.md#getfc), and [`SECULR`](https://github.com/yreclab/yrec/blob/7be4133/src/seculr.f#L6-L532). It replaces `COMMON/INTVAR/` (MHP via Claude, 10/14/26); `JSON` comes from [`DIMENSIONS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/dimensions_mod.f#L38-L44). All members are arrays of `JSON`.
 
 **What its variables hold, who sets them, who reads them.** All are set by `SETUPV`:
 - `RM`: the radius of the interface between shells `I-1` and `I`, the mean of the two shells' radii.

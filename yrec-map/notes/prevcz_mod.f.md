@@ -5,7 +5,7 @@
 **What its variables hold, who sets them, who reads them.**
 - `RBASE0`: the radius of the base of the convection zone at the start of the step (with overshoot). `LIBURN`, `LIBURN2` compute it from the starting model when it is 0, and store the step's ending base in it for the next step; the [main program](main.f.md#file-level) resets it to 0 when `LEXCOM` is set.
 - `JENVOS`: the shell of the envelope's base at the end of the step, stored by `LIBURN`, `LIBURN2` and used as the next step's starting `JENV0` when `RBASE0` is already known.
-- `BLI6OLD`, `BLI7OLD`, `BBE9OLD`: the mass-averaged burning rates of $`^6\mathrm{Li}`$, $`^7\mathrm{Li}`$ and $`^9\mathrm{Be}`$ in the convection zone at the end of the step (their logarithms, by the code's comments), stored by `LIBURN` for the start of the next.
+- `BLI6OLD`, `BLI7OLD`, `BBE9OLD`: the mass-averaged burning rates of $`^6\mathrm{Li}`$, $`^7\mathrm{Li}`$, and $`^9\mathrm{Be}`$ in the convection zone at the end of the step (their natural logarithms, [liburn.f, lines 368–370](https://github.com/yreclab/yrec/blob/7be4133/src/liburn.f#L368-L370)), stored by `LIBURN` for the start of the next.
 - `LBLIOLD` (`.FALSE.` at the start): whether those three hold `LIBURN`'s end-of-step rates. `LIBURN` sets it when it stores them, clears it when it skips the convection zone, and reuses the stored rates as the next step's starting rates only when it is set (otherwise it recomputes them); `LIBURN2` always computes its starting rates and clears it, and the main program clears it at each kind card when `LEXCOM` is set.
 
 **Design.** A blanket `USE PREVCZ_MOD` in each routine.

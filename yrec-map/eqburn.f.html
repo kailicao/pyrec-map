@@ -2,7 +2,7 @@
 <header class='top'><img class='logo' src='../logo.svg' alt=''><a href='../index.html'>PyREC scaffolding (from YREC development, 7be4133)</a><span class='muted'>/ eqburn.f</span><a class='gl-link' href='../glossary.html'>Glossary</a></header><div class='page'><nav class='toc'><div class='toc-head'><span class='toc-title'>On this page</span><button type='button' class='toc-toggle'>hide</button></div><ol><li><a href='#purpose'>Purpose</a></li><li><a href='#how-it-fits'>How it fits</a></li><li><a href='#method'>The method</a></li><li><a href='#documentation'>From YREC&#x27;s documentation</a></li><li><a href='#bugs'>Suspected bugs, checked by running the code</a><ol><li><a href='#b1'>1. Division by a rate that can be zero</a></li></ol></li><li><a href='#definitions'>Definitions</a><ol><li><a href='#def-EQBURN'>EQBURN</a></li></ol></li><li><a href='#change-log'>Change log</a></li></ol></nav><main class='textcol'>
 <h1>eqburn.f</h1>
 <p class='muted'>219 lines · 1 definitions · <a href='https://github.com/yreclab/yrec/blob/7be4133/src/eqburn.f'>on GitHub (7be4133)</a></p>
-<p><strong>Python version</strong>: <code>eqburn.py</code>, 144 lines, on the right (switch to Python above the code).</p>
+<p><strong>Python version</strong>: <code>eqburn.py</code>, 333 lines, on the right (switch to Python above the code).</p>
 <details class='vars' id='terms'><summary>Variables on this page (3)</summary><p><a href='../glossary.html#var-hcompp' data-def='the old composition, mass fractions as in &lt;code&gt;HCOMP&lt;/code&gt; (1 $X$, 2 $Y$, 3 $Z$, 4–15 the tracked isotopes), &lt;code&gt;(15,JSON)&lt;/code&gt;; saved by the &lt;a href=&quot;../yrec-map/main.f.html#def-_file_level_&quot;&gt;main program&lt;/a&gt;, &lt;a href=&quot;../yrec-map/hpoint.f.html#def-HPOINT&quot;&gt;&lt;code&gt;HPOINT&lt;/code&gt;&lt;/a&gt;, &lt;a href=&quot;../yrec-map/getw.f.html#def-GETW&quot;&gt;&lt;code&gt;GETW&lt;/code&gt;&lt;/a&gt; and &lt;a href=&quot;../yrec-map/bursmix.f.html#def-BURSMIX&quot;&gt;&lt;code&gt;BURSMIX&lt;/code&gt;&lt;/a&gt;.'><code>hcompp</code></a>, <a href='../glossary.html#var-json' data-def='the maximum number of shells in a model, 5000 (a &lt;code&gt;PARAMETER&lt;/code&gt;, used by 144 files).'><code>json</code></a>, <a href='../glossary.html#var-tcut' data-def='&lt;code&gt;(5)&lt;/code&gt;, thresholds in $\log T$: (1) below which all burning rates are zero; (2), (3) the equilibrium pp chains and CN cycle in &lt;a href=&quot;#def-EQBURN&quot;&gt;&lt;code&gt;EQBURN&lt;/code&gt;&lt;/a&gt; (the documentation calls them unused); (4) the $\alpha$ captures in &lt;a href=&quot;../yrec-map/engeb.f.html#def-ENGEB&quot;&gt;&lt;code&gt;ENGEB&lt;/code&gt;&lt;/a&gt; and &lt;a href=&quot;../yrec-map/rates.f.html#def-RATES&quot;&gt;&lt;code&gt;RATES&lt;/code&gt;&lt;/a&gt;; (5) the neutrino losses in ENGEB; default (6.5D0, 6.5D0, 6.82D0, 7.7D0, 7.5D0).'><code>tcut</code></a></p></details><h2 id='purpose'>Purpose</h2>
 <div class='notes'><p><code>EQBURN</code> gives explicit hydrogen and helium burning rates for one shell or one convection zone, assuming that $^3$He and the CN cycle are in equilibrium. Its comment says the result is "an initial guess at the burning rates at the start of the time step," which a fully implicit non-equilibrium calculation can supplement later.</p></div>
 <h2 id='how-it-fits'>How it fits</h2>
@@ -298,148 +298,337 @@
 <span class="line" id="L218"><span class="ln">218</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>RETURN</span></span>
 <span class="line" id="L219"><span class="ln">219</span><span class='lt'>      </span><span class='lr'>      </span><span class='hk'>END</span></span></pre></div><div class='pane p'><pre class='src'><span class="line" id="P1"><span class="ln">1</span><span class='hs'>&quot;&quot;&quot;Python version of eqburn.f (YREC 7be4133): explicit hydrogen and helium</span></span>
 <span class="line" id="P2"><span class="ln">2</span><span class='hs'>burning rates for a shell or a convection zone, with 3He and the CN cycle</span></span>
-<span class="line" id="P3"><span class="ln">3</span><span class='hs'>in equilibrium.&quot;&quot;&quot;</span></span>
+<span class="line" id="P3"><span class="ln">3</span><span class='hs'>in equilibrium.</span></span>
 <span class="line" id="P4"><span class="ln">4</span></span>
-<span class="line" id="P5"><span class="ln">5</span><span class='hk'>import</span> math</span>
-<span class="line" id="P6"><span class="ln">6</span></span>
-<span class="line" id="P7"><span class="ln">7</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
-<span class="line" id="P8"><span class="ln">8</span></span>
-<span class="line" id="P9"><span class="ln">9</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> nmlpar_mod</span>
-<span class="line" id="P10"><span class="ln">10</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> oldmod_mod</span>
-<span class="line" id="P11"><span class="ln">11</span></span>
-<span class="line" id="P12"><span class="ln">12</span><span class='hc'># SAVE: the work array XSUM(11), set before use on every call.</span></span>
-<span class="line" id="P13"><span class="ln">13</span>xsum = np.zeros(<span class='hn'>11</span> + <span class='hn'>1</span>)</span>
+<span class="line" id="P5"><span class="ln">5</span><span class='hs'>Functions</span></span>
+<span class="line" id="P6"><span class="ln">6</span><span class='hs'>---------</span></span>
+<span class="line" id="P7"><span class="ln">7</span><span class='hs'>eqburn_mean_abund : The abundances at the start of the step: one shell&#x27;s, or a zone&#x27;s mass-weighted means.</span></span>
+<span class="line" id="P8"><span class="ln">8</span><span class='hs'>eqburn_mean_rates : The rates GR1..GR7, GR10, GR12: one shell&#x27;s, or a zone&#x27;s mass-weighted means.</span></span>
+<span class="line" id="P9"><span class="ln">9</span><span class='hs'>eqburn : The explicit rates (the routine; its Numba kernel when accel.USE_NUMBA).</span></span>
+<span class="line" id="P10"><span class="ln">10</span></span>
+<span class="line" id="P11"><span class="ln">11</span><span class='hs'>The kernel `_eqburn_nb` is also called by mix.py&#x27;s burning chain and xtime.py.</span></span>
+<span class="line" id="P12"><span class="ln">12</span></span>
+<span class="line" id="P13"><span class="ln">13</span><span class='hs'>&quot;&quot;&quot;</span></span>
 <span class="line" id="P14"><span class="ln">14</span></span>
-<span class="line" id="P15"><span class="ln">15</span></span>
-<span class="line" id="P16"><span class="ln">16</span><span class='hk'>def</span> eqburn(hr1: np.ndarray, hr2: np.ndarray, hr3: np.ndarray, hr4: np.ndarray, hr5: np.ndarray, hr6: np.ndarray,</span>
-<span class="line" id="P17"><span class="ln">17</span>           hr7: np.ndarray, hr10: np.ndarray, hr12: np.ndarray, hs2: np.ndarray, ht: np.ndarray, ibegin: <span class='hb'>int</span>, iend: <span class='hb'>int</span>,</span>
-<span class="line" id="P18"><span class="ln">18</span>           dcdt: <span class='hb'>float</span>, dodt: <span class='hb'>float</span>, dxdt: <span class='hb'>float</span>, dydt: <span class='hb'>float</span>, xc12: <span class='hb'>float</span>, xo16: <span class='hb'>float</span>, x: <span class='hb'>float</span>,</span>
-<span class="line" id="P19"><span class="ln">19</span>           z: <span class='hb'>float</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>]:</span>
-<span class="line" id="P20"><span class="ln">20</span>    <span class='hs'>&quot;&quot;&quot;Explicit burning rates for shells ibegin..iend (mass-weighted means</span></span>
-<span class="line" id="P21"><span class="ln">21</span><span class='hs'>    over a zone), with 3He and the CN cycle in equilibrium: an initial</span></span>
-<span class="line" id="P22"><span class="ln">22</span><span class='hs'>    guess at the rates at the start of the step.</span></span>
-<span class="line" id="P23"><span class="ln">23</span></span>
-<span class="line" id="P24"><span class="ln">24</span><span class='hs'>    Translates: eqburn.f#EQBURN (7be4133)</span></span>
-<span class="line" id="P25"><span class="ln">25</span></span>
-<span class="line" id="P26"><span class="ln">26</span><span class='hs'>    Arguments: hr1..hr12, the reaction-rate arrays from RATES; hs2, the</span></span>
-<span class="line" id="P27"><span class="ln">27</span><span class='hs'>    shell masses; ht, log T; ibegin, iend, the shell or zone; dcdt, dodt,</span></span>
-<span class="line" id="P28"><span class="ln">28</span><span class='hs'>    dxdt, dydt, xc12, xo16, x, z (set only, except below tcut[1], where</span></span>
-<span class="line" id="P29"><span class="ln">29</span><span class='hs'>    xc12, xo16, x, z keep their values).</span></span>
+<span class="line" id="P15"><span class="ln">15</span><span class='hk'>import</span> math</span>
+<span class="line" id="P16"><span class="ln">16</span></span>
+<span class="line" id="P17"><span class="ln">17</span><span class='hk'>import</span> numpy <span class='hk'>as</span> np</span>
+<span class="line" id="P18"><span class="ln">18</span></span>
+<span class="line" id="P19"><span class="ln">19</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> accel</span>
+<span class="line" id="P20"><span class="ln">20</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> nmlpar_mod</span>
+<span class="line" id="P21"><span class="ln">21</span><span class='hk'>from</span> pyrec <span class='hk'>import</span> oldmod_mod</span>
+<span class="line" id="P22"><span class="ln">22</span></span>
+<span class="line" id="P23"><span class="ln">23</span><span class='hc'># SAVE: the work array XSUM(11), set before use on every call.</span></span>
+<span class="line" id="P24"><span class="ln">24</span>xsum = np.zeros(<span class='hn'>11</span> + <span class='hn'>1</span>)</span>
+<span class="line" id="P25"><span class="ln">25</span>gr = np.zeros(<span class='hn'>13</span>)  <span class='hc'># GR1..GR7, GR10, GR12 at their indices (pyrec&#x27;s work array).</span></span>
+<span class="line" id="P26"><span class="ln">26</span></span>
+<span class="line" id="P27"><span class="ln">27</span></span>
+<span class="line" id="P28"><span class="ln">28</span><span class='hc'># --- Utilities (each routine its own copies) --------------------------------------------------------------------</span></span>
+<span class="line" id="P29"><span class="ln">29</span></span>
 <span class="line" id="P30"><span class="ln">30</span></span>
-<span class="line" id="P31"><span class="ln">31</span><span class='hs'>    Returns (dcdt, dodt, dxdt, dydt, xc12, xo16, x, z): the rates of change</span></span>
-<span class="line" id="P32"><span class="ln">32</span><span class='hs'>    of 12C, 16O, H and He (mass fraction per Gyr) and the zone&#x27;s mean</span></span>
-<span class="line" id="P33"><span class="ln">33</span><span class='hs'>    12C (its CN-equilibrium value if the CN step ran), 16O, X and Z.</span></span>
-<span class="line" id="P34"><span class="ln">34</span></span>
-<span class="line" id="P35"><span class="ln">35</span><span class='hs'>    &quot;&quot;&quot;</span></span>
-<span class="line" id="P36"><span class="ln">36</span></span>
-<span class="line" id="P37"><span class="ln">37</span>    tcut = nmlpar_mod.tcut</span>
-<span class="line" id="P38"><span class="ln">38</span>    hcompp = oldmod_mod.hcompp</span>
-<span class="line" id="P39"><span class="ln">39</span></span>
-<span class="line" id="P40"><span class="ln">40</span>    <span class='hc'># No burning below TCUT(1) (<a class='fl' href='#L51-L55'>Fortran lines 51–55</a>).</span></span>
-<span class="line" id="P41"><span class="ln">41</span>    dxdt = <span class='hn'>0.0</span></span>
-<span class="line" id="P42"><span class="ln">42</span>    dydt = <span class='hn'>0.0</span></span>
-<span class="line" id="P43"><span class="ln">43</span>    dcdt = <span class='hn'>0.0</span></span>
-<span class="line" id="P44"><span class="ln">44</span>    dodt = <span class='hn'>0.0</span></span>
-<span class="line" id="P45"><span class="ln">45</span>    <span class='hk'>if</span> ht[ibegin] &lt; tcut[<span class='hn'>1</span>]:</span>
-<span class="line" id="P46"><span class="ln">46</span>        <span class='hk'>return</span> dcdt, dodt, dxdt, dydt, xc12, xo16, x, z</span>
-<span class="line" id="P47"><span class="ln">47</span></span>
-<span class="line" id="P48"><span class="ln">48</span>    <span class='hc'># Abundances: mass-weighted means over a zone (<a class='fl' href='#L61-L83'>Fortran lines 61–83</a>).</span></span>
-<span class="line" id="P49"><span class="ln">49</span>    <span class='hk'>if</span> ibegin != iend:</span>
-<span class="line" id="P50"><span class="ln">50</span>        wtsum = <span class='hn'>0.0</span></span>
-<span class="line" id="P51"><span class="ln">51</span>        <span class='hk'>for</span> j <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, <span class='hn'>12</span>):  <span class='hc'># label 1</span></span>
-<span class="line" id="P52"><span class="ln">52</span>            xsum[j] = <span class='hn'>0.0</span></span>
-<span class="line" id="P53"><span class="ln">53</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(ibegin, iend + <span class='hn'>1</span>):  <span class='hc'># label 5</span></span>
-<span class="line" id="P54"><span class="ln">54</span>            wtsum = wtsum + hs2[i]</span>
-<span class="line" id="P55"><span class="ln">55</span>            <span class='hk'>for</span> j <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, <span class='hn'>12</span>):  <span class='hc'># label 3</span></span>
-<span class="line" id="P56"><span class="ln">56</span>                xsum[j] = xsum[j] + hcompp[j, i] * hs2[i]</span>
-<span class="line" id="P57"><span class="ln">57</span>        <span class='hk'>for</span> j <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, <span class='hn'>12</span>):  <span class='hc'># label 7</span></span>
-<span class="line" id="P58"><span class="ln">58</span>            xsum[j] = xsum[j] / wtsum</span>
-<span class="line" id="P59"><span class="ln">59</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P60"><span class="ln">60</span>        <span class='hk'>for</span> j <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, <span class='hn'>12</span>):  <span class='hc'># label 9</span></span>
-<span class="line" id="P61"><span class="ln">61</span>            xsum[j] = hcompp[j, ibegin]</span>
-<span class="line" id="P62"><span class="ln">62</span></span>
-<span class="line" id="P63"><span class="ln">63</span>    <span class='hc'># Rates: likewise (<a class='fl' href='#L84-L157'>Fortran lines 84–157</a>).</span></span>
-<span class="line" id="P64"><span class="ln">64</span>    <span class='hk'>if</span> ibegin == iend:</span>
-<span class="line" id="P65"><span class="ln">65</span>        gr1 = hr1[ibegin]</span>
-<span class="line" id="P66"><span class="ln">66</span>        gr2 = hr2[ibegin]</span>
-<span class="line" id="P67"><span class="ln">67</span>        gr3 = hr3[ibegin]</span>
-<span class="line" id="P68"><span class="ln">68</span>        gr4 = hr4[ibegin]</span>
-<span class="line" id="P69"><span class="ln">69</span>        gr5 = hr5[ibegin]</span>
-<span class="line" id="P70"><span class="ln">70</span>        gr6 = hr6[ibegin]</span>
-<span class="line" id="P71"><span class="ln">71</span>        gr7 = hr7[ibegin]</span>
-<span class="line" id="P72"><span class="ln">72</span>        gr10 = hr10[ibegin]</span>
-<span class="line" id="P73"><span class="ln">73</span>        gr12 = hr12[ibegin]</span>
-<span class="line" id="P74"><span class="ln">74</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P75"><span class="ln">75</span>        gr1 = gr2 = gr3 = gr4 = gr5 = gr6 = gr7 = gr10 = gr12 = <span class='hn'>0.0</span></span>
-<span class="line" id="P76"><span class="ln">76</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(ibegin, iend + <span class='hn'>1</span>):  <span class='hc'># label 15</span></span>
-<span class="line" id="P77"><span class="ln">77</span>            gr1 = gr1 + hs2[i] * hr1[i]</span>
-<span class="line" id="P78"><span class="ln">78</span>            gr2 = gr2 + hs2[i] * hr2[i]</span>
-<span class="line" id="P79"><span class="ln">79</span>            gr3 = gr3 + hs2[i] * hr3[i]</span>
-<span class="line" id="P80"><span class="ln">80</span>            gr4 = gr4 + hs2[i] * hr4[i]</span>
-<span class="line" id="P81"><span class="ln">81</span>            gr5 = gr5 + hs2[i] * hr5[i]</span>
-<span class="line" id="P82"><span class="ln">82</span>            gr6 = gr6 + hs2[i] * hr6[i]</span>
-<span class="line" id="P83"><span class="ln">83</span>            gr7 = gr7 + hs2[i] * hr7[i]</span>
-<span class="line" id="P84"><span class="ln">84</span>            gr10 = gr10 + hs2[i] * hr10[i]</span>
-<span class="line" id="P85"><span class="ln">85</span>            gr12 = gr12 + hs2[i] * hr12[i]</span>
-<span class="line" id="P86"><span class="ln">86</span>        gr1 = gr1 / wtsum</span>
-<span class="line" id="P87"><span class="ln">87</span>        gr2 = gr2 / wtsum</span>
-<span class="line" id="P88"><span class="ln">88</span>        gr3 = gr3 / wtsum</span>
-<span class="line" id="P89"><span class="ln">89</span>        gr4 = gr4 / wtsum</span>
-<span class="line" id="P90"><span class="ln">90</span>        gr5 = gr5 / wtsum</span>
-<span class="line" id="P91"><span class="ln">91</span>        gr6 = gr6 / wtsum</span>
-<span class="line" id="P92"><span class="ln">92</span>        gr7 = gr7 / wtsum</span>
-<span class="line" id="P93"><span class="ln">93</span>        gr10 = gr10 / wtsum</span>
-<span class="line" id="P94"><span class="ln">94</span>        gr12 = gr12 / wtsum</span>
-<span class="line" id="P95"><span class="ln">95</span></span>
-<span class="line" id="P96"><span class="ln">96</span>    <span class='hc'># <a class='fl' href='#L161-L168'>Fortran lines 161–168</a>.</span></span>
-<span class="line" id="P97"><span class="ln">97</span>    x = xsum[<span class='hn'>1</span>]</span>
-<span class="line" id="P98"><span class="ln">98</span>    xhe3 = xsum[<span class='hn'>4</span>]</span>
-<span class="line" id="P99"><span class="ln">99</span>    y = xsum[<span class='hn'>2</span>]</span>
-<span class="line" id="P100"><span class="ln">100</span>    z = xsum[<span class='hn'>3</span>]</span>
-<span class="line" id="P101"><span class="ln">101</span>    xc12 = xsum[<span class='hn'>5</span>]</span>
-<span class="line" id="P102"><span class="ln">102</span>    xc13 = xsum[<span class='hn'>6</span>]</span>
-<span class="line" id="P103"><span class="ln">103</span>    xn14 = xsum[<span class='hn'>7</span>]</span>
-<span class="line" id="P104"><span class="ln">104</span>    xo16 = xsum[<span class='hn'>9</span>]</span>
-<span class="line" id="P105"><span class="ln">105</span></span>
-<span class="line" id="P106"><span class="ln">106</span>    <span class='hc'># pp chains, 3He in equilibrium (capped at its actual abundance)</span></span>
-<span class="line" id="P107"><span class="ln">107</span>    <span class='hc'># (<a class='fl' href='#L169-L184'>Fortran lines 169–184</a>).</span></span>
-<span class="line" id="P108"><span class="ln">108</span>    <span class='hc'># Suspected bug (see the page): divides by gr2 (and gr4, gr5 below).</span></span>
-<span class="line" id="P109"><span class="ln">109</span>    <span class='hk'>if</span> x &gt; <span class='hn'>1.0e-10</span> <span class='hk'>and</span> ht[ibegin] &gt; tcut[<span class='hn'>2</span>]:</span>
-<span class="line" id="P110"><span class="ln">110</span>        r11 = gr1 * x**<span class='hn'>2</span></span>
-<span class="line" id="P111"><span class="ln">111</span>        r34 = gr3 * y</span>
-<span class="line" id="P112"><span class="ln">112</span>        xhe3e = <span class='hn'>0.25</span> * (math.sqrt(r34**<span class='hn'>2</span> + <span class='hn'>8.0</span> * gr2 * r11) - r34) / gr2</span>
-<span class="line" id="P113"><span class="ln">113</span>        xhe3 = <span class='hb'>min</span>(xhe3, xhe3e)</span>
-<span class="line" id="P114"><span class="ln">114</span>        dxdt = -<span class='hn'>3.0</span> * r11 + <span class='hn'>2.0</span> * gr2 * xhe3**<span class='hn'>2</span> - r34 * xhe3</span>
-<span class="line" id="P115"><span class="ln">115</span></span>
-<span class="line" id="P116"><span class="ln">116</span>        <span class='hc'># CN cycle in equilibrium (<a class='fl' href='#L185-L203'>Fortran lines 185–203</a>).</span></span>
-<span class="line" id="P117"><span class="ln">117</span>        <span class='hk'>if</span> ht[ibegin] &gt; tcut[<span class='hn'>3</span>]:</span>
-<span class="line" id="P118"><span class="ln">118</span>            sumcno = xc12 / <span class='hn'>12.0</span> + xc13 / <span class='hn'>13.0</span> + xn14 / <span class='hn'>14.0</span></span>
-<span class="line" id="P119"><span class="ln">119</span>            r1214 = gr6 / gr4</span>
-<span class="line" id="P120"><span class="ln">120</span>            r1314 = gr6 / gr5</span>
-<span class="line" id="P121"><span class="ln">121</span>            xn14 = sumcno / (r1214 / <span class='hn'>12.0</span> + r1314 / <span class='hn'>13.0</span> + <span class='hn'>1.0</span> / <span class='hn'>14.0</span>)</span>
-<span class="line" id="P122"><span class="ln">122</span>            <span class='hc'># Question (see the page): xc12 becomes its equilibrium value,</span></span>
-<span class="line" id="P123"><span class="ln">123</span>            <span class='hc'># returned and used for 12C + alpha below.</span></span>
-<span class="line" id="P124"><span class="ln">124</span>            xc12 = xn14 * r1214</span>
-<span class="line" id="P125"><span class="ln">125</span>            xc13 = xn14 * r1314</span>
-<span class="line" id="P126"><span class="ln">126</span>            <span class='hc'># Two protons for 16O + p, as for 14N + p (see the page).</span></span>
-<span class="line" id="P127"><span class="ln">127</span>            dxdt = (dxdt - gr4 * x * xc12 - gr5 * x * xc13</span>
-<span class="line" id="P128"><span class="ln">128</span>                    - <span class='hn'>2.0</span> * gr6 * x * xn14 - <span class='hn'>2.0</span> * gr7 * x * xo16)</span>
-<span class="line" id="P129"><span class="ln">129</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P130"><span class="ln">130</span>        dxdt = <span class='hn'>0.0</span>  <span class='hc'># GOTO 100: the CN step is skipped</span></span>
-<span class="line" id="P131"><span class="ln">131</span></span>
-<span class="line" id="P132"><span class="ln">132</span>    <span class='hc'># label 100: helium burning (<a class='fl' href='#L204-L216'>Fortran lines 204–216</a>).</span></span>
-<span class="line" id="P133"><span class="ln">133</span>    <span class='hk'>if</span> y &gt; <span class='hn'>1.0e-10</span> <span class='hk'>and</span> ht[ibegin] &gt; tcut[<span class='hn'>4</span>]:</span>
-<span class="line" id="P134"><span class="ln">134</span>        r3a = gr12 * y**<span class='hn'>3</span></span>
-<span class="line" id="P135"><span class="ln">135</span>        r412 = gr10 * y * xc12</span>
-<span class="line" id="P136"><span class="ln">136</span>        dydt = -<span class='hn'>4.0</span> * (r412 + <span class='hn'>3.0</span> * r3a)</span>
-<span class="line" id="P137"><span class="ln">137</span>        dcdt = <span class='hn'>12.0</span> * (r3a - r412)</span>
-<span class="line" id="P138"><span class="ln">138</span>        dodt = <span class='hn'>16.0</span> * r412</span>
-<span class="line" id="P139"><span class="ln">139</span>    <span class='hk'>else</span>:</span>
-<span class="line" id="P140"><span class="ln">140</span>        dydt = <span class='hn'>0.0</span></span>
-<span class="line" id="P141"><span class="ln">141</span>        dcdt = <span class='hn'>0.0</span></span>
-<span class="line" id="P142"><span class="ln">142</span>        dodt = <span class='hn'>0.0</span></span>
+<span class="line" id="P31"><span class="ln">31</span><span class='hk'>def</span> eqburn_mean_abund(hcompp: np.ndarray, hs2: np.ndarray, ibegin: <span class='hb'>int</span>, iend: <span class='hb'>int</span>, xsum: np.ndarray) -&gt; <span class='hb'>float</span>:</span>
+<span class="line" id="P32"><span class="ln">32</span>    <span class='hs'>&quot;&quot;&quot;The abundances at the start of the step: one shell&#x27;s, or a zone&#x27;s mass-weighted means (lines 61–83).</span></span>
+<span class="line" id="P33"><span class="ln">33</span></span>
+<span class="line" id="P34"><span class="ln">34</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P35"><span class="ln">35</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P36"><span class="ln">36</span><span class='hs'>    hcompp : np.ndarray, shape: `(16, JSON + 1)`, dtype: ``float64``</span></span>
+<span class="line" id="P37"><span class="ln">37</span><span class='hs'>        oldmod_mod.hcompp.</span></span>
+<span class="line" id="P38"><span class="ln">38</span><span class='hs'>    hs2 : np.ndarray, shape: `(JSON + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P39"><span class="ln">39</span><span class='hs'>        The shell masses.</span></span>
+<span class="line" id="P40"><span class="ln">40</span><span class='hs'>    ibegin, iend : int</span></span>
+<span class="line" id="P41"><span class="ln">41</span><span class='hs'>        The zone&#x27;s first and last shells.</span></span>
+<span class="line" id="P42"><span class="ln">42</span><span class='hs'>    xsum : np.ndarray, shape: `(12,)`, dtype: ``float64``</span></span>
+<span class="line" id="P43"><span class="ln">43</span><span class='hs'>        Filled in place: elements 1-11.</span></span>
+<span class="line" id="P44"><span class="ln">44</span></span>
+<span class="line" id="P45"><span class="ln">45</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P46"><span class="ln">46</span><span class='hs'>    -------</span></span>
+<span class="line" id="P47"><span class="ln">47</span><span class='hs'>    float</span></span>
+<span class="line" id="P48"><span class="ln">48</span><span class='hs'>        WTSUM, the zone&#x27;s mass (0 for one shell).</span></span>
+<span class="line" id="P49"><span class="ln">49</span></span>
+<span class="line" id="P50"><span class="ln">50</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P51"><span class="ln">51</span>    wtsum = <span class='hn'>0.0</span></span>
+<span class="line" id="P52"><span class="ln">52</span>    <span class='hk'>if</span> ibegin != iend:</span>
+<span class="line" id="P53"><span class="ln">53</span>        <span class='hk'>for</span> j <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, <span class='hn'>12</span>):  <span class='hc'># label 1</span></span>
+<span class="line" id="P54"><span class="ln">54</span>            xsum[j] = <span class='hn'>0.0</span></span>
+<span class="line" id="P55"><span class="ln">55</span>        <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(ibegin, iend + <span class='hn'>1</span>):  <span class='hc'># label 5</span></span>
+<span class="line" id="P56"><span class="ln">56</span>            wtsum = wtsum + hs2[i]</span>
+<span class="line" id="P57"><span class="ln">57</span>            <span class='hk'>for</span> j <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, <span class='hn'>12</span>):  <span class='hc'># label 3</span></span>
+<span class="line" id="P58"><span class="ln">58</span>                xsum[j] = xsum[j] + hcompp[j, i] * hs2[i]</span>
+<span class="line" id="P59"><span class="ln">59</span>        <span class='hk'>for</span> j <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, <span class='hn'>12</span>):  <span class='hc'># label 7</span></span>
+<span class="line" id="P60"><span class="ln">60</span>            xsum[j] = xsum[j] / wtsum</span>
+<span class="line" id="P61"><span class="ln">61</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P62"><span class="ln">62</span>        <span class='hk'>for</span> j <span class='hk'>in</span> <span class='hb'>range</span>(<span class='hn'>1</span>, <span class='hn'>12</span>):  <span class='hc'># label 9</span></span>
+<span class="line" id="P63"><span class="ln">63</span>            xsum[j] = hcompp[j, ibegin]</span>
+<span class="line" id="P64"><span class="ln">64</span>    <span class='hk'>return</span> wtsum</span>
+<span class="line" id="P65"><span class="ln">65</span></span>
+<span class="line" id="P66"><span class="ln">66</span></span>
+<span class="line" id="P67"><span class="ln">67</span><span class='hk'>def</span> eqburn_mean_rates(hr1: np.ndarray, hr2: np.ndarray, hr3: np.ndarray, hr4: np.ndarray, hr5: np.ndarray,</span>
+<span class="line" id="P68"><span class="ln">68</span>                      hr6: np.ndarray, hr7: np.ndarray, hr10: np.ndarray, hr12: np.ndarray, hs2: np.ndarray,</span>
+<span class="line" id="P69"><span class="ln">69</span>                      ibegin: <span class='hb'>int</span>, iend: <span class='hb'>int</span>, wtsum: <span class='hb'>float</span>, gr: np.ndarray) -&gt; <span class='hk'>None</span>:</span>
+<span class="line" id="P70"><span class="ln">70</span>    <span class='hs'>&quot;&quot;&quot;The rates: one shell&#x27;s, or a zone&#x27;s mass-weighted means, summed in the Fortran&#x27;s order (lines 84–157).</span></span>
+<span class="line" id="P71"><span class="ln">71</span></span>
+<span class="line" id="P72"><span class="ln">72</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P73"><span class="ln">73</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P74"><span class="ln">74</span><span class='hs'>    hr1 ... hr7, hr10, hr12 : np.ndarray, shape: `(JSON + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P75"><span class="ln">75</span><span class='hs'>        The rates.</span></span>
+<span class="line" id="P76"><span class="ln">76</span><span class='hs'>    hs2 : np.ndarray, shape: `(JSON + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P77"><span class="ln">77</span><span class='hs'>        The shell masses.</span></span>
+<span class="line" id="P78"><span class="ln">78</span><span class='hs'>    ibegin, iend : int</span></span>
+<span class="line" id="P79"><span class="ln">79</span><span class='hs'>        The zone&#x27;s first and last shells.</span></span>
+<span class="line" id="P80"><span class="ln">80</span><span class='hs'>    wtsum : float</span></span>
+<span class="line" id="P81"><span class="ln">81</span><span class='hs'>        The zone&#x27;s mass (eqburn_mean_abund).</span></span>
+<span class="line" id="P82"><span class="ln">82</span><span class='hs'>    gr : np.ndarray, shape: `(13,)`, dtype: ``float64``</span></span>
+<span class="line" id="P83"><span class="ln">83</span><span class='hs'>        Filled in place: GR1..GR7, GR10, GR12 at their indices.</span></span>
+<span class="line" id="P84"><span class="ln">84</span></span>
+<span class="line" id="P85"><span class="ln">85</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P86"><span class="ln">86</span>    <span class='hk'>if</span> ibegin == iend:</span>
+<span class="line" id="P87"><span class="ln">87</span>        gr[<span class='hn'>1</span>] = hr1[ibegin]</span>
+<span class="line" id="P88"><span class="ln">88</span>        gr[<span class='hn'>2</span>] = hr2[ibegin]</span>
+<span class="line" id="P89"><span class="ln">89</span>        gr[<span class='hn'>3</span>] = hr3[ibegin]</span>
+<span class="line" id="P90"><span class="ln">90</span>        gr[<span class='hn'>4</span>] = hr4[ibegin]</span>
+<span class="line" id="P91"><span class="ln">91</span>        gr[<span class='hn'>5</span>] = hr5[ibegin]</span>
+<span class="line" id="P92"><span class="ln">92</span>        gr[<span class='hn'>6</span>] = hr6[ibegin]</span>
+<span class="line" id="P93"><span class="ln">93</span>        gr[<span class='hn'>7</span>] = hr7[ibegin]</span>
+<span class="line" id="P94"><span class="ln">94</span>        gr[<span class='hn'>10</span>] = hr10[ibegin]</span>
+<span class="line" id="P95"><span class="ln">95</span>        gr[<span class='hn'>12</span>] = hr12[ibegin]</span>
+<span class="line" id="P96"><span class="ln">96</span>        <span class='hk'>return</span></span>
+<span class="line" id="P97"><span class="ln">97</span>    gr1 = gr2 = gr3 = gr4 = gr5 = gr6 = gr7 = gr10 = gr12 = <span class='hn'>0.0</span></span>
+<span class="line" id="P98"><span class="ln">98</span>    <span class='hk'>for</span> i <span class='hk'>in</span> <span class='hb'>range</span>(ibegin, iend + <span class='hn'>1</span>):  <span class='hc'># label 15</span></span>
+<span class="line" id="P99"><span class="ln">99</span>        gr1 = gr1 + hs2[i] * hr1[i]</span>
+<span class="line" id="P100"><span class="ln">100</span>        gr2 = gr2 + hs2[i] * hr2[i]</span>
+<span class="line" id="P101"><span class="ln">101</span>        gr3 = gr3 + hs2[i] * hr3[i]</span>
+<span class="line" id="P102"><span class="ln">102</span>        gr4 = gr4 + hs2[i] * hr4[i]</span>
+<span class="line" id="P103"><span class="ln">103</span>        gr5 = gr5 + hs2[i] * hr5[i]</span>
+<span class="line" id="P104"><span class="ln">104</span>        gr6 = gr6 + hs2[i] * hr6[i]</span>
+<span class="line" id="P105"><span class="ln">105</span>        gr7 = gr7 + hs2[i] * hr7[i]</span>
+<span class="line" id="P106"><span class="ln">106</span>        gr10 = gr10 + hs2[i] * hr10[i]</span>
+<span class="line" id="P107"><span class="ln">107</span>        gr12 = gr12 + hs2[i] * hr12[i]</span>
+<span class="line" id="P108"><span class="ln">108</span>    gr[<span class='hn'>1</span>] = gr1 / wtsum</span>
+<span class="line" id="P109"><span class="ln">109</span>    gr[<span class='hn'>2</span>] = gr2 / wtsum</span>
+<span class="line" id="P110"><span class="ln">110</span>    gr[<span class='hn'>3</span>] = gr3 / wtsum</span>
+<span class="line" id="P111"><span class="ln">111</span>    gr[<span class='hn'>4</span>] = gr4 / wtsum</span>
+<span class="line" id="P112"><span class="ln">112</span>    gr[<span class='hn'>5</span>] = gr5 / wtsum</span>
+<span class="line" id="P113"><span class="ln">113</span>    gr[<span class='hn'>6</span>] = gr6 / wtsum</span>
+<span class="line" id="P114"><span class="ln">114</span>    gr[<span class='hn'>7</span>] = gr7 / wtsum</span>
+<span class="line" id="P115"><span class="ln">115</span>    gr[<span class='hn'>10</span>] = gr10 / wtsum</span>
+<span class="line" id="P116"><span class="ln">116</span>    gr[<span class='hn'>12</span>] = gr12 / wtsum</span>
+<span class="line" id="P117"><span class="ln">117</span></span>
+<span class="line" id="P118"><span class="ln">118</span></span>
+<span class="line" id="P119"><span class="ln">119</span>_eqburn_mean_abund_nb = accel.njit(eqburn_mean_abund, _nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P120"><span class="ln">120</span>_eqburn_mean_rates_nb = accel.njit(eqburn_mean_rates, _nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P121"><span class="ln">121</span></span>
+<span class="line" id="P122"><span class="ln">122</span></span>
+<span class="line" id="P123"><span class="ln">123</span><span class='hk'>def</span> eqburn(hr1: np.ndarray, hr2: np.ndarray, hr3: np.ndarray, hr4: np.ndarray, hr5: np.ndarray, hr6: np.ndarray,</span>
+<span class="line" id="P124"><span class="ln">124</span>           hr7: np.ndarray, hr10: np.ndarray, hr12: np.ndarray, hs2: np.ndarray, ht: np.ndarray, ibegin: <span class='hb'>int</span>, iend: <span class='hb'>int</span>,</span>
+<span class="line" id="P125"><span class="ln">125</span>           dcdt: <span class='hb'>float</span>, dodt: <span class='hb'>float</span>, dxdt: <span class='hb'>float</span>, dydt: <span class='hb'>float</span>, xc12: <span class='hb'>float</span>, xo16: <span class='hb'>float</span>, x: <span class='hb'>float</span>,</span>
+<span class="line" id="P126"><span class="ln">126</span>           z: <span class='hb'>float</span>) -&gt; <span class='hb'>tuple</span>[<span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>, <span class='hb'>float</span>]:</span>
+<span class="line" id="P127"><span class="ln">127</span>    <span class='hs'>&quot;&quot;&quot;Explicit burning rates for shells ibegin..iend (mass-weighted means</span></span>
+<span class="line" id="P128"><span class="ln">128</span><span class='hs'>    over a zone), with 3He and the CN cycle in equilibrium: an initial</span></span>
+<span class="line" id="P129"><span class="ln">129</span><span class='hs'>    guess at the rates at the start of the step.</span></span>
+<span class="line" id="P130"><span class="ln">130</span></span>
+<span class="line" id="P131"><span class="ln">131</span><span class='hs'>    Translates: eqburn.f#EQBURN (7be4133)</span></span>
+<span class="line" id="P132"><span class="ln">132</span></span>
+<span class="line" id="P133"><span class="ln">133</span><span class='hs'>    Arguments: hr1..hr12, the reaction-rate arrays from RATES; hs2, the</span></span>
+<span class="line" id="P134"><span class="ln">134</span><span class='hs'>    shell masses; ht, log T; ibegin, iend, the shell or zone; dcdt, dodt,</span></span>
+<span class="line" id="P135"><span class="ln">135</span><span class='hs'>    dxdt, dydt, xc12, xo16, x, z (set only, except below tcut[1], where</span></span>
+<span class="line" id="P136"><span class="ln">136</span><span class='hs'>    xc12, xo16, x, z keep their values).</span></span>
+<span class="line" id="P137"><span class="ln">137</span></span>
+<span class="line" id="P138"><span class="ln">138</span><span class='hs'>    Returns (dcdt, dodt, dxdt, dydt, xc12, xo16, x, z): the rates of change</span></span>
+<span class="line" id="P139"><span class="ln">139</span><span class='hs'>    of 12C, 16O, H and He (mass fraction per Gyr) and the zone&#x27;s mean</span></span>
+<span class="line" id="P140"><span class="ln">140</span><span class='hs'>    12C (its CN-equilibrium value if the CN step ran), 16O, X and Z.</span></span>
+<span class="line" id="P141"><span class="ln">141</span></span>
+<span class="line" id="P142"><span class="ln">142</span><span class='hs'>    &quot;&quot;&quot;</span></span>
 <span class="line" id="P143"><span class="ln">143</span></span>
-<span class="line" id="P144"><span class="ln">144</span>    <span class='hk'>return</span> dcdt, dodt, dxdt, dydt, xc12, xo16, x, z</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
+<span class="line" id="P144"><span class="ln">144</span>    <span class='hk'>if</span> accel.USE_NUMBA:</span>
+<span class="line" id="P145"><span class="ln">145</span>        <span class='hk'>return</span> _eqburn_nb(hr1, hr2, hr3, hr4, hr5, hr6, hr7, hr10, hr12, hs2, ht, ibegin, iend, xc12, xo16, x, z,</span>
+<span class="line" id="P146"><span class="ln">146</span>                          oldmod_mod.hcompp, xsum, gr, nmlpar_mod.tcut)</span>
+<span class="line" id="P147"><span class="ln">147</span>    <span class='hk'>return</span> _eqburn_body(hr1, hr2, hr3, hr4, hr5, hr6, hr7, hr10, hr12, hs2, ht, ibegin, iend, xc12, xo16, x, z,</span>
+<span class="line" id="P148"><span class="ln">148</span>                        oldmod_mod.hcompp, xsum, gr, nmlpar_mod.tcut)</span>
+<span class="line" id="P149"><span class="ln">149</span></span>
+<span class="line" id="P150"><span class="ln">150</span></span>
+<span class="line" id="P151"><span class="ln">151</span><span class='hk'>def</span> _eqburn_body(hr1: np.ndarray, hr2: np.ndarray, hr3: np.ndarray, hr4: np.ndarray, hr5: np.ndarray,</span>
+<span class="line" id="P152"><span class="ln">152</span>                 hr6: np.ndarray, hr7: np.ndarray, hr10: np.ndarray, hr12: np.ndarray, hs2: np.ndarray, ht: np.ndarray,</span>
+<span class="line" id="P153"><span class="ln">153</span>                 ibegin: <span class='hb'>int</span>, iend: <span class='hb'>int</span>, xc12: <span class='hb'>float</span>, xo16: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, hcompp: np.ndarray,</span>
+<span class="line" id="P154"><span class="ln">154</span>                 xsum: np.ndarray, gr: np.ndarray, tcut: np.ndarray) -&gt; <span class='hb'>tuple</span>:</span>
+<span class="line" id="P155"><span class="ln">155</span>    <span class='hs'>&quot;&quot;&quot;eqburn&#x27;s body, plain (its kernel `_eqburn_nb` is a copy calling the utilities&#x27; kernels).</span></span>
+<span class="line" id="P156"><span class="ln">156</span></span>
+<span class="line" id="P157"><span class="ln">157</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P158"><span class="ln">158</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P159"><span class="ln">159</span><span class='hs'>    hr1 ... hr7, hr10, hr12, hs2, ht : np.ndarray, shape: `(JSON + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P160"><span class="ln">160</span><span class='hs'>        As the routine&#x27;s arguments.</span></span>
+<span class="line" id="P161"><span class="ln">161</span><span class='hs'>    ibegin, iend : int</span></span>
+<span class="line" id="P162"><span class="ln">162</span><span class='hs'>        The shell or zone.</span></span>
+<span class="line" id="P163"><span class="ln">163</span><span class='hs'>    xc12, xo16, x, z : float</span></span>
+<span class="line" id="P164"><span class="ln">164</span><span class='hs'>        Returned unchanged below TCUT(1).</span></span>
+<span class="line" id="P165"><span class="ln">165</span><span class='hs'>    hcompp : np.ndarray, shape: `(16, JSON + 1)`, dtype: ``float64``</span></span>
+<span class="line" id="P166"><span class="ln">166</span><span class='hs'>        oldmod_mod.hcompp.</span></span>
+<span class="line" id="P167"><span class="ln">167</span><span class='hs'>    xsum, gr : np.ndarray, shapes: `(12,)`, `(13,)`, dtype: ``float64``</span></span>
+<span class="line" id="P168"><span class="ln">168</span><span class='hs'>        Work arrays, set in place.</span></span>
+<span class="line" id="P169"><span class="ln">169</span><span class='hs'>    tcut : np.ndarray, shape: `(6,)`, dtype: ``float64``</span></span>
+<span class="line" id="P170"><span class="ln">170</span><span class='hs'>        nmlpar_mod.tcut.</span></span>
+<span class="line" id="P171"><span class="ln">171</span></span>
+<span class="line" id="P172"><span class="ln">172</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P173"><span class="ln">173</span><span class='hs'>    -------</span></span>
+<span class="line" id="P174"><span class="ln">174</span><span class='hs'>    tuple of float</span></span>
+<span class="line" id="P175"><span class="ln">175</span><span class='hs'>        (dcdt, dodt, dxdt, dydt, xc12, xo16, x, z), as eqburn.</span></span>
+<span class="line" id="P176"><span class="ln">176</span></span>
+<span class="line" id="P177"><span class="ln">177</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P178"><span class="ln">178</span>    <span class='hc'># No burning below TCUT(1) (<a class='fl' href='#L51-L55'>Fortran lines 51–55</a>).</span></span>
+<span class="line" id="P179"><span class="ln">179</span>    dxdt = <span class='hn'>0.0</span></span>
+<span class="line" id="P180"><span class="ln">180</span>    dydt = <span class='hn'>0.0</span></span>
+<span class="line" id="P181"><span class="ln">181</span>    dcdt = <span class='hn'>0.0</span></span>
+<span class="line" id="P182"><span class="ln">182</span>    dodt = <span class='hn'>0.0</span></span>
+<span class="line" id="P183"><span class="ln">183</span>    <span class='hk'>if</span> ht[ibegin] &lt; tcut[<span class='hn'>1</span>]:</span>
+<span class="line" id="P184"><span class="ln">184</span>        <span class='hk'>return</span> dcdt, dodt, dxdt, dydt, xc12, xo16, x, z</span>
+<span class="line" id="P185"><span class="ln">185</span></span>
+<span class="line" id="P186"><span class="ln">186</span>    <span class='hc'># Abundances and rates: mass-weighted means over a zone (Fortran lines</span></span>
+<span class="line" id="P187"><span class="ln">187</span>    <span class='hc'># 61–157).</span></span>
+<span class="line" id="P188"><span class="ln">188</span>    wtsum = eqburn_mean_abund(hcompp, hs2, ibegin, iend, xsum)</span>
+<span class="line" id="P189"><span class="ln">189</span>    eqburn_mean_rates(hr1, hr2, hr3, hr4, hr5, hr6, hr7, hr10, hr12, hs2, ibegin, iend, wtsum, gr)</span>
+<span class="line" id="P190"><span class="ln">190</span>    gr1, gr2, gr3, gr4, gr5, gr6, gr7, gr10, gr12 = gr[<span class='hn'>1</span>], gr[<span class='hn'>2</span>], gr[<span class='hn'>3</span>], gr[<span class='hn'>4</span>], gr[<span class='hn'>5</span>], gr[<span class='hn'>6</span>], gr[<span class='hn'>7</span>], gr[<span class='hn'>10</span>], gr[<span class='hn'>12</span>]</span>
+<span class="line" id="P191"><span class="ln">191</span></span>
+<span class="line" id="P192"><span class="ln">192</span>    <span class='hc'># <a class='fl' href='#L161-L168'>Fortran lines 161–168</a>.</span></span>
+<span class="line" id="P193"><span class="ln">193</span>    x = xsum[<span class='hn'>1</span>]</span>
+<span class="line" id="P194"><span class="ln">194</span>    xhe3 = xsum[<span class='hn'>4</span>]</span>
+<span class="line" id="P195"><span class="ln">195</span>    y = xsum[<span class='hn'>2</span>]</span>
+<span class="line" id="P196"><span class="ln">196</span>    z = xsum[<span class='hn'>3</span>]</span>
+<span class="line" id="P197"><span class="ln">197</span>    xc12 = xsum[<span class='hn'>5</span>]</span>
+<span class="line" id="P198"><span class="ln">198</span>    xc13 = xsum[<span class='hn'>6</span>]</span>
+<span class="line" id="P199"><span class="ln">199</span>    xn14 = xsum[<span class='hn'>7</span>]</span>
+<span class="line" id="P200"><span class="ln">200</span>    xo16 = xsum[<span class='hn'>9</span>]</span>
+<span class="line" id="P201"><span class="ln">201</span></span>
+<span class="line" id="P202"><span class="ln">202</span>    <span class='hc'># pp chains, 3He in equilibrium (capped at its actual abundance)</span></span>
+<span class="line" id="P203"><span class="ln">203</span>    <span class='hc'># (<a class='fl' href='#L169-L184'>Fortran lines 169–184</a>).</span></span>
+<span class="line" id="P204"><span class="ln">204</span>    <span class='hc'># Suspected bug (see the page): divides by gr2 (and gr4, gr5 below).</span></span>
+<span class="line" id="P205"><span class="ln">205</span>    <span class='hk'>if</span> x &gt; <span class='hn'>1.0e-10</span> <span class='hk'>and</span> ht[ibegin] &gt; tcut[<span class='hn'>2</span>]:</span>
+<span class="line" id="P206"><span class="ln">206</span>        r11 = gr1 * (x * x)</span>
+<span class="line" id="P207"><span class="ln">207</span>        r34 = gr3 * y</span>
+<span class="line" id="P208"><span class="ln">208</span>        xhe3e = <span class='hn'>0.25</span> * (math.sqrt(r34 * r34 + <span class='hn'>8.0</span> * gr2 * r11) - r34) / gr2</span>
+<span class="line" id="P209"><span class="ln">209</span>        xhe3 = <span class='hb'>min</span>(xhe3, xhe3e)</span>
+<span class="line" id="P210"><span class="ln">210</span>        dxdt = -<span class='hn'>3.0</span> * r11 + <span class='hn'>2.0</span> * gr2 * (xhe3 * xhe3) - r34 * xhe3</span>
+<span class="line" id="P211"><span class="ln">211</span></span>
+<span class="line" id="P212"><span class="ln">212</span>        <span class='hc'># CN cycle in equilibrium (<a class='fl' href='#L185-L203'>Fortran lines 185–203</a>).</span></span>
+<span class="line" id="P213"><span class="ln">213</span>        <span class='hk'>if</span> ht[ibegin] &gt; tcut[<span class='hn'>3</span>]:</span>
+<span class="line" id="P214"><span class="ln">214</span>            sumcno = xc12 / <span class='hn'>12.0</span> + xc13 / <span class='hn'>13.0</span> + xn14 / <span class='hn'>14.0</span></span>
+<span class="line" id="P215"><span class="ln">215</span>            r1214 = gr6 / gr4</span>
+<span class="line" id="P216"><span class="ln">216</span>            r1314 = gr6 / gr5</span>
+<span class="line" id="P217"><span class="ln">217</span>            xn14 = sumcno / (r1214 / <span class='hn'>12.0</span> + r1314 / <span class='hn'>13.0</span> + <span class='hn'>1.0</span> / <span class='hn'>14.0</span>)</span>
+<span class="line" id="P218"><span class="ln">218</span>            <span class='hc'># Question (see the page): xc12 becomes its equilibrium value,</span></span>
+<span class="line" id="P219"><span class="ln">219</span>            <span class='hc'># returned and used for 12C + alpha below.</span></span>
+<span class="line" id="P220"><span class="ln">220</span>            xc12 = xn14 * r1214</span>
+<span class="line" id="P221"><span class="ln">221</span>            xc13 = xn14 * r1314</span>
+<span class="line" id="P222"><span class="ln">222</span>            <span class='hc'># Two protons for 16O + p, as for 14N + p (see the page).</span></span>
+<span class="line" id="P223"><span class="ln">223</span>            dxdt = (dxdt - gr4 * x * xc12 - gr5 * x * xc13</span>
+<span class="line" id="P224"><span class="ln">224</span>                    - <span class='hn'>2.0</span> * gr6 * x * xn14 - <span class='hn'>2.0</span> * gr7 * x * xo16)</span>
+<span class="line" id="P225"><span class="ln">225</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P226"><span class="ln">226</span>        dxdt = <span class='hn'>0.0</span>  <span class='hc'># GOTO 100: the CN step is skipped</span></span>
+<span class="line" id="P227"><span class="ln">227</span></span>
+<span class="line" id="P228"><span class="ln">228</span>    <span class='hc'># label 100: helium burning (<a class='fl' href='#L204-L216'>Fortran lines 204–216</a>).</span></span>
+<span class="line" id="P229"><span class="ln">229</span>    <span class='hk'>if</span> y &gt; <span class='hn'>1.0e-10</span> <span class='hk'>and</span> ht[ibegin] &gt; tcut[<span class='hn'>4</span>]:</span>
+<span class="line" id="P230"><span class="ln">230</span>        r3a = gr12 * ((y * y) * y)</span>
+<span class="line" id="P231"><span class="ln">231</span>        r412 = gr10 * y * xc12</span>
+<span class="line" id="P232"><span class="ln">232</span>        dydt = -<span class='hn'>4.0</span> * (r412 + <span class='hn'>3.0</span> * r3a)</span>
+<span class="line" id="P233"><span class="ln">233</span>        dcdt = <span class='hn'>12.0</span> * (r3a - r412)</span>
+<span class="line" id="P234"><span class="ln">234</span>        dodt = <span class='hn'>16.0</span> * r412</span>
+<span class="line" id="P235"><span class="ln">235</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P236"><span class="ln">236</span>        dydt = <span class='hn'>0.0</span></span>
+<span class="line" id="P237"><span class="ln">237</span>        dcdt = <span class='hn'>0.0</span></span>
+<span class="line" id="P238"><span class="ln">238</span>        dodt = <span class='hn'>0.0</span></span>
+<span class="line" id="P239"><span class="ln">239</span></span>
+<span class="line" id="P240"><span class="ln">240</span>    <span class='hk'>return</span> dcdt, dodt, dxdt, dydt, xc12, xo16, x, z</span>
+<span class="line" id="P241"><span class="ln">241</span></span>
+<span class="line" id="P242"><span class="ln">242</span></span>
+<span class="line" id="P243"><span class="ln">243</span>@accel.njit(_nrt=<span class='hk'>False</span>)</span>
+<span class="line" id="P244"><span class="ln">244</span><span class='hk'>def</span> _eqburn_nb(hr1: np.ndarray, hr2: np.ndarray, hr3: np.ndarray, hr4: np.ndarray, hr5: np.ndarray,</span>
+<span class="line" id="P245"><span class="ln">245</span>               hr6: np.ndarray, hr7: np.ndarray, hr10: np.ndarray, hr12: np.ndarray, hs2: np.ndarray, ht: np.ndarray,</span>
+<span class="line" id="P246"><span class="ln">246</span>               ibegin: <span class='hb'>int</span>, iend: <span class='hb'>int</span>, xc12: <span class='hb'>float</span>, xo16: <span class='hb'>float</span>, x: <span class='hb'>float</span>, z: <span class='hb'>float</span>, hcompp: np.ndarray,</span>
+<span class="line" id="P247"><span class="ln">247</span>               xsum: np.ndarray, gr: np.ndarray, tcut: np.ndarray) -&gt; <span class='hb'>tuple</span>:</span>
+<span class="line" id="P248"><span class="ln">248</span>    <span class='hs'>&quot;&quot;&quot;eqburn&#x27;s kernel: `_eqburn_body`&#x27;s operations, compiled, calling the utilities&#x27; kernels.</span></span>
+<span class="line" id="P249"><span class="ln">249</span></span>
+<span class="line" id="P250"><span class="ln">250</span><span class='hs'>    Parameters</span></span>
+<span class="line" id="P251"><span class="ln">251</span><span class='hs'>    ----------</span></span>
+<span class="line" id="P252"><span class="ln">252</span><span class='hs'>    hr1 ... hr7, hr10, hr12, hs2, ht : np.ndarray, shape: `(JSON + 1,)`, dtype: ``float64``</span></span>
+<span class="line" id="P253"><span class="ln">253</span><span class='hs'>        As the routine&#x27;s arguments.</span></span>
+<span class="line" id="P254"><span class="ln">254</span><span class='hs'>    ibegin, iend : int</span></span>
+<span class="line" id="P255"><span class="ln">255</span><span class='hs'>        The shell or zone.</span></span>
+<span class="line" id="P256"><span class="ln">256</span><span class='hs'>    xc12, xo16, x, z : float</span></span>
+<span class="line" id="P257"><span class="ln">257</span><span class='hs'>        Returned unchanged below TCUT(1).</span></span>
+<span class="line" id="P258"><span class="ln">258</span><span class='hs'>    hcompp : np.ndarray, shape: `(16, JSON + 1)`, dtype: ``float64``</span></span>
+<span class="line" id="P259"><span class="ln">259</span><span class='hs'>        oldmod_mod.hcompp.</span></span>
+<span class="line" id="P260"><span class="ln">260</span><span class='hs'>    xsum, gr : np.ndarray, shapes: `(12,)`, `(13,)`, dtype: ``float64``</span></span>
+<span class="line" id="P261"><span class="ln">261</span><span class='hs'>        Work arrays, set in place.</span></span>
+<span class="line" id="P262"><span class="ln">262</span><span class='hs'>    tcut : np.ndarray, shape: `(6,)`, dtype: ``float64``</span></span>
+<span class="line" id="P263"><span class="ln">263</span><span class='hs'>        nmlpar_mod.tcut.</span></span>
+<span class="line" id="P264"><span class="ln">264</span></span>
+<span class="line" id="P265"><span class="ln">265</span><span class='hs'>    Returns</span></span>
+<span class="line" id="P266"><span class="ln">266</span><span class='hs'>    -------</span></span>
+<span class="line" id="P267"><span class="ln">267</span><span class='hs'>    tuple of float</span></span>
+<span class="line" id="P268"><span class="ln">268</span><span class='hs'>        (dcdt, dodt, dxdt, dydt, xc12, xo16, x, z), as eqburn.</span></span>
+<span class="line" id="P269"><span class="ln">269</span></span>
+<span class="line" id="P270"><span class="ln">270</span><span class='hs'>    &quot;&quot;&quot;</span></span>
+<span class="line" id="P271"><span class="ln">271</span>    <span class='hc'># No burning below TCUT(1) (<a class='fl' href='#L51-L55'>Fortran lines 51–55</a>).</span></span>
+<span class="line" id="P272"><span class="ln">272</span>    dxdt = <span class='hn'>0.0</span></span>
+<span class="line" id="P273"><span class="ln">273</span>    dydt = <span class='hn'>0.0</span></span>
+<span class="line" id="P274"><span class="ln">274</span>    dcdt = <span class='hn'>0.0</span></span>
+<span class="line" id="P275"><span class="ln">275</span>    dodt = <span class='hn'>0.0</span></span>
+<span class="line" id="P276"><span class="ln">276</span>    <span class='hk'>if</span> ht[ibegin] &lt; tcut[<span class='hn'>1</span>]:</span>
+<span class="line" id="P277"><span class="ln">277</span>        <span class='hk'>return</span> dcdt, dodt, dxdt, dydt, xc12, xo16, x, z</span>
+<span class="line" id="P278"><span class="ln">278</span></span>
+<span class="line" id="P279"><span class="ln">279</span>    <span class='hc'># Abundances and rates: mass-weighted means over a zone (Fortran lines</span></span>
+<span class="line" id="P280"><span class="ln">280</span>    <span class='hc'># 61–157).</span></span>
+<span class="line" id="P281"><span class="ln">281</span>    wtsum = _eqburn_mean_abund_nb(hcompp, hs2, ibegin, iend, xsum)</span>
+<span class="line" id="P282"><span class="ln">282</span>    _eqburn_mean_rates_nb(hr1, hr2, hr3, hr4, hr5, hr6, hr7, hr10, hr12, hs2, ibegin, iend, wtsum, gr)</span>
+<span class="line" id="P283"><span class="ln">283</span>    gr1, gr2, gr3, gr4, gr5, gr6, gr7, gr10, gr12 = gr[<span class='hn'>1</span>], gr[<span class='hn'>2</span>], gr[<span class='hn'>3</span>], gr[<span class='hn'>4</span>], gr[<span class='hn'>5</span>], gr[<span class='hn'>6</span>], gr[<span class='hn'>7</span>], gr[<span class='hn'>10</span>], gr[<span class='hn'>12</span>]</span>
+<span class="line" id="P284"><span class="ln">284</span></span>
+<span class="line" id="P285"><span class="ln">285</span>    <span class='hc'># <a class='fl' href='#L161-L168'>Fortran lines 161–168</a>.</span></span>
+<span class="line" id="P286"><span class="ln">286</span>    x = xsum[<span class='hn'>1</span>]</span>
+<span class="line" id="P287"><span class="ln">287</span>    xhe3 = xsum[<span class='hn'>4</span>]</span>
+<span class="line" id="P288"><span class="ln">288</span>    y = xsum[<span class='hn'>2</span>]</span>
+<span class="line" id="P289"><span class="ln">289</span>    z = xsum[<span class='hn'>3</span>]</span>
+<span class="line" id="P290"><span class="ln">290</span>    xc12 = xsum[<span class='hn'>5</span>]</span>
+<span class="line" id="P291"><span class="ln">291</span>    xc13 = xsum[<span class='hn'>6</span>]</span>
+<span class="line" id="P292"><span class="ln">292</span>    xn14 = xsum[<span class='hn'>7</span>]</span>
+<span class="line" id="P293"><span class="ln">293</span>    xo16 = xsum[<span class='hn'>9</span>]</span>
+<span class="line" id="P294"><span class="ln">294</span></span>
+<span class="line" id="P295"><span class="ln">295</span>    <span class='hc'># pp chains, 3He in equilibrium (capped at its actual abundance)</span></span>
+<span class="line" id="P296"><span class="ln">296</span>    <span class='hc'># (<a class='fl' href='#L169-L184'>Fortran lines 169–184</a>).</span></span>
+<span class="line" id="P297"><span class="ln">297</span>    <span class='hc'># Suspected bug (see the page): divides by gr2 (and gr4, gr5 below).</span></span>
+<span class="line" id="P298"><span class="ln">298</span>    <span class='hk'>if</span> x &gt; <span class='hn'>1.0e-10</span> <span class='hk'>and</span> ht[ibegin] &gt; tcut[<span class='hn'>2</span>]:</span>
+<span class="line" id="P299"><span class="ln">299</span>        r11 = gr1 * (x * x)</span>
+<span class="line" id="P300"><span class="ln">300</span>        r34 = gr3 * y</span>
+<span class="line" id="P301"><span class="ln">301</span>        xhe3e = <span class='hn'>0.25</span> * (math.sqrt(r34 * r34 + <span class='hn'>8.0</span> * gr2 * r11) - r34) / gr2</span>
+<span class="line" id="P302"><span class="ln">302</span>        xhe3 = <span class='hb'>min</span>(xhe3, xhe3e)</span>
+<span class="line" id="P303"><span class="ln">303</span>        dxdt = -<span class='hn'>3.0</span> * r11 + <span class='hn'>2.0</span> * gr2 * (xhe3 * xhe3) - r34 * xhe3</span>
+<span class="line" id="P304"><span class="ln">304</span></span>
+<span class="line" id="P305"><span class="ln">305</span>        <span class='hc'># CN cycle in equilibrium (<a class='fl' href='#L185-L203'>Fortran lines 185–203</a>).</span></span>
+<span class="line" id="P306"><span class="ln">306</span>        <span class='hk'>if</span> ht[ibegin] &gt; tcut[<span class='hn'>3</span>]:</span>
+<span class="line" id="P307"><span class="ln">307</span>            sumcno = xc12 / <span class='hn'>12.0</span> + xc13 / <span class='hn'>13.0</span> + xn14 / <span class='hn'>14.0</span></span>
+<span class="line" id="P308"><span class="ln">308</span>            r1214 = gr6 / gr4</span>
+<span class="line" id="P309"><span class="ln">309</span>            r1314 = gr6 / gr5</span>
+<span class="line" id="P310"><span class="ln">310</span>            xn14 = sumcno / (r1214 / <span class='hn'>12.0</span> + r1314 / <span class='hn'>13.0</span> + <span class='hn'>1.0</span> / <span class='hn'>14.0</span>)</span>
+<span class="line" id="P311"><span class="ln">311</span>            <span class='hc'># Question (see the page): xc12 becomes its equilibrium value,</span></span>
+<span class="line" id="P312"><span class="ln">312</span>            <span class='hc'># returned and used for 12C + alpha below.</span></span>
+<span class="line" id="P313"><span class="ln">313</span>            xc12 = xn14 * r1214</span>
+<span class="line" id="P314"><span class="ln">314</span>            xc13 = xn14 * r1314</span>
+<span class="line" id="P315"><span class="ln">315</span>            <span class='hc'># Two protons for 16O + p, as for 14N + p (see the page).</span></span>
+<span class="line" id="P316"><span class="ln">316</span>            dxdt = (dxdt - gr4 * x * xc12 - gr5 * x * xc13</span>
+<span class="line" id="P317"><span class="ln">317</span>                    - <span class='hn'>2.0</span> * gr6 * x * xn14 - <span class='hn'>2.0</span> * gr7 * x * xo16)</span>
+<span class="line" id="P318"><span class="ln">318</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P319"><span class="ln">319</span>        dxdt = <span class='hn'>0.0</span>  <span class='hc'># GOTO 100: the CN step is skipped</span></span>
+<span class="line" id="P320"><span class="ln">320</span></span>
+<span class="line" id="P321"><span class="ln">321</span>    <span class='hc'># label 100: helium burning (<a class='fl' href='#L204-L216'>Fortran lines 204–216</a>).</span></span>
+<span class="line" id="P322"><span class="ln">322</span>    <span class='hk'>if</span> y &gt; <span class='hn'>1.0e-10</span> <span class='hk'>and</span> ht[ibegin] &gt; tcut[<span class='hn'>4</span>]:</span>
+<span class="line" id="P323"><span class="ln">323</span>        r3a = gr12 * ((y * y) * y)</span>
+<span class="line" id="P324"><span class="ln">324</span>        r412 = gr10 * y * xc12</span>
+<span class="line" id="P325"><span class="ln">325</span>        dydt = -<span class='hn'>4.0</span> * (r412 + <span class='hn'>3.0</span> * r3a)</span>
+<span class="line" id="P326"><span class="ln">326</span>        dcdt = <span class='hn'>12.0</span> * (r3a - r412)</span>
+<span class="line" id="P327"><span class="ln">327</span>        dodt = <span class='hn'>16.0</span> * r412</span>
+<span class="line" id="P328"><span class="ln">328</span>    <span class='hk'>else</span>:</span>
+<span class="line" id="P329"><span class="ln">329</span>        dydt = <span class='hn'>0.0</span></span>
+<span class="line" id="P330"><span class="ln">330</span>        dcdt = <span class='hn'>0.0</span></span>
+<span class="line" id="P331"><span class="ln">331</span>        dodt = <span class='hn'>0.0</span></span>
+<span class="line" id="P332"><span class="ln">332</span></span>
+<span class="line" id="P333"><span class="ln">333</span>    <span class='hk'>return</span> dcdt, dodt, dxdt, dydt, xc12, xo16, x, z</span></pre></div></div></aside></div><script>(function(){var nav=document.querySelector('nav.toc');if(!nav)return;var page=nav.parentElement;
 function st(){try{return localStorage.getItem('pm-toc')}catch(e){return null}}function sv(v){try{localStorage.setItem('pm-toc',v)}catch(e){}}
 var b=nav.querySelector('.toc-toggle');function set(h){page.classList.toggle('toc-hidden',h);b.textContent=h?'show':'hide';}
 set(st()==='hidden');b.addEventListener('click',function(){var h=!page.classList.contains('toc-hidden');set(h);sv(h?'hidden':'shown');});

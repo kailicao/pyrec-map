@@ -3,7 +3,7 @@
 **Purpose.** Reads a LAOL89 opacity table for pure metals (no hydrogen or helium), the "pure Z" table.
 
 **How it fits.**
-- **Who calls it:** [`SETUPOPAC`](setupopac.f.md#setupopac), when `LPUREZ` is true, before [`ZSULAOL`](zsulaol.f.md#zsulaol) sets up its interpolation.
+- **Who calls it:** [`SETUPOPAC`](https://github.com/yreclab/yrec/blob/7be4133/src/setupopac.f#L14-L95), when `LPUREZ` is true, before [`ZSULAOL`](zsulaol.f.md#zsulaol) sets up its interpolation.
 - **Input:** the formatted file `FPUREZ`, on unit `IOPUREZ` (from `IOUNITS_MOD`).
 - **Output, through a module:** `ZLAOL_MOD` (`ZOLAOL(rho, T)`, the grids `ZORHO`, `ZOT`, sizes `NUMRHOZ`, `NUMTZ`), read by `ZSULAOL` and [`GTPURZ`](gtpurz.f.md#gtpurz).
 - **Other module:** `IOUNITS_MOD` (`IOPUREZ`, `ISHORT`).

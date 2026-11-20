@@ -4,7 +4,7 @@
 
 **How it fits.**
 - **Who calls it:** the [main program](main.f.md#file-level), once at the start, with its own `YRECVER` (`CHARACTER*10`) and `GITHASH` (`CHARACTER*20`).
-- **Outputs:** the two strings, which the main program passes to [`PARMIN`](parmin.f.md#parmin). PARMIN prints the banner "Yale Rotating Evolution Code - YREC, v…" and writes a line "# YREC v… (…)" at the head of the output files (the stored models and the short and track files).
+- **Outputs:** the two strings, which the main program passes to [`PARMIN`](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489). PARMIN prints the banner "Yale Rotating Evolution Code - YREC, v…" and writes a line "# YREC v… (…)" at the head of the output files (the stored models and the short and track files).
 
 **Design.** The strings first went through a `COMMON/VERSION/`; since they are CHARACTER, "which does not belong in a COMMON block" (the comment), the main program now holds them and passes them as arguments (MHP via Claude, 10/13/26).
 

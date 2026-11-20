@@ -3,10 +3,10 @@
 **Purpose.** `AEOS06_MOD` holds the OPAL 2006 equation-of-state tables and their grids, shared by 5 routines. It replaces `COMMON/AEOS06/` (MHP via Claude, 10/20/26), whose member `M` is now named `MIDX`; the table dimensions (`MX` = 5, `MV` = 10, `NR` = 169, `NT` = 197) are private to the module, since each user declares its own.
 
 **What its variables hold, who sets them, who reads them.**
-- `XZ(MX,MV,NT,NR)`: the tables, for each of the five $`X`$ values, room for ten quantities on the $`(T_6, \rho)`$ grid, of which the file fills nine ([readcoeos06.f, lines 124–126](https://github.com/yreclab/yrec/blob/7be4133/src/readcoeos06.f#L124-L126); the rest stays at $`10^{35}`$); read in by [`READCOEOS06`](readcoeos06.f.md#readcoeos06), read by [`ESAC06`](esac06.f.md#esac06) and [`RHOOFP06`](rhoofp06.f.md#rhoofp06).
-- `T6LIST(NR,NT)`, `RHO(NR)`, `T6A(NT)`: the grids, from `READCOEOS06`; read by `ESAC06`, `RHOOFP06`, [`EQBOUND06`](eqbound06.f.md#eqbound06) and [`T6RINTEOS06`](t6rinteos06.f.md#t6rinteos06).
-- `DFSX(MX)`, `DFS(NT)`, `DFSR(NR)`: inverse grid spacings in $`X`$, $`T_6`$ and $`\rho`$, set by `READCOEOS06`; read by `ESAC06` and `T6RINTEOS06`.
-- `ESK(NT,NR)`, `ESK2(NT,NR)`: values interpolated in $`X`$, set by `ESAC06` and read by it and `T6RINTEOS06`.
+- `XZ(MX,MV,NT,NR)`: the tables, for each of the five $`X`$ values, room for ten quantities on the $`(T_6, \rho)`$ grid, of which the file fills nine ([readcoeos06.f, lines 124–126](https://github.com/yreclab/yrec/blob/7be4133/src/readcoeos06.f#L124-L126); the rest stays at $`10^{35}`$); read in by [`READCOEOS06`](https://github.com/yreclab/yrec/blob/7be4133/src/readcoeos06.f#L7-L163), read by [`ESAC06`](esac06.f.md#esac06) and [`RHOOFP06`](https://github.com/yreclab/yrec/blob/7be4133/src/rhoofp06.f#L8-L147).
+- `T6LIST(NR,NT)`, `RHO(NR)`, `T6A(NT)`: the grids, from `READCOEOS06`; read by `ESAC06` (all three), `RHOOFP06` (`T6LIST`, `RHO`), and [`EQBOUND06`](eqbound06.f.md#eqbound06) and [`T6RINTEOS06`](t6rinteos06.f.md#t6rinteos06) (`RHO`, `T6A`).
+- `DFSX(MX)`, `DFS(NT)`, `DFSR(NR)`: inverse grid spacings in $`X`$, $`T_6`$, and $`\rho`$, set by `READCOEOS06`; `DFSX` is read by `ESAC06`, `DFS` and `DFSR` by `T6RINTEOS06`.
+- `ESK(NT,NR)`, `ESK2(NT,NR)`: values interpolated in $`X`$, set by `ESAC06`; `ESK` is read by it and `T6RINTEOS06`, `ESK2` by `ESAC06` alone.
 - `MIDX`: a loop index over the $`X`$ tables, in `READCOEOS06` (as it reads each table) and `ESAC06`; `MF`: the $`X`$ index, set in `ESAC06`.
 - `XA(MX)`: the five $`X`$ values, 0, 0.2, 0.4, 0.6, 0.8 (a `DATA` statement moved from `ESAC06`); read by `ESAC06` and `RHOOFP06`.
 

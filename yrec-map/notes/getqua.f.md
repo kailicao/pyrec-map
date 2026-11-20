@@ -3,10 +3,10 @@
 **Purpose.** `GETQUA` solves for the quadrupole moment (the $`P_2`$ part of the gravitational potential perturbation) of a rotating star, "using the Sweet ([1950](https://ui.adsabs.harvard.edu/abs/1950MNRAS.110..548S)) formulation as given in Zahn ([1992](https://ui.adsabs.harvard.edu/abs/1992A%26A...265..115Z))" (its comment). The result is needed for the meridional circulation velocity.
 
 **How it fits.**
-- **Who calls it:** only [SECULR](seculr.f.md#seculr).
+- **Who calls it:** only [SECULR](https://github.com/yreclab/yrec/blob/7be4133/src/seculr.f#L6-L532).
 - **Inputs:** `HD` ($`\log\rho`$), `HG` (gravity $`g`$), `HRU` (radius, unlogged), `OMEGA`, `M`.
-- **Outputs:** in [`QUADRU_MOD`](quadru_mod.f.md#quadru_mod): `QUAD` (the quadrupole term per shell) and `GG` (a copy of $`g`$), read by [GETW](getw.f.md#getw) and [VCIRC](vcirc.f.md#vcirc).
-- **Modules:** `QUADRU_MOD` (output); [`TRIDI_MOD`](tridi_mod.f.md#tridi_mod) as workspace for the tridiagonal solver (shared with `CCOEFT`, `CTRIDI`, `DCOEFT`, [MIXCOM](mixcom.f.md#mixcom), `TRIDIA`); constants from [`CONSTANTS_MOD`](constants_mod.f.md#constants_mod); `ISHORT` from [`IOUNITS_MOD`](iounits_mod.f.md#iounits_mod), for the error message.
+- **Outputs:** in [`QUADRU_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/quadru_mod.f#L19-L31): `QUAD` (the quadrupole term per shell) and `GG` (a copy of $`g`$), read by [GETW](getw.f.md#getw) and [VCIRC](vcirc.f.md#vcirc).
+- **Modules:** `QUADRU_MOD` (output); [`TRIDI_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/tridi_mod.f#L19-L35) as workspace for the tridiagonal solver (shared with `CCOEFT`, `CTRIDI`, `DCOEFT`, [MIXCOM](https://github.com/yreclab/yrec/blob/7be4133/src/mixcom.f#L2-L203), `TRIDIA`); constants from [`CONSTANTS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/constants_mod.f#L37-L75); `ISHORT` from [`IOUNITS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/iounits_mod.f#L19-L54), for the error message.
 
 **The method.** The comment states the equation
 ```math

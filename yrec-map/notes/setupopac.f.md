@@ -3,10 +3,10 @@
 **Purpose.** Reads the opacity tables chosen for the run and sets up their interpolation. Its comment: "THIS SUBROUTINE READS IN SPECIFIED OPACITY TABLES AND SET UP SPLINES FOR THE TABLES. WHEN LZRAMP=T OR LDIFZ=T THEN READ IN SECOND SET OF OPACITY TABLES AT DIFFERENT Z."
 
 **How it fits.**
-- **Who calls it:** [`SETUPS`](setups.f.md#setups), once per run; the file names are passed through (MHP 8/25).
+- **Who calls it:** [`SETUPS`](https://github.com/yreclab/yrec/blob/7be4133/src/setups.f#L16-L396), once per run; the file names are passed through (MHP 8/25).
 - **What it calls,** by the namelist switches in `NMLPAR_MOD`:
-  - interior tables: OPAL95, [`LL95TBL`](ll95tbl.f.md#ll95tbl) then [`OP95XTAB`](op95xtab.f.md#op95xtab) (`LOPAL95`); the pure-Z table, [`RDZLAOL`](rdzlaol.f.md#rdzlaol) then [`ZSULAOL`](zsulaol.f.md#zsulaol) (`LPUREZ`);
-  - low-temperature tables: Ferguson et al. [2005](https://ui.adsabs.harvard.edu/abs/2005ApJ...623..585F), [`READALEX06`](readalex06.f.md#readalex06) (`LALEX06`).
+  - interior tables: OPAL95, [`LL95TBL`](ll95tbl.f.md#ll95tbl) then [`OP95XTAB`](https://github.com/yreclab/yrec/blob/7be4133/src/op95xtab.f#L6-L104) (`LOPAL95`); the pure-Z table, [`RDZLAOL`](https://github.com/yreclab/yrec/blob/7be4133/src/rdzlaol.f#L6-L74) then [`ZSULAOL`](zsulaol.f.md#zsulaol) (`LPUREZ`);
+  - low-temperature tables: Ferguson et al. [2005](https://ui.adsabs.harvard.edu/abs/2005ApJ...623..585F), [`READALEX06`](https://github.com/yreclab/yrec/blob/7be4133/src/readalex06.f#L18-L141) (`LALEX06`).
 - **Inputs:** `XENV` (the envelope's $`X`$, for the tables built at fixed composition) and the file names `FALEX06`, `FLIV95`, `FPUREZ`. Sets `L2Z` = `LZRAMP` or `LDIFZ` (both namelist parameters) in `NEWOPAC_MOD` ([line 64](https://github.com/yreclab/yrec/blob/7be4133/src/setupopac.f#L64)); despite the header's comment, no reader reads it, and only [`GETOPAC`](getopac.f.md#getopac) does, in its single-table test ([getopac.f, lines 140–141](https://github.com/yreclab/yrec/blob/7be4133/src/getopac.f#L140-L141); settled from the code, Nov 9, 2026).
 - **Output:** the tables, in the modules of the routines called. They are used at run time by [`GETOPAC`](getopac.f.md#getopac).
 

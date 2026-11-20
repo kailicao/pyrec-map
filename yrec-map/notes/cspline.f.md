@@ -6,7 +6,7 @@
 - **Inputs:** `X(N)` (increasing), `Y(N)`, and the end slopes `YP1`, `YPN`; a slope of $`10^{30}`$ or more asks for a natural spline (zero second derivative) at that end.
 - **Who calls it:** the opacity routines [GTPURZ](gtpurz.f.md#gtpurz) and [ZSULAOL](zsulaol.f.md#zsulaol); at `rp_1` also GTLAOL, GTLAOL2 and SULAOL (removed since `rp_1`).
 - **Output:** `Y2(N)`, the second derivatives, for a spline evaluation routine.
-- **Limits:** the work array `U` has the fixed size `JSON` (5000, from [`DIMENSIONS_MOD`](dimensions_mod.f.md#dimensions_mod); [line 27](https://github.com/yreclab/yrec/blob/7be4133/src/cspline.f#L27)), and `N` is not checked against it; the callers pass at most 104 points (the pure-Z table's densities and temperatures, `ZLAOL_MOD`).
+- **Limits:** the work array `U` has the fixed size `JSON` (5000, from [`DIMENSIONS_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/dimensions_mod.f#L38-L44); [line 27](https://github.com/yreclab/yrec/blob/7be4133/src/cspline.f#L27)), and `N` is not checked against it; the callers pass at most 104 points (the pure-Z table's densities and temperatures, `ZLAOL_MOD`).
 
 **The method.** Continuity of the first derivative at interior points gives the tridiagonal system
 ```math

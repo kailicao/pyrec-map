@@ -4,9 +4,9 @@
 
 **How it fits.**
 - **Who calls it:** only [ESAC06](esac06.f.md#esac06).
-- **What it calls:** [QUADEOS06](quadeos06.f.md#quadeos06).
+- **What it calls:** [QUADEOS06](https://github.com/yreclab/yrec/blob/7be4133/src/quadeos06.f#L7-L42).
 - **Inputs:** `SLR` and `SLT`, the density and temperature; from `AEOS06_MOD` the grids `RHO`, `T6A`, the inverse spacings `DFS`, `DFSR` and `ESK`, the values already interpolated in $`X`$; from `EOS06MISC_MOD` the grid indices `K1`–`K4`, `L1`–`L4` and the switches `IP`, `IQ`, set by `ESAC06`, and the work arrays `H`, `Q`.
-- **Output:** `ESACT` in `EOS06MISC_MOD`, read by `ESAC06`; the module is also used by [OEQOS06](oeqos06.f.md#oeqos06), [RADSUB06](radsub06.f.md#radsub06), [READCOEOS06](readcoeos06.f.md#readcoeos06), [RHOOFP06](rhoofp06.f.md#rhoofp06), [EQBOUND06](eqbound06.f.md#eqbound06) and [CALCAD](calcad.f.md#calcad).
+- **Output:** `ESACT` in `EOS06MISC_MOD`, read by `ESAC06`; the module is also used by [OEQOS06](https://github.com/yreclab/yrec/blob/7be4133/src/oeqos06.f#L30-L132), [RADSUB06](https://github.com/yreclab/yrec/blob/7be4133/src/radsub06.f#L7-L117), [READCOEOS06](https://github.com/yreclab/yrec/blob/7be4133/src/readcoeos06.f#L7-L163), [RHOOFP06](https://github.com/yreclab/yrec/blob/7be4133/src/rhoofp06.f#L8-L147), [EQBOUND06](eqbound06.f.md#eqbound06) and [CALCAD](calcad.f.md#calcad).
 
 **The method.** `QUADEOS06` gives the quadratic through three points, evaluated at $`x`$. For each of the temperatures $`T_{k_1}, \dots`$, a quadratic in density through the rows $`l_1`$–$`l_3`$ gives $`h_k`$, and, if `IQ = 3`, another through $`l_2`$–$`l_4`$ gives $`q_k`$. Quadratics in temperature through $`h_{k_1..k_3}`$ and $`h_{k_2..k_4}`$ (if `IP = 3`) are then blended linearly:
 ```math

@@ -3,10 +3,10 @@
 **Purpose.** `FINDSH` locates, in a model, the outer edge of a central convection zone, the inner edge of a surface convection zone, and, once the core's hydrogen falls below a threshold, the beginning, middle and end of the hydrogen-burning shell. Its comment lists a planned addition ("TO BE ADDED"): finding the exact edges of the convection zones and adding points there.
 
 **How it fits.**
-- **Who calls it:** the main program ([main.f](main.f.md#file-level)) and [RSCALE](rscale.f.md#rscale).
+- **Who calls it:** the main program ([main.f](main.f.md#file-level)) and [RSCALE](https://github.com/yreclab/yrec/blob/7be4133/src/rscale.f#L5-L432).
 - **Inputs:** `HCOMP` (abundances; row 1 is $`X`$), `HL` (luminosity in solar units), `LC` (convective flags), `M` (number of points).
 - **Outputs:** `JCORE` (outermost point of the convective core; 1 if none), `JENV` (innermost point of the surface convection zone; `M` if none), `LSHELL` (a hydrogen shell exists), and `JXBEG`, `JXMID`, `JXEND` (the shell's start, middle and end).
-- **Modules:** [`NMLPAR_MOD`](nmlpar_mod.f.md#nmlpar_mod), for `ATIME(1)` (formerly in `/CTLIM/`), the central $`X`$ below which the star has a shell rather than a core (set in [PARMIN](parmin.f.md#parmin)).
+- **Modules:** [`NMLPAR_MOD`](https://github.com/yreclab/yrec/blob/7be4133/src/nmlpar_mod.f#L32-L279), for `ATIME(1)` (formerly in `/CTLIM/`), the central $`X`$ below which the star has a shell rather than a core (set in [PARMIN](https://github.com/yreclab/yrec/blob/7be4133/src/parmin.f#L16-L1489)).
 
 **The method.**
 1. **Shell** (if $`X_\mathrm{c} \le`$ `ATIME(1)`): going outward, `JXBEG` counts the points with $`X \le`$ `ATIME(1)`, `JXMID` also those with $`X \le X_\mathrm{surf}/2`$; the shell ends (`JXEND`) at the first point where $`L_i - L_{i-1} \lt{} 10^{-5}L_\mathrm{surf}`$ or $`X_\mathrm{surf} - X_i \lt{} 10^{-5}`$. The difference `HL(I) - HL(I-1)` would read `HL(0)` at the centre, which the compiler flags, but at `I = 1` the first test always holds, since $`X_\mathrm{c} \le`$ `ATIME(1)` there, so `HL(0)` is never read (settled from the code, Nov 9, 2026: [line 80](https://github.com/yreclab/yrec/blob/7be4133/src/findsh.f#L80); [lines 85–92](https://github.com/yreclab/yrec/blob/7be4133/src/findsh.f#L85-L92)).
